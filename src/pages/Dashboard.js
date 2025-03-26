@@ -97,19 +97,19 @@ export const Dashboard = () => {
             {
                 icon: _jsx(Smile, { className: "w-4 h-4" }),
                 label: "Smile",
-                value: faceAttributes.smile.value ? "Yes" : "No",
-                confidence: faceAttributes.smile.confidence
+                value: faceAttributes.smile?.value ? "Yes" : "No",
+                confidence: faceAttributes.smile?.confidence || 0
             },
             {
                 icon: _jsx(Eye, { className: "w-4 h-4" }),
                 label: "Eyes Open",
-                value: faceAttributes.eyesOpen.value ? "Yes" : "No",
-                confidence: faceAttributes.eyesOpen.confidence
+                value: faceAttributes.eyesOpen?.value ? "Yes" : "No",
+                confidence: faceAttributes.eyesOpen?.confidence || 0
             },
             {
                 icon: _jsx(Ruler, { className: "w-4 h-4" }),
                 label: "Age Range",
-                value: `${faceAttributes.age.low}-${faceAttributes.age.high}`,
+                value: `${faceAttributes.age?.low || 0}-${faceAttributes.age?.high || 0}`,
                 confidence: 100
             },
             {
@@ -121,8 +121,8 @@ export const Dashboard = () => {
             {
                 icon: _jsx(User, { className: "w-4 h-4" }),
                 label: "Gender",
-                value: faceAttributes.gender.value,
-                confidence: faceAttributes.gender.confidence
+                value: faceAttributes.gender?.value || "Unknown",
+                confidence: faceAttributes.gender?.confidence || 0
             }
         ];
         return (_jsxs("div", { className: "mt-4 space-y-2", children: [_jsx("h4", { className: "text-sm font-medium text-apple-gray-700", children: "Face Attributes" }), _jsx("div", { className: "grid grid-cols-1 md:grid-cols-3 gap-2", children: attributes.map((attr, index) => (_jsxs("div", { className: "flex items-center p-2 bg-apple-gray-50 rounded-apple", children: [_jsx("div", { className: "mr-2 text-apple-gray-500", children: attr.icon }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium text-apple-gray-900", children: attr.label }), _jsxs("div", { className: "text-xs text-apple-gray-500", children: [attr.value, " (", Math.round(attr.confidence), "% confidence)"] })] })] }, index))) })] }));

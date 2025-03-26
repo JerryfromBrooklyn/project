@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Share2, Trash2, X, Users, AlertCircle, Info } from 'lucide-react';
-import { PhotoService, PhotoMetadata } from '../services/PhotoService';
+import { PhotoService } from '../services/PhotoService';
+import { PhotoMetadata } from '../types';
 import { PhotoInfoModal } from './PhotoInfoModal';
 import { cn } from '../utils/cn';
 
@@ -22,23 +23,30 @@ export const PhotoGrid: React.FC<PhotoGridProps> = ({
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
   const handleDownload = async (photo: PhotoMetadata) => {
+    if (onDownload) {
+      try {
+        setLoading({ ...loading, [photo.id]: true });
+        await onDownload(photo.id);
+      } catch (error) {
+        console.error('Error downloading photo:', error);
+      } finally {
+        setLoading({ ...loading, [photo.id]: false });
+      }
+      return;
+    }
+    
     try {
       setLoading({ ...loading, [photo.id]: true });
+      const url = await PhotoService.downloadPhoto(photo.id);
       
-      if (onDownload) {
-        await onDownload(photo.id);
-      } else {
-        const url = await PhotoService.downloadPhoto(photo.id);
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `photo-${photo.id}.jpg`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        URL.revokeObjectURL(url);
-      }
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `photo-${photo.id}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading photo:', error);
     } finally {
@@ -101,6 +109,7 @@ export const PhotoGrid: React.FC<PhotoGridProps> = ({
                     onClick={() => handleDownload(photo)}
                     className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300"
                     disabled={loading[photo.id]}
+                    aria-label="Download photo"
                   >
                     <Download className="w-5 h-5" />
                   </button>
@@ -108,6 +117,7 @@ export const PhotoGrid: React.FC<PhotoGridProps> = ({
                     <button
                       onClick={() => onShare(photo.id)}
                       className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300"
+                      aria-label="Share photo"
                     >
                       <Share2 className="w-5 h-5" />
                     </button>
@@ -115,6 +125,7 @@ export const PhotoGrid: React.FC<PhotoGridProps> = ({
                   <button
                     onClick={() => setSelectedPhoto(photo)}
                     className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300"
+                    aria-label="View photo details"
                   >
                     <Info className="w-5 h-5" />
                   </button>
@@ -123,6 +134,7 @@ export const PhotoGrid: React.FC<PhotoGridProps> = ({
                   <button
                     onClick={() => onDelete(photo.id)}
                     className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300"
+                    aria-label="Delete photo"
                   >
                     <Trash2 className="w-5 h-5" />
                   </button>

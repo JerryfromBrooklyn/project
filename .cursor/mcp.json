@@ -1,0 +1,15 @@
+{
+  "supabase": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "npx",
+      "-y",
+      "@smithery/cli@latest",
+      "run",
+      "@alexander-zuev/supabase-mcp-server",
+      "--config",
+      "{\\\"supabaseProjectRef\\\":\\\"gmupwzjxirpkskolsuix\\\",\\\"supabaseDbPassword\\\":\\\"55xz472otM3aoIuf\\\",\\\"supabaseRegion\\\":\\\"us-east-1\\\",\\\"supabaseAccessToken\\\":\\\"<REDACTED>\\\",\\\"supabaseServiceRoleKey\\\":\\\"<REDACTED>\\\"}"
+    ]
+  }
+}

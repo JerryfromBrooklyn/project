@@ -1,14 +1,30 @@
 import { S3Client } from '@aws-sdk/client-s3';
 import { RekognitionClient, CreateCollectionCommand, ListCollectionsCommand, DeleteCollectionCommand } from '@aws-sdk/client-rekognition';
+import dotenv from 'dotenv';
+
+// Load environment variables if running in Node.js directly
+if (typeof import.meta === 'undefined') {
+  dotenv.config();
+}
+
+// Helper function to get environment variables from either Vite or Node
+function getEnvVariable(name: string, defaultValue?: string): string {
+  // Check if we're in Vite context
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    return import.meta.env[name] || process.env[name] || defaultValue || '';
+  }
+  // Otherwise use Node.js process.env
+  return process.env[name] || defaultValue || '';
+}
 
 // AWS Configuration
-export const AWS_REGION = 'us-east-1';
-export const AWS_ACCESS_KEY_ID = 'AKIA3ISBVSQ26AGWN3OT';
-export const AWS_SECRET_ACCESS_KEY = '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';
+export const AWS_REGION = getEnvVariable('VITE_AWS_REGION', 'us-east-1');
+export const AWS_ACCESS_KEY_ID = getEnvVariable('VITE_AWS_ACCESS_KEY_ID');
+export const AWS_SECRET_ACCESS_KEY = getEnvVariable('VITE_AWS_SECRET_ACCESS_KEY');
 
 // Face recognition configuration
 export const FACE_MATCH_THRESHOLD = 80; // Increased threshold for better accuracy
-export const COLLECTION_ID = 'shmong-faces';
+export const COLLECTION_ID = getEnvVariable('VITE_AWS_COLLECTION_ID', 'shmong-faces');
 
 // Initialize S3 Client
 export const s3Client = new S3Client({

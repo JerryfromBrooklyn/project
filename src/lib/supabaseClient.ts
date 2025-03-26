@@ -1,12 +1,3 @@
-// Add TypeScript type declaration for Vite's import.meta.env
-interface ImportMeta {
-  env: {
-    VITE_SUPABASE_URL?: string;
-    VITE_SUPABASE_ANON_KEY?: string;
-    [key: string]: any;
-  };
-}
-
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
 import 'cross-fetch';
@@ -16,28 +7,9 @@ if (typeof process !== 'undefined') {
   dotenv.config();
 }
 
-// Function to safely get environment variables
-const getEnvVar = (key: string): string => {
-  // Check for Vite environment variables (browser)
-  if (typeof import.meta === 'object' && import.meta !== null) {
-    // @ts-ignore - Vite-specific environment usage
-    if (import.meta.env && import.meta.env[key]) {
-      // @ts-ignore
-      return import.meta.env[key];
-    }
-  }
-  
-  // Fallback to Node.js process environment
-  if (typeof process !== 'undefined' && process.env && process.env[key]) {
-    return process.env[key] as string;
-  }
-  
-  return '';
-};
-
-// Get environment variables
-const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+// Get environment variables from either Vite or Node.js process
+const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');

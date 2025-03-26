@@ -171,82 +171,123 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
             if (!publicUrl) {
                 throw new Error('Failed to retrieve public URL');
             }
-            // Save face data reference with attributes
-            console.log('Saving face data...');
-            const { error: dbError } = await supabase
-                .from('face_data')
-                .upsert({
-                user_id: user.id,
-                face_data: {
-                    image_path: filePath,
-                    public_url: publicUrl,
-                    attributes: {
-                        age: {
-                            low: faceAttributes.AgeRange?.Low || 0,
-                            high: faceAttributes.AgeRange?.High || 0
-                        },
-                        smile: {
-                            value: faceAttributes.Smile?.Value || false,
-                            confidence: faceAttributes.Smile?.Confidence || 0
-                        },
-                        eyeglasses: {
-                            value: faceAttributes.Eyeglasses?.Value || false,
-                            confidence: faceAttributes.Eyeglasses?.Confidence || 0
-                        },
-                        sunglasses: {
-                            value: faceAttributes.Sunglasses?.Value || false,
-                            confidence: faceAttributes.Sunglasses?.Confidence || 0
-                        },
-                        gender: {
-                            value: faceAttributes.Gender?.Value || '',
-                            confidence: faceAttributes.Gender?.Confidence || 0
-                        },
-                        eyesOpen: {
-                            value: faceAttributes.EyesOpen?.Value || false,
-                            confidence: faceAttributes.EyesOpen?.Confidence || 0
-                        },
-                        mouthOpen: {
-                            value: faceAttributes.MouthOpen?.Value || false,
-                            confidence: faceAttributes.MouthOpen?.Confidence || 0
-                        },
-                        quality: {
-                            brightness: faceAttributes.Quality?.Brightness || 0,
-                            sharpness: faceAttributes.Quality?.Sharpness || 0
-                        },
-                        emotions: faceAttributes.Emotions?.map(emotion => ({
-                            type: emotion.Type,
-                            confidence: emotion.Confidence
-                        })) || [],
-                        landmarks: faceAttributes.Landmarks,
-                        pose: faceAttributes.Pose,
-                        beard: {
-                            value: faceAttributes.Beard?.Value || false,
-                            confidence: faceAttributes.Beard?.Confidence || 0
-                        },
-                        mustache: {
-                            value: faceAttributes.Mustache?.Value || false,
-                            confidence: faceAttributes.Mustache?.Confidence || 0
-                        },
-                        overallConfidence: faceAttributes.Confidence
-                    }
-                }
-            });
-            if (dbError)
-                throw dbError;
-            console.log('Face data saved successfully');
+            
             // Index the face with AWS Rekognition
             console.log('Indexing face...');
             const indexResult = await FaceIndexingService.indexFace(imageBytes, user.id);
             if (!indexResult.success) {
                 throw new Error(indexResult.error || 'Failed to index face');
             }
-            console.log('Face indexed successfully');
-            console.log('Face registration complete!');
-            onSuccess();
-        }
-        catch (err) {
-            console.error('Face registration error:', err);
-            setError(err.message || 'Failed to register face');
+            
+            // Save face data reference with attributes using the new RPC function
+            console.log('Saving face data...');
+            const generatedFaceId = `face_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+            const faceIdToUse = (indexResult && indexResult.faceId) ? indexResult.faceId : generatedFaceId;
+
+            console.log('Using face ID for registration:', faceIdToUse);
+
+            // First try direct insert to face_data as a workaround
+            try {
+                console.log('Trying direct insert with face_id:', faceIdToUse);
+                const { error: directError } = await supabase
+                    .from('face_data')
+                    .insert({
+                        user_id: user.id,
+                        face_id: faceIdToUse, // Explicitly provide face_id
+                        face_data: {
+                            image_path: filePath,
+                            public_url: publicUrl,
+                            attributes: faceAttributes || {}
+                        },
+                        metadata: {
+                            registeredFrom: 'webcam',
+                            registeredAt: new Date().toISOString(),
+                            deviceType: selectedDeviceId
+                        }
+                    });
+                
+                if (directError) {
+                    console.error('Direct insert failed:', directError);
+                    // Fall back to RPC method if direct insert fails
+                    const { data: registerResult, error: rpcError } = await supabase.rpc('rpc_register_face', {
+                        face_id: faceIdToUse,
+                        face_data: {
+                            image_path: filePath,
+                            public_url: publicUrl,
+                            attributes: {
+                                age: {
+                                    low: faceAttributes.AgeRange?.Low || 0,
+                                    high: faceAttributes.AgeRange?.High || 0
+                                },
+                                smile: {
+                                    value: faceAttributes.Smile?.Value || false,
+                                    confidence: faceAttributes.Smile?.Confidence || 0
+                                },
+                                eyeglasses: {
+                                    value: faceAttributes.Eyeglasses?.Value || false,
+                                    confidence: faceAttributes.Eyeglasses?.Confidence || 0
+                                },
+                                sunglasses: {
+                                    value: faceAttributes.Sunglasses?.Value || false,
+                                    confidence: faceAttributes.Sunglasses?.Confidence || 0
+                                },
+                                gender: {
+                                    value: faceAttributes.Gender?.Value || '',
+                                    confidence: faceAttributes.Gender?.Confidence || 0
+                                },
+                                eyesOpen: {
+                                    value: faceAttributes.EyesOpen?.Value || false,
+                                    confidence: faceAttributes.EyesOpen?.Confidence || 0
+                                },
+                                mouthOpen: {
+                                    value: faceAttributes.MouthOpen?.Value || false,
+                                    confidence: faceAttributes.MouthOpen?.Confidence || 0
+                                },
+                                quality: {
+                                    brightness: faceAttributes.Quality?.Brightness || 0,
+                                    sharpness: faceAttributes.Quality?.Sharpness || 0
+                                },
+                                emotions: faceAttributes.Emotions?.map(emotion => ({
+                                    type: emotion.Type,
+                                    confidence: emotion.Confidence
+                                })) || [],
+                                landmarks: faceAttributes.Landmarks,
+                                pose: faceAttributes.Pose,
+                                beard: {
+                                    value: faceAttributes.Beard?.Value || false,
+                                    confidence: faceAttributes.Beard?.Confidence || 0
+                                },
+                                mustache: {
+                                    value: faceAttributes.Mustache?.Value || false,
+                                    confidence: faceAttributes.Mustache?.Confidence || 0
+                                },
+                                overallConfidence: faceAttributes.Confidence
+                            }
+                        },
+                        metadata: {
+                            registeredFrom: 'webcam',
+                            registeredAt: new Date().toISOString(),
+                            deviceType: selectedDeviceId
+                        }
+                    });
+                    
+                    if (rpcError) {
+                        throw rpcError;
+                    }
+                    
+                    if (registerResult && !registerResult.success) {
+                        throw new Error(registerResult.message || 'Failed to register face');
+                    }
+                    
+                    console.log('Face indexed and registered successfully');
+                    console.log('Face registration complete!');
+                    onSuccess();
+                }
+            }
+            catch (err) {
+                console.error('Face registration error:', err);
+                setError(err.message || 'Failed to register face');
+            }
         }
         finally {
             setLoading(false);

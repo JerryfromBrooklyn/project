@@ -5,26 +5,17 @@ import {
   Upload, X, Check, Image as ImageIcon, AlertTriangle, Folder, List, Grid, 
   Filter, Search, Edit2, Calendar, MapPin, User, Building, Users, Info 
 } from 'lucide-react';
-import { PhotoService, PhotoMetadata } from '../services/PhotoService';
+import { PhotoService } from '../services/PhotoService';
+import { PhotoMetadata, UploadItem } from '../types';
 import { cn } from '../utils/cn';
 import { useAuth } from '../context/AuthContext';
 import { GoogleMaps } from './GoogleMaps';
+import { v4 as uuidv4 } from 'uuid';
 
 interface PhotoUploaderProps {
   eventId?: string;
   onUploadComplete?: (photoId: string) => void;
   onError?: (error: string) => void;
-}
-
-interface UploadItem {
-  id: string;
-  file: File;
-  progress: number;
-  status: 'pending' | 'uploading' | 'complete' | 'error';
-  error?: string;
-  folderPath?: string;
-  photoId?: string;
-  photoDetails?: PhotoMetadata;
 }
 
 interface ViewMode {
@@ -185,7 +176,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         setUploads(prev => 
           prev.map(u => 
             u.id === upload.id 
-              ? { ...u, status: 'uploading' }
+              ? { ...u, status: 'uploading' as const, progress: 10 }
               : u
           )
         );
@@ -228,7 +219,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         clearInterval(progressInterval);
 
         if (result.success) {
-          const updatedUpload: UploadItem = {
+          const updatedUpload = {
             ...upload,
             status: 'complete' as const,
             progress: 100,
@@ -255,7 +246,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         setUploads(prev => 
           prev.map(u => 
             u.id === upload.id 
-              ? { ...u, status: 'error', error: (error as Error).message }
+              ? { ...u, status: 'error' as const, error: (error as Error).message }
               : u
           )
         );
@@ -274,6 +265,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
       'image/jpeg': ['.jpg', '.jpeg'],
       'image/png': ['.png'],
       'image/webp': ['.webp'],
+      'image/x-dcraw': ['.raw'],
       'image/x-canon-cr2': ['.cr2'],
       'image/x-nikon-nef': ['.nef'],
       'image/x-sony-arw': ['.arw'],
@@ -282,7 +274,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     maxSize: 104857600, // 100MB
     disabled: showMetadataForm,
     noClick: showMetadataForm,
-    noKeyboard: showMetadataForm
+    noKeyboard: showMetadataForm,
   });
 
   const handleFolderRename = async (oldPath: string, newName: string) => {
@@ -620,8 +612,11 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
       >
         <input 
           {...getInputProps()} 
-          // @ts-ignore - These props are valid for file input but not in TypeScript definitions
-          webkitdirectory="" 
+          multiple 
+          type="file" 
+          accept="image/*" 
+          className="hidden"
+          aria-label="Upload files"
         />
         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white flex items-center justify-center">
           <Upload className="w-8 h-8 text-apple-gray-500" />

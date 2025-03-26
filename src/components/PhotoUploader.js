@@ -122,7 +122,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         for (const upload of newUploads) {
             try {
                 setUploads(prev => prev.map(u => u.id === upload.id
-                    ? { ...u, status: 'uploading' }
+                    ? { ...u, status: 'uploading', progress: 10 }
                     : u));
                 // Simulate upload progress
                 const progressInterval = setInterval(() => {
@@ -186,6 +186,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
             'image/jpeg': ['.jpg', '.jpeg'],
             'image/png': ['.png'],
             'image/webp': ['.webp'],
+            'image/x-dcraw': ['.raw'],
             'image/x-canon-cr2': ['.cr2'],
             'image/x-nikon-nef': ['.nef'],
             'image/x-sony-arw': ['.arw'],
@@ -194,7 +195,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         maxSize: 104857600, // 100MB
         disabled: showMetadataForm,
         noClick: showMetadataForm,
-        noKeyboard: showMetadataForm
+        noKeyboard: showMetadataForm,
     });
     const handleFolderRename = async (oldPath, newName) => {
         try {
@@ -300,9 +301,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                                         setPendingFiles([]);
                                     }, className: "ios-button-secondary", children: "Cancel" }), _jsx("button", { onClick: processUploads, className: "ios-button-primary", children: "Continue Upload" })] })] })) }), _jsxs("div", { ...getRootProps(), className: cn("mt-4 p-10 border-2 border-dashed rounded-apple-xl text-center transition-colors duration-300", isDragActive
                     ? "border-apple-blue-500 bg-apple-blue-50"
-                    : "border-apple-gray-200 bg-apple-gray-50", uploads.length > 0 && "mb-8"), children: [_jsx("input", { ...getInputProps(), 
-                        // @ts-ignore - These props are valid for file input but not in TypeScript definitions
-                        webkitdirectory: "" }), _jsx("div", { className: "w-16 h-16 mx-auto mb-4 rounded-full bg-white flex items-center justify-center", children: _jsx(Upload, { className: "w-8 h-8 text-apple-gray-500" }) }), _jsx("p", { className: "text-apple-gray-500 mb-2", children: isDragActive
+                    : "border-apple-gray-200 bg-apple-gray-50", uploads.length > 0 && "mb-8"), children: [_jsx("input", { ...getInputProps(), multiple: true, type: "file", accept: "image/*", className: "hidden", "aria-label": "Upload files" }), _jsx("div", { className: "w-16 h-16 mx-auto mb-4 rounded-full bg-white flex items-center justify-center", children: _jsx(Upload, { className: "w-8 h-8 text-apple-gray-500" }) }), _jsx("p", { className: "text-apple-gray-500 mb-2", children: isDragActive
                             ? "Drop the photos or folders here"
                             : "Drag and drop photos or folders here, or click to select" }), _jsx("p", { className: "text-apple-gray-400 text-sm", children: "Supported formats: JPG, PNG, WebP, RAW (CR2, NEF, ARW, RW2) \u2022 Max 100MB per file" })] }), uploads.length > 0 && (_jsxs("div", { className: "flex items-center justify-between mb-4", children: [_jsxs("div", { className: "flex items-center space-x-2", children: [_jsx("button", { onClick: () => setViewMode(prev => ({ ...prev, mode: 'grid' })), className: cn("p-2 rounded-apple", viewMode.mode === 'grid'
                                     ? "bg-apple-blue-500 text-white"

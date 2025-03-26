@@ -115,19 +115,19 @@ export const Dashboard = () => {
       {
         icon: <Smile className="w-4 h-4" />,
         label: "Smile",
-        value: faceAttributes.smile.value ? "Yes" : "No",
-        confidence: faceAttributes.smile.confidence
+        value: faceAttributes.smile?.value ? "Yes" : "No",
+        confidence: faceAttributes.smile?.confidence || 0
       },
       {
         icon: <Eye className="w-4 h-4" />,
         label: "Eyes Open",
-        value: faceAttributes.eyesOpen.value ? "Yes" : "No",
-        confidence: faceAttributes.eyesOpen.confidence
+        value: faceAttributes.eyesOpen?.value ? "Yes" : "No",
+        confidence: faceAttributes.eyesOpen?.confidence || 0
       },
       {
         icon: <Ruler className="w-4 h-4" />,
         label: "Age Range",
-        value: `${faceAttributes.age.low}-${faceAttributes.age.high}`,
+        value: `${faceAttributes.age?.low || 0}-${faceAttributes.age?.high || 0}`,
         confidence: 100
       },
       {
@@ -139,8 +139,8 @@ export const Dashboard = () => {
       {
         icon: <User className="w-4 h-4" />,
         label: "Gender",
-        value: faceAttributes.gender.value,
-        confidence: faceAttributes.gender.confidence
+        value: faceAttributes.gender?.value || "Unknown",
+        confidence: faceAttributes.gender?.confidence || 0
       }
     ];
 

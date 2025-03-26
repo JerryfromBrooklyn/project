@@ -7,10 +7,11 @@ import {
   Glasses, Frown, Laugh, Bean as Beard, Meh, Compass, Map,
   FileType, HardDrive, Globe, Upload
 } from 'lucide-react';
-import { PhotoService, PhotoMetadata } from '../services/PhotoService';
+import { PhotoService } from '../services/PhotoService';
+import { PhotoMetadata } from '../types';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
-import { Location, EventDetails, FaceAttributes } from '../types';
+import { EventDetails, FaceAttributes } from '../types';
 
 interface PhotoInfoModalProps {
   photo: PhotoMetadata;
@@ -389,9 +390,10 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
             <div className="p-6 flex-1 overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">Photo Details</h3>
-                <button
-                  onClick={onClose}
-                  className="text-apple-gray-400 hover:text-apple-gray-600"
+                <button 
+                  onClick={onClose} 
+                  className="absolute top-2 right-2 p-2 rounded-full bg-apple-white hover:bg-apple-gray-100 text-apple-gray-500 transition-colors"
+                  aria-label="Close modal"
                 >
                   <X className="w-5 h-5" />
                 </button>

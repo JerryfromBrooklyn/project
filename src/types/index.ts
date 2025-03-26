@@ -77,6 +77,7 @@ export interface FaceAttributes {
 export interface Face {
   userId: string;
   confidence: number;
+  faceId?: string;
   attributes?: FaceAttributes;
 }
 

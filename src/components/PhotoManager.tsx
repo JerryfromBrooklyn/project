@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoGrid } from './PhotoGrid';
-import { PhotoService, PhotoMetadata } from '../services/PhotoService';
+import { PhotoService } from '../services/PhotoService';
+import { PhotoMetadata } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, RefreshCw, Filter, ChevronDown, Calendar, MapPin, Tag, Clock, Search } from 'lucide-react';
@@ -121,7 +122,11 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
         query = query.eq('uploaded_by', user.id);
       } else {
         console.log('Fetching matched photos');
-        query = query.filter('matched_users', 'cs', `[{"userId": "${user.id}"}]`);
+        console.log(`Looking for photos matching user ID: ${user.id}`);
+        
+        const jsonPayload = JSON.stringify([{ userId: user.id }]);
+        console.log('Using filter payload:', jsonPayload);
+        query = query.filter('matched_users', 'cs', jsonPayload);
       }
 
       query = query.order('created_at', { ascending: false });
@@ -131,27 +136,34 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
       if (error) throw error;
 
       console.log(`Fetched ${fetchedPhotos?.length || 0} photos`);
+      
+      if (fetchedPhotos && fetchedPhotos.length > 0) {
+        console.log('First photo structure:', fetchedPhotos[0]);
+      }
 
-      const transformedPhotos: PhotoMetadata[] = (fetchedPhotos || []).map(photo => ({
-        id: photo.id,
-        url: photo.public_url,
-        eventId: photo.event_id,
-        uploadedBy: photo.uploaded_by,
-        created_at: photo.created_at,
-        folderPath: photo.folder_path,
-        folderName: photo.folder_name,
-        fileSize: photo.file_size,
-        fileType: photo.file_type,
-        faces: photo.faces || [],
-        title: photo.title,
-        description: photo.description,
-        location: photo.location,
-        venue: photo.venue,
-        tags: photo.tags,
-        date_taken: photo.date_taken,
-        event_details: photo.event_details,
-        matched_users: photo.matched_users || []
-      }));
+      const transformedPhotos: PhotoMetadata[] = (fetchedPhotos || []).map(photo => {
+        return {
+          id: photo.id,
+          url: photo.url || photo.public_url,
+          eventId: photo.event_id || photo.eventId,
+          uploadedBy: photo.uploaded_by || photo.uploadedBy,
+          created_at: photo.created_at || photo.createdAt || new Date().toISOString(),
+          updated_at: photo.updated_at || photo.updatedAt,
+          folderPath: photo.folder_path || photo.folderPath,
+          folderName: photo.folder_name || photo.folderName,
+          fileSize: photo.file_size || photo.fileSize,
+          fileType: photo.file_type || photo.fileType,
+          faces: photo.faces || [],
+          title: photo.title,
+          description: photo.description,
+          location: photo.location,
+          venue: photo.venue,
+          tags: photo.tags,
+          date_taken: photo.date_taken || photo.dateTaken,
+          event_details: photo.event_details || photo.eventDetails,
+          matched_users: photo.matched_users || photo.matchedUsers
+        };
+      });
 
       setPhotos(transformedPhotos);
     } catch (err) {
