@@ -1,0 +1,204 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --safe-area-inset-top: env(safe-area-inset-top);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom);
+  --safe-area-inset-left: env(safe-area-inset-left);
+  --safe-area-inset-right: env(safe-area-inset-right);
+}
+
+@layer base {
+  html {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-apple-gray-50 text-apple-gray-900 antialiased;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+@layer components {
+  .ios-button {
+    @apply flex items-center justify-center px-7 py-3.5 text-base font-medium transition-all duration-300 rounded-apple shadow-apple-button relative overflow-hidden;
+  }
+
+  .ios-button::after {
+    content: "";
+    @apply absolute inset-0 w-full h-full opacity-0 transition-opacity duration-300 bg-white;
+    pointer-events: none;
+  }
+
+  .ios-button:active::after {
+    @apply opacity-20;
+  }
+
+  .ios-button-primary {
+    @apply ios-button bg-apple-blue-500 text-white;
+  }
+
+  .ios-button-primary:hover {
+    @apply bg-apple-blue-600 transform scale-[1.02] transition-all duration-300;
+  }
+
+  .ios-button-primary:active {
+    @apply transform scale-[0.98];
+  }
+
+  .ios-button-secondary {
+    @apply ios-button bg-apple-gray-200 text-apple-gray-900;
+  }
+
+  .ios-button-secondary:hover {
+    @apply bg-apple-gray-300 transform scale-[1.02] transition-all duration-300;
+  }
+
+  .ios-button-secondary:active {
+    @apply transform scale-[0.98];
+  }
+
+  .ios-card {
+    @apply bg-white rounded-apple-xl p-6 shadow-apple border border-apple-gray-100;
+  }
+
+  .ios-card-elevated {
+    @apply ios-card shadow-apple-lg;
+  }
+
+  .ios-input {
+    @apply bg-apple-gray-100 rounded-apple px-4 py-3.5 w-full text-apple-gray-900 transition-all duration-300 focus:ring-2 focus:ring-apple-blue-500 focus:outline-none border border-apple-gray-200 focus:border-apple-blue-400;
+  }
+
+  .ios-input::placeholder {
+    @apply text-apple-gray-500;
+  }
+
+  .ios-label {
+    @apply block text-sm font-medium text-apple-gray-700 mb-2;
+  }
+
+  .ios-divider {
+    @apply w-full h-px bg-apple-gray-200 my-6;
+  }
+
+  .ios-tag {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-sm font-medium bg-apple-gray-100 text-apple-gray-800;
+  }
+
+  .ios-tag-blue {
+    @apply ios-tag bg-apple-blue-100 text-apple-blue-800;
+  }
+
+  .ios-tag-green {
+    @apply ios-tag bg-green-100 text-green-800;
+  }
+
+  .glass-effect {
+    @apply backdrop-blur-md bg-white/80 border border-white/20;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-apple-blue-500 to-apple-blue-300;
+  }
+
+  .text-gradient-primary {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-[#007AFF] to-[#5AC8FA];
+  }
+
+  .shadow-apple-button {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+
+  .backdrop-navbar {
+    @apply backdrop-blur-md bg-white/90 border-b border-apple-gray-100;
+  }
+}
+
+/* Apple-like focus styles */
+:focus {
+  outline: none;
+}
+
+/* Better button tap states for mobile */
+@media (hover: none) {
+  .ios-button:active::after {
+    @apply opacity-20;
+  }
+}
+
+/* iOS-style input appearance */
+input, select, textarea {
+  appearance: none;
+  border-radius: 10px;
+  -webkit-appearance: none;
+}
+
+/* Mobile responsiveness improvements */
+@media (max-width: 768px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+/* iPhone and iPad specific adjustments */
+@supports (-webkit-touch-callout: none) {
+  .pt-ios-safe {
+    padding-top: var(--safe-area-inset-top);
+  }
+  
+  .pb-ios-safe {
+    padding-bottom: var(--safe-area-inset-bottom);
+  }
+}
+
+/* Animation utilities */
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.slide-up {
+  animation: slideUp 0.5s ease-out forwards;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Fix for Tailwind purge and dynamic classes */
+.filter {
+  filter: var(--tw-filter);
+}
+
+.blur-3xl {
+  --tw-blur: blur(64px);
+  filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
+}
+
+[id] {
+  scroll-margin-top: 80px;
+}
