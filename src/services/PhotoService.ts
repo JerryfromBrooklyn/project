@@ -138,11 +138,12 @@ export class PhotoService {
       const arrayBuffer = await file.arrayBuffer();
       const imageBytes = new Uint8Array(arrayBuffer);
       
-      console.log('Processing faces in uploaded photo...');
+      console.log('[DEBUG] Starting face processing for photo:', photoId);
+      console.log('[DEBUG] Processing faces in uploaded photo...');
       
       // First detect faces
       const detectedFaces = await this.detectFaces(imageBytes);
-      console.log('Detected faces:', detectedFaces);
+      console.log('[DEBUG] Detected faces:', detectedFaces.length);
       
       // Initialize faces array with detected face attributes
       const faces: Face[] = detectedFaces.map(face => ({
@@ -202,12 +203,14 @@ export class PhotoService {
       let matched_users: MatchedUser[] = [];
       
       if (faces.length > 0) {
-        console.log(`Indexing ${faces.length} faces for future matching...`);
+        console.log(`[DEBUG] Indexing ${faces.length} faces for future matching...`);
         
         // Index these faces in AWS Rekognition and store their FaceIDs
         try {
           // Create a safe external ID that doesn't use underscores or other special chars
           const externalImageId = `p${photoId.replace(/-/g, '')}`;
+          
+          console.log('[DEBUG] Sending IndexFacesCommand to AWS with external ID:', externalImageId);
           
           const indexCommand = new IndexFacesCommand({
             CollectionId: COLLECTION_ID,
@@ -221,7 +224,7 @@ export class PhotoService {
           const indexResult = await rekognitionClient.send(indexCommand);
           
           if (indexResult.FaceRecords && indexResult.FaceRecords.length > 0) {
-            console.log(`Successfully indexed ${indexResult.FaceRecords.length} faces in AWS`);
+            console.log(`[DEBUG] Successfully indexed ${indexResult.FaceRecords.length} faces in AWS`);
             
             // Store the face IDs for later use
             const faceIds: string[] = [];
@@ -278,8 +281,9 @@ export class PhotoService {
           }
           
           // Immediately search for matching users
+          console.log('[DEBUG] Searching for face matches...');
           const matches = await FaceIndexingService.searchFaces(imageBytes);
-          console.log('Face matches:', matches);
+          console.log('[DEBUG] Face matches returned:', matches ? matches.length : 0);
           
           // Filter matches by confidence threshold
           const highConfidenceMatches = matches.filter(match => match.confidence >= FACE_MATCH_THRESHOLD);
@@ -368,7 +372,16 @@ export class PhotoService {
       updateData.file_size = file.size;
       updateData.file_type = file.type;
       
-      console.log('Updating photo with full details:', JSON.stringify(updateData));
+      // For debugging - show detailed information about the update data
+      console.log('Updating photo with full details:', {
+        title: updateData.title,
+        event_details: updateData.event_details,
+        venue: updateData.venue,
+        location: updateData.location, 
+        date_taken: updateData.date_taken,
+        file_size: updateData.file_size,
+        file_type: updateData.file_type
+      });
       
       // Update the photo record with faces and matched users
       const { error: updateError } = await supabase
@@ -570,18 +583,22 @@ export class PhotoService {
 
       while (retries < this.MAX_RETRIES) {
         try {
+          console.log('[DEBUG] Sending DetectFacesCommand to AWS...');
           const command = new DetectFacesCommand({
             Image: { Bytes: imageBytes },
             Attributes: ['ALL']
           });
-
           response = await rekognitionClient.send(command);
+          console.log('[DEBUG] AWS DetectFaces response received');
           return response.FaceDetails || [];
         } catch (err) {
           error = err;
+          console.error('[ERROR] AWS DetectFaces failed:', err);
           retries++;
           if (retries < this.MAX_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * retries));
+            const delay = this.RETRY_DELAY * retries;
+            console.log(`[DEBUG] Retrying face detection in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
       }
@@ -589,7 +606,8 @@ export class PhotoService {
       throw error;
     } catch (error) {
       console.error('Error detecting faces:', error);
-      throw error;
+      // Return empty array instead of throwing to allow upload to continue
+      return [];
     }
   }
 

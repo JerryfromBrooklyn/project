@@ -22,6 +22,17 @@ export const AWS_REGION = getEnvVariable('VITE_AWS_REGION', 'us-east-1');
 export const AWS_ACCESS_KEY_ID = getEnvVariable('VITE_AWS_ACCESS_KEY_ID');
 export const AWS_SECRET_ACCESS_KEY = getEnvVariable('VITE_AWS_SECRET_ACCESS_KEY');
 
+// Validate AWS credentials
+console.log('[DEBUG] AWS Configuration:');
+console.log('[DEBUG] - Region:', AWS_REGION);
+console.log('[DEBUG] - Access Key ID:', AWS_ACCESS_KEY_ID ? `${AWS_ACCESS_KEY_ID.substring(0, 4)}...` : 'Not set');
+console.log('[DEBUG] - Secret Access Key:', AWS_SECRET_ACCESS_KEY ? 'Set (hidden)' : 'Not set');
+console.log('[DEBUG] - Collection ID:', getEnvVariable('VITE_AWS_COLLECTION_ID', 'shmong-faces'));
+
+if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
+  console.error('[ERROR] AWS credentials are not properly configured. Face detection and matching will not work.');
+}
+
 // Face recognition configuration
 export const FACE_MATCH_THRESHOLD = 80; // Increased threshold for better accuracy
 export const COLLECTION_ID = getEnvVariable('VITE_AWS_COLLECTION_ID', 'shmong-faces');
@@ -94,3 +105,28 @@ export const initializeCollection = async () => {
 
 // Initialize collection
 initializeCollection().catch(console.error);
+
+// Test AWS Rekognition connectivity
+export const testRekognitionConnectivity = async () => {
+  try {
+    console.log('[DEBUG] Testing AWS Rekognition connectivity...');
+    const listCollections = await rekognitionClient.send(
+      new ListCollectionsCommand({})
+    );
+    console.log('[DEBUG] Successfully connected to AWS Rekognition');
+    console.log('[DEBUG] Available collections:', listCollections.CollectionIds);
+    return true;
+  } catch (error) {
+    console.error('[ERROR] Failed to connect to AWS Rekognition:', error);
+    return false;
+  }
+};
+
+// Run connectivity test
+testRekognitionConnectivity().then(result => {
+  if (result) {
+    console.log('[INFO] AWS Rekognition is properly configured and working');
+  } else {
+    console.error('[ERROR] AWS Rekognition is not working. Face detection will be disabled.');
+  }
+});

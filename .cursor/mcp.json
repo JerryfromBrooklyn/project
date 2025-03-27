@@ -1,6 +1,7 @@
 {
-  "supabase": {
-    "command": "cmd",
+  "mcpServers": {
+    "supabase": {
+      "command": "cmd",
     "args": [
       "/c",
       "npx",
@@ -9,7 +10,43 @@
       "run",
       "@alexander-zuev/supabase-mcp-server",
       "--config",
-      "{\\\"supabaseProjectRef\\\":\\\"gmupwzjxirpkskolsuix\\\",\\\"supabaseDbPassword\\\":\\\"55xz472otM3aoIuf\\\",\\\"supabaseRegion\\\":\\\"us-east-1\\\",\\\"supabaseAccessToken\\\":\\\"<REDACTED>\\\",\\\"supabaseServiceRoleKey\\\":\\\"<REDACTED>\\\"}"
+      "{\"supabaseProjectRef\":\"gmupwzjxirpkskolsuix\",\"supabaseDbPassword\":\"55xz472otM3aoIuf\",\"supabaseRegion\":\"us-east-1\",\"supabaseAccessToken\":\"sbp_b770ec46a0342723af4acd39a75795a289890a44\",\"supabaseServiceRoleKey\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdtdXB3emp4aXJwa3Nrb2xzdWl4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MTI0NTk5MCwiZXhwIjoyMDU2ODIxOTkwfQ.vT7Io2aolTOQr3xQVFeSMDzg8NiMMNKdDwOyDObc6HE\"}"
     ]
-  }
+  },
+"sequential-thinking": {
+
+"command": "cmd",
+
+"args": [
+  "/c",
+  "npx",
+
+"-y",
+
+"@modelcontextprotocol/server-sequential-thinking"
+
+]
+
+},
+"memory": {
+
+"command": "cmd",
+
+"args": [
+  "/c",
+  "npx",
+
+"-y",
+
+"@modelcontextprotocol/server-memory"
+
+]
+
 }
+
+}
+  
+
+}
+
+

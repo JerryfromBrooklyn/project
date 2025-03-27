@@ -197,7 +197,55 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
                         face_data: {
                             image_path: filePath,
                             public_url: publicUrl,
-                            attributes: faceAttributes || {}
+                            attributes: {
+                                age: {
+                                    low: faceAttributes.AgeRange?.Low || 0,
+                                    high: faceAttributes.AgeRange?.High || 0
+                                },
+                                smile: {
+                                    value: faceAttributes.Smile?.Value || false,
+                                    confidence: faceAttributes.Smile?.Confidence || 0
+                                },
+                                eyeglasses: {
+                                    value: faceAttributes.Eyeglasses?.Value || false,
+                                    confidence: faceAttributes.Eyeglasses?.Confidence || 0
+                                },
+                                sunglasses: {
+                                    value: faceAttributes.Sunglasses?.Value || false,
+                                    confidence: faceAttributes.Sunglasses?.Confidence || 0
+                                },
+                                gender: {
+                                    value: faceAttributes.Gender?.Value || '',
+                                    confidence: faceAttributes.Gender?.Confidence || 0
+                                },
+                                eyesOpen: {
+                                    value: faceAttributes.EyesOpen?.Value || false,
+                                    confidence: faceAttributes.EyesOpen?.Confidence || 0
+                                },
+                                mouthOpen: {
+                                    value: faceAttributes.MouthOpen?.Value || false,
+                                    confidence: faceAttributes.MouthOpen?.Confidence || 0
+                                },
+                                quality: {
+                                    brightness: faceAttributes.Quality?.Brightness || 0,
+                                    sharpness: faceAttributes.Quality?.Sharpness || 0
+                                },
+                                emotions: faceAttributes.Emotions?.map(emotion => ({
+                                    type: emotion.Type,
+                                    confidence: emotion.Confidence
+                                })) || [],
+                                landmarks: faceAttributes.Landmarks,
+                                pose: faceAttributes.Pose,
+                                beard: {
+                                    value: faceAttributes.Beard?.Value || false,
+                                    confidence: faceAttributes.Beard?.Confidence || 0
+                                },
+                                mustache: {
+                                    value: faceAttributes.Mustache?.Value || false,
+                                    confidence: faceAttributes.Mustache?.Confidence || 0
+                                },
+                                overallConfidence: faceAttributes.Confidence
+                            }
                         },
                         metadata: {
                             registeredFrom: 'webcam',
@@ -280,6 +328,11 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
                     }
                     
                     console.log('Face indexed and registered successfully');
+                    console.log('Face registration complete!');
+                    onSuccess();
+                } else {
+                    // Add success callback for direct insert
+                    console.log('Face indexed and registered successfully via direct insert');
                     console.log('Face registration complete!');
                     onSuccess();
                 }

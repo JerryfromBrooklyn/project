@@ -111,6 +111,15 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
       onError?.('Date is required');
       return false;
     }
+    
+    // Make sure location is complete if it's provided
+    if (metadata.location && metadata.location.name) {
+      if (!metadata.location.lat || !metadata.location.lng) {
+        onError?.('Location is incomplete. Please search or click on the map');
+        return false;
+      }
+    }
+    
     return true;
   };
 
@@ -204,7 +213,16 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
           venue: {
             name: metadata.venueName
           },
-          location: metadata.location.name ? metadata.location : undefined,
+          // Only include location if it has valid data
+          ...(metadata.location && metadata.location.name && metadata.location.lat && metadata.location.lng 
+            ? { 
+                location: {
+                  lat: metadata.location.lat,
+                  lng: metadata.location.lng,
+                  name: metadata.location.name
+                } 
+              } 
+            : {}),
           date_taken: metadata.date
         };
 

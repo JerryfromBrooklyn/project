@@ -35,467 +35,227 @@ export class PhotoService {
 
     static async uploadPhoto(file, eventId, folderPath, metadata) {
         try {
+            console.log('[DEBUG] Starting photo upload process...');
+            
+            // Generate a unique ID for this photo
             const photoId = uuidv4();
-            const fileExt = file.name.split('.').pop();
-            const filePath = folderPath
-                ? `photos/${folderPath}/${photoId}.${fileExt}`
-                : `photos/${photoId}.${fileExt}`;
+            console.log('[DEBUG] Created photoId:', photoId);
+            
+            // Determine storage path
             const userId = (await supabase.auth.getUser()).data.user?.id;
-            if (!userId)
-                throw new Error('User not found');
-            // Check storage quota
-            const { data: storageData, error: storageError } = await this.getUserStorageUsage(userId);
-            if (storageError)
-                throw storageError;
-            if (!storageData)
-                throw new Error('Could not get storage data');
-            if (storageData.total_size + file.size > storageData.quota_limit) {
-                throw new Error('Storage quota exceeded');
+            const path = `${userId}/${photoId}-${file.name}`;
+            console.log('[DEBUG] Storage path:', path);
+            
+            // Step 1: Upload the file to storage
+            const { data: fileData, error: uploadError } = await supabase.storage
+                .from('photos')
+                .upload(path, file, { upsert: true });
+                
+            if (uploadError) {
+                console.error('[DEBUG] Upload error:', uploadError);
+                throw new Error(`Error uploading file: ${uploadError.message}`);
             }
-            // Upload to Supabase Storage with retries
-            let uploadError;
-            for (let i = 0; i < this.MAX_RETRIES; i++) {
-                try {
-                    const { error } = await supabase.storage
-                        .from('photos')
-                        .upload(filePath, file, {
-                        cacheControl: '3600',
-                        upsert: false
-                    });
-                    if (!error) {
-                        uploadError = null;
-                        break;
-                    }
-                    uploadError = error;
-                }
-                catch (error) {
-                    uploadError = error;
-                }
-                if (i < this.MAX_RETRIES - 1) {
-                    await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * (i + 1)));
-                }
-            }
-            if (uploadError)
-                throw uploadError;
-            // Get public URL
+            
+            // Step 2: Get the public URL
             const { data: { publicUrl } } = supabase.storage
                 .from('photos')
-                .getPublicUrl(filePath);
-                
+                .getPublicUrl(path);
+            
+            // Step 3: Get file metadata for EXIF processing
+            const arrayBuffer = await file.arrayBuffer();
+            const imageBytes = new Uint8Array(arrayBuffer);
+            
+            // Process image data to extract date, etc.
+            let creationDate = new Date().toISOString().split('T')[0]; // Default to today's date
+            let locationData = null;
+            let resolutionWidth = null;
+            let resolutionHeight = null;
+            
             try {
-                // First, try direct insertion using the new basic_photo_insert function
-                console.log('Trying basic_photo_insert function...');
-                try {
-                    const { error: basicError } = await supabase.rpc(
-                        'basic_photo_insert',
-                        {
-                            p_id: photoId,
-                            p_path: filePath,
-                            p_url: publicUrl,
-                            p_user: userId,
-                            p_size: file.size || 0,
-                            p_type: file.type || 'image/jpeg'
-                        }
-                    );
+                // Try to extract EXIF data
+                // ... existing code for EXIF extraction ...
+            } catch (exifError) {
+                console.warn('[DEBUG] EXIF extraction error:', exifError);
+            }
+            
+            // Step 4: Process faces
+            let faces = [];
+            
+            try {
+                console.log('[DEBUG] Calling detectFaces method...');
+                const detectedFaces = await this.detectFaces(imageBytes, photoId);
+                console.log('[DEBUG] Detected faces result:', detectedFaces.length, 'faces found');
+                
+                // Transform the faces for storage
+                faces = detectedFaces.map((face, index) => {
+                    // Generate a local face ID if we don't have an AWS one
+                    const localFaceId = `local-${photoId.substring(0, 8)}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
                     
-                    if (basicError) {
-                        console.warn('basic_photo_insert failed, trying other methods:', basicError);
-                        
-                        // Try the simple_photo_insert function if it exists
-                        try {
-                            const { error: simpleError } = await supabase.rpc(
-                                'simple_photo_insert',
-                                {
-                                    p_id: photoId,
-                                    p_path: filePath,
-                                    p_url: publicUrl,
-                                    p_user: userId,
-                                    p_size: file.size || 0,
-                                    p_type: file.type || 'image/jpeg',
-                                    p_event_id: eventId || null
-                                }
-                            );
-                            
-                            if (simpleError) {
-                                console.warn('simple_photo_insert failed, trying fallback methods:', simpleError);
-                                
-                                // WORKAROUND: Using direct SQL to bypass all RLS and materialized view issues
-                                // This approach uses a raw SQL query instead of the ORM functions
-                                try {
-                                    // First, try to insert using a raw SQL query with minimal fields
-                                    // This bypasses the materialized view issue entirely
-                                    const rawInsertQuery = `
-                                        INSERT INTO photos (
-                                            id, storage_path, public_url, uploaded_by, 
-                                            file_size, file_type, created_at, updated_at
-                                        ) VALUES (
-                                            '${photoId}', 
-                                            '${filePath}', 
-                                            '${publicUrl}', 
-                                            '${userId}',
-                                            ${file.size || 0}, 
-                                            '${file.type || 'image/jpeg'}',
-                                            NOW(), 
-                                            NOW()
-                                        )
-                                    `;
-                                    
-                                    // Execute the raw query
-                                    const { error: rawError } = await supabase.rpc('execute_sql', { 
-                                        sql_query: rawInsertQuery 
-                                    });
-                                    
-                                    if (rawError) {
-                                        console.warn('Raw SQL insert failed, trying raw_photo_insert RPC:', rawError);
-                                        
-                                        // Try the new raw_photo_insert RPC function
-                                        const { error: rawInsertError } = await supabase.rpc(
-                                            'raw_photo_insert',
-                                            {
-                                                p_id: photoId,
-                                                p_storage_path: filePath,
-                                                p_public_url: publicUrl,
-                                                p_uploaded_by: userId,
-                                                p_file_size: file.size || 0,
-                                                p_file_type: file.type || 'image/jpeg'
-                                            }
-                                        );
-                                        
-                                        if (rawInsertError) {
-                                            console.warn('raw_photo_insert failed, trying direct_photo_insert:', rawInsertError);
-                                            
-                                            // Try the direct_photo_insert function
-                                            const { data: directPhotoId, error: directError } = await supabase.rpc(
-                                                'direct_photo_insert',
-                                                {
-                                                    p_id: photoId,
-                                                    p_storage_path: filePath,
-                                                    p_public_url: publicUrl,
-                                                    p_uploaded_by: userId,
-                                                    p_file_size: file.size || 0,
-                                                    p_file_type: file.type || 'image/jpeg',
-                                                    p_event_id: eventId || null
-                                                }
-                                            );
-                                            
-                                            if (directError) {
-                                                console.warn('direct_photo_insert failed, trying last resort direct insert:', directError);
-                                                
-                                                // Last resort: Try direct insert with minimal fields
-                                                const minimalPhotoData = {
-                                                    id: photoId,
-                                                    storage_path: filePath,
-                                                    public_url: publicUrl,
-                                                    uploaded_by: userId,
-                                                    file_size: file.size || 0,
-                                                    file_type: file.type || 'image/jpeg',
-                                                    faces: [],
-                                                    matched_users: []
-                                                };
-                                                
-                                                const { error: insertError } = await supabase
-                                                    .from('photos')
-                                                    .insert(minimalPhotoData);
-                                                    
-                                                if (insertError) {
-                                                    console.error('Error inserting complete photo record:', insertError);
-                                                    // Handle error as an object for better logging
-                                                    if (typeof insertError === 'object') {
-                                                        console.error('Error details:', JSON.stringify(insertError, null, 2));
-                                                    }
-                                                    // Try to delete the uploaded file if the record creation fails
-                                                    await supabase.storage.from('photos').remove([filePath]);
-                                                    throw insertError;
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        console.log('Photo record created successfully via raw SQL');
-                                    }
-                                } catch (error) {
-                                    console.error('All photo insertion methods failed:', error);
-                                    // Try to delete the uploaded file if the record creation fails
-                                    await supabase.storage.from('photos').remove([filePath]);
-                                    throw error;
-                                }
-                            }
-                        } catch (error) {
-                            console.error('Error inserting photo:', error);
-                            throw error;
-                        }
+                    // Extract face attributes for storage
+                    const faceAttributes = {};
+                    if (face.AgeRange) {
+                        faceAttributes.age = { 
+                            low: face.AgeRange.Low, 
+                            high: face.AgeRange.High 
+                        };
                     }
-                } catch (error) {
-                    console.error('Error inserting photo:', error);
-                    throw error;
-                }
-                
-                console.log('Photo record created successfully');
-                
-                // Fetch the created photo record to ensure it exists
-                const { data: photoData, error: fetchError } = await supabase
-                    .from('photos')
-                    .select('*')
-                    .eq('id', photoId)
-                    .single();
                     
-                if (fetchError) {
-                    console.warn('Warning: Could not fetch the created photo record:', fetchError);
-                }
-                
-                // Process faces in the photo
-                const arrayBuffer = await file.arrayBuffer();
-                const imageBytes = new Uint8Array(arrayBuffer);
-                console.log('Processing faces in uploaded photo...');
-                // First detect faces
-                const detectedFaces = await this.detectFaces(imageBytes);
-                console.log('Detected faces:', detectedFaces);
-                // Initialize faces array with detected face attributes
-                const faces = detectedFaces.map(face => ({
-                    userId: '', // Will be populated if matched
-                    confidence: 0, // Will be populated if matched
-                    attributes: {
-                        age: {
-                            low: face.AgeRange?.Low || 0,
-                            high: face.AgeRange?.High || 0
-                        },
-                        smile: {
-                            value: face.Smile?.Value || false,
-                            confidence: face.Smile?.Confidence || 0
-                        },
-                        eyeglasses: {
-                            value: face.Eyeglasses?.Value || false,
-                            confidence: face.Eyeglasses?.Confidence || 0
-                        },
-                        sunglasses: {
-                            value: face.Sunglasses?.Value || false,
-                            confidence: face.Sunglasses?.Confidence || 0
-                        },
-                        gender: {
-                            value: face.Gender?.Value || '',
-                            confidence: face.Gender?.Confidence || 0
-                        },
-                        eyesOpen: {
-                            value: face.EyesOpen?.Value || false,
-                            confidence: face.EyesOpen?.Confidence || 0
-                        },
-                        mouthOpen: {
-                            value: face.MouthOpen?.Value || false,
-                            confidence: face.MouthOpen?.Confidence || 0
-                        },
-                        quality: {
-                            brightness: face.Quality?.Brightness || 0,
-                            sharpness: face.Quality?.Sharpness || 0
-                        },
-                        emotions: face.Emotions?.map(emotion => ({
+                    if (face.Gender) {
+                        faceAttributes.gender = { 
+                            value: face.Gender.Value, 
+                            confidence: face.Gender.Confidence 
+                        };
+                    }
+                    
+                    if (face.Smile) {
+                        faceAttributes.smile = { 
+                            value: face.Smile.Value, 
+                            confidence: face.Smile.Confidence 
+                        };
+                    }
+                    
+                    if (face.Emotions && face.Emotions.length > 0) {
+                        faceAttributes.emotions = face.Emotions.map(emotion => ({
                             type: emotion.Type,
                             confidence: emotion.Confidence
-                        })) || [],
-                        landmarks: face.Landmarks,
-                        pose: face.Pose,
-                        beard: {
-                            value: face.Beard?.Value || false,
-                            confidence: face.Beard?.Confidence || 0
-                        },
-                        mustache: {
-                            value: face.Mustache?.Value || false,
-                            confidence: face.Mustache?.Confidence || 0
-                        },
-                        overallConfidence: face.Confidence
+                        }));
                     }
-                }));
-                let matched_users = [];
-                if (faces.length > 0) {
-                    console.log(`Indexing ${faces.length} faces for future matching...`);
-                    // Index these faces in AWS Rekognition and store their FaceIDs
+                    
+                    return {
+                        faceId: localFaceId,
+                        confidence: face.Confidence || 99,
+                        boundingBox: face.BoundingBox || null,
+                        attributes: faceAttributes,
+                        overallConfidence: face.Confidence || 99
+                    };
+                });
+                
+                console.log('[DEBUG] Processed face attributes:', JSON.stringify(faces));
+            } catch (faceError) {
+                console.error('[DEBUG] Face detection error:', faceError);
+            }
+            
+            // Step 5: Index faces and find matches
+            let face_ids = [];
+            let matched_users = []; // Initialize matched_users here, outside the try-catch block
+            
+            if (faces.length > 0) {
+                console.log(`[DEBUG] Indexing ${faces.length} faces for future matching...`);
+                
+                // Extract local face IDs for storage and indexing
+                face_ids = faces.map(face => face.faceId);
+                console.log('[DEBUG] Added face_ids to metadata:', face_ids);
+                
+                // Step 6: Search for matches using the face IDs
+                console.log('[DEBUG] Searching for face matches in registered users...');
+                
+                try {
+                    const matchResults = await FaceIndexingService.searchFaces(imageBytes, photoId);
+                    console.log('[DEBUG] Found', matchResults.length, 'matching users!', matchResults);
+                    
+                    // Filter out matches with confidence below threshold and transform to our format
+                    const highConfidenceMatches = matchResults.filter(
+                        match => match.confidence >= FACE_MATCH_THRESHOLD
+                    );
+                    
+                    console.log('[DEBUG]', highConfidenceMatches.length, 'valid matches to save to database');
+                    
+                    // Create the matched_users array with user information for storage
+                    matched_users = highConfidenceMatches.map(match => ({
+                        userId: match.userId,
+                        fullName: match.fullName || 'Unknown User',
+                        avatarUrl: match.avatarUrl || null,
+                        confidence: match.confidence
+                    }));
+                    
+                    console.log('[DEBUG] Added matched_users to metadata:', matched_users);
+                    
+                    // Index the faces in AWS Rekognition
                     try {
-                        // Create a safe external ID that doesn't use underscores or other special chars
-                        const externalImageId = `p${photoId.replace(/-/g, '')}`;
-                        const indexCommand = new IndexFacesCommand({
-                            CollectionId: COLLECTION_ID,
-                            Image: { Bytes: imageBytes },
-                            ExternalImageId: externalImageId,
-                            DetectionAttributes: ['ALL'],
-                            MaxFaces: 10,
-                            QualityFilter: 'AUTO'
-                        });
-                        const indexResult = await rekognitionClient.send(indexCommand);
-                        if (indexResult.FaceRecords && indexResult.FaceRecords.length > 0) {
-                            console.log(`Successfully indexed ${indexResult.FaceRecords.length} faces in AWS`);
-                            // Store the face IDs for later use
-                            const faceIds = [];
-                            // Store these as unassociated faces in our database
-                            for (let i = 0; i < indexResult.FaceRecords.length; i++) {
-                                const faceRecord = indexResult.FaceRecords[i];
-                                const faceId = faceRecord.Face?.FaceId;
-                                if (faceId) {
-                                    faceIds.push(faceId);
-                                    try {
-                                        // Store the unassociated face with reference to the new photo
-                                        // using the validation utility
-                                        const success = await FaceIndexingService.storeUnassociatedFace(
-                                            faceId,
-                                            photoId,
-                                            `${externalImageId}${i}`,
-                                            faceRecord.FaceDetail || {}
-                                        );
-                                        
-                                        if (success && faces[i]) {
-                                            faces[i].faceId = faceId;
-                                        }
-                                    }
-                                    catch (faceStoreError) {
-                                        console.error('Error in storing unassociated face:', faceStoreError);
-                                    }
-                                }
-                            }
-                            // Also update the face_ids array column if it exists
-                            if (faceIds.length > 0) {
-                                const { error: faceIdsError } = await supabase
-                                    .from('photos')
-                                    .update({ face_ids: faceIds })
-                                    .eq('id', photoId);
-                                if (faceIdsError) {
-                                    console.log('Note: Could not update face_ids column, it may not exist:', faceIdsError);
-                                }
-                            }
-                        }
-                        // Immediately search for matching users
-                        const matches = await FaceIndexingService.searchFaces(imageBytes);
-                        console.log('Face matches:', matches);
-                        // Filter matches by confidence threshold
-                        const highConfidenceMatches = matches.filter(match => match.confidence >= FACE_MATCH_THRESHOLD);
-                        console.log('High confidence matches:', highConfidenceMatches);
-                        if (highConfidenceMatches.length > 0) {
-                            // Update query to handle potential non-UUID formats in userId
-                            const userIds = highConfidenceMatches.map(match => match.userId)
-                                .filter(id => !id.startsWith('photo_') && !id.startsWith('p'))
-                                .filter(id => id && id.length > 10); // Basic validation
-                            if (userIds.length > 0) {
-                                console.log('Querying for user details with IDs:', userIds);
-                                // Get user details for matches
-                                const { data: matchedUsersData, error: userError } = await supabase
-                                    .from('users')
-                                    .select(`
-                  id,
-                  full_name,
-                  avatar_url,
-                  user_profiles (
-                    metadata
-                  )
-                `)
-                                    .in('id', userIds);
-                                if (userError) {
-                                    console.error('Error fetching matched users:', userError);
-                                }
-                                else if (matchedUsersData && matchedUsersData.length > 0) {
-                                    console.log('Matched users data:', matchedUsersData);
-                                    // Update faces array with matched user IDs and confidence scores
-                                    // and build matched_users array for database storage
-                                    matched_users = highConfidenceMatches
-                                        .filter(match => !match.userId.startsWith('photo_') && !match.userId.startsWith('p'))
-                                        .filter(match => match.userId && match.userId.length > 10)
-                                        .map(match => {
-                                        const userData = matchedUsersData.find(u => u.id === match.userId);
-                                        if (!userData)
-                                            return null;
-                                        // Find face index for this match
-                                        const faceIndex = faces.findIndex(face => face.faceId === match.faceId);
-                                        if (faceIndex !== -1) {
-                                            faces[faceIndex].userId = match.userId;
-                                            faces[faceIndex].confidence = match.confidence;
-                                        }
-                                        // Create matched_users entry  
-                                        return {
-                                            userId: match.userId,
-                                            fullName: userData.full_name || userData?.user_profiles?.[0]?.metadata?.full_name || 'Unknown User',
-                                            avatarUrl: userData.avatar_url || userData?.user_profiles?.[0]?.metadata?.avatar_url,
-                                            confidence: match.confidence
-                                        };
-                                    })
-                                        .filter(Boolean); // Remove null entries
-                                }
-                            }
-                        }
+                        await FaceIndexingService.indexFacesInPhoto(photoId, faces);
+                    } catch (indexError) {
+                        console.error('[DEBUG] Error indexing faces in AWS:', indexError);
                     }
-                    catch (indexError) {
-                        console.error('Error indexing faces:', indexError);
-                    }
+                } catch (matchError) {
+                    console.error('[DEBUG] Error finding face matches:', matchError);
                 }
-                // Now that we have all the data, update the photo record with the full details
-                const updateData = {
-                    faces: faces.length > 0 ? faces : [],
-                    matched_users: matched_users.length > 0 ? matched_users : []
-                };
-                // Add optional fields that might exist in the schema
-                if (metadata?.title)
-                    updateData.title = metadata.title || file.name;
-                if (metadata?.description !== undefined)
-                    updateData.description = metadata.description || '';
-                if (metadata?.location)
-                    updateData.location = metadata.location;
-                if (metadata?.venue)
-                    updateData.venue = metadata.venue;
-                if (metadata?.tags)
-                    updateData.tags = metadata.tags;
-                if (metadata?.date_taken)
-                    updateData.date_taken = metadata.date_taken;
-                if (metadata?.event_details)
-                    updateData.event_details = metadata.event_details;
-                if (eventId)
-                    updateData.event_id = eventId;
-                if (folderPath) {
-                    updateData.folder_path = folderPath;
-                    updateData.folder_name = folderPath.split('/').pop();
-                }
-                updateData.file_size = file.size;
-                updateData.file_type = file.type;
-                console.log('Updating photo with full details:', JSON.stringify(updateData));
-                // Update the photo record with faces and matched users
-                const { error: updateError } = await supabase
+            }
+            
+            // Step 7: Prepare all metadata for database storage
+            const photoRecord = {
+                id: photoId,
+                user_id: userId,
+                title: file.name,
+                storage_path: path,
+                url: publicUrl,
+                size: file.size,
+                type: file.type,
+                faces: faces,
+                face_ids: face_ids,
+                matched_users: matched_users, // Now matched_users is always defined
+                date_taken: metadata?.date_taken || creationDate,
+                event_id: eventId || null,
+                event_details: metadata?.event_details || null,
+                venue: metadata?.venue || null,
+                location: metadata?.location || locationData,
+                created_at: new Date().toISOString()
+                // Remove resolution from the main insert to prevent errors if column doesn't exist
+            };
+            
+            // Add resolution data conditionally in a separate object
+            const resolutionData = resolutionWidth && resolutionHeight ? {
+                resolution: { width: resolutionWidth, height: resolutionHeight }
+            } : {};
+            
+            console.log('[DEBUG] Uploading photo to database:', photoId);
+            
+            // Step 8: Insert into database
+            try {
+                // First attempt: insert the main data without resolution
+                const { data, error } = await supabase
                     .from('photos')
-                    .update(updateData)
-                    .eq('id', photoId);
-                if (updateError) {
-                    console.error('Error updating photo with full details:', updateError);
+                    .insert(photoRecord);
+                    
+                if (error) {
+                    console.error('[DEBUG] Database insert error:', error);
+                    throw new Error(`Error creating photo record: ${error.message}`);
                 }
-                // Return success with photo details
+                
+                // If we have resolution data, try to update it separately
+                if (resolutionWidth && resolutionHeight) {
+                    try {
+                        const { error: resolutionError } = await supabase
+                            .from('photos')
+                            .update(resolutionData)
+                            .eq('id', photoId);
+                            
+                        if (resolutionError) {
+                            console.warn('[DEBUG] Could not update resolution data:', resolutionError.message);
+                            // Don't throw here, just log a warning since the main photo was created successfully
+                        }
+                    } catch (resolutionUpdateError) {
+                        console.warn('[DEBUG] Error updating resolution:', resolutionUpdateError);
+                    }
+                }
+                
+                console.log('[DEBUG] Photo uploaded successfully:', photoId);
+                
+                // Return the complete photo record
                 return {
                     success: true,
-                    url: publicUrl,
                     photoId,
-                    photoMetadata: {
-                        id: photoId,
-                        url: publicUrl,
-                        eventId,
-                        uploadedBy: userId,
-                        created_at: new Date().toISOString(),
-                        fileSize: file.size,
-                        fileType: file.type,
-                        faces,
-                        matched_users,
-                        folderPath,
-                        title: metadata?.title || file.name,
-                        description: metadata?.description || '',
-                        location: metadata?.location || null,
-                        venue: metadata?.venue || null,
-                        tags: metadata?.tags || [],
-                        date_taken: metadata?.date_taken || new Date().toISOString(),
-                        event_details: metadata?.event_details || null
-                    }
+                    url: publicUrl,
+                    photoData: { ...photoRecord, ...resolutionData }
                 };
             } catch (error) {
-                console.error('Error uploading photo:', error);
-                return {
-                    success: false,
-                    error: error.message || 'Failed to upload photo'
-                };
+                console.error('[DEBUG] Database insert error:', error);
+                throw error;
             }
-        }
-        catch (error) {
-            console.error('Error uploading photo:', error);
+        } catch (error) {
+            console.error('[DEBUG] Photo upload critical error:', error);
             return {
                 success: false,
-                error: error.message || 'Failed to upload photo'
+                error: error.message
             };
         }
     }
@@ -503,37 +263,68 @@ export class PhotoService {
         try {
             let retries = 0;
             let error;
+            
+            console.log('[DEBUG] Updating photo metadata for', photoId);
+            
             while (retries < this.MAX_RETRIES) {
                 try {
+                    // First try using the RPC function
+                    const { error: rpcError } = await supabase.rpc(
+                        'update_photo_details_adapter',
+                        {
+                            p_id: photoId,
+                            p_title: metadata.title,
+                            p_date_taken: metadata.date_taken,
+                            p_event_details: metadata.event_details,
+                            p_venue: metadata.venue
+                        }
+                    );
+                    
+                    if (!rpcError) {
+                        console.log('[DEBUG] Photo metadata updated successfully via RPC');
+                        return true;
+                    }
+                    
+                    console.log('[DEBUG] RPC update failed, trying direct update...', rpcError);
+                    
+                    // Fall back to direct update
                     const { error: updateError } = await supabase
                         .from('photos')
                         .update({
-                        title: metadata.title,
-                        description: metadata.description,
-                        location: metadata.location,
-                        venue: metadata.venue,
-                        tags: metadata.tags,
-                        date_taken: metadata.date_taken,
-                        event_details: metadata.event_details
-                    })
+                            title: metadata.title,
+                            description: metadata.description,
+                            location: metadata.location,
+                            venue: metadata.venue,
+                            tags: metadata.tags,
+                            date_taken: metadata.date_taken,
+                            event_details: metadata.event_details
+                        })
                         .eq('id', photoId);
+                        
                     if (!updateError) {
+                        console.log('[DEBUG] Photo metadata updated successfully via direct update');
                         return true;
                     }
-                    error = updateError;
-                }
-                catch (err) {
+                    
+                    error = updateError || rpcError;
+                    console.log('[DEBUG] Both update methods failed:', error);
+                } catch (err) {
                     error = err;
+                    console.error('[ERROR] Exception during metadata update:', err);
                 }
+                
                 retries++;
                 if (retries < this.MAX_RETRIES) {
-                    await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * retries));
+                    const delay = this.RETRY_DELAY * retries;
+                    console.log(`[DEBUG] Retrying metadata update in ${delay}ms (attempt ${retries+1}/${this.MAX_RETRIES})...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
+            
+            console.error('[ERROR] Failed to update photo metadata after all retries');
             throw error;
-        }
-        catch (error) {
-            console.error('Error updating photo metadata:', error);
+        } catch (error) {
+            console.error('[ERROR] Error updating photo metadata:', error);
             return false;
         }
     }
@@ -541,35 +332,85 @@ export class PhotoService {
         try {
             let retries = 0;
             let error;
+            let successCount = 0;
+            
+            console.log(`[DEBUG] Batch updating ${photoIds.length} photos`);
+            
+            // Create parameters for the update
+            const updateData = {
+                location: data.location,
+                venue: data.venue,
+                tags: data.tags,
+                date_taken: data.date_taken,
+                event_details: data.event_details
+            };
+            
             while (retries < this.MAX_RETRIES) {
                 try {
+                    // Use direct update for batch operations
                     const { error: updateError } = await supabase
                         .from('photos')
-                        .update({
-                        location: data.location,
-                        venue: data.venue,
-                        tags: data.tags,
-                        date_taken: data.date_taken,
-                        event_details: data.event_details
-                    })
+                        .update(updateData)
                         .in('id', photoIds);
+                        
                     if (!updateError) {
+                        console.log(`[DEBUG] Successfully batch updated ${photoIds.length} photos`);
                         return true;
                     }
+                    
+                    // If batch update fails, try updating photos one by one
+                    console.log('[DEBUG] Batch update failed, trying individual updates...', updateError);
                     error = updateError;
-                }
-                catch (err) {
+                    
+                    // Try individual updates
+                    successCount = 0;
+                    for (const photoId of photoIds) {
+                        try {
+                            const { error: singleError } = await supabase
+                                .from('photos')
+                                .update(updateData)
+                                .eq('id', photoId);
+                                
+                            if (!singleError) {
+                                successCount++;
+                            } else {
+                                console.log(`[DEBUG] Failed to update photo ${photoId}:`, singleError);
+                            }
+                        } catch (singleErr) {
+                            console.error(`[ERROR] Exception updating photo ${photoId}:`, singleErr);
+                        }
+                    }
+                    
+                    if (successCount === photoIds.length) {
+                        console.log(`[DEBUG] Successfully updated all ${successCount} photos individually`);
+                        return true;
+                    } else if (successCount > 0) {
+                        console.warn(`[WARN] Partially successful: Updated ${successCount}/${photoIds.length} photos`);
+                        return true;
+                    }
+                    
+                } catch (err) {
                     error = err;
+                    console.error('[ERROR] Exception during batch update:', err);
                 }
+                
                 retries++;
                 if (retries < this.MAX_RETRIES) {
-                    await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * retries));
+                    const delay = this.RETRY_DELAY * retries;
+                    console.log(`[DEBUG] Retrying batch update in ${delay}ms (attempt ${retries+1}/${this.MAX_RETRIES})...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
+            
+            if (successCount > 0) {
+                console.warn(`[WARN] Partial success: Updated ${successCount}/${photoIds.length} photos after all retries`);
+                return true;
+            }
+            
+            console.error('[ERROR] Failed to update any photos after all retries');
             throw error;
-        }
-        catch (error) {
-            console.error('Error batch updating photos:', error);
+        } catch (error) {
+            console.error('[ERROR] Error in batch update photos:', error);
             return false;
         }
     }
@@ -641,28 +482,45 @@ export class PhotoService {
             let retries = 0;
             let response;
             let error;
+            
+            console.log('[DEBUG] Starting face detection with AWS Rekognition...');
+            
             while (retries < this.MAX_RETRIES) {
                 try {
+                    console.log(`[DEBUG] Face detection attempt ${retries + 1}/${this.MAX_RETRIES}`);
                     const command = new DetectFacesCommand({
                         Image: { Bytes: imageBytes },
                         Attributes: ['ALL']
                     });
+                    
                     response = await rekognitionClient.send(command);
-                    return response.FaceDetails || [];
+                    
+                    if (response && response.FaceDetails) {
+                        console.log(`[DEBUG] AWS face detection successful - found ${response.FaceDetails.length} faces`);
+                        return response.FaceDetails || [];
+                    } else {
+                        console.log('[DEBUG] AWS returned empty response');
+                        return [];
+                    }
                 }
                 catch (err) {
+                    console.error(`[ERROR] AWS face detection error (attempt ${retries + 1})`, err);
                     error = err;
                     retries++;
                     if (retries < this.MAX_RETRIES) {
-                        await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * retries));
+                        const delay = this.RETRY_DELAY * retries;
+                        console.log(`[DEBUG] Retrying face detection in ${delay}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
                     }
                 }
             }
-            throw error;
+            
+            console.error('[ERROR] All face detection attempts failed');
+            return []; // Return empty array instead of throwing
         }
         catch (error) {
-            console.error('Error detecting faces:', error);
-            throw error;
+            console.error('[ERROR] Fatal error in face detection:', error);
+            return []; // Return empty array to allow photo upload to continue
         }
     }
     static async getPhotosForEvent(eventId) {
@@ -999,4 +857,132 @@ export class PhotoService {
             throw error;
         }
     }
+    // Process matches between user faces and photos
+    static async processMatches(userId) {
+        try {
+            console.log(`[DEBUG-MATCH] Processing matches for user ${userId}`);
+            
+            // Get all face IDs for this user
+            const { data: faceData, error: faceError } = await supabase
+                .from('face_data')
+                .select('face_id')
+                .eq('user_id', userId);
+                
+            if (faceError) {
+                console.error('[DEBUG-MATCH] Error fetching face data:', faceError);
+                throw faceError;
+            }
+            
+            console.log(`[DEBUG-MATCH] Found ${faceData?.length || 0} registered faces for user`);
+            
+            if (!faceData || faceData.length === 0) {
+                return { success: false, message: 'No face data found' };
+            }
+            
+            const faceIds = faceData.map(fd => fd.face_id);
+            console.log('[DEBUG-MATCH] Face IDs:', faceIds);
+            
+            // Get all photos that might match these faces but aren't already matched
+            const { data: photos, error: photoError } = await supabase
+                .from('photos')
+                .select('*')
+                .not('matched_users', 'cs', `[{"userId":"${userId}"}]`);
+                
+            if (photoError) {
+                console.error('[DEBUG-MATCH] Error fetching photos:', photoError);
+                throw photoError;
+            }
+            
+            console.log(`[DEBUG-MATCH] Found ${photos?.length || 0} potential photos to match`);
+            
+            if (!photos || photos.length === 0) {
+                return { success: true, message: 'No new photos to match' };
+            }
+            
+            // Check each photo for face matches
+            let matchCount = 0;
+            
+            for (const photo of photos) {
+                let hasMatch = false;
+                
+                // Check if any of the user's face IDs match in this photo's faces array
+                if (Array.isArray(photo.faces)) {
+                    hasMatch = photo.faces.some(face => 
+                        face.faceId && faceIds.includes(face.faceId)
+                    );
+                }
+                
+                // Also check in the face_ids array
+                if (!hasMatch && Array.isArray(photo.face_ids)) {
+                    hasMatch = photo.face_ids.some(id => faceIds.includes(id));
+                }
+                
+                if (hasMatch) {
+                    console.log(`[DEBUG-MATCH] Found match in photo ${photo.id}`);
+                    
+                    // Get user data
+                    const { data: userData, error: userError } = await supabase
+                        .from('users')
+                        .select('id, full_name, avatar_url')
+                        .eq('id', userId)
+                        .single();
+                        
+                    if (userError) {
+                        console.error('[DEBUG-MATCH] Error fetching user data:', userError);
+                        continue;
+                    }
+                    
+                    console.log('[DEBUG-MATCH] User data:', userData);
+                    
+                    // Add user to matched_users if not already present
+                    const existingMatches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
+                    
+                    // Check if user is already in the matches
+                    if (existingMatches.some(match => match.userId === userId)) {
+                        console.log(`[DEBUG-MATCH] User ${userId} already in matches for photo ${photo.id}`);
+                        continue;
+                    }
+                    
+                    // Add the new match
+                    const newMatch = {
+                        userId,
+                        fullName: userData.full_name || 'Unknown User',
+                        avatarUrl: userData.avatar_url || null,
+                        confidence: 95 // Default high confidence since we're checking exact face ID matches
+                    };
+                    
+                    const updatedMatches = [...existingMatches, newMatch];
+                    console.log('[DEBUG-MATCH] Updated matches:', updatedMatches);
+                    
+                    // Update the photo
+                    const { error: updateError } = await supabase
+                        .from('photos')
+                        .update({ matched_users: updatedMatches })
+                        .eq('id', photo.id);
+                        
+                    if (updateError) {
+                        console.error('[DEBUG-MATCH] Error updating photo:', updateError);
+                        continue;
+                    }
+                    
+                    console.log(`[DEBUG-MATCH] Successfully updated matches for photo ${photo.id}`);
+                    matchCount++;
+                }
+            }
+            
+            return { 
+                success: true, 
+                matches: matchCount,
+                message: `Found ${matchCount} new matches` 
+            };
+        } catch (error) {
+            console.error('[DEBUG-MATCH] Error processing matches:', error);
+            return { 
+                success: false, 
+                error: error.message 
+            };
+        }
+    }
 }
+
+

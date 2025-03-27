@@ -79,3 +79,28 @@ export const initializeCollection = async () => {
 };
 // Initialize collection
 initializeCollection().catch(console.error);
+
+// Test AWS Rekognition connectivity
+export const testRekognitionConnectivity = async () => {
+  try {
+    console.log('[DEBUG] Testing AWS Rekognition connectivity...');
+    const listCollections = await rekognitionClient.send(
+      new ListCollectionsCommand({})
+    );
+    console.log('[DEBUG] Successfully connected to AWS Rekognition');
+    console.log('[DEBUG] Available collections:', listCollections.CollectionIds);
+    return true;
+  } catch (error) {
+    console.error('[ERROR] Failed to connect to AWS Rekognition:', error);
+    return false;
+  }
+};
+
+// Run connectivity test
+testRekognitionConnectivity().then(result => {
+  if (result) {
+    console.log('[INFO] AWS Rekognition is properly configured and working');
+  } else {
+    console.error('[ERROR] AWS Rekognition is not working. Face detection will be disabled.');
+  }
+});

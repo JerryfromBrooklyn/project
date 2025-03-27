@@ -89,7 +89,14 @@ export const GoogleMaps: React.FC<GoogleMapsProps> = ({
           type="text"
           placeholder="Search for a location..."
           className="ios-input w-full mb-2"
-          defaultValue={location.name}
+          value={location.name || ''}
+          onChange={(e) => {
+            // Update the location name when typing
+            onLocationChange({
+              ...location,
+              name: e.target.value
+            });
+          }}
         />
       </div>
       <div style={{ height, width: '100%' }} className="rounded-apple overflow-hidden">
@@ -99,11 +106,12 @@ export const GoogleMaps: React.FC<GoogleMapsProps> = ({
           zoom={location.lat && location.lng ? 15 : 1}
           onClick={(e) => {
             if (e.latLng) {
-              onLocationChange({
+              const newLocation = {
                 lat: e.latLng.lat(),
                 lng: e.latLng.lng(),
-                name: location.name || `${e.latLng.lat()}, ${e.latLng.lng()}`
-              });
+                name: location.name || `${e.latLng.lat().toFixed(6)}, ${e.latLng.lng().toFixed(6)}`
+              };
+              onLocationChange(newLocation);
             }
           }}
           onLoad={setMap}

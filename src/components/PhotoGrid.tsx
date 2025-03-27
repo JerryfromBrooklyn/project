@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Share2, Trash2, X, Users, AlertCircle, Info } from 'lucide-react';
 import { PhotoService } from '../services/PhotoService';
 import { PhotoMetadata } from '../types';
-import { PhotoInfoModal } from './PhotoInfoModal';
+import { PhotoInfoModal } from './PhotoInfoModal.jsx';
 import { cn } from '../utils/cn';
 
 interface PhotoGridProps {
@@ -91,13 +91,13 @@ export const PhotoGrid: React.FC<PhotoGridProps> = ({
               <div 
                 className={cn(
                   "absolute top-2 right-2 px-2 py-1 rounded-full text-sm flex items-center gap-1",
-                  photo.matched_users?.length 
-                    ? "bg-apple-green-500 text-white" 
-                    : "bg-apple-gray-200 text-apple-gray-600"
+                  "bg-apple-blue-500/80 text-white backdrop-blur-sm"
                 )}
               >
                 <Users className="w-4 h-4" />
-                {photo.matched_users?.length || "No"} {photo.matched_users?.length === 1 ? "Match" : "Matches"}
+                {photo.matched_users?.length > 0 
+                  ? `${photo.matched_users.length} ${photo.matched_users.length === 1 ? "Match" : "Matches"}`
+                  : `${photo.faces.length} ${photo.faces.length === 1 ? "Face" : "Faces"}`}
               </div>
             )}
 
