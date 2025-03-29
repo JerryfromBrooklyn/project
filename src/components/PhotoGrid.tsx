@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Share2, Trash2, X, Users, AlertCircle, Info } from 'lucide-react';
 import { PhotoService } from '../services/PhotoService';
 import { PhotoMetadata } from '../types';
-import { PhotoInfoModal } from './PhotoInfoModal.jsx';
+import SimplePhotoInfoModal from './SimplePhotoInfoModal';
 import { cn } from '../utils/cn';
 
 interface PhotoGridProps {
@@ -148,7 +148,7 @@ export const PhotoGrid: React.FC<PhotoGridProps> = ({
       {/* Photo Info Modal */}
       <AnimatePresence>
         {selectedPhoto && (
-          <PhotoInfoModal
+          <SimplePhotoInfoModal
             photo={selectedPhoto}
             onClose={() => setSelectedPhoto(null)}
           />

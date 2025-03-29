@@ -7,6 +7,9 @@ import { PhotoService } from '../services/PhotoService';
 import { cn } from '../utils/cn';
 import { useAuth } from '../context/AuthContext';
 import { GoogleMaps } from './GoogleMaps';
+import { supabase } from '../lib/supabaseClient';
+import SimplePhotoInfoModal from './SimplePhotoInfoModal';
+
 export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     const { user } = useAuth();
     const [uploads, setUploads] = useState([]);
@@ -35,6 +38,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     const [showMetadataForm, setShowMetadataForm] = useState(false);
     const [pendingFiles, setPendingFiles] = useState([]);
     const [selectedUpload, setSelectedUpload] = useState(null);
+
     useEffect(() => {
         // Fetch current storage usage
         const fetchStorageUsage = async () => {
@@ -52,6 +56,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         };
         fetchStorageUsage();
     }, [user]);
+
     const validateMetadata = () => {
         if (!metadata.eventName.trim()) {
             onError?.('Event name is required');
@@ -71,6 +76,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         }
         return true;
     };
+
     const onDrop = useCallback(async (acceptedFiles) => {
         // Check if total upload size would exceed limit
         const uploadSize = acceptedFiles.reduce((total, file) => total + file.size, 0);
@@ -82,9 +88,16 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         setPendingFiles(acceptedFiles);
         setShowMetadataForm(true);
     }, [totalStorage, storageLimit, onError]);
+
     const processUploads = async () => {
         if (!validateMetadata())
             return;
+            
+        console.log('[DEBUG] Processing uploads - validation passed');
+        console.log('[DEBUG] Pending files:', pendingFiles.map(f => f.name));
+        console.log('[DEBUG] Current user:', user?.id);
+        console.log('[DEBUG] Metadata:', JSON.stringify(metadata, null, 2));
+            
         // Process folder structure
         const newFolderStructure = { ...folderStructure };
         const newUploads = [];
@@ -116,11 +129,17 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
             };
             newUploads.push(uploadItem);
         });
+        
+        console.log('[DEBUG] Created upload items:', newUploads.length);
+        
         setFolderStructure(newFolderStructure);
         setUploads(prev => [...prev, ...newUploads]);
+        
         // Process uploads
         for (const upload of newUploads) {
             try {
+                console.log(`[DEBUG] Starting upload process for ${upload.file.name} (${upload.id})`);
+                
                 setUploads(prev => prev.map(u => u.id === upload.id
                     ? { ...u, status: 'uploading', progress: 10 }
                     : u));
@@ -133,24 +152,42 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                         return u;
                     }));
                 }, 200);
+                
                 // Prepare photo metadata
                 const photoMetadata = {
                     title: upload.file.name,
                     event_details: {
-                        name: metadata.eventName,
-                        date: metadata.date,
-                        promoter: metadata.promoterName
+                        name: metadata.eventName || "Untitled Event",
+                        date: metadata.date || new Date().toISOString(),
+                        promoter: metadata.promoterName || "Unknown"
                     },
                     venue: {
-                        name: metadata.venueName
+                        name: metadata.venueName || "Unknown Venue",
+                        id: null
                     },
-                    location: metadata.location.name ? metadata.location : undefined,
-                    date_taken: metadata.date
+                    location: metadata.location && metadata.location.name ? metadata.location : {
+                        lat: null,
+                        lng: null,
+                        name: "Unknown Location"
+                    },
+                    date_taken: metadata.date || new Date().toISOString(),
+                    // Add empty structures for things that will be populated by the service
+                    tags: [],
+                    matched_users: []
                 };
+                
+                console.log(`[DEBUG] Prepared metadata for ${upload.file.name}:`, JSON.stringify(photoMetadata, null, 2));
+                
                 // Upload photo
+                console.log(`[DEBUG] Calling PhotoService.uploadPhoto for ${upload.file.name}`);
                 const result = await PhotoService.uploadPhoto(upload.file, eventId, upload.folderPath, photoMetadata);
+                console.log(`[DEBUG] Upload result for ${upload.file.name}:`, JSON.stringify(result, null, 2));
+                
                 clearInterval(progressInterval);
+                
                 if (result.success) {
+                    console.log(`[DEBUG] Upload successful for ${upload.file.name} - photoId: ${result.photoId}`);
+                    
                     const updatedUpload = {
                         ...upload,
                         status: 'complete',
@@ -158,28 +195,49 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                         photoId: result.photoId,
                         photoDetails: result.photoMetadata
                     };
+                    
                     setUploads(prev => prev.map(u => u.id === upload.id
                         ? updatedUpload
                         : u));
-                    onUploadComplete?.(result.photoId);
+                        
+                    if (onUploadComplete) {
+                        console.log(`[DEBUG] Calling onUploadComplete callback for ${result.photoId}`);
+                        onUploadComplete(result.photoId);
+                    } else {
+                        console.log(`[DEBUG] No onUploadComplete callback provided`);
+                    }
+                    
                     // Update storage usage
                     setTotalStorage(prev => prev + upload.file.size);
                 }
                 else {
+                    console.error(`[DEBUG] Upload failed for ${upload.file.name}:`, result.error);
                     throw new Error(result.error);
                 }
             }
             catch (error) {
+                console.error(`[DEBUG] Exception during upload of ${upload.file.name}:`, error);
+                
                 setUploads(prev => prev.map(u => u.id === upload.id
                     ? { ...u, status: 'error', error: error.message }
                     : u));
-                onError?.(error.message);
+                    
+                if (onError) {
+                    console.log(`[DEBUG] Calling onError callback with: ${error.message}`);
+                    onError(error.message);
+                } else {
+                    console.log(`[DEBUG] No onError callback provided`);
+                }
             }
         }
+        
+        console.log(`[DEBUG] All uploads processed - total: ${newUploads.length}`);
+        
         // Reset metadata form
         setShowMetadataForm(false);
         setPendingFiles([]);
     };
+
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop,
         accept: {
@@ -197,6 +255,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         noClick: showMetadataForm,
         noKeyboard: showMetadataForm,
     });
+
     const handleFolderRename = async (oldPath, newName) => {
         try {
             // Update folder name in database
@@ -244,6 +303,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
             onError?.('Failed to rename folder');
         }
     };
+
     // Filter and sort uploads
     const filteredUploads = uploads
         .filter(upload => {
@@ -266,6 +326,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 return b.file.lastModified - a.file.lastModified;
         }
     });
+
     const removeUpload = (id) => {
         const upload = uploads.find(u => u.id === id);
         if (upload && upload.status === 'complete') {
@@ -273,6 +334,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         }
         setUploads(prev => prev.filter(u => u.id !== id));
     };
+
     const renderFolderStructure = (structure, path = '') => {
         return Object.entries(structure).map(([key, folder]) => (_jsxs("div", { className: "mb-4", children: [_jsxs("div", { className: "flex items-center justify-between p-2 bg-apple-gray-50 rounded-apple", children: [_jsxs("div", { className: "flex items-center", children: [_jsx(Folder, { className: "w-4 h-4 text-apple-gray-400 mr-2" }), editingFolder === path + key ? (_jsx("input", { type: "text", value: newFolderName, onChange: (e) => setNewFolderName(e.target.value), onBlur: () => {
                                         if (newFolderName && newFolderName !== folder.name) {
@@ -291,11 +353,13 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                                                 setNewFolderName(folder.name);
                                             }, className: "ml-2 text-apple-gray-400 hover:text-apple-gray-600", children: _jsx(Edit2, { className: "w-3 h-3" }) })] }))] }), _jsxs("span", { className: "text-xs text-apple-gray-500", children: [folder.files.length, " files"] })] }), _jsx("div", { className: "ml-4", children: renderFolderStructure(folder.subfolders, path + key + '/') })] }, path + key)));
     };
+
     const renderUploadDetails = (upload) => {
         if (!upload.photoDetails)
             return null;
         return (_jsx("div", { className: "mt-4 space-y-4", children: _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4", children: [_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium mb-2", children: "Photo Information" }), _jsxs("div", { className: "space-y-2", children: [_jsxs("div", { className: "flex items-center p-2 bg-apple-gray-50 rounded-apple", children: [_jsx(Calendar, { className: "w-4 h-4 text-apple-gray-500 mr-2" }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium", children: "Date Taken" }), _jsx("div", { className: "text-xs text-apple-gray-500", children: new Date(upload.photoDetails.date_taken || upload.photoDetails.created_at).toLocaleDateString() })] })] }), _jsxs("div", { className: "flex items-center p-2 bg-apple-gray-50 rounded-apple", children: [_jsx(MapPin, { className: "w-4 h-4 text-apple-gray-500 mr-2" }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium", children: "Location" }), _jsx("div", { className: "text-xs text-apple-gray-500", children: upload.photoDetails.location?.name || 'Unknown' })] })] })] })] }), _jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium mb-2", children: "Face Detection" }), _jsx("div", { className: "space-y-2", children: upload.photoDetails.matched_users?.length ? (upload.photoDetails.matched_users.map((user, index) => (_jsxs("div", { className: "flex items-center p-2 bg-apple-gray-50 rounded-apple", children: [_jsx(User, { className: "w-4 h-4 text-apple-gray-500 mr-2" }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium", children: user.fullName }), _jsxs("div", { className: "text-xs text-apple-gray-500", children: [Math.round(user.confidence), "% match"] })] })] }, index)))) : (_jsxs("div", { className: "flex items-center p-2 bg-apple-gray-50 rounded-apple", children: [_jsx(AlertTriangle, { className: "w-4 h-4 text-apple-gray-500 mr-2" }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium", children: "No Matches Found" }), _jsx("div", { className: "text-xs text-apple-gray-500", children: "No registered faces were detected" })] })] })) })] })] }) }));
     };
+
     return (_jsxs("div", { className: "w-full", children: [_jsxs("div", { className: "mb-6", children: [_jsxs("div", { className: "flex items-center justify-between mb-2", children: [_jsx("span", { className: "text-sm font-medium text-apple-gray-700", children: "Storage Usage" }), _jsxs("span", { className: "text-sm text-apple-gray-500", children: [(totalStorage / 1024 / 1024 / 1024).toFixed(2), "GB of 10GB"] })] }), _jsx("div", { className: "h-2 bg-apple-gray-100 rounded-full overflow-hidden", children: _jsx("div", { className: "h-full bg-apple-blue-500 transition-all duration-300", style: { width: `${(totalStorage / storageLimit) * 100}%` } }) })] }), _jsx(AnimatePresence, { children: showMetadataForm && (_jsxs(motion.div, { initial: { opacity: 0, y: -20 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -20 }, className: "mb-8 p-6 bg-white rounded-apple-xl border border-apple-gray-200", children: [_jsx("h3", { className: "text-lg font-medium text-apple-gray-900 mb-4", children: "Photo Details" }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4", children: [_jsxs("div", { children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(Calendar, { className: "w-4 h-4 mr-2" }), "Event Name*"] }), _jsx("input", { type: "text", value: metadata.eventName, onChange: (e) => setMetadata({ ...metadata, eventName: e.target.value }), className: "ios-input", placeholder: "Enter event name", required: true })] }), _jsxs("div", { children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(Building, { className: "w-4 h-4 mr-2" }), "Venue Name*"] }), _jsx("input", { type: "text", value: metadata.venueName, onChange: (e) => setMetadata({ ...metadata, venueName: e.target.value }), className: "ios-input", placeholder: "Enter venue name", required: true })] }), _jsxs("div", { children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(User, { className: "w-4 h-4 mr-2" }), "Promoter Name*"] }), _jsx("input", { type: "text", value: metadata.promoterName, onChange: (e) => setMetadata({ ...metadata, promoterName: e.target.value }), className: "ios-input", placeholder: "Enter promoter name", required: true })] }), _jsxs("div", { children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(Calendar, { className: "w-4 h-4 mr-2" }), "Date*"] }), _jsx("input", { type: "date", value: metadata.date, onChange: (e) => setMetadata({ ...metadata, date: e.target.value }), className: "ios-input", required: true })] }), _jsxs("div", { className: "md:col-span-2", children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(MapPin, { className: "w-4 h-4 mr-2" }), "Location (optional)"] }), _jsx(GoogleMaps, { location: metadata.location, onLocationChange: (location) => setMetadata({ ...metadata, location }), height: "300px", className: "rounded-apple overflow-hidden" })] })] }), _jsxs("div", { className: "flex justify-end space-x-4 mt-6", children: [_jsx("button", { onClick: () => {
                                         setShowMetadataForm(false);
                                         setPendingFiles([]);
@@ -313,6 +377,12 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                                     ? "aspect-square"
                                     : "w-20 h-20"), children: [upload.file.type.startsWith('image/') && (_jsx("img", { src: URL.createObjectURL(upload.file), alt: upload.file.name, className: "w-full h-full object-cover rounded-tl-apple rounded-tr-apple" })), _jsxs("div", { className: cn("absolute inset-0 bg-black/50 flex items-center justify-center", upload.status === 'complete' && "bg-apple-green-500/50", upload.status === 'error' && "bg-apple-red-500/50"), children: [upload.status === 'uploading' && (_jsx("div", { className: "w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" })), upload.status === 'complete' && (_jsx(Check, { className: "w-8 h-8 text-white" })), upload.status === 'error' && (_jsx(AlertTriangle, { className: "w-8 h-8 text-white" }))] })] }), _jsxs("div", { className: "p-4 flex-1", children: [_jsxs("div", { className: "flex items-start justify-between", children: [_jsxs("div", { children: [_jsx("p", { className: "font-medium text-apple-gray-900 truncate", children: upload.file.name }), _jsxs("p", { className: "text-sm text-apple-gray-500", children: [upload.folderPath && (_jsxs("span", { className: "text-apple-gray-400", children: [upload.folderPath, " /"] })), ' ', (upload.file.size / 1024 / 1024).toFixed(2), " MB"] })] }), _jsxs("div", { className: "flex items-center space-x-2", children: [upload.status === 'complete' && (_jsx("button", { onClick: () => setSelectedUpload(upload), className: "text-apple-gray-400 hover:text-apple-gray-600", children: _jsx(Info, { className: "w-4 h-4" }) })), _jsx("button", { onClick: () => removeUpload(upload.id), className: "text-apple-gray-400 hover:text-apple-gray-600", children: _jsx(X, { className: "w-4 h-4" }) })] })] }), upload.status !== 'complete' && (_jsxs("div", { className: "mt-2", children: [_jsx("div", { className: "h-1 bg-apple-gray-100 rounded-full overflow-hidden", children: _jsx("div", { className: cn("h-full transition-all duration-300", upload.status === 'error'
                                                         ? "bg-apple-red-500"
-                                                        : "bg-apple-blue-500"), style: { width: `${upload.progress}%` } }) }), upload.error && (_jsx("p", { className: "mt-1 text-sm text-apple-red-500", children: upload.error }))] })), upload.status === 'complete' && upload.photoDetails && (_jsx("div", { className: "mt-4", children: _jsx("div", { className: "flex items-center space-x-2", children: upload.photoDetails.matched_users?.length ? (_jsxs("div", { className: "bg-apple-green-500 text-white px-2 py-1 rounded-full text-sm flex items-center", children: [_jsx(Users, { className: "w-4 h-4 mr-1" }), upload.photoDetails.matched_users.length, " ", upload.photoDetails.matched_users.length === 1 ? 'Match' : 'Matches'] })) : (_jsxs("div", { className: "bg-apple-gray-200 text-apple-gray-600 px-2 py-1 rounded-full text-sm flex items-center", children: [_jsx(Users, { className: "w-4 h-4 mr-1" }), "No Matches"] })) }) }))] })] }, upload.id))) })) }), _jsx(AnimatePresence, { children: selectedUpload && selectedUpload.photoDetails && (_jsx(motion.div, { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, className: "fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4", onClick: () => setSelectedUpload(null), children: _jsx(motion.div, { initial: { scale: 0.9, opacity: 0 }, animate: { scale: 1, opacity: 1 }, exit: { scale: 0.9, opacity: 0 }, className: "relative max-w-2xl w-full bg-white rounded-apple-2xl overflow-hidden", onClick: (e) => e.stopPropagation(), children: _jsxs("div", { className: "p-6", children: [_jsxs("div", { className: "flex justify-between items-center mb-4", children: [_jsx("h3", { className: "text-lg font-semibold", children: "Photo Details" }), _jsx("button", { onClick: () => setSelectedUpload(null), className: "text-apple-gray-400 hover:text-apple-gray-600", children: _jsx(X, { className: "w-5 h-5" }) })] }), _jsx("div", { className: "aspect-video rounded-apple-xl overflow-hidden mb-6", children: _jsx("img", { src: URL.createObjectURL(selectedUpload.file), alt: selectedUpload.file.name, className: "w-full h-full object-cover" }) }), renderUploadDetails(selectedUpload)] }) }) })) })] }));
+                                                        : "bg-apple-blue-500"), style: { width: `${upload.progress}%` } }) }), upload.error && (_jsx("p", { className: "mt-1 text-sm text-apple-red-500", children: upload.error }))] })), upload.status === 'complete' && upload.photoDetails && (_jsx("div", { className: "mt-4", children: _jsx("div", { className: "flex items-center space-x-2", children: upload.photoDetails.matched_users?.length ? (_jsxs("div", { className: "bg-apple-green-500 text-white px-2 py-1 rounded-full text-sm flex items-center", children: [_jsx(Users, { className: "w-4 h-4 mr-1" }), upload.photoDetails.matched_users.length, " ", upload.photoDetails.matched_users.length === 1 ? 'Match' : 'Matches'] })) : (_jsxs("div", { className: "bg-apple-gray-200 text-apple-gray-600 px-2 py-1 rounded-full text-sm flex items-center", children: [_jsx(Users, { className: "w-4 h-4 mr-1" }), "No Matches"] })) }) }))] })] }, upload.id))) })) }), _jsx(AnimatePresence, { children: selectedUpload && selectedUpload.photoDetails && (
+          _jsx(SimplePhotoInfoModal, {
+            photo: selectedUpload.photoDetails,
+            onClose: () => setSelectedUpload(null)
+          })
+        ) })] }));
 };
+
 export default PhotoUploader;

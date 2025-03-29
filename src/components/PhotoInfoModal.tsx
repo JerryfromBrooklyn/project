@@ -1,17 +1,16 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  X, User, Users, AlertCircle, Calendar, MapPin, Tag, Info, 
-  Download, Share2, Building, UserCog, Camera, Image, Clock,
-  Sparkles, Eye, Ruler, Smile, Aperture, Settings, Sliders,
-  Glasses, Frown, Laugh, Bean as Beard, Meh, Compass, Map,
-  FileType, HardDrive, Globe, Upload
+  X, Calendar, MapPin, Tag, Info, Download, Share2, 
+  Building, Camera, Image, Clock, Sparkles, Eye, Ruler, 
+  Smile, Glasses, FileType, HardDrive, Globe, Upload,
+  Users, ChevronRight, User, MessageCircle, Award, Heart,
+  AlertCircle
 } from 'lucide-react';
 import { PhotoService } from '../services/PhotoService';
-import { PhotoMetadata } from '../types';
+import { PhotoMetadata, MatchedUser, FaceAttributes } from '../types';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
-import { EventDetails, FaceAttributes } from '../types';
 
 interface PhotoInfoModalProps {
   photo: PhotoMetadata;
@@ -24,9 +23,52 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
   onClose,
   onShare 
 }) => {
-  const [loading, setLoading] = React.useState(false);
-  const [imageLoaded, setImageLoaded] = React.useState(false);
-  const [imageSize, setImageSize] = React.useState({ width: 0, height: 0 });
+  // Log the full photo object for debugging
+  console.log('[PhotoInfoModal] Full photo data:', JSON.stringify(photo, null, 2));
+  
+  // Ensure photo has all required properties
+  const normalizedPhoto = {
+    ...photo,
+    faces: Array.isArray(photo.faces) ? photo.faces : [],
+    matched_users: Array.isArray(photo.matched_users) ? photo.matched_users : [],
+    location: photo.location || { lat: null, lng: null, name: null },
+    event_details: photo.event_details || { date: null, name: null, type: null, promoter: null },
+    venue: photo.venue || { id: null, name: null },
+    tags: Array.isArray(photo.tags) ? photo.tags : []
+  };
+
+  // Debug logs - more detailed info
+  console.log('[PhotoInfoModal] Has faces:', normalizedPhoto.faces.length > 0, 'Length:', normalizedPhoto.faces.length);
+  console.log('[PhotoInfoModal] Has matched_users:', normalizedPhoto.matched_users?.length > 0, 'Length:', normalizedPhoto.matched_users?.length);
+  console.log('[PhotoInfoModal] Has location:', normalizedPhoto.location?.name != null);
+  console.log('[PhotoInfoModal] Has event_details:', 
+    normalizedPhoto.event_details?.name != null || normalizedPhoto.event_details?.date != null ||
+    normalizedPhoto.event_details?.promoter != null);
+  
+  // Debug first face in more detail
+  if (normalizedPhoto.faces.length > 0) {
+    console.log('[PhotoInfoModal] First face structure:', JSON.stringify(normalizedPhoto.faces[0], null, 2));
+    
+    if (normalizedPhoto.faces[0]?.attributes) {
+      console.log('[PhotoInfoModal] First face attributes:', JSON.stringify(normalizedPhoto.faces[0].attributes, null, 2));
+      
+      if (normalizedPhoto.faces[0].attributes.emotions?.length > 0) {
+        console.log('[PhotoInfoModal] First face emotions:', JSON.stringify(normalizedPhoto.faces[0].attributes.emotions, null, 2));
+      }
+    }
+  }
+  
+  // Debug additional photo data
+  console.log('[PhotoInfoModal] First matched user:', normalizedPhoto.matched_users?.[0] ? 
+    JSON.stringify(normalizedPhoto.matched_users[0], null, 2) : 'None');
+  console.log('[PhotoInfoModal] Location data:', JSON.stringify(normalizedPhoto.location, null, 2));
+  console.log('[PhotoInfoModal] Event details:', JSON.stringify(normalizedPhoto.event_details, null, 2));
+  console.log('[PhotoInfoModal] Venue data:', JSON.stringify(normalizedPhoto.venue, null, 2));
+
+  const [loading, setLoading] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [activeTab, setActiveTab] = useState<'info' | 'faces' | 'matches'>('info');
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.target as HTMLImageElement;
@@ -40,11 +82,11 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
   const handleDownload = async () => {
     try {
       setLoading(true);
-      const url = await PhotoService.downloadPhoto(photo.id);
+      const url = await PhotoService.downloadPhoto(normalizedPhoto.id);
       
       const link = document.createElement('a');
       link.href = url;
-      link.download = `photo-${photo.id}.jpg`;
+      link.download = `photo-${normalizedPhoto.id}.jpg`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -57,398 +99,600 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
     }
   };
 
-  const renderEventDetails = () => {
-    if (!photo.event_details) return null;
-
-    const details = [
-      {
-        icon: <Calendar className="w-4 h-4" />,
-        label: "Event Date",
-        value: new Date(photo.event_details.date || photo.date_taken || photo.created_at).toLocaleDateString()
-      },
-      {
-        icon: <Sparkles className="w-4 h-4" />,
-        label: "Event Name",
-        value: photo.event_details.name || 'Untitled Event'
-      },
-      {
-        icon: <Building className="w-4 h-4" />,
-        label: "Venue",
-        value: photo.venue?.name || 'Unknown Venue'
-      },
-      {
-        icon: <UserCog className="w-4 h-4" />,
-        label: "Promoter",
-        value: photo.event_details.promoter || 'Unknown'
-      }
-    ];
-
-    return (
-      <div className="mb-6">
-        <h4 className="text-sm font-medium text-apple-gray-700 mb-2">Event Information</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {details.map((detail, index) => (
-            <div 
-              key={index}
-              className="flex items-center p-2 bg-apple-gray-50 rounded-apple"
-            >
-              <div className="mr-2 text-apple-gray-500">
-                {detail.icon}
-              </div>
-              <div>
-                <div className="text-sm font-medium text-apple-gray-900">
-                  {detail.label}
-                </div>
-                <div className="text-xs text-apple-gray-500">
-                  {detail.value}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+  const handleShare = () => {
+    if (onShare) {
+      onShare(normalizedPhoto.id);
+    }
   };
 
-  const renderPhotoDetails = () => {
-    const details = [
-      {
-        icon: <Calendar className="w-4 h-4" />,
-        label: "Date Taken",
-        value: new Date(photo.date_taken || photo.created_at).toLocaleDateString()
-      },
-      {
-        icon: <FileType className="w-4 h-4" />,
-        label: "File Type",
-        value: photo.fileType
-      },
-      {
-        icon: <HardDrive className="w-4 h-4" />,
-        label: "File Size",
-        value: `${(photo.fileSize / 1024 / 1024).toFixed(2)} MB`
-      },
-      {
-        icon: <Clock className="w-4 h-4" />,
-        label: "Uploaded",
-        value: new Date(photo.created_at).toLocaleString()
-      },
-      {
-        icon: <Image className="w-4 h-4" />,
-        label: "Dimensions",
-        value: `${imageSize.width} × ${imageSize.height}`
-      },
-      {
-        icon: <Upload className="w-4 h-4" />,
-        label: "Uploaded By",
-        value: photo.uploadedBy || 'Unknown'
-      }
-    ];
+  // Animation variants
+  const backdropVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1 }
+  };
 
-    if (photo.location?.name) {
-      details.push({
-        icon: <Globe className="w-4 h-4" />,
-        label: "Location",
-        value: photo.location.name
-      });
+  const modalVariants = {
+    hidden: { opacity: 0, y: 20, scale: 0.98 },
+    visible: { 
+      opacity: 1, 
+      y: 0, 
+      scale: 1,
+      transition: { 
+        type: 'spring', 
+        damping: 25, 
+        stiffness: 300 
+      } 
+    },
+    exit: { 
+      opacity: 0, 
+      y: 20, 
+      scale: 0.98,
+      transition: { 
+        duration: 0.2 
+      } 
     }
+  };
 
-    if (photo.tags?.length) {
-      details.push({
-        icon: <Tag className="w-4 h-4" />,
-        label: "Tags",
-        value: photo.tags.join(', ')
-      });
-    }
+  // Helper for confidence indicator
+  const getConfidenceColor = (confidence: number) => {
+    if (confidence >= 90) return 'bg-green-500';
+    if (confidence >= 70) return 'bg-yellow-500';
+    return 'bg-orange-500';
+  };
 
+  // Safely check if a property exists and has a value
+  const hasValue = (obj: any, key: string) => {
+    if (!obj) return false;
+    const value = obj[key];
+    // Check for empty strings, null, undefined
+    return value !== null && value !== undefined && value !== '' && value !== 'null';
+  };
+
+  // Tabs components
+  const InfoTabContent = () => {
+    // Check if event details exist and have any non-empty values
+    const hasEventName = hasValue(normalizedPhoto.event_details, 'name');
+    const hasEventDate = hasValue(normalizedPhoto.event_details, 'date');
+    const hasPromoter = hasValue(normalizedPhoto.event_details, 'promoter');
+    const hasEventDetails = hasEventName || hasEventDate || hasPromoter;
+    
+    // Check if venue exists and has a name
+    const hasVenueName = hasValue(normalizedPhoto.venue, 'name');
+    
+    // Check if location exists and has any values
+    const hasLocation = hasValue(normalizedPhoto.location, 'name') || 
+                       (normalizedPhoto.location?.lat && normalizedPhoto.location.lat !== 0) || 
+                       (normalizedPhoto.location?.lng && normalizedPhoto.location.lng !== 0);
+    
+    console.log('[InfoTabContent] Has event name:', hasEventName);
+    console.log('[InfoTabContent] Has event date:', hasEventDate);
+    console.log('[InfoTabContent] Has promoter:', hasPromoter);
+    console.log('[InfoTabContent] Has event details:', hasEventDetails);
+    console.log('[InfoTabContent] Has venue name:', hasVenueName);
+    console.log('[InfoTabContent] Has location:', hasLocation);
+    console.log('[InfoTabContent] Event details:', JSON.stringify(normalizedPhoto.event_details, null, 2));
+    console.log('[InfoTabContent] Venue data:', JSON.stringify(normalizedPhoto.venue, null, 2));
+    
     return (
-      <div className="mb-6">
-        <h4 className="text-sm font-medium text-apple-gray-700 mb-2">Photo Information</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {details.map((detail, index) => (
-            <div 
-              key={index}
-              className="flex items-center p-2 bg-apple-gray-50 rounded-apple"
-            >
-              <div className="mr-2 text-apple-gray-500">
-                {detail.icon}
-              </div>
-              <div>
-                <div className="text-sm font-medium text-apple-gray-900">
-                  {detail.label}
+      <div className="space-y-6">
+        {/* Photo details */}
+        <section>
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">Photo Details</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              { icon: <Calendar className="w-4 h-4" />, label: "Date Taken", value: new Date(normalizedPhoto.date_taken || normalizedPhoto.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) },
+              { icon: <FileType className="w-4 h-4" />, label: "File Type", value: normalizedPhoto.fileType },
+              { icon: <HardDrive className="w-4 h-4" />, label: "File Size", value: `${(normalizedPhoto.fileSize / 1024 / 1024).toFixed(2)} MB` },
+              { icon: <Image className="w-4 h-4" />, label: "Dimensions", value: `${imageSize.width} × ${imageSize.height}` },
+              { icon: <Clock className="w-4 h-4" />, label: "Uploaded", value: new Date(normalizedPhoto.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) },
+              { icon: <Upload className="w-4 h-4" />, label: "Uploaded By", value: normalizedPhoto.uploadedBy || 'Unknown' }
+            ].map((item, index) => (
+              <div key={index} className="flex items-center p-3 bg-gray-50 rounded-xl">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">
+                  {item.icon}
                 </div>
-                <div className="text-xs text-apple-gray-500">
-                  {detail.value}
+                <div className="ml-3">
+                  <p className="text-xs text-gray-500">{item.label}</p>
+                  <p className="text-sm font-medium text-gray-900">{item.value}</p>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </section>
 
-        {photo.location?.lat && photo.location?.lng && (
-          <div className="mt-4">
-            <h4 className="text-sm font-medium text-apple-gray-700 mb-2">Location</h4>
-            <div className="h-48 rounded-apple overflow-hidden">
+        {/* Event details */}
+        {(hasEventDetails || hasVenueName) && (
+          <section>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Event Information</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                // Only include items with values
+                hasEventDate && { 
+                  icon: <Calendar className="w-4 h-4" />, 
+                  label: "Event Date", 
+                  value: normalizedPhoto.event_details.date && normalizedPhoto.event_details.date !== "null" 
+                    ? new Date(normalizedPhoto.event_details.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) 
+                    : "Unknown" 
+                },
+                hasEventName && { 
+                  icon: <Sparkles className="w-4 h-4" />, 
+                  label: "Event Name", 
+                  value: normalizedPhoto.event_details.name
+                },
+                hasVenueName && { 
+                  icon: <Building className="w-4 h-4" />, 
+                  label: "Venue", 
+                  value: normalizedPhoto.venue.name
+                },
+                hasPromoter && { 
+                  icon: <User className="w-4 h-4" />, 
+                  label: "Promoter", 
+                  value: normalizedPhoto.event_details.promoter
+                }
+              ]
+              .filter(Boolean)
+              .map((item, index) => (
+                item && (
+                  <div key={index} className="flex items-center p-3 bg-gray-50 rounded-xl">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">
+                      {item.icon}
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-xs text-gray-500">{item.label}</p>
+                      <p className="text-sm font-medium text-gray-900">{item.value}</p>
+                    </div>
+                  </div>
+                )
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Location */}
+        {hasLocation && (
+          <section>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Location</h3>
+            <div className="h-60 rounded-xl overflow-hidden shadow-sm">
               <GoogleMaps
                 location={{
-                  lat: photo.location.lat,
-                  lng: photo.location.lng,
-                  name: photo.location.name || ''
+                  lat: normalizedPhoto.location.lat,
+                  lng: normalizedPhoto.location.lng,
+                  name: normalizedPhoto.location.name || ''
                 }}
                 onLocationChange={() => {}}
                 height="100%"
                 className="w-full"
               />
             </div>
-          </div>
+            <p className="mt-2 text-sm text-gray-500">{normalizedPhoto.location.name}</p>
+          </section>
         )}
-      </div>
-    );
-  };
 
-  const renderFaceAttributes = () => {
-    if (!photo.faces?.length) return null;
-
-    const face = photo.faces[0];
-    if (!face.attributes) return null;
-
-    // Get primary emotion (highest confidence)
-    const primaryEmotion = face.attributes.emotions?.reduce((prev, curr) => 
-      (curr.confidence > prev.confidence) ? curr : prev
-    );
-
-    const attributes = [
-      {
-        icon: <Smile className="w-4 h-4" />,
-        label: "Expression",
-        value: face.attributes.smile?.value ? "Smiling" : "Not Smiling",
-        confidence: face.attributes.smile?.confidence
-      },
-      {
-        icon: <Eye className="w-4 h-4" />,
-        label: "Eyes",
-        value: face.attributes.eyesOpen?.value ? "Open" : "Closed",
-        confidence: face.attributes.eyesOpen?.confidence
-      },
-      {
-        icon: <Glasses className="w-4 h-4" />,
-        label: "Eyewear",
-        value: face.attributes.sunglasses?.value ? "Sunglasses" : 
-               face.attributes.eyeglasses?.value ? "Glasses" : "None",
-        confidence: face.attributes.sunglasses?.value ? 
-                   face.attributes.sunglasses?.confidence :
-                   face.attributes.eyeglasses?.confidence
-      },
-      {
-        icon: <Ruler className="w-4 h-4" />,
-        label: "Age Range",
-        value: `${face.attributes.age?.low}-${face.attributes.age?.high} years`,
-        confidence: 100
-      },
-      {
-        icon: <User className="w-4 h-4" />,
-        label: "Gender",
-        value: face.attributes.gender?.value,
-        confidence: face.attributes.gender?.confidence
-      },
-      {
-        icon: <Laugh className="w-4 h-4" />,
-        label: "Emotion",
-        value: primaryEmotion?.type || "Neutral",
-        confidence: primaryEmotion?.confidence
-      },
-      {
-        icon: <Beard className="w-4 h-4" />,
-        label: "Facial Hair",
-        value: face.attributes.beard?.value ? "Beard" : 
-               face.attributes.mustache?.value ? "Mustache" : "None",
-        confidence: face.attributes.beard?.value ? 
-                   face.attributes.beard?.confidence :
-                   face.attributes.mustache?.confidence
-      },
-      {
-        icon: <Sliders className="w-4 h-4" />,
-        label: "Quality",
-        value: `${Math.round(face.attributes.quality?.brightness || 0)}% Brightness, ${Math.round(face.attributes.quality?.sharpness || 0)}% Sharpness`,
-        confidence: 100
-      }
-    ];
-
-    return (
-      <div className="mb-6">
-        <h4 className="text-sm font-medium text-apple-gray-700 mb-2">Face Analysis</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {attributes.map((attr, index) => (
-            <div 
-              key={index}
-              className="flex items-center p-2 bg-apple-gray-50 rounded-apple"
-            >
-              <div className="mr-2 text-apple-gray-500">
-                {attr.icon}
-              </div>
-              <div>
-                <div className="text-sm font-medium text-apple-gray-900">
-                  {attr.label}
-                </div>
-                <div className="text-xs text-apple-gray-500">
-                  {attr.value} ({Math.round(attr.confidence || 0)}% confidence)
-                </div>
-              </div>
+        {/* Tags */}
+        {normalizedPhoto.tags && normalizedPhoto.tags.length > 0 && (
+          <section>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Tags</h3>
+            <div className="flex flex-wrap gap-2">
+              {normalizedPhoto.tags.map((tag, index) => (
+                <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                  <Tag className="w-3 h-3 mr-1" />
+                  {tag}
+                </span>
+              ))}
             </div>
-          ))}
-        </div>
+          </section>
+        )}
+
+        {/* Show raw data for debugging */}
+        <section className="border-t border-gray-200 pt-4 mt-6">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-gray-500">Debug Information</h3>
+            <span className="text-xs text-gray-400">For development</span>
+          </div>
+          <div className="bg-gray-50 p-2 rounded-md text-xs font-mono text-gray-600 overflow-x-auto max-h-32 overflow-y-auto">
+            <pre>ID: {normalizedPhoto.id}</pre>
+            {normalizedPhoto.faces?.length > 0 && (
+              <pre>Faces: {normalizedPhoto.faces.length} detected</pre>
+            )}
+            {normalizedPhoto.event_details && (
+              <pre>Event: {JSON.stringify(normalizedPhoto.event_details, null, 2)}</pre>
+            )}
+            {normalizedPhoto.venue && (
+              <pre>Venue: {JSON.stringify(normalizedPhoto.venue, null, 2)}</pre>
+            )}
+          </div>
+        </section>
       </div>
     );
   };
 
-  const renderMatchedUsers = () => {
-    if (!photo.matched_users?.length) {
+  const FacesTabContent = () => {
+    console.log("[renderFaceAttributes] Called with photo.faces:", JSON.stringify(normalizedPhoto.faces, null, 2));
+    
+    if (!normalizedPhoto.faces || normalizedPhoto.faces.length === 0) {
+      console.log("[renderFaceAttributes] No faces found");
       return (
-        <div className="mb-6 p-4 bg-apple-gray-50 rounded-apple text-center">
-          <AlertCircle className="w-8 h-8 text-apple-gray-400 mx-auto mb-2" />
-          <p className="text-apple-gray-600 font-medium">No Matches Found</p>
-          <p className="text-apple-gray-500 text-sm mt-1">
-            No registered faces were detected in this photo
-          </p>
+        <div className="py-10 text-center">
+          <div className="inline-block p-3 rounded-full bg-gray-100 mb-3">
+            <User className="w-6 h-6 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900">No faces detected</h3>
+          <p className="text-sm text-gray-500 mt-1">This photo doesn't contain any recognized faces</p>
         </div>
       );
     }
 
     return (
-      <div className="mb-6">
-        <h4 className="text-sm font-medium text-apple-gray-700 mb-2">Matched People</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {photo.matched_users.map((user) => (
-            <div
-              key={user.userId}
-              className="flex items-center gap-2 p-2 rounded-apple bg-apple-gray-50"
-            >
-              {user.avatarUrl ? (
-                <img
-                  src={user.avatarUrl}
-                  alt={user.fullName}
-                  className="w-8 h-8 rounded-full"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-apple-blue-100 text-apple-blue-500 flex items-center justify-center">
-                  <User className="w-4 h-4" />
+      <div className="space-y-6">
+        {normalizedPhoto.faces.map((face, faceIndex) => {
+          console.log(`[renderFaceAttributes] Rendering face ${faceIndex}:`, face);
+          if (!face.attributes) {
+            console.log(`[renderFaceAttributes] No attributes for face ${faceIndex}`);
+            return (
+              <div key={faceIndex} className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Face #{faceIndex + 1}</h3>
+                  <div className="flex items-center space-x-1">
+                    <span className="text-sm text-gray-500">Confidence:</span>
+                    <div className="ml-2 flex items-center">
+                      <div className={cn("h-2 w-16 rounded-full bg-gray-200 overflow-hidden")}>
+                        <div 
+                          className={cn("h-full rounded-full", getConfidenceColor(face.confidence))}
+                          style={{ width: `${face.confidence}%` }}
+                        />
+                      </div>
+                      <span className="ml-2 text-xs font-medium">{Math.round(face.confidence)}%</span>
+                    </div>
+                  </div>
                 </div>
-              )}
-              <div>
-                <div className="text-sm font-medium">{user.fullName}</div>
-                <div className="text-xs text-apple-gray-500">
-                  {Math.round(user.confidence)}% match
+                
+                <div className="text-center py-4">
+                  <AlertCircle className="w-8 h-8 text-orange-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">Face detected but no attributes available</p>
                 </div>
               </div>
+            );
+          }
+          
+          // Ensure attributes exist and have proper structure
+          const attributes = face.attributes || {};
+
+          // Get primary emotion (highest confidence) if emotions exist
+          const primaryEmotion = attributes.emotions && Array.isArray(attributes.emotions) 
+            ? attributes.emotions.reduce(
+                (prev, curr) => (curr.confidence > prev.confidence) ? curr : prev, 
+                { type: 'neutral', confidence: 0 }
+              )
+            : null;
+
+          const hasAge = attributes.age && (
+            (attributes.age.low > 0 || attributes.age.high > 0) || 
+            (typeof attributes.age === 'object' && Object.keys(attributes.age).length > 0)
+          );
+          const hasGender = attributes.gender && (attributes.gender.value || attributes.gender.confidence > 0);
+          const hasSmile = attributes.smile && (typeof attributes.smile.value === 'boolean' || attributes.smile.confidence > 0);
+          const hasEmotions = attributes.emotions && Array.isArray(attributes.emotions) && attributes.emotions.length > 0;
+
+          return (
+            <div key={faceIndex} className="bg-gray-50 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Face #{faceIndex + 1}</h3>
+                <div className="flex items-center space-x-1">
+                  <span className="text-sm text-gray-500">Confidence:</span>
+                  <div className="ml-2 flex items-center">
+                    <div className={cn("h-2 w-16 rounded-full bg-gray-200 overflow-hidden")}>
+                      <div 
+                        className={cn("h-full rounded-full", getConfidenceColor(face.confidence))}
+                        style={{ width: `${face.confidence}%` }}
+                      />
+                    </div>
+                    <span className="ml-2 text-xs font-medium">{Math.round(face.confidence)}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {/* Age */}
+                {hasAge && (
+                  <div className="flex flex-col p-3 bg-white rounded-lg shadow-sm">
+                    <div className="flex items-center mb-2">
+                      <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center">
+                        <Ruler className="w-3 h-3 text-blue-500" />
+                      </div>
+                      <span className="ml-2 text-xs font-medium text-gray-500">Age Range</span>
+                    </div>
+                    <span className="text-sm font-semibold">
+                      {attributes.age.low}-{attributes.age.high} years
+                    </span>
+                  </div>
+                )}
+
+                {/* Gender */}
+                {hasGender && (
+                  <div className="flex flex-col p-3 bg-white rounded-lg shadow-sm">
+                    <div className="flex items-center mb-2">
+                      <div className="w-6 h-6 rounded-full bg-purple-50 flex items-center justify-center">
+                        <User className="w-3 h-3 text-purple-500" />
+                      </div>
+                      <span className="ml-2 text-xs font-medium text-gray-500">Gender</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-sm font-semibold">{attributes.gender.value}</span>
+                      <div className="ml-2 text-xs text-gray-500">
+                        {Math.round(attributes.gender.confidence)}%
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Emotion */}
+                {hasEmotions && primaryEmotion && (
+                  <div className="flex flex-col p-3 bg-white rounded-lg shadow-sm">
+                    <div className="flex items-center mb-2">
+                      <div className="w-6 h-6 rounded-full bg-yellow-50 flex items-center justify-center">
+                        <Heart className="w-3 h-3 text-yellow-500" />
+                      </div>
+                      <span className="ml-2 text-xs font-medium text-gray-500">Emotion</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-sm font-semibold capitalize">{primaryEmotion.type}</span>
+                      <div className="ml-2 text-xs text-gray-500">
+                        {Math.round(primaryEmotion.confidence)}%
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Smile */}
+                {hasSmile && (
+                  <div className="flex flex-col p-3 bg-white rounded-lg shadow-sm">
+                    <div className="flex items-center mb-2">
+                      <div className="w-6 h-6 rounded-full bg-green-50 flex items-center justify-center">
+                        <Smile className="w-3 h-3 text-green-500" />
+                      </div>
+                      <span className="ml-2 text-xs font-medium text-gray-500">Expression</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-sm font-semibold">{attributes.smile.value ? "Smiling" : "Not Smiling"}</span>
+                      <div className="ml-2 text-xs text-gray-500">
+                        {Math.round(attributes.smile.confidence)}%
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Eyes */}
+                {attributes.eyesOpen && (
+                  <div className="flex flex-col p-3 bg-white rounded-lg shadow-sm">
+                    <div className="flex items-center mb-2">
+                      <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center">
+                        <Eye className="w-3 h-3 text-indigo-500" />
+                      </div>
+                      <span className="ml-2 text-xs font-medium text-gray-500">Eyes</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-sm font-semibold">{attributes.eyesOpen.value ? "Open" : "Closed"}</span>
+                      <div className="ml-2 text-xs text-gray-500">
+                        {Math.round(attributes.eyesOpen.confidence)}%
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Eyewear */}
+                {(attributes.sunglasses || attributes.eyeglasses) && (
+                  <div className="flex flex-col p-3 bg-white rounded-lg shadow-sm">
+                    <div className="flex items-center mb-2">
+                      <div className="w-6 h-6 rounded-full bg-teal-50 flex items-center justify-center">
+                        <Glasses className="w-3 h-3 text-teal-500" />
+                      </div>
+                      <span className="ml-2 text-xs font-medium text-gray-500">Eyewear</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-sm font-semibold">
+                        {attributes.sunglasses?.value 
+                          ? "Sunglasses" 
+                          : attributes.eyeglasses?.value 
+                            ? "Glasses" 
+                            : "None"}
+                      </span>
+                      <div className="ml-2 text-xs text-gray-500">
+                        {Math.round(
+                          attributes.sunglasses?.value 
+                            ? attributes.sunglasses.confidence 
+                            : attributes.eyeglasses?.confidence || 0
+                        )}%
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          ))}
+          );
+        })}
+      </div>
+    );
+  };
+
+  const MatchesTabContent = () => {
+    console.log("[renderMatchedUsers] Called with matched_users:", normalizedPhoto.matched_users);
+    
+    if (!normalizedPhoto.matched_users || normalizedPhoto.matched_users.length === 0) {
+      console.log("[renderMatchedUsers] No matched users found");
+      return (
+        <div className="py-10 text-center">
+          <div className="inline-block p-3 rounded-full bg-gray-100 mb-3">
+            <Users className="w-6 h-6 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900">No matches found</h3>
+          <p className="text-sm text-gray-500 mt-1">There are no recognized users in this photo</p>
         </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {normalizedPhoto.matched_users.map((user, index) => (
+          <div key={index} className="bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                  {user.avatarUrl ? (
+                    <img 
+                      src={user.avatarUrl} 
+                      alt={user.fullName} 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-blue-100 text-blue-500">
+                      <User className="w-5 h-5" />
+                    </div>
+                  )}
+                </div>
+                <div className="ml-3">
+                  <h4 className="text-sm font-medium text-gray-900">{user.fullName}</h4>
+                  <p className="text-xs text-gray-500">ID: {user.userId.substring(0, 8)}...</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-1">
+                <span className="text-xs text-gray-500">Match:</span>
+                <div className="ml-1 w-12 h-2 rounded-full bg-gray-200 overflow-hidden">
+                  <div 
+                    className={cn("h-full rounded-full", getConfidenceColor(user.confidence))}
+                    style={{ width: `${user.confidence}%` }}
+                  />
+                </div>
+                <span className="text-xs font-medium">{Math.round(user.confidence)}%</span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     );
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onClose}
-    >
+    <AnimatePresence>
       <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="relative w-full max-w-5xl bg-white rounded-apple-2xl overflow-hidden"
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        variants={backdropVariants}
+        initial="hidden"
+        animate="visible"
+        exit="hidden"
+        onClick={onClose}
       >
-        <div className="flex flex-col md:flex-row h-[85vh]">
-          {/* Left side - Image */}
-          <div className="w-full md:w-3/5 h-full relative">
-            <div className="absolute inset-0 flex items-center justify-center bg-apple-gray-100">
-              <div className="relative w-full h-full">
-                <img
-                  src={photo.url}
-                  alt={photo.title || 'Photo'}
-                  className={cn(
-                    "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
-                    "max-w-[95%] max-h-[95%] w-auto h-auto object-contain",
-                    !imageLoaded && "opacity-0"
-                  )}
-                  onLoad={handleImageLoad}
-                />
-                {!imageLoaded && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-apple-gray-900"></div>
-                  </div>
-                )}
-              </div>
+        <motion.div 
+          className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+          variants={modalVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-gray-900">Photo Details</h2>
+            <button 
+              onClick={onClose}
+              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors"
+              aria-label="Close modal"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+          
+          {/* Image preview */}
+          <div className="bg-gray-50 p-4 border-b border-gray-100">
+            <div className="aspect-video relative rounded-lg overflow-hidden bg-gray-100 mx-auto shadow-sm">
+              <img 
+                src={normalizedPhoto.url} 
+                alt="Photo preview" 
+                className="object-contain w-full h-full"
+                onLoad={handleImageLoad}
+              />
             </div>
           </div>
-
-          {/* Right side - Details */}
-          <div className="w-full md:w-2/5 h-full flex flex-col">
-            <div className="p-6 flex-1 overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">Photo Details</h3>
-                <button 
-                  onClick={onClose} 
-                  className="absolute top-2 right-2 p-2 rounded-full bg-apple-white hover:bg-apple-gray-100 text-apple-gray-500 transition-colors"
-                  aria-label="Close modal"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Photo Info */}
-              {(photo.title || photo.description) && (
-                <div className="mb-6">
-                  {photo.title && (
-                    <h3 className="text-lg font-medium mb-1">{photo.title}</h3>
-                  )}
-                  {photo.description && (
-                    <p className="text-apple-gray-600 text-sm">{photo.description}</p>
-                  )}
-                </div>
+          
+          {/* Action buttons */}
+          <div className="p-3 flex justify-center space-x-4 border-b border-gray-100">
+            <button 
+              onClick={handleDownload}
+              disabled={loading}
+              className="flex items-center px-4 py-2 rounded-full bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-medium"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {loading ? 'Downloading...' : 'Download'}
+            </button>
+            
+            {onShare && (
+              <button 
+                onClick={handleShare}
+                className="flex items-center px-4 py-2 rounded-full bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-medium"
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                Share
+              </button>
+            )}
+          </div>
+          
+          {/* Tabs */}
+          <div className="grid grid-cols-3 border-b border-gray-100">
+            <button
+              onClick={() => setActiveTab('info')}
+              className={cn(
+                "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors",
+                activeTab === 'info' 
+                  ? "border-blue-500 text-blue-600" 
+                  : "border-transparent text-gray-500 hover:text-gray-900"
               )}
-
-              {/* Face Analysis */}
-              {renderFaceAttributes()}
-
-              {/* Event Details */}
-              {renderEventDetails()}
-
-              {/* Photo Details */}
-              {renderPhotoDetails()}
-
-              {/* Matched Users */}
-              {renderMatchedUsers()}
-            </div>
-
-            {/* Action Buttons */}
-            <div className="p-4 border-t border-apple-gray-200 bg-white">
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={handleDownload}
-                  disabled={loading}
-                  className="ios-button-secondary flex items-center"
-                >
-                  <Download className="w-5 h-5 mr-2" />
-                  Download
-                </button>
-                {onShare && (
-                  <button
-                    onClick={() => onShare(photo.id)}
-                    className="ios-button-primary flex items-center"
-                  >
-                    <Share2 className="w-5 h-5 mr-2" />
-                    Share
-                  </button>
-                )}
-              </div>
-            </div>
+            >
+              <Info className="w-4 h-4 mr-2" />
+              Details
+            </button>
+            <button
+              onClick={() => setActiveTab('faces')}
+              className={cn(
+                "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors relative",
+                activeTab === 'faces' 
+                  ? "border-blue-500 text-blue-600" 
+                  : "border-transparent text-gray-500 hover:text-gray-900"
+              )}
+            >
+              <User className="w-4 h-4 mr-2" />
+              Face Analysis
+              {normalizedPhoto.faces && normalizedPhoto.faces.length > 0 && (
+                <span className="ml-1 w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center">
+                  {normalizedPhoto.faces.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('matches')}
+              className={cn(
+                "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors relative",
+                activeTab === 'matches' 
+                  ? "border-blue-500 text-blue-600" 
+                  : "border-transparent text-gray-500 hover:text-gray-900"
+              )}
+            >
+              <Users className="w-4 h-4 mr-2" />
+              Matches
+              {normalizedPhoto.matched_users && normalizedPhoto.matched_users.length > 0 && (
+                <span className="ml-1 w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center">
+                  {normalizedPhoto.matched_users.length}
+                </span>
+              )}
+            </button>
           </div>
-        </div>
+          
+          {/* Content */}
+          <div className="p-4 overflow-y-auto">
+            {activeTab === 'info' && <InfoTabContent />}
+            {activeTab === 'faces' && <FacesTabContent />}
+            {activeTab === 'matches' && <MatchesTabContent />}
+          </div>
+        </motion.div>
       </motion.div>
-    </motion.div>
+    </AnimatePresence>
   );
 };

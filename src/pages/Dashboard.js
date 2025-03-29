@@ -2,7 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Camera, User, Calendar, Image, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, ImageIcon as Photos, Settings } from 'lucide-react';
+import { LogOut, Camera, User, Calendar, Image, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, ImageIcon as Photos, Settings, AlertTriangle } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { FaceRegistration } from '../components/FaceRegistration';
 import { PhotoManager } from '../components/PhotoManager';
@@ -394,31 +394,42 @@ export const Dashboard = () => {
     
     // Define the navigation tabs array outside the JSX
     const navigationTabs = [
-        { id: 'home', name: 'Home', icon: _jsx(User, { className: "w-4 h-4" }) },
+        { id: 'home', name: 'Home', icon: _jsx(Camera, { className: "w-4 h-4" }) },
         { id: 'upload', name: 'Upload', icon: _jsx(Upload, { className: "w-4 h-4" }) },
         { id: 'photos', name: 'My Photos', icon: _jsx(Image, { className: "w-4 h-4" }) },
         { id: 'events', name: 'Events', icon: _jsx(Calendar, { className: "w-4 h-4" }) },
-        { id: 'admin', name: 'Admin', icon: _jsx(Settings, { className: "w-4 h-4" }) }
+        { id: 'admin', name: 'Admin', icon: _jsx(Shield, { className: "w-4 h-4" }) },
+        { 
+            id: 'emergency',
+            name: 'Emergency Tools',
+            icon: _jsx(AlertTriangle, { className: 'w-4 h-4 text-amber-500' }),
+            onClick: () => {
+                window.location.href = '/emergency-tools';
+            }
+        }
     ];
     
     // Create the navigation buttons
     const renderNavigationButtons = () => {
-        return navigationTabs.map((tab) => (
-            _jsxs("button", {
-                key: tab.id,
-                onClick: () => setActiveTab(tab.id), 
-                className: cn(
-                    "flex items-center px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap transition-all duration-300", 
-                    activeTab === tab.id
-                        ? "bg-white text-apple-gray-900 shadow-apple-button"
-                        : "text-apple-gray-600 hover:text-apple-gray-900"
-                ), 
-                children: [
-                    tab.icon, 
-                    _jsx("span", { className: "ml-2", children: tab.name })
-                ] 
-            })
-        ));
+        return navigationTabs.map((tab) => {
+            const { id, onClick, icon, name } = tab;
+            return (
+                _jsxs("button", {
+                    key: id,
+                    onClick: onClick || (() => setActiveTab(id)), 
+                    className: cn(
+                        "flex items-center px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap transition-all duration-300", 
+                        activeTab === id
+                            ? "bg-white text-apple-gray-900 shadow-apple-button"
+                            : "text-apple-gray-600 hover:text-apple-gray-900"
+                    ), 
+                    children: [
+                        icon, 
+                        _jsx("span", { className: "ml-2", children: name })
+                    ] 
+                })
+            );
+        });
     };
 
     return _jsxs("div", { 
@@ -475,14 +486,78 @@ export const Dashboard = () => {
                                                         children: user?.email 
                                                     })
                                                 ] 
-                                            }), 
-                                            _jsxs("button", { 
-                                                onClick: () => signOut(), 
-                                                className: "flex items-center w-full text-left px-4 py-2 text-sm text-apple-red-500 hover:bg-apple-gray-50", 
-                                                children: [
-                                                    _jsx(LogOut, { className: "w-4 h-4 mr-2" }), 
-                                                    "Sign out"
-                                                ] 
+                                            }),
+                                            _jsx("div", { 
+                                                className: "py-1", 
+                                                children: _jsxs(motion.div, { 
+                                                    className: "space-y-1 px-2", 
+                                                    children: [
+                                                        _jsx("button", { 
+                                                            onClick: () => setActiveTab('profile'), 
+                                                            className: "flex w-full items-center px-2 py-2 text-sm text-apple-gray-700 rounded-apple hover:bg-apple-gray-100", 
+                                                            children: _jsxs("div", { 
+                                                                className: "flex items-center", 
+                                                                children: [
+                                                                    _jsx(User, { className: "mr-2 h-4 w-4 text-apple-gray-500" }), 
+                                                                    "Profile"
+                                                                ] 
+                                                            }) 
+                                                        }),
+                                                        _jsx("button", { 
+                                                            onClick: () => setActiveTab('settings'), 
+                                                            className: "flex w-full items-center px-2 py-2 text-sm text-apple-gray-700 rounded-apple hover:bg-apple-gray-100", 
+                                                            children: _jsxs("div", { 
+                                                                className: "flex items-center", 
+                                                                children: [
+                                                                    _jsx(Settings, { className: "mr-2 h-4 w-4 text-apple-gray-500" }), 
+                                                                    "Settings"
+                                                                ] 
+                                                            }) 
+                                                        }),
+                                                        _jsx("button", { 
+                                                            onClick: () => setActiveTab('admin'), 
+                                                            className: "flex w-full items-center px-2 py-2 text-sm text-apple-gray-700 rounded-apple hover:bg-apple-gray-100", 
+                                                            children: _jsxs("div", { 
+                                                                className: "flex items-center", 
+                                                                children: [
+                                                                    _jsx(Shield, { className: "mr-2 h-4 w-4 text-apple-gray-500" }), 
+                                                                    "Admin Tools"
+                                                                ] 
+                                                            }) 
+                                                        }),
+                                                        _jsx("button", { 
+                                                            onClick: () => {
+                                                                window.location.href = '/emergency-tools';
+                                                                setIsMenuOpen(false);
+                                                            }, 
+                                                            className: "flex w-full items-center px-2 py-2 text-sm text-amber-600 rounded-apple hover:bg-amber-50", 
+                                                            children: _jsxs("div", { 
+                                                                className: "flex items-center", 
+                                                                children: [
+                                                                    _jsx(AlertTriangle, { className: "mr-2 h-4 w-4 text-amber-500" }), 
+                                                                    "Emergency Tools"
+                                                                ] 
+                                                            }) 
+                                                        }),
+                                                        _jsx("div", { 
+                                                            className: "border-t border-apple-gray-100 my-2" 
+                                                        }),
+                                                        _jsx("button", { 
+                                                            onClick: async () => {
+                                                                await signOut();
+                                                                setIsMenuOpen(false);
+                                                            }, 
+                                                            className: "flex w-full items-center px-2 py-2 text-sm text-apple-gray-700 rounded-apple hover:bg-apple-gray-100", 
+                                                            children: _jsxs("div", { 
+                                                                className: "flex items-center", 
+                                                                children: [
+                                                                    _jsx(LogOut, { className: "mr-2 h-4 w-4 text-apple-gray-500" }), 
+                                                                    "Sign out"
+                                                                ] 
+                                                            }) 
+                                                        })
+                                                    ] 
+                                                }) 
                                             })
                                         ] 
                                     })

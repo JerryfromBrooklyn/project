@@ -42,7 +42,11 @@
 
 ]
 
-}
+},
+"Supabase Read Only": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@modelcontextprotocol/server-postgres", "postgresql://postgres.gmupwzjxirpkskolsuix:55xz472otM3aoIuf@aws-0-us-east-1.pooler.supabase.com:5432/postgres"]
+    }
 
 }
   

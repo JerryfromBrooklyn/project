@@ -1,5 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, User, AlertCircle, Calendar, Tag, Download, Share2, Building, UserCog, Image, Clock, Sparkles, Eye, Ruler, Smile, Sliders, Glasses, Laugh, Bean as Beard, FileType, HardDrive, Globe, Upload, Users } from 'lucide-react';
 import { PhotoService } from '../services/PhotoService';
@@ -10,6 +10,76 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
     const [loading, setLoading] = React.useState(false);
     const [imageLoaded, setImageLoaded] = React.useState(false);
     const [imageSize, setImageSize] = React.useState({ width: 0, height: 0 });
+    const [enhancedPhoto, setEnhancedPhoto] = useState(() => {
+        // Initialize with safe defaults for all fields
+        return {
+            ...photo,
+            faces: photo.faces || [],
+            matched_users: photo.matched_users || [],
+            location: photo.location || { lat: null, lng: null, name: null },
+            venue: photo.venue || { id: null, name: null },
+            event_details: photo.event_details || { date: null, name: null, type: null, promoter: null },
+            tags: photo.tags || []
+        };
+    });
+    
+    // Check localStorage for cached face data when the photo is loaded
+    useEffect(() => {
+        const checkForCachedData = async () => {
+            // Only look for cached data if no faces are present
+            if (!photo.faces || !Array.isArray(photo.faces) || photo.faces.length === 0) {
+                try {
+                    // Get current user ID from Supabase
+                    const { data: userData } = await PhotoService.getCurrentUser();
+                    if (userData && userData.id) {
+                        // Look for cached data for this photo
+                        const cachedData = PhotoService.getFromLocalStorage(userData.id, photo.id);
+                        
+                        if (cachedData && cachedData.faces && cachedData.faces.length > 0) {
+                            console.log("[PhotoInfoModal] Found cached face data:", cachedData.faces);
+                            
+                            // Merge the cached data with the current photo
+                            setEnhancedPhoto({
+                                ...photo,
+                                faces: cachedData.faces,
+                                face_ids: cachedData.face_ids || [],
+                                matched_users: cachedData.matched_users || []
+                            });
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error("[PhotoInfoModal] Error retrieving cached data:", error);
+                }
+            }
+        };
+        
+        checkForCachedData();
+    }, [photo.id]);
+    
+    // Add extensive logging of incoming photo data
+    console.log("[PhotoInfoModal] Full photo data:", JSON.stringify(enhancedPhoto, null, 2));
+    console.log("[PhotoInfoModal] Has faces:", Boolean(enhancedPhoto.faces?.length), "Length:", enhancedPhoto.faces?.length);
+    console.log("[PhotoInfoModal] Has matched_users:", Boolean(enhancedPhoto.matched_users?.length), "Length:", enhancedPhoto.matched_users?.length);
+    console.log("[PhotoInfoModal] Has location:", Boolean(enhancedPhoto.location?.lat && enhancedPhoto.location?.lng));
+    console.log("[PhotoInfoModal] Has event_details:", Boolean(enhancedPhoto.event_details));
+    
+    // Check for potential issues with data structure
+    if (enhancedPhoto.faces) {
+        console.log("[PhotoInfoModal] First face structure:", JSON.stringify(enhancedPhoto.faces[0], null, 2));
+        if (enhancedPhoto.faces[0] && !enhancedPhoto.faces[0].attributes) {
+            console.error("[PhotoInfoModal] ERROR: Face object exists but has no attributes property");
+            console.log("[PhotoInfoModal] Available face properties:", Object.keys(enhancedPhoto.faces[0]));
+        }
+    }
+    
+    if (enhancedPhoto.matched_users) {
+        console.log("[PhotoInfoModal] First matched user:", JSON.stringify(enhancedPhoto.matched_users[0], null, 2));
+    }
+    
+    if (enhancedPhoto.location) {
+        console.log("[PhotoInfoModal] Location data:", JSON.stringify(enhancedPhoto.location, null, 2));
+    }
 
     const handleImageLoad = (e) => {
         const img = e.target;
@@ -23,10 +93,10 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
     const handleDownload = async () => {
         try {
             setLoading(true);
-            const url = await PhotoService.downloadPhoto(photo.id);
+            const url = await PhotoService.downloadPhoto(enhancedPhoto.id);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `photo-${photo.id}.jpg`;
+            link.download = `photo-${enhancedPhoto.id}.jpg`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -40,32 +110,65 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
         }
     };
 
+    // Function to safely get fields with proper fallbacks
+    const safeGet = (obj, path, defaultVal) => {
+        try {
+            const parts = path.split('.');
+            let result = obj;
+            for (const part of parts) {
+                if (result == null) return defaultVal;
+                result = result[part];
+            }
+            return result == null ? defaultVal : result;
+        } catch (e) {
+            return defaultVal;
+        }
+    };
+
     const renderEventDetails = () => {
-        if (!photo.event_details)
-            return null;
         const details = [
             {
                 icon: _jsx(Calendar, { className: "w-4 h-4" }),
                 label: "Event Date",
-                value: new Date(photo.event_details.date || photo.date_taken || photo.created_at).toLocaleDateString()
+                value: safeGet(enhancedPhoto, 'event_details.date', null) || 
+                      safeGet(enhancedPhoto, 'date_taken', null) || 
+                      safeGet(enhancedPhoto, 'created_at', 'Unknown Date')
             },
             {
                 icon: _jsx(Sparkles, { className: "w-4 h-4" }),
                 label: "Event Name",
-                value: photo.event_details.name || 'Untitled Event'
+                value: safeGet(enhancedPhoto, 'event_details.name', 'Untitled Event')
             },
             {
                 icon: _jsx(Building, { className: "w-4 h-4" }),
                 label: "Venue",
-                value: photo.venue?.name || 'Unknown Venue'
+                value: safeGet(enhancedPhoto, 'venue.name', 'Unknown Venue')
             },
             {
                 icon: _jsx(UserCog, { className: "w-4 h-4" }),
                 label: "Promoter",
-                value: photo.event_details.promoter || 'Unknown'
+                value: safeGet(enhancedPhoto, 'event_details.promoter', 'Unknown')
             }
         ];
-        return (_jsxs("div", { className: "mb-6", children: [_jsx("h4", { className: "text-sm font-medium text-apple-gray-700 mb-2", children: "Event Information" }), _jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-2", children: details.map((detail, index) => (_jsxs("div", { className: "flex items-center p-2 bg-apple-gray-50 rounded-apple", children: [_jsx("div", { className: "mr-2 text-apple-gray-500", children: detail.icon }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium text-apple-gray-900", children: detail.label }), _jsx("div", { className: "text-xs text-apple-gray-500", children: detail.value })] })] }, index))) })] }));
+        
+        // Only show details that have valid values
+        const validDetails = details.filter(detail => {
+            if (typeof detail.value === 'string' && detail.value.includes('Unknown')) {
+                // Keep "Unknown" values if we don't have anything better
+                return true;
+            }
+            return detail.value != null;
+        });
+        
+        if (validDetails.length === 0) return null;
+        
+        return (_jsxs("div", { className: "mb-6", children: [_jsx("h4", { className: "text-sm font-medium text-gray-700 mb-2", children: "Event Information" }), _jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-2", children: validDetails.map((detail, index) => {
+            const valueDisplay = typeof detail.value === 'string' && detail.value.toLowerCase().includes('unknown')
+                ? _jsx("span", { className: "text-gray-400 italic", children: detail.value })
+                : detail.value;
+                
+            return (_jsxs("div", { className: "flex items-center p-2 bg-gray-50 rounded-xl", children: [_jsx("div", { className: "mr-2 text-gray-500", children: detail.icon }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium text-gray-900", children: detail.label }), _jsx("div", { className: "text-xs text-gray-500", children: valueDisplay })] })] }, index));
+        }) })] }));
     };
 
     const renderPhotoDetails = () => {
@@ -73,144 +176,311 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
             {
                 icon: _jsx(Calendar, { className: "w-4 h-4" }),
                 label: "Date Taken",
-                value: new Date(photo.date_taken || photo.created_at).toLocaleDateString()
+                value: safeGet(enhancedPhoto, 'date_taken', null) || 
+                      safeGet(enhancedPhoto, 'created_at', new Date().toLocaleDateString())
             },
             {
                 icon: _jsx(FileType, { className: "w-4 h-4" }),
                 label: "File Type",
-                value: photo.fileType
+                value: safeGet(enhancedPhoto, 'file_type', null) || 
+                      safeGet(enhancedPhoto, 'fileType', 'Unknown')
             },
             {
                 icon: _jsx(HardDrive, { className: "w-4 h-4" }),
                 label: "File Size",
-                value: `${(photo.fileSize / 1024 / 1024).toFixed(2)} MB`
+                value: `${((safeGet(enhancedPhoto, 'file_size', 0) || 
+                           safeGet(enhancedPhoto, 'fileSize', 0) || 
+                           safeGet(enhancedPhoto, 'size', 0)) / 1024 / 1024).toFixed(2)} MB`
             },
             {
                 icon: _jsx(Clock, { className: "w-4 h-4" }),
                 label: "Uploaded",
-                value: new Date(photo.created_at).toLocaleString()
+                value: new Date(safeGet(enhancedPhoto, 'created_at', new Date())).toLocaleString()
             },
             {
                 icon: _jsx(Image, { className: "w-4 h-4" }),
                 label: "Dimensions",
-                value: `${imageSize.width} × ${imageSize.height}`
+                value: imageSize.width > 0 ? `${imageSize.width} × ${imageSize.height}` : 'Unknown'
             },
             {
                 icon: _jsx(Upload, { className: "w-4 h-4" }),
                 label: "Uploaded By",
-                value: photo.uploadedBy || 'Unknown'
+                value: safeGet(enhancedPhoto, 'uploaded_by', null) || 
+                      safeGet(enhancedPhoto, 'uploadedBy', 'Unknown')
             }
         ];
-        if (photo.location?.name) {
+        
+        if (safeGet(enhancedPhoto, 'location.name', null)) {
             details.push({
                 icon: _jsx(Globe, { className: "w-4 h-4" }),
                 label: "Location",
-                value: photo.location.name
+                value: enhancedPhoto.location.name
             });
         }
-        if (photo.tags?.length) {
+        
+        if (safeGet(enhancedPhoto, 'tags', []).length) {
             details.push({
                 icon: _jsx(Tag, { className: "w-4 h-4" }),
                 label: "Tags",
-                value: photo.tags.join(', ')
+                value: Array.isArray(enhancedPhoto.tags) ? enhancedPhoto.tags.join(', ') : 'No tags'
             });
         }
-        return (_jsxs("div", { className: "mb-6", children: [_jsx("h4", { className: "text-sm font-medium text-apple-gray-700 mb-2", children: "Photo Information" }), _jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-2", children: details.map((detail, index) => (_jsxs("div", { className: "flex items-center p-2 bg-apple-gray-50 rounded-apple", children: [_jsx("div", { className: "mr-2 text-apple-gray-500", children: detail.icon }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium text-apple-gray-900", children: detail.label }), _jsx("div", { className: "text-xs text-apple-gray-500", children: detail.value })] })] }, index))) }), photo.location?.lat && photo.location?.lng && (_jsxs("div", { className: "mt-4", children: [_jsx("h4", { className: "text-sm font-medium text-apple-gray-700 mb-2", children: "Location" }), _jsx("div", { className: "h-48 rounded-apple overflow-hidden", children: _jsx(GoogleMaps, { location: {
-                                    lat: photo.location.lat,
-                                    lng: photo.location.lng,
-                                    name: photo.location.name || ''
-                                }, onLocationChange: () => { }, height: "100%", className: "w-full" }) })] }))] }));
+        
+        // Check if GoogleMaps component is available
+        let GoogleMapsComponent = null;
+        try {
+            GoogleMapsComponent = GoogleMaps;
+        } catch (error) {
+            console.warn('GoogleMaps component not available:', error);
+        }
+        
+        // Only show the map if we have valid coordinates
+        const showMap = safeGet(enhancedPhoto, 'location.lat', null) !== null && 
+                       safeGet(enhancedPhoto, 'location.lng', null) !== null &&
+                       GoogleMapsComponent !== null;
+        
+        return (_jsxs("div", { className: "mb-6", children: [
+            _jsx("h4", { className: "text-sm font-medium text-gray-700 mb-2", children: "Photo Information" }), 
+            _jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-2", children: details.map((detail, index) => {
+                const valueDisplay = typeof detail.value === 'string' && detail.value.toLowerCase().includes('unknown')
+                    ? _jsx("span", { className: "text-gray-400 italic", children: detail.value })
+                    : detail.value;
+                    
+                return (_jsxs("div", { className: "flex items-center p-2 bg-gray-50 rounded-xl", children: [
+                    _jsx("div", { className: "mr-2 text-gray-500", children: detail.icon }), 
+                    _jsxs("div", { children: [
+                        _jsx("div", { className: "text-sm font-medium text-gray-900", children: detail.label }), 
+                        _jsx("div", { className: "text-xs text-gray-500", children: valueDisplay })
+                    ] })
+                ] }, index));
+            }) }), 
+            showMap && (_jsxs("div", { className: "mt-4", children: [
+                _jsx("h4", { className: "text-sm font-medium text-gray-700 mb-2", children: "Location" }), 
+                _jsx("div", { className: "h-48 rounded-xl overflow-hidden", children: _jsx(GoogleMapsComponent, { 
+                    location: {
+                        lat: enhancedPhoto.location.lat,
+                        lng: enhancedPhoto.location.lng,
+                        name: enhancedPhoto.location.name || ''
+                    }, 
+                    onLocationChange: () => { }, 
+                    height: "100%", 
+                    className: "w-full" 
+                }) })
+            ] }))
+        ] }));
     };
 
     const renderFaceAttributes = () => {
-        if (!photo.faces?.length)
+        console.log("[renderFaceAttributes] Called with photo.faces:", JSON.stringify(enhancedPhoto.faces, null, 2));
+        
+        // If no faces are detected, return null
+        if (!enhancedPhoto.faces || !Array.isArray(enhancedPhoto.faces) || enhancedPhoto.faces.length === 0) {
+            console.log("[renderFaceAttributes] No faces found");
             return null;
-        const face = photo.faces[0];
-        if (!face.attributes)
+        }
+        
+        const face = enhancedPhoto.faces[0];
+        console.log("[renderFaceAttributes] Processing face:", JSON.stringify(face, null, 2));
+        
+        // Check if face object has expected structure and attributes
+        if (!face) {
+            console.error("[renderFaceAttributes] ERROR: Face is undefined or null");
             return null;
+        }
+        
+        // If the attributes property doesn't exist or is empty, try to extract attributes from the face object directly
+        let attributes = face.attributes;
+        if (!attributes || Object.keys(attributes).length === 0) {
+            console.log("[renderFaceAttributes] No attributes property found or it's empty, trying to extract attributes from the face object directly");
+            
+            // Try to reconstruct attributes from direct properties if they exist
+            const possibleAttributes = ['age', 'gender', 'smile', 'emotions', 'eyeglasses', 'sunglasses', 'eyesOpen', 'mouthOpen',
+                                       'AgeRange', 'Gender', 'Smile', 'Emotions', 'Eyeglasses', 'Sunglasses', 'EyesOpen', 'MouthOpen'];
+            
+            const foundKeys = Object.keys(face).filter(key => possibleAttributes.includes(key));
+            console.log("[renderFaceAttributes] Found these attribute keys directly on face object:", foundKeys);
+            
+            if (foundKeys.length > 0) {
+                // Create an attributes object from the direct properties
+                attributes = {};
+                foundKeys.forEach(key => {
+                    attributes[key] = face[key];
+                });
+                console.log("[renderFaceAttributes] Reconstructed attributes:", attributes);
+            } else {
+                console.error("[renderFaceAttributes] ERROR: Could not find any attribute properties");
+                
+                // Provide a simpler face detected view since no attributes are available
+                return (
+                    <div className="mb-6 p-4 bg-blue-50 rounded-xl text-center">
+                        <Users className="w-8 h-8 text-blue-400 mx-auto mb-2" />
+                        <p className="text-blue-600 font-medium">
+                            Face Detected
+                        </p>
+                        <p className="text-blue-500 text-sm mt-1">
+                            Face analysis is available, but no detailed attributes were found.
+                        </p>
+                    </div>
+                );
+            }
+        }
+        
+        // Log the attributes we'll be using
+        console.log("[renderFaceAttributes] Using these attributes:", attributes);
+        
+        // Normalize attributes to handle both camelCase and PascalCase formats from AWS
+        const normalizedAttrs = {
+            age: attributes.age || {
+                low: attributes.AgeRange?.Low || 0,
+                high: attributes.AgeRange?.High || 0
+            },
+            gender: attributes.gender || {
+                value: attributes.Gender?.Value || '',
+                confidence: attributes.Gender?.Confidence || 0
+            },
+            smile: attributes.smile || {
+                value: attributes.Smile?.Value || false,
+                confidence: attributes.Smile?.Confidence || 0
+            },
+            eyeglasses: attributes.eyeglasses || {
+                value: attributes.Eyeglasses?.Value || false,
+                confidence: attributes.Eyeglasses?.Confidence || 0
+            },
+            sunglasses: attributes.sunglasses || {
+                value: attributes.Sunglasses?.Value || false,
+                confidence: attributes.Sunglasses?.Confidence || 0
+            },
+            eyesOpen: attributes.eyesOpen || {
+                value: attributes.EyesOpen?.Value || false,
+                confidence: attributes.EyesOpen?.Confidence || 0
+            },
+            mouthOpen: attributes.mouthOpen || {
+                value: attributes.MouthOpen?.Value || false,
+                confidence: attributes.MouthOpen?.Confidence || 0
+            }
+        };
+        
         // Get primary emotion (highest confidence)
-        const primaryEmotion = face.attributes.emotions?.reduce((prev, curr) => (curr.confidence > prev.confidence) ? curr : prev);
-        const attributes = [
+        let primaryEmotion = { type: "Neutral", confidence: 0 };
+        if (attributes.emotions && Array.isArray(attributes.emotions) && attributes.emotions.length > 0) {
+            console.log("[renderFaceAttributes] Using camelCase emotions:", attributes.emotions);
+            primaryEmotion = attributes.emotions.reduce((prev, curr) => 
+                (curr.confidence > prev.confidence) ? curr : prev, 
+                { type: "Neutral", confidence: 0 }
+            );
+        } else if (attributes.Emotions && Array.isArray(attributes.Emotions)) {
+            console.log("[renderFaceAttributes] Using PascalCase Emotions:", attributes.Emotions);
+            primaryEmotion = attributes.Emotions.reduce((prev, curr) => 
+                (curr.Confidence > prev.confidence) ? {type: curr.Type, confidence: curr.Confidence} : prev, 
+                { type: "Neutral", confidence: 0 }
+            );
+        } else {
+            console.warn("[renderFaceAttributes] WARNING: No emotions array found, using default neutral emotion");
+        }
+        
+        console.log("[renderFaceAttributes] Normalized attributes:", normalizedAttrs);
+        console.log("[renderFaceAttributes] Primary emotion:", primaryEmotion);
+        
+        // Display these attributes in a nice UI
+        const details = [
             {
-                icon: _jsx(Smile, { className: "w-4 h-4" }),
-                label: "Expression",
-                value: face.attributes.smile?.value ? "Smiling" : "Not Smiling",
-                confidence: face.attributes.smile?.confidence
-            },
-            {
-                icon: _jsx(Eye, { className: "w-4 h-4" }),
-                label: "Eyes",
-                value: face.attributes.eyesOpen?.value ? "Open" : "Closed",
-                confidence: face.attributes.eyesOpen?.confidence
-            },
-            {
-                icon: _jsx(Glasses, { className: "w-4 h-4" }),
-                label: "Eyewear",
-                value: face.attributes.sunglasses?.value ? "Sunglasses" :
-                    face.attributes.eyeglasses?.value ? "Glasses" : "None",
-                confidence: face.attributes.sunglasses?.value ?
-                    face.attributes.sunglasses?.confidence :
-                    face.attributes.eyeglasses?.confidence
-            },
-            {
-                icon: _jsx(Ruler, { className: "w-4 h-4" }),
+                icon: <User className="w-4 h-4" />,
                 label: "Age Range",
-                value: `${face.attributes.age?.low}-${face.attributes.age?.high} years`,
-                confidence: 100
+                value: `${normalizedAttrs.age?.low || 'Unknown'} - ${normalizedAttrs.age?.high || 'Unknown'}`
             },
             {
-                icon: _jsx(User, { className: "w-4 h-4" }),
+                icon: <AlertCircle className="w-4 h-4" />,
                 label: "Gender",
-                value: face.attributes.gender?.value,
-                confidence: face.attributes.gender?.confidence
+                value: normalizedAttrs.gender?.value || 'Unknown',
+                confidence: normalizedAttrs.gender?.confidence
             },
             {
-                icon: _jsx(Laugh, { className: "w-4 h-4" }),
-                label: "Emotion",
-                value: primaryEmotion?.type || "Neutral",
+                icon: <Smile className="w-4 h-4" />,
+                label: "Expression",
+                value: primaryEmotion?.type || 'Unknown',
                 confidence: primaryEmotion?.confidence
             },
             {
-                icon: _jsx(Beard, { className: "w-4 h-4" }),
-                label: "Facial Hair",
-                value: face.attributes.beard?.value ? "Beard" :
-                    face.attributes.mustache?.value ? "Mustache" : "None",
-                confidence: face.attributes.beard?.value ?
-                    face.attributes.beard?.confidence :
-                    face.attributes.mustache?.confidence
+                icon: <Laugh className="w-4 h-4" />,
+                label: "Smiling",
+                value: normalizedAttrs.smile?.value ? 'Yes' : 'No',
+                confidence: normalizedAttrs.smile?.confidence
             },
             {
-                icon: _jsx(Sliders, { className: "w-4 h-4" }),
-                label: "Quality",
-                value: `${Math.round(face.attributes.quality?.brightness || 0)}% Brightness, ${Math.round(face.attributes.quality?.sharpness || 0)}% Sharpness`,
-                confidence: 100
+                icon: <Glasses className="w-4 h-4" />,
+                label: "Glasses",
+                value: normalizedAttrs.eyeglasses?.value ? 'Yes' : 'No',
+                confidence: normalizedAttrs.eyeglasses?.confidence
+            },
+            {
+                icon: <Eye className="w-4 h-4" />,
+                label: "Eyes Open",
+                value: normalizedAttrs.eyesOpen?.value ? 'Yes' : 'No',
+                confidence: normalizedAttrs.eyesOpen?.confidence
             }
         ];
-        return (_jsxs("div", { className: "mb-6", children: [_jsx("h4", { className: "text-sm font-medium text-apple-gray-700 mb-2", children: "Face Analysis" }), _jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-2", children: attributes.map((attr, index) => (_jsxs("div", { className: "flex items-center p-2 bg-apple-gray-50 rounded-apple", children: [_jsx("div", { className: "mr-2 text-apple-gray-500", children: attr.icon }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium text-apple-gray-900", children: attr.label }), _jsxs("div", { className: "text-xs text-apple-gray-500", children: [attr.value, " (", Math.round(attr.confidence || 0), "% confidence)"] })] })] }, index))) })] }));
+        
+        // Only add beard if found in attributes
+        if (attributes.beard || attributes.Beard) {
+            details.push({
+                icon: <Beard className="w-4 h-4" />,
+                label: "Beard",
+                value: (attributes.beard?.value || attributes.Beard?.Value) ? 'Yes' : 'No',
+                confidence: attributes.beard?.confidence || attributes.Beard?.Confidence
+            });
+        }
+        
+        return (
+            <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Face Analysis</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {details.map((detail, index) => (
+                        <div key={index} className="flex items-center p-2 bg-gray-50 rounded-xl">
+                            <div className="mr-2 text-gray-500">
+                                {detail.icon}
+                            </div>
+                            <div>
+                                <div className="text-sm font-medium text-gray-900">{detail.label}</div>
+                                <div className="text-xs text-gray-500">
+                                    {detail.value}
+                                    {detail.confidence && detail.confidence > 0 && (
+                                        <span className="text-gray-400 ml-1">{Math.round(detail.confidence)}% confident</span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
     };
 
     const renderMatchedUsers = () => {
-        if (!photo.matched_users?.length) {
+        console.log("[renderMatchedUsers] Called with matched_users:", JSON.stringify(enhancedPhoto.matched_users, null, 2));
+        
+        // Ensure matched_users is defined and is an array
+        if (!enhancedPhoto.matched_users || !Array.isArray(enhancedPhoto.matched_users) || enhancedPhoto.matched_users.length === 0) {
+            console.log("[renderMatchedUsers] No matched users found");
             // Check if there are faces detected but no matches
-            const hasFaces = photo.faces && photo.faces.length > 0;
+            const hasFaces = enhancedPhoto.faces && Array.isArray(enhancedPhoto.faces) && enhancedPhoto.faces.length > 0;
             
             return (
-                <div className="mb-6 p-4 bg-apple-blue-50 rounded-apple text-center">
+                <div className="mb-6 p-4 bg-blue-50 rounded-xl text-center">
                     {hasFaces ? (
                         <>
-                            <Users className="w-8 h-8 text-apple-blue-400 mx-auto mb-2" />
-                            <p className="text-apple-blue-600 font-medium">
-                                {photo.faces.length} {photo.faces.length === 1 ? "Face" : "Faces"} Detected
+                            <Users className="w-8 h-8 text-blue-400 mx-auto mb-2" />
+                            <p className="text-blue-600 font-medium">
+                                {enhancedPhoto.faces.length} {enhancedPhoto.faces.length === 1 ? "Face" : "Faces"} Detected
                             </p>
-                            <p className="text-apple-blue-500 text-sm mt-1">
+                            <p className="text-blue-500 text-sm mt-1">
                                 No matches found with registered users
                             </p>
                         </>
                     ) : (
                         <>
-                            <AlertCircle className="w-8 h-8 text-apple-gray-400 mx-auto mb-2" />
-                            <p className="text-apple-gray-600 font-medium">No Matches Found</p>
-                            <p className="text-apple-gray-500 text-sm mt-1">
+                            <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                            <p className="text-gray-600 font-medium">No Matches Found</p>
+                            <p className="text-gray-500 text-sm mt-1">
                                 No registered faces were detected in this photo
                             </p>
                         </>
@@ -219,8 +489,161 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
             );
         }
         
-        return (_jsxs("div", { className: "mb-6", children: [_jsx("h4", { className: "text-sm font-medium text-apple-gray-700 mb-2", children: "Matched People" }), _jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-2", children: photo.matched_users.map((user) => (_jsxs("div", { className: "flex items-center gap-2 p-2 rounded-apple bg-apple-gray-50", children: [user.avatarUrl ? (_jsx("img", { src: user.avatarUrl, alt: user.fullName, className: "w-8 h-8 rounded-full" })) : (_jsx("div", { className: "w-8 h-8 rounded-full bg-apple-blue-100 text-apple-blue-500 flex items-center justify-center", children: _jsx(User, { className: "w-4 h-4" }) })), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium", children: user.fullName }), _jsxs("div", { className: "text-xs text-apple-gray-500", children: [Math.round(user.confidence), "% match"] })] })] }, user.userId))) })] }));
+        console.log("[renderMatchedUsers] Processing matched users:", enhancedPhoto.matched_users);
+        
+        // Ensure each user has required properties, setting defaults if missing
+        const validMatchedUsers = enhancedPhoto.matched_users.map((user, index) => {
+            console.log(`[renderMatchedUsers] Processing user ${index}:`, JSON.stringify(user, null, 2));
+            
+            const normalizedUser = {
+                userId: user.userId || user.user_id || 'unknown',
+                fullName: user.fullName || user.full_name || user.name || user.display_name || user.email || 'Unknown User',
+                avatarUrl: user.avatarUrl || user.avatar_url || null,
+                confidence: user.confidence || 0
+            };
+            
+            console.log(`[renderMatchedUsers] Normalized user ${index}:`, JSON.stringify(normalizedUser, null, 2));
+            return normalizedUser;
+        });
+        
+        console.log("[renderMatchedUsers] Final validMatchedUsers:", validMatchedUsers);
+        
+        return (
+            <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Matched People ({validMatchedUsers.length})</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {validMatchedUsers.map((user) => (
+                        <div
+                            key={user.userId}
+                            className="flex items-center gap-2 p-2 rounded-xl bg-gray-50"
+                        >
+                            {user.avatarUrl ? (
+                                <img
+                                    src={user.avatarUrl}
+                                    alt={user.fullName}
+                                    className="w-8 h-8 rounded-full"
+                                />
+                            ) : (
+                                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-500 flex items-center justify-center">
+                                    <User className="w-4 h-4" />
+                                </div>
+                            )}
+                            <div>
+                                <div className="text-sm font-medium">{user.fullName}</div>
+                                <div className="text-xs text-gray-500">
+                                    {Math.round(user.confidence)}% match
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
     };
 
-    return (_jsx(motion.div, { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, className: "fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4", onClick: onClose, children: _jsx(motion.div, { initial: { scale: 0.9, opacity: 0 }, animate: { scale: 1, opacity: 1 }, exit: { scale: 0.9, opacity: 0 }, className: "relative w-full max-w-5xl bg-white rounded-apple-2xl overflow-hidden", onClick: (e) => e.stopPropagation(), children: _jsxs("div", { className: "flex flex-col md:flex-row h-[85vh]", children: [_jsx("div", { className: "w-full md:w-3/5 h-full relative", children: _jsx("div", { className: "absolute inset-0 flex items-center justify-center bg-apple-gray-100", children: _jsxs("div", { className: "relative w-full h-full", children: [_jsx("img", { src: photo.url, alt: photo.title || 'Photo', className: cn("absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2", "max-w-[95%] max-h-[95%] w-auto h-auto object-contain", !imageLoaded && "opacity-0"), onLoad: handleImageLoad }), !imageLoaded && (_jsx("div", { className: "absolute inset-0 flex items-center justify-center", children: _jsx("div", { className: "animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-apple-gray-900" }) }))] }) }) }), _jsxs("div", { className: "w-full md:w-2/5 h-full flex flex-col", children: [_jsxs("div", { className: "p-6 flex-1 overflow-y-auto", children: [_jsxs("div", { className: "flex justify-between items-center mb-4", children: [_jsx("h3", { className: "text-lg font-semibold", children: "Photo Details" }), _jsx("button", { onClick: onClose, className: "absolute top-2 right-2 p-2 rounded-full bg-apple-white hover:bg-apple-gray-100 text-apple-gray-500 transition-colors", "aria-label": "Close modal", children: _jsx(X, { className: "w-5 h-5" }) })] }), (photo.title || photo.description) && (_jsxs("div", { className: "mb-6", children: [photo.title && (_jsx("h3", { className: "text-lg font-medium mb-1", children: photo.title })), photo.description && (_jsx("p", { className: "text-apple-gray-600 text-sm", children: photo.description }))] })), renderFaceAttributes(), renderEventDetails(), renderPhotoDetails(), renderMatchedUsers()] }), _jsx("div", { className: "p-4 border-t border-apple-gray-200 bg-white", children: _jsxs("div", { className: "flex justify-end gap-3", children: [_jsxs("button", { onClick: handleDownload, disabled: loading, className: "ios-button-secondary flex items-center", children: [_jsx(Download, { className: "w-5 h-5 mr-2" }), "Download"] }), onShare && (_jsxs("button", { onClick: () => onShare(photo.id), className: "ios-button-primary flex items-center", children: [_jsx(Share2, { className: "w-5 h-5 mr-2" }), "Share"] }))] }) })] })] }) }) }));
+    return (
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={onClose}
+        >
+            <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="relative w-full max-w-5xl bg-white rounded-xl overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex flex-col md:flex-row h-[85vh]">
+                    {/* Left side - Image */}
+                    <div className="w-full md:w-3/5 h-full relative">
+                        <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                            <div className="relative w-full h-full">
+                                <img
+                                    src={enhancedPhoto.url || enhancedPhoto.public_url}
+                                    alt={enhancedPhoto.title || 'Photo'}
+                                    className={cn(
+                                        "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
+                                        "max-w-[95%] max-h-[95%] w-auto h-auto object-contain",
+                                        !imageLoaded && "opacity-0"
+                                    )}
+                                    onLoad={handleImageLoad}
+                                />
+                                {!imageLoaded && (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right side - Details */}
+                    <div className="w-full md:w-2/5 h-full flex flex-col">
+                        <div className="p-6 flex-1 overflow-y-auto">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-semibold">Photo Details</h3>
+                                <button 
+                                    onClick={onClose} 
+                                    className="absolute top-2 right-2 p-2 rounded-full bg-white hover:bg-gray-100 text-gray-500 transition-colors"
+                                    aria-label="Close modal"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            {/* Photo Info */}
+                            {(enhancedPhoto.title || enhancedPhoto.description) && (
+                                <div className="mb-6">
+                                    {enhancedPhoto.title && (
+                                        <h3 className="text-lg font-medium mb-1">{enhancedPhoto.title}</h3>
+                                    )}
+                                    {enhancedPhoto.description && (
+                                        <p className="text-gray-600 text-sm">{enhancedPhoto.description}</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Matched Users (Shown first since it's most important) */}
+                            {renderMatchedUsers()}
+                            
+                            {/* Face Analysis */}
+                            {renderFaceAttributes()}
+
+                            {/* Event Details */}
+                            {renderEventDetails()}
+
+                            {/* Photo Details */}
+                            {renderPhotoDetails()}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="p-4 border-t border-gray-200 bg-white">
+                            <div className="flex justify-end gap-3">
+                                <button 
+                                    onClick={handleDownload}
+                                    disabled={loading}
+                                    className="ios-button-secondary flex items-center"
+                                >
+                                    <Download className="w-5 h-5 mr-2" />
+                                    Download
+                                </button>
+                                {onShare && (
+                                    <button 
+                                        onClick={() => onShare(enhancedPhoto.id)}
+                                        className="ios-button-primary flex items-center"
+                                    >
+                                        <Share2 className="w-5 h-5 mr-2" />
+                                        Share
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </motion.div>
+        </motion.div>
+    );
 }; 

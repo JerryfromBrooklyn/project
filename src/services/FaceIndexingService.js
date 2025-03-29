@@ -1,3 +1,22 @@
+/* =========================================================
+ * CRITICAL SECURITY NOTICE - DO NOT MODIFY UNLESS AUTHORIZED
+ * =========================================================
+ * 
+ * ROW LEVEL SECURITY (RLS) CONFIGURATION:
+ * 
+ * - RLS has been DELIBERATELY DISABLED on database tables
+ * - DO NOT ENABLE RLS POLICIES until project completion
+ * - Enabling RLS prematurely will BREAK admin functionality
+ *   and face matching features
+ * 
+ * When the project is complete, a comprehensive security review
+ * will establish appropriate RLS policies that maintain functionality
+ * while ensuring data protection.
+ * 
+ * Any changes to this configuration require security team approval.
+ * =========================================================
+ */
+
 import { rekognitionClient, COLLECTION_ID } from '../config/aws-config';
 import { IndexFacesCommand, SearchFacesByImageCommand, SearchFacesCommand, DetectFacesCommand, ListCollectionsCommand, DeleteCollectionCommand, CreateCollectionCommand } from '@aws-sdk/client-rekognition';
 import { FACE_MATCH_THRESHOLD } from '../config/aws-config';
@@ -1106,6 +1125,116 @@ export class FaceIndexingService {
             return indexedFaces;
         } catch (error) {
             console.error('[ERROR] Error in face indexing:', error);
+            return [];
+        }
+    }
+    /**
+     * Search for faces in an image by URL
+     * @param {string} photoId - Photo ID for tracking
+     * @param {string} imageUrl - Public URL of the image
+     * @returns {Array} - Array of matching user objects
+     */
+    static async searchFacesByImage(photoId, imageUrl) {
+        try {
+            console.log('[FaceIndexingService.searchFacesByImage] STARTED face matching for photo:', photoId);
+            console.log('[FaceIndexingService.searchFacesByImage] Image URL:', imageUrl);
+            
+            // First download the image from URL
+            console.log('[FaceIndexingService.searchFacesByImage] Downloading image from URL for processing');
+            const response = await fetch(imageUrl);
+            
+            if (!response.ok) {
+                console.error('[FaceIndexingService.searchFacesByImage] ERROR: Failed to download image from URL:', response.status, response.statusText);
+                throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+            }
+            
+            const imageBuffer = await response.arrayBuffer();
+            const imageBytes = new Uint8Array(imageBuffer);
+            
+            console.log('[FaceIndexingService.searchFacesByImage] Image downloaded successfully, size:', imageBytes.length, 'bytes');
+            
+            // Now detect faces in the image
+            console.log('[FaceIndexingService.searchFacesByImage] Detecting faces in image');
+            const detectedFaces = await this.detectFacesWithRetry(imageBytes);
+            
+            if (!detectedFaces || detectedFaces.length === 0) {
+                console.log('[FaceIndexingService.searchFacesByImage] No faces detected in image');
+                return [];
+            }
+            
+            console.log('[FaceIndexingService.searchFacesByImage] Detected', detectedFaces.length, 'faces in image');
+            
+            // For each detected face, search for matches
+            const allMatches = [];
+            
+            for (let i = 0; i < detectedFaces.length; i++) {
+                try {
+                    console.log(`[FaceIndexingService.searchFacesByImage] Processing face ${i+1} of ${detectedFaces.length}`);
+                    
+                    // Use SearchFacesByImage API
+                    const command = new SearchFacesByImageCommand({
+                        CollectionId: this.COLLECTION_ID,
+                        Image: { Bytes: imageBytes },
+                        FaceMatchThreshold: FACE_MATCH_THRESHOLD,
+                        MaxFaces: 10
+                    });
+                    
+                    console.log('[FaceIndexingService.searchFacesByImage] Sending request to AWS Rekognition...');
+                    const searchResponse = await rekognitionClient.send(command);
+                    
+                    if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
+                        console.log(`[FaceIndexingService.searchFacesByImage] Found ${searchResponse.FaceMatches.length} potential matches for face ${i+1}`);
+                        
+                        // Map the AWS responses to our format
+                        const matches = searchResponse.FaceMatches.map(match => {
+                            return {
+                                userId: match.Face.ExternalImageId, // This should contain the user ID
+                                faceId: match.Face.FaceId,
+                                similarity: match.Similarity,
+                                confidence: match.Face.Confidence
+                            };
+                        });
+                        
+                        allMatches.push(...matches);
+                        console.log('[FaceIndexingService.searchFacesByImage] Processed matches:', JSON.stringify(matches, null, 2));
+                    } else {
+                        console.log(`[FaceIndexingService.searchFacesByImage] No matches found for face ${i+1}`);
+                    }
+                } catch (searchError) {
+                    console.error(`[FaceIndexingService.searchFacesByImage] ERROR searching for face ${i+1}:`, searchError);
+                    console.error('[FaceIndexingService.searchFacesByImage] Error stack:', searchError.stack);
+                }
+            }
+            
+            if (allMatches.length === 0) {
+                console.log('[FaceIndexingService.searchFacesByImage] No matches found for any faces');
+                return [];
+            }
+            
+            console.log(`[FaceIndexingService.searchFacesByImage] Found total of ${allMatches.length} matches across all faces`);
+            
+            // Deduplicate matches by user ID, keeping the highest confidence match
+            const uniqueMatches = {};
+            
+            allMatches.forEach(match => {
+                const userId = match.userId;
+                if (!uniqueMatches[userId] || match.similarity > uniqueMatches[userId].similarity) {
+                    uniqueMatches[userId] = match;
+                }
+            });
+            
+            // Convert to array and sort by similarity
+            const finalMatches = Object.values(uniqueMatches)
+                .filter(match => match.similarity >= FACE_MATCH_THRESHOLD)
+                .sort((a, b) => b.similarity - a.similarity);
+            
+            console.log(`[FaceIndexingService.searchFacesByImage] Final matches after filtering: ${finalMatches.length}`);
+            console.log('[FaceIndexingService.searchFacesByImage] Final matches:', JSON.stringify(finalMatches, null, 2));
+            
+            return finalMatches;
+        } catch (error) {
+            console.error('[FaceIndexingService.searchFacesByImage] CRITICAL ERROR:', error);
+            console.error('[FaceIndexingService.searchFacesByImage] Error stack:', error.stack);
             return [];
         }
     }

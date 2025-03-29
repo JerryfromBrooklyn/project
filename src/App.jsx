@@ -1,15 +1,40 @@
-import SimplePhotoUpload from './components/workaround/SimplePhotoUpload';
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import AuthProvider from './auth/AuthProvider';
+import ProtectedRoute from './auth/ProtectedRoute';
+import PhotosProvider from './features/photos/PhotosProvider';
 
-function App() {
+// Pages
+import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
+import PhotosPage from './pages/PhotosPage';
+
+/**
+ * Main application component
+ */
+const App = () => {
   return (
-    <div className="app-container">
-      <div className="mt-4">
-        <h2 className="text-xl font-bold mb-2">Workaround Solution</h2>
-        <p className="mb-4">Use this simplified uploader until the database issue is fixed:</p>
-        <SimplePhotoUpload />
-      </div>
-    </div>
+    <AuthProvider>
+      <PhotosProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/login" element={<LoginPage />} />
+            
+            {/* Protected routes */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/photos" element={<PhotosPage />} />
+            </Route>
+            
+            {/* Redirects */}
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </PhotosProvider>
+    </AuthProvider>
   );
-}
+};
 
 export default App; 

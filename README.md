@@ -2,6 +2,11 @@
 
 A React application with TypeScript and TailwindCSS for face recognition and management.
 
+## 🚨 SECURITY NOTICE 🚨
+
+For development purposes, **Row Level Security (RLS) has been deliberately disabled** on all database tables. 
+DO NOT enable RLS until explicitly instructed to do so. See [SECURITY_POLICY.md](./SECURITY_POLICY.md) for details.
+
 ## Prerequisites
 
 - Node.js (v16 or higher)

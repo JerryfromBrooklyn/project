@@ -1,3 +1,22 @@
+/* =========================================================
+ * CRITICAL SECURITY NOTICE - DO NOT MODIFY UNLESS AUTHORIZED
+ * =========================================================
+ * 
+ * ROW LEVEL SECURITY (RLS) CONFIGURATION:
+ * 
+ * - RLS has been DELIBERATELY DISABLED on database tables
+ * - DO NOT ENABLE RLS POLICIES until project completion
+ * - Enabling RLS prematurely will BREAK admin functionality
+ *   and face matching features
+ * 
+ * When the project is complete, a comprehensive security review
+ * will establish appropriate RLS policies that maintain functionality
+ * while ensuring data protection.
+ * 
+ * Any changes to this configuration require security team approval.
+ * =========================================================
+ */
+
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
@@ -5,6 +24,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LandingPage } from './pages/LandingPage';
 // Lazy load dashboard to improve initial load time
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+// Lazy load emergency tools
+const EmergencyTools = lazy(() => import('./pages/EmergencyTools'));
 // Protected route component
 const ProtectedRoute = ({ children }) => {
     const { user, loading } = useAuth();
