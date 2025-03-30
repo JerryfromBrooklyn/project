@@ -4,20 +4,10 @@ const defineConfig = (config) => config;
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
-export default defineConfig({
-  plugins: [react()],
-  
-  // Build configuration
+export default {
+  // Basic build configuration
   build: {
     outDir: 'dist',
-    sourcemap: false,
-  },
-  
-  // Resolve aliases for consistent imports
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, './src'),
-    },
   },
   
   // Server configuration (development only)
@@ -27,4 +17,4 @@ export default defineConfig({
   
   // Handle environment variables properly
   envPrefix: ['VITE_', 'REACT_APP_'],
-}); 
+}; 

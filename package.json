@@ -8,7 +8,7 @@
     "dev": "vite",
     "clean-start": "node scripts/kill-node.js && npm run dev",
     "prebuild": "node scripts/kill-node.js",
-    "build": "npx vite@5.1.4 build",
+    "build": "vite build --config vite.config.js",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "netlify:dev": "netlify dev",
