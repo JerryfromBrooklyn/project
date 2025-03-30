@@ -7,7 +7,6 @@
     "predev": "node scripts/kill-node.js",
     "dev": "vite",
     "clean-start": "node scripts/kill-node.js && npm run dev",
-    "prebuild": "node scripts/kill-node.js",
     "build": "vite build --config vite.config.js",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
