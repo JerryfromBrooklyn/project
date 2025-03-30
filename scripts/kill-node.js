@@ -1,41 +1,53 @@
-// Script to kill lingering Node.js processes
-// This is cross-platform and works on both Windows and Unix-based systems
+/**
+ * kill-node.js
+ * 
+ * This script cleans up any lingering Node processes before starting the development server.
+ * It helps prevent port conflicts and zombie processes.
+ * 
+ * For Netlify deployment, this script is not used in production.
+ */
 
 import { exec } from 'child_process';
 import { platform } from 'os';
 
-const isWindows = platform() === 'win32';
+// Skip in production (Netlify)
+if (process.env.NODE_ENV === 'production') {
+  console.log('Running in production mode, skipping process cleanup');
+  process.exit(0);
+}
 
-// Command to list and kill Node.js processes based on OS
-const cmd = isWindows
+console.log('Cleaning up lingering Node processes...');
+
+// Platform-specific cleanup commands
+const isWindows = platform() === 'win32';
+const cleanupCommand = isWindows
   ? 'taskkill /F /IM node.exe'
   : "pkill -f 'node|vite'";
 
-console.log(`Attempting to kill lingering Node processes...`);
-
-exec(cmd, (error) => {
-  // We ignore errors since they simply mean no matching processes were found
-  if (!error) {
-    console.log('Successfully terminated Node processes');
-  } else {
+// Execute the cleanup command
+exec(cleanupCommand, (error, stdout, stderr) => {
+  if (error) {
+    // Error could mean no processes found, which is fine
     console.log('No lingering Node processes found');
+  } else {
+    console.log('Successfully terminated Node processes');
+    console.log(stdout || stderr);
   }
 });
 
-// For Windows, also attempt to kill any processes using the Vite ports
+// Also free up common Vite ports on Windows
 if (isWindows) {
-  // Common Vite ports
-  const ports = [5173, 5174, 5175, 5176, 5177, 5178, 5179, 9000];
+  const ports = [5173, 5174, 5175, 5176, 5177, 5178, 5179];
   
   ports.forEach(port => {
-    const portCmd = `for /f "tokens=5" %p in ('netstat -ano ^| findstr :${port}') do taskkill /F /PID %p`;
-    exec(portCmd, () => {
-      // Ignore errors, just a best effort to free ports
+    const portCommand = `for /f "tokens=5" %p in ('netstat -ano ^| findstr :${port}') do taskkill /F /PID %p`;
+    exec(portCommand, () => {
+      // Ignore errors - just best effort
     });
   });
 }
 
-// Small delay to ensure processes are killed before proceeding
+// Add a small delay to ensure processes are terminated
 setTimeout(() => {
-  console.log('Continuing with server startup...');
+  console.log('Cleanup complete, continuing with development server...');
 }, 1000); 
