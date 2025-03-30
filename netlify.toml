@@ -2,7 +2,7 @@
 
 [build]
   # The build command Netlify will run
-  command = "npm install -g vite@5.1.4 && npm install vite@5.1.4 --no-save && npm install && npm run build"
+  command = "npm install -g vite@5.1.4 && npm install vite@5.1.4 @vitejs/plugin-react --no-save && npm install && npm run build"
   # The directory with compiled assets Netlify will serve
   publish = "dist"
   # Node version (ensure compatibility with your local dev environment)
