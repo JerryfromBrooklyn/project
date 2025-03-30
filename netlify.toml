@@ -8,6 +8,9 @@
   # Node version (ensure compatibility with your local dev environment)
   environment = { NODE_VERSION = "20" }
 
+[build.environment]
+  GO_VERSION = "1.19"
+
 # SPA redirect - serve index.html for all paths (for React Router)
 [[redirects]]
   from = "/*"
