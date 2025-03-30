@@ -12,6 +12,29 @@ import { PhotoMetadata, MatchedUser, FaceAttributes } from '../types';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
 
+// iOS-specific styles
+const iOSStyles = `
+  @supports (-webkit-touch-callout: none) {
+    /* CSS specific to iOS devices */
+    .ios-modal-container {
+      height: 100% !important;
+      max-height: 100% !important;
+    }
+    
+    .ios-image-container {
+      height: 40% !important;
+      max-height: 40% !important;
+    }
+    
+    .ios-content-container {
+      height: 60% !important;
+      max-height: 60% !important;
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch !important;
+    }
+  }
+`;
+
 interface PhotoInfoModalProps {
   photo: PhotoMetadata;
   onClose: () => void;
@@ -573,6 +596,7 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
 
   return (
     <AnimatePresence>
+      <style>{iOSStyles}</style>
       <motion.div
         className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
         variants={backdropVariants}
@@ -582,7 +606,7 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
         onClick={onClose}
       >
         <motion.div
-          className="bg-white w-full max-w-none sm:max-w-3xl max-h-[98vh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden"
+          className="bg-white w-full max-w-none sm:max-w-3xl max-h-[98vh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden ios-modal-container"
           variants={modalVariants}
           initial="hidden"
           animate="visible"
@@ -603,9 +627,9 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
 
           {/* Mobile-optimized layout */}
           <div className="flex flex-col h-[calc(98vh-4rem)] sm:h-auto">
-            {/* Fixed height image container - exactly 35% of viewport height on mobile */}
+            {/* Fixed height image container */}
             <div 
-              className="bg-gray-50 p-2 sm:p-4 border-b border-gray-100" 
+              className="bg-gray-50 p-2 sm:p-4 border-b border-gray-100 ios-image-container" 
               style={{ height: '35vh', maxHeight: '35vh' }}
             >
               <div className="h-full w-full relative rounded-lg overflow-hidden bg-gray-100 mx-auto shadow-sm">
@@ -618,8 +642,8 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
               </div>
             </div>
 
-            {/* Scrollable content area - rest of available space */}
-            <div className="flex-1 overflow-y-auto" style={{ height: 'calc(98vh - 35vh - 4rem)' }}>
+            {/* Scrollable content area */}
+            <div className="flex-1 overflow-y-auto ios-content-container" style={{ height: 'calc(98vh - 35vh - 4rem)' }}>
               {/* Action buttons */}
               <div className="p-3 flex justify-center space-x-4 border-b border-gray-100">
                 <button
