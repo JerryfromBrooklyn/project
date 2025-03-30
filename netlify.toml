@@ -2,7 +2,7 @@
 
 [build]
   # The build command Netlify will run
-  command = "npm ci && npm install -D tailwindcss postcss autoprefixer && npm run build"
+  command = "npm ci && npm install -D tailwindcss postcss autoprefixer && npx vite build --config vite.config.js"
   # The directory with compiled assets Netlify will serve
   publish = "dist"
   # Node version (ensure compatibility with your local dev environment)
