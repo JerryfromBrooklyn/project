@@ -582,15 +582,15 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
         onClick={onClose}
       >
         <motion.div
-          className="bg-white w-full max-w-none sm:max-w-3xl max-h-[95vh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden flex flex-col"
+          className="bg-white w-full max-w-none sm:max-w-3xl max-h-[98vh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden"
           variants={modalVariants}
           initial="hidden"
           animate="visible"
           exit="exit"
           onClick={e => e.stopPropagation()}
         >
-          {/* Header - Non-shrinking */}
-          <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+          {/* Fixed header */}
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Photo Details</h2>
             <button
               onClick={onClose}
@@ -601,103 +601,106 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
             </button>
           </div>
 
-          {/* Image preview container - Further reduced fixed height on mobile, non-shrinking */}
-          <div className="flex-shrink-0 bg-gray-50 p-2 sm:p-4 border-b border-gray-100 h-[40vh] sm:h-auto">
-            <div className="relative rounded-lg overflow-hidden bg-gray-100 mx-auto shadow-sm h-full w-full sm:aspect-video">
-              <img
-                src={normalizedPhoto.url}
-                alt="Photo preview"
-                className="object-contain w-full h-full"
-                onLoad={handleImageLoad}
-              />
+          {/* Mobile-optimized layout */}
+          <div className="flex flex-col h-[calc(98vh-4rem)] sm:h-auto">
+            {/* Fixed height image container - exactly 35% of viewport height on mobile */}
+            <div 
+              className="bg-gray-50 p-2 sm:p-4 border-b border-gray-100" 
+              style={{ height: '35vh', maxHeight: '35vh' }}
+            >
+              <div className="h-full w-full relative rounded-lg overflow-hidden bg-gray-100 mx-auto shadow-sm">
+                <img
+                  src={normalizedPhoto.url}
+                  alt="Photo preview"
+                  className="object-contain w-full h-full"
+                  onLoad={handleImageLoad}
+                />
+              </div>
             </div>
-          </div>
 
-          {/* Scrollable Details Area - Takes remaining space */}
-          <div className="flex-1 overflow-y-auto">
-            {/* Action buttons */}
-            <div className="p-3 flex justify-center space-x-4 border-b border-gray-100 flex-shrink-0">
-              <button
-                onClick={handleDownload}
-                disabled={loading}
-                className="flex items-center px-4 py-2 rounded-full bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-medium"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                {loading ? 'Downloading...' : 'Download'}
-              </button>
-              
-              {onShare && (
+            {/* Scrollable content area - rest of available space */}
+            <div className="flex-1 overflow-y-auto" style={{ height: 'calc(98vh - 35vh - 4rem)' }}>
+              {/* Action buttons */}
+              <div className="p-3 flex justify-center space-x-4 border-b border-gray-100">
                 <button
-                  onClick={handleShare}
+                  onClick={handleDownload}
+                  disabled={loading}
                   className="flex items-center px-4 py-2 rounded-full bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-medium"
                 >
-                  <Share2 className="w-4 h-4 mr-2" />
-                  Share
+                  <Download className="w-4 h-4 mr-2" />
+                  {loading ? 'Downloading...' : 'Download'}
                 </button>
-              )}
+                
+                {onShare && (
+                  <button
+                    onClick={handleShare}
+                    className="flex items-center px-4 py-2 rounded-full bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-medium"
+                  >
+                    <Share2 className="w-4 h-4 mr-2" />
+                    Share
+                  </button>
+                )}
+              </div>
+              
+              {/* Tabs - Sticky within the scrollable container */}
+              <div className="sticky top-0 z-10 bg-white border-b border-gray-100 grid grid-cols-3">
+                {/* Tab buttons (no changes) */}
+                <button
+                  onClick={() => setActiveTab('info')}
+                  className={cn(
+                    "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors",
+                    activeTab === 'info'
+                      ? "border-blue-500 text-blue-600"
+                      : "border-transparent text-gray-500 hover:text-gray-900"
+                  )}
+                >
+                  <Info className="w-4 h-4 mr-1 sm:mr-2" />
+                  Details
+                </button>
+                <button
+                  onClick={() => setActiveTab('faces')}
+                  className={cn(
+                    "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors relative",
+                    activeTab === 'faces'
+                      ? "border-blue-500 text-blue-600"
+                      : "border-transparent text-gray-500 hover:text-gray-900"
+                  )}
+                >
+                  <User className="w-4 h-4 mr-1 sm:mr-2" />
+                  Analysis
+                  {normalizedPhoto.faces && normalizedPhoto.faces.length > 0 && (
+                    <span className="ml-1 w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center">
+                      {normalizedPhoto.faces.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('matches')}
+                  className={cn(
+                    "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors relative",
+                    activeTab === 'matches'
+                      ? "border-blue-500 text-blue-600"
+                      : "border-transparent text-gray-500 hover:text-gray-900"
+                  )}
+                >
+                  <Users className="w-4 h-4 mr-1 sm:mr-2" />
+                  Matches
+                  {normalizedPhoto.matched_users && normalizedPhoto.matched_users.length > 0 && (
+                    <span className="ml-1 w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center">
+                      {normalizedPhoto.matched_users.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+              
+              {/* Tab Content */}
+              <div className="p-4">
+                {activeTab === 'info' && <InfoTabContent />}
+                {activeTab === 'faces' && <FacesTabContent />}
+                {activeTab === 'matches' && <MatchesTabContent />}
+              </div>
             </div>
-            
-            {/* Tabs - Sticky within this scrollable container */}
-            <div className="sticky top-0 z-10 bg-white border-b border-gray-100 grid grid-cols-3">
-              {/* Info Tab Button */}
-              <button
-                onClick={() => setActiveTab('info')}
-                className={cn(
-                  "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors",
-                  activeTab === 'info'
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-900"
-                )}
-              >
-                <Info className="w-4 h-4 mr-1 sm:mr-2" />
-                Details
-              </button>
-              {/* Faces Tab Button */}
-               <button
-                onClick={() => setActiveTab('faces')}
-                className={cn(
-                  "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors relative",
-                  activeTab === 'faces'
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-900"
-                )}
-              >
-                <User className="w-4 h-4 mr-1 sm:mr-2" />
-                Analysis
-                {normalizedPhoto.faces && normalizedPhoto.faces.length > 0 && (
-                  <span className="ml-1 w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center">
-                    {normalizedPhoto.faces.length}
-                  </span>
-                )}
-              </button>
-              {/* Matches Tab Button */}
-              <button
-                onClick={() => setActiveTab('matches')}
-                className={cn(
-                  "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors relative",
-                  activeTab === 'matches'
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-900"
-                )}
-              >
-                <Users className="w-4 h-4 mr-1 sm:mr-2" />
-                Matches
-                {normalizedPhoto.matched_users && normalizedPhoto.matched_users.length > 0 && (
-                  <span className="ml-1 w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center">
-                    {normalizedPhoto.matched_users.length}
-                  </span>
-                )}
-              </button>
-            </div>
-            
-            {/* Tab Content */}
-            <div className="p-4">
-              {activeTab === 'info' && <InfoTabContent />}
-              {activeTab === 'faces' && <FacesTabContent />}
-              {activeTab === 'matches' && <MatchesTabContent />}
-            </div>
-          </div> {/* End Scrollable Details Area */}
-          
+          </div>
         </motion.div>
       </motion.div>
     </AnimatePresence>
