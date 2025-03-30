@@ -1,5 +1,5 @@
 // FaceStorageService.js - Utility to store and retrieve face IDs using Supabase Storage
-import { supabase, supabaseAdmin, getFaceIdFromCache, cacheFaceId } from '../lib/supabaseClient'; // Using the lib path that's working
+import { supabase, supabaseAdmin, getFaceIdFromCache, cacheFaceId } from '../lib/supabaseClient'; // Using the correct path
 
 const STORAGE_BUCKET = 'user-data';
 const FACE_ID_FILE = 'face-id.json';
@@ -25,7 +25,7 @@ export const storeFaceId = async (userId, faceId) => {
     
     try {
       // Use supabaseAdmin for guaranteed permissions
-      const { error } = await supabaseAdmin.storage
+      const { error } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(filePath, content, {
           upsert: true,

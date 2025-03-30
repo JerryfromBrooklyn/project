@@ -1,6 +1,14 @@
 // supabaseClient.js
 import { createClient } from '@supabase/supabase-js';
 
+// Cache configuration to prevent continuous .env reloads
+const CONFIG_CACHE = {
+  supabaseUrl: null,
+  supabaseAnonKey: null,
+  supabaseServiceKey: null,
+  initialized: false
+};
+
 // Get environment variables with fallbacks for development, supporting both React and Vite apps
 const getEnvVar = (reactKey, viteKey, fallback) => {
   // Try React naming convention first
@@ -19,50 +27,63 @@ const getEnvVar = (reactKey, viteKey, fallback) => {
   return fallback;
 };
 
-// Get URL and keys
-const supabaseUrl = getEnvVar(
-  'REACT_APP_SUPABASE_URL', 
-  'VITE_SUPABASE_URL', 
-  'https://gmupwzjxirpkskolsuix.supabase.co'
-);
+// Only load environment variables once
+if (!CONFIG_CACHE.initialized) {
+  // Get URL and keys
+  CONFIG_CACHE.supabaseUrl = getEnvVar(
+    'REACT_APP_SUPABASE_URL', 
+    'VITE_SUPABASE_URL', 
+    'https://gmupwzjxirpkskolsuix.supabase.co'
+  );
 
-// For the anon key (public)
-const supabaseAnonKey = getEnvVar(
-  'REACT_APP_SUPABASE_ANON_KEY', 
-  'VITE_SUPABASE_ANON_KEY', 
-  null
-);
+  // For the anon key (public)
+  CONFIG_CACHE.supabaseAnonKey = getEnvVar(
+    'REACT_APP_SUPABASE_ANON_KEY', 
+    'VITE_SUPABASE_ANON_KEY', 
+    null
+  );
 
-if (!supabaseAnonKey) {
-  console.warn('Supabase anon key is not set. Using fallback key for development only.');
+  if (!CONFIG_CACHE.supabaseAnonKey) {
+    console.warn('Supabase anon key is not set. Using fallback key for development only.');
+  }
+
+  // For the service role key (privileged - admin only)
+  CONFIG_CACHE.supabaseServiceKey = getEnvVar(
+    'REACT_APP_SUPABASE_SERVICE_KEY', 
+    'VITE_SUPABASE_SERVICE_KEY',
+    null
+  );
+
+  if (!CONFIG_CACHE.supabaseServiceKey) {
+    console.warn('Supabase service key is not set. Admin operations will fail.');
+  }
+
+  // Mark as initialized to prevent re-reading values
+  CONFIG_CACHE.initialized = true;
+
+  // Initialize with logging to make debugging easier
+  console.log(`[Supabase] Initializing with URL: ${CONFIG_CACHE.supabaseUrl}`);
+  console.log(`[Supabase] Anon key available: ${!!CONFIG_CACHE.supabaseAnonKey}`);
+  console.log(`[Supabase] Service key available: ${!!CONFIG_CACHE.supabaseServiceKey}`);
 }
-
-// For the service role key (privileged - admin only)
-const supabaseServiceKey = getEnvVar(
-  'REACT_APP_SUPABASE_SERVICE_KEY', 
-  'VITE_SUPABASE_SERVICE_KEY',
-  null
-);
-
-if (!supabaseServiceKey) {
-  console.warn('Supabase service key is not set. Admin operations will fail.');
-}
-
-// Initialize with logging to make debugging easier
-console.log(`[Supabase] Initializing with URL: ${supabaseUrl}`);
-console.log(`[Supabase] Anon key available: ${!!supabaseAnonKey}`);
-console.log(`[Supabase] Service key available: ${!!supabaseServiceKey}`);
 
 // Regular client for normal operations (with RLS)
-export const supabase = createClient(supabaseUrl, supabaseAnonKey || 'ANON_KEY_MISSING');
+export const supabase = createClient(
+  CONFIG_CACHE.supabaseUrl, 
+  CONFIG_CACHE.supabaseAnonKey || 'ANON_KEY_MISSING'
+);
 
 // Admin client with service role key for operations that bypass RLS
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey || 'SERVICE_KEY_MISSING', {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
+export const supabaseAdmin = createClient(
+  CONFIG_CACHE.supabaseUrl, 
+  CONFIG_CACHE.supabaseServiceKey || 'SERVICE_KEY_MISSING', 
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
   }
-});
+);
 
 // Add cache for database schema and frequently used data
 const schemaCache = {

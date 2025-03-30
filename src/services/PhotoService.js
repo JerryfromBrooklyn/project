@@ -97,10 +97,127 @@ export class PhotoService {
         return validateForTable('photos', dataToValidate);
     }
 
+    /**
+     * Compresses an image while maintaining high quality for 4K photos
+     * @param {File|Blob} file - The file object to compress
+     * @param {Object} options - Compression options
+     * @param {number} options.maxWidth - Maximum width for the image (default: 3840 for 4K)
+     * @param {number} options.quality - JPEG quality 1-100 (default: 92, perceptually lossless)
+     * @param {string} options.format - Output format (default: 'jpeg')
+     * @returns {Promise<File>} - A compressed File object
+     */
+    static async compressImage(file, options = {}) {
+        const {
+            maxWidth = 3840, // 4K UHD width
+            quality = 0.92,  // High quality - barely perceptible loss (0-1 for canvas)
+            format = 'jpeg'  // Most efficient format with good quality
+        } = options;
+
+        console.log(`[PhotoService.compressImage] Starting compression for ${file.name}`);
+        console.log(`[PhotoService.compressImage] Original size: ${Math.round(file.size / 1024)}KB`);
+        
+        try {
+            // Create a FileReader to read the image
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                
+                reader.onload = (event) => {
+                    const img = new Image();
+                    
+                    img.onload = () => {
+                        // Check if resizing is needed
+                        let width = img.width;
+                        let height = img.height;
+                        
+                        // Only resize if image is larger than maxWidth
+                        if (width > maxWidth) {
+                            const ratio = maxWidth / width;
+                            width = maxWidth;
+                            height = Math.round(height * ratio);
+                            console.log(`[PhotoService.compressImage] Resizing from ${img.width}x${img.height} to ${width}x${height}`);
+                        } else {
+                            console.log(`[PhotoService.compressImage] No resize needed, width (${width}px) <= ${maxWidth}px`);
+                        }
+                        
+                        // Create a canvas for the resized image
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        
+                        // Draw the image on the canvas
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        // Get the mime type
+                        const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+                        
+                        // Convert the canvas to a blob with the specified quality
+                        canvas.toBlob((blob) => {
+                            if (!blob) {
+                                console.error('[PhotoService.compressImage] Failed to compress image');
+                                resolve(file); // Fall back to original file
+                                return;
+                            }
+                            
+                            // Create a new filename with the correct extension
+                            const filenameBase = file.name.replace(/\.\w+$/, '');
+                            const newFilename = `${filenameBase}.${format}`;
+                            
+                            // Convert to File object
+                            const compressedFile = new File(
+                                [blob], 
+                                newFilename,
+                                { type: mimeType }
+                            );
+                            
+                            // Log compression results
+                            const compressionRatio = Math.round((file.size / compressedFile.size) * 100) / 100;
+                            const sizeSaved = file.size - compressedFile.size;
+                            console.log(`[PhotoService.compressImage] Compression results:`);
+                            console.log(`- Original: ${Math.round(file.size / 1024)}KB`);
+                            console.log(`- Compressed: ${Math.round(compressedFile.size / 1024)}KB`);
+                            console.log(`- Saved: ${Math.round(sizeSaved / 1024)}KB (${Math.round((sizeSaved / file.size) * 100)}%)`);
+                            console.log(`- Compression ratio: ${compressionRatio}x`);
+                            
+                            resolve(compressedFile);
+                        }, mimeType, quality);
+                    };
+                    
+                    img.onerror = () => {
+                        console.error('[PhotoService.compressImage] Failed to load image');
+                        resolve(file); // Fall back to original file
+                    };
+                    
+                    // Set the image source from the FileReader result
+                    img.src = event.target.result;
+                };
+                
+                reader.onerror = () => {
+                    console.error('[PhotoService.compressImage] Failed to read file');
+                    resolve(file); // Fall back to original file
+                };
+                
+                // Read the file as a data URL
+                reader.readAsDataURL(file);
+            });
+        } catch (error) {
+            console.error('[PhotoService.compressImage] Error compressing image:', error);
+            // In case of any errors, return the original file
+            return file;
+        }
+    }
+
     static async uploadPhoto(file, eventId, folderPath, metadata) {
         try {
             console.log('[PhotoService.uploadPhoto] Starting photo upload process');
             console.log('[PhotoService.uploadPhoto] File:', file.name, 'Size:', file.size, 'Type:', file.type);
+            
+            // Compress the image before uploading if it's an image
+            if (file.type.startsWith('image/')) {
+                console.log('[PhotoService.uploadPhoto] Compressing image before upload...');
+                file = await this.compressImage(file);
+                console.log('[PhotoService.uploadPhoto] Compression complete, new size:', file.size);
+            }
             
             // Generate a unique ID for this photo
             const photoId = uuidv4();
