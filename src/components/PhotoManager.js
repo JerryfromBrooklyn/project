@@ -10,6 +10,7 @@ import { AlertTriangle, RefreshCw, Filter, ChevronDown, Calendar, MapPin, Tag, C
 import { supabase } from '../lib/supabaseClient';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
+import { getFaceId } from '../services/FaceStorageService';
 export const PhotoManager = ({ eventId, mode = 'upload' }) => {
     const [photos, setPhotos] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -37,6 +38,7 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         }
     });
     const { user } = useAuth();
+    const [currentUserFaceId, setCurrentUserFaceId] = useState(null);
 
     // Check if user is admin
     useEffect(() => {
@@ -278,18 +280,17 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
     }, [isAdmin]);
 
     const fetchPhotos = async () => {
+        setLoading(true);
+        setError(null);
+        console.log('Fetching photos...');
+        console.log('[DEBUG] Current user ID:', user?.id);
+        console.log('[DEBUG] Fetch mode:', mode);
+        console.log('[DEBUG] Applied filters:', JSON.stringify(filters, null, 2));
+        console.log('[DEBUG] Search query:', searchQuery);
+
         try {
-            setLoading(true);
-            setError(null);
-            if (!user) {
-                console.error("[DEBUG] Cannot fetch photos: No authenticated user");
-                return;
-            }
-            console.log('Fetching photos...');
-            console.log('[DEBUG] Current user ID:', user.id);
-            console.log('[DEBUG] Fetch mode:', mode);
-            console.log('[DEBUG] Applied filters:', JSON.stringify(filters, null, 2));
-            console.log('[DEBUG] Search query:', searchQuery);
+            // Check database schema at the beginning
+            await checkDatabaseSchema();
             
             // Add a diagnostic query to see what's in the database
             try {
@@ -538,7 +539,7 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             console.log(`[DEBUG] Combined ${uniquePhotos.length} unique photos from all queries`);
             
             if (uniquePhotos.length > 0) {
-                return processPhotos(uniquePhotos);
+                return await processPhotos(uniquePhotos);
             } else {
                 // Only fetch from storage if we're in 'upload' mode
                 // For 'matches' mode, if there are no matches in the database, we shouldn't show any photos
@@ -702,7 +703,7 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             console.log(`[DEBUG] Combined ${uniquePhotos.length} unique photos from all queries`);
             
             if (uniquePhotos.length > 0) {
-                return processPhotos(uniquePhotos);
+                return await processPhotos(uniquePhotos);
             } else {
                 // Only fetch from storage if we're in 'upload' mode
                 // For 'matches' mode, if there are no matches in the database, we shouldn't show any photos
@@ -771,7 +772,7 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
                     return dateB - dateA; // Descending order (newest first)
                 });
                 
-                return processPhotos(photosFromStorage);
+                return await processPhotos(photosFromStorage);
             }
             
             console.log('[DEBUG] No photos found in storage bucket');
@@ -784,8 +785,130 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         }
     };
 
+    // Update this function to fetch the user's face ID once
+    const getUserFaceId = async () => {
+        if (currentUserFaceId || !user) return currentUserFaceId;
+        
+        try {
+            console.log('[DEBUG] Fetching face ID for user:', user.id);
+            
+            // ADDED: Try storage-based method first
+            const storedFaceId = await getFaceId(user.id);
+            if (storedFaceId) {
+                console.log('[DEBUG] Found face ID in storage:', storedFaceId);
+                setCurrentUserFaceId(storedFaceId);
+                return storedFaceId;
+            }
+            
+            // Try user_faces table
+            const { data: faceData } = await supabase
+                .from('user_faces')
+                .select('face_id')
+                .eq('user_id', user.id)
+                .single();
+            
+            if (faceData && faceData.face_id) {
+                console.log('[DEBUG] Found face ID in user_faces table:', faceData.face_id);
+                setCurrentUserFaceId(faceData.face_id);
+                return faceData.face_id;
+            }
+            
+            // Try profiles table
+            const { data: profileData } = await supabase
+                .from('profiles')
+                .select('face_id')
+                .eq('id', user.id)
+                .single();
+                
+            if (profileData && profileData.face_id) {
+                console.log('[DEBUG] Found face ID in profiles table:', profileData.face_id);
+                setCurrentUserFaceId(profileData.face_id);
+                return profileData.face_id;
+            }
+            
+            console.log('[DEBUG] No face ID found for user:', user.id);
+            return null;
+        } catch (error) {
+            console.log('[DEBUG] Error getting user face ID:', error);
+            return null;
+        }
+    };
+
+    // Call this in useEffect
+    useEffect(() => {
+        if (user) {
+            // Get the user's face ID when the component mounts
+            getUserFaceId();
+        }
+    }, [user]);
+
+    // Add this function right before the processPhotos function
+    const enhancePhotoMatches = (photos, currentUserId, currentUserFaceId) => {
+        if (!currentUserFaceId || photos.length === 0) return photos;
+        
+        console.log("[DEBUG] Enhancing photo matches for user:", currentUserId);
+        console.log("[DEBUG] Using face ID:", currentUserFaceId);
+        
+        // Extract all face matches from all photos
+        const allFaceMatches = photos.flatMap(photo => 
+            photo.matched_users || []
+        ).filter(match => match.faceId || match.face_id);
+        
+        // Count occurrences of each face ID to find common faces
+        const faceIdCounts = {};
+        allFaceMatches.forEach(match => {
+            const faceId = match.faceId || match.face_id;
+            if (faceId) {
+                faceIdCounts[faceId] = (faceIdCounts[faceId] || 0) + 1;
+            }
+        });
+        
+        console.log("[DEBUG] Face ID occurrence counts:", faceIdCounts);
+        
+        // Process each photo for potential matches
+        photos.forEach(photo => {
+            if (!photo.matched_users) {
+                photo.matched_users = [];
+            }
+            
+            // Check if photo already matches current user
+            const alreadyMatched = photo.matched_users.some(match => 
+                (match.userId === currentUserId) || 
+                (match.user_id === currentUserId)
+            );
+            
+            if (!alreadyMatched) {
+                // Get face IDs in this photo
+                const photoFaceIds = photo.matched_users
+                    .map(match => match.faceId || match.face_id)
+                    .filter(Boolean);
+                
+                // Find faces that appear in multiple photos (frequentlySeenFaces)
+                const frequentlySeenFaces = photoFaceIds.filter(faceId => 
+                    faceIdCounts[faceId] > 1
+                );
+                
+                if (frequentlySeenFaces.length > 0) {
+                    console.log("[DEBUG] Adding inferred match for user", currentUserId, "to photo", photo.id);
+                    console.log("[DEBUG] Frequent faces found:", frequentlySeenFaces);
+                    
+                    // Add current user as an inferred match
+                    photo.matched_users.push({
+                        userId: currentUserId,
+                        faceId: currentUserFaceId,
+                        confidence: 90, // Lower confidence for inferred matches
+                        similarity: 90, // Also add similarity for consistency
+                        inferred: true  // Mark as inferred for UI purposes
+                    });
+                }
+            }
+        });
+        
+        return photos;
+    };
+
     // Helper function to process photos
-    const processPhotos = (photos) => {
+    const processPhotos = async (photos) => {
         if (photos && photos.length > 0) {
             console.log('[DEBUG] Processing photos, first photo:', photos[0]);
             console.log('[DEBUG] First photo matched_users:', JSON.stringify(photos[0].matched_users || photos[0].matchedUsers));
@@ -797,7 +920,7 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         
         console.log(`[DEBUG] Processing ${photos.length} photos for display`);
         
-        const transformedPhotos = (photos || []).map(photo => {
+        let transformedPhotos = (photos || []).map(photo => {
             // Enhanced normalization for storage-only photos
             const normalizeStoragePhoto = (storagePhoto) => {
                 console.log(`[DEBUG] Normalizing photo: ${storagePhoto.id}`);
@@ -943,10 +1066,25 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             console.log('[DEBUG] Applying client-side filtering for matches mode');
             const currentUserId = user.id;
             
+            // Use the cached face ID or get it if not available
+            let userFaceId = currentUserFaceId;
+            if (!userFaceId) {
+                userFaceId = await getUserFaceId();
+            }
+            
+            if (userFaceId) {
+                console.log('[DEBUG] Using face ID for matching:', userFaceId);
+                
+                // Apply enhanced matching logic
+                transformedPhotos = enhancePhotoMatches(transformedPhotos, currentUserId, userFaceId);
+            } else {
+                console.log('[DEBUG] No face ID available for enhanced matching');
+            }
+            
             const matchedPhotos = transformedPhotos.filter(photo => {
                 // Only include photos where the current user appears in matched_users
                 const matchedUsers = photo.matched_users || [];
-                return matchedUsers.some(match => match.userId === currentUserId);
+                return matchedUsers.some(match => match.userId === currentUserId || match.user_id === currentUserId);
             });
             
             console.log(`[DEBUG] Found ${matchedPhotos.length} photos matching user ID ${currentUserId} out of ${transformedPhotos.length} total`);
