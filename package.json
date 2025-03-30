@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "predev": "node scripts/kill-node.js",
     "dev": "vite",
     "clean-start": "node scripts/kill-node.js && npm run dev",
     "build": "vite build --config vite.config.js",

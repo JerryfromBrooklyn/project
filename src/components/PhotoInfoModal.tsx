@@ -574,123 +574,131 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
         variants={backdropVariants}
         initial="hidden"
         animate="visible"
         exit="hidden"
         onClick={onClose}
       >
-        <motion.div 
-          className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+        <motion.div
+          className="bg-white w-full max-w-none sm:max-w-3xl max-h-[95vh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden flex flex-col"
           variants={modalVariants}
           initial="hidden"
           animate="visible"
           exit="exit"
           onClick={e => e.stopPropagation()}
         >
-          {/* Header */}
-          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">Photo Details</h2>
-            <button 
+          {/* Header - sticky potentially? For now, just part of scroll */}
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Photo Details</h2>
+            <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors"
+              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-500"
               aria-label="Close modal"
             >
-              <X className="w-5 h-5 text-gray-500" />
+              <X className="w-5 h-5" />
             </button>
           </div>
-          
-          {/* Image preview */}
-          <div className="bg-gray-50 p-4 border-b border-gray-100">
-            <div className="aspect-video relative rounded-lg overflow-hidden bg-gray-100 mx-auto shadow-sm">
-              <img 
-                src={normalizedPhoto.url} 
-                alt="Photo preview" 
-                className="object-contain w-full h-full"
-                onLoad={handleImageLoad}
-              />
+
+          {/* Scrollable Content Area */}
+          <div className="flex-1 overflow-y-auto">
+            {/* Image preview - Constrain height on mobile */}
+            <div className="bg-gray-50 p-2 sm:p-4 border-b border-gray-100">
+              {/* Limit height on mobile, use aspect-video on larger screens */}
+              <div className="relative rounded-lg overflow-hidden bg-gray-100 mx-auto shadow-sm max-h-72 sm:max-h-none sm:aspect-video">
+                <img
+                  src={normalizedPhoto.url}
+                  alt="Photo preview"
+                  className="object-contain w-full h-full" // Keep object-contain
+                  onLoad={handleImageLoad}
+                />
+              </div>
             </div>
-          </div>
-          
-          {/* Action buttons */}
-          <div className="p-3 flex justify-center space-x-4 border-b border-gray-100">
-            <button 
-              onClick={handleDownload}
-              disabled={loading}
-              className="flex items-center px-4 py-2 rounded-full bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-medium"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              {loading ? 'Downloading...' : 'Download'}
-            </button>
-            
-            {onShare && (
-              <button 
-                onClick={handleShare}
+
+            {/* Action buttons */}
+            <div className="p-3 flex justify-center space-x-4 border-b border-gray-100">
+              <button
+                onClick={handleDownload}
+                disabled={loading}
                 className="flex items-center px-4 py-2 rounded-full bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-medium"
               >
-                <Share2 className="w-4 h-4 mr-2" />
-                Share
+                <Download className="w-4 h-4 mr-2" />
+                {loading ? 'Downloading...' : 'Download'}
               </button>
-            )}
-          </div>
+              
+              {onShare && (
+                <button
+                  onClick={handleShare}
+                  className="flex items-center px-4 py-2 rounded-full bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-medium"
+                >
+                  <Share2 className="w-4 h-4 mr-2" />
+                  Share
+                </button>
+              )}
+            </div>
+            
+            {/* Tabs */}
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-100 grid grid-cols-3">
+              {/* Info Tab Button */}
+              <button
+                onClick={() => setActiveTab('info')}
+                className={cn(
+                  "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors",
+                  activeTab === 'info'
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-900"
+                )}
+              >
+                <Info className="w-4 h-4 mr-1 sm:mr-2" />
+                Details
+              </button>
+              {/* Faces Tab Button */}
+               <button
+                onClick={() => setActiveTab('faces')}
+                className={cn(
+                  "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors relative",
+                  activeTab === 'faces'
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-900"
+                )}
+              >
+                <User className="w-4 h-4 mr-1 sm:mr-2" />
+                Analysis
+                {normalizedPhoto.faces && normalizedPhoto.faces.length > 0 && (
+                  <span className="ml-1 w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center">
+                    {normalizedPhoto.faces.length}
+                  </span>
+                )}
+              </button>
+              {/* Matches Tab Button */}
+              <button
+                onClick={() => setActiveTab('matches')}
+                className={cn(
+                  "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors relative",
+                  activeTab === 'matches'
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-900"
+                )}
+              >
+                <Users className="w-4 h-4 mr-1 sm:mr-2" />
+                Matches
+                {normalizedPhoto.matched_users && normalizedPhoto.matched_users.length > 0 && (
+                  <span className="ml-1 w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center">
+                    {normalizedPhoto.matched_users.length}
+                  </span>
+                )}
+              </button>
+            </div>
+            
+            {/* Tab Content - Removed overflow-y-auto here */}
+            <div className="p-4"> 
+              {activeTab === 'info' && <InfoTabContent />}
+              {activeTab === 'faces' && <FacesTabContent />}
+              {activeTab === 'matches' && <MatchesTabContent />}
+            </div>
+          </div> {/* End Scrollable Content Area */}
           
-          {/* Tabs */}
-          <div className="grid grid-cols-3 border-b border-gray-100">
-            <button
-              onClick={() => setActiveTab('info')}
-              className={cn(
-                "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors",
-                activeTab === 'info' 
-                  ? "border-blue-500 text-blue-600" 
-                  : "border-transparent text-gray-500 hover:text-gray-900"
-              )}
-            >
-              <Info className="w-4 h-4 mr-2" />
-              Details
-            </button>
-            <button
-              onClick={() => setActiveTab('faces')}
-              className={cn(
-                "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors relative",
-                activeTab === 'faces' 
-                  ? "border-blue-500 text-blue-600" 
-                  : "border-transparent text-gray-500 hover:text-gray-900"
-              )}
-            >
-              <User className="w-4 h-4 mr-2" />
-              Face Analysis
-              {normalizedPhoto.faces && normalizedPhoto.faces.length > 0 && (
-                <span className="ml-1 w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center">
-                  {normalizedPhoto.faces.length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('matches')}
-              className={cn(
-                "py-3 text-sm font-medium flex items-center justify-center border-b-2 transition-colors relative",
-                activeTab === 'matches' 
-                  ? "border-blue-500 text-blue-600" 
-                  : "border-transparent text-gray-500 hover:text-gray-900"
-              )}
-            >
-              <Users className="w-4 h-4 mr-2" />
-              Matches
-              {normalizedPhoto.matched_users && normalizedPhoto.matched_users.length > 0 && (
-                <span className="ml-1 w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center">
-                  {normalizedPhoto.matched_users.length}
-                </span>
-              )}
-            </button>
-          </div>
-          
-          {/* Content */}
-          <div className="p-4 overflow-y-auto">
-            {activeTab === 'info' && <InfoTabContent />}
-            {activeTab === 'faces' && <FacesTabContent />}
-            {activeTab === 'matches' && <MatchesTabContent />}
-          </div>
         </motion.div>
       </motion.div>
     </AnimatePresence>
