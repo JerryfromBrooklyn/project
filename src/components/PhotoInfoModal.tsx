@@ -601,13 +601,13 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
             </button>
           </div>
 
-          {/* Image preview container - Fixed height on mobile, non-shrinking */}
-          <div className="flex-shrink-0 bg-gray-50 p-2 sm:p-4 border-b border-gray-100 h-[45vh] sm:h-auto">
+          {/* Image preview container - Further reduced fixed height on mobile, non-shrinking */}
+          <div className="flex-shrink-0 bg-gray-50 p-2 sm:p-4 border-b border-gray-100 h-[40vh] sm:h-auto">
             <div className="relative rounded-lg overflow-hidden bg-gray-100 mx-auto shadow-sm h-full w-full sm:aspect-video">
               <img
                 src={normalizedPhoto.url}
                 alt="Photo preview"
-                className="object-contain w-full h-full" // object-contain within fixed height container
+                className="object-contain w-full h-full"
                 onLoad={handleImageLoad}
               />
             </div>
