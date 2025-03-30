@@ -2,7 +2,7 @@
 
 [build]
   # The build command Netlify will run
-  command = "npm install && npx vite build --config vite.config.js"
+  command = "npm install && npm install -g vite && vite build --config vite.config.js"
   # The directory with compiled assets Netlify will serve
   publish = "dist"
   # Node version (ensure compatibility with your local dev environment)
