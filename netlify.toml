@@ -23,7 +23,6 @@
 
 # Production context settings
 [context.production]
-  environment = { NODE_ENV = "production" }
 
 # Deploy Preview context settings (for PRs)
 [context.deploy-preview]
