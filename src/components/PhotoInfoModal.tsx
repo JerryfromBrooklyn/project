@@ -605,8 +605,8 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
           <div className="flex-1 overflow-y-auto">
             {/* Image preview - Constrain height on mobile */}
             <div className="bg-gray-50 p-2 sm:p-4 border-b border-gray-100">
-              {/* Limit height on mobile, use aspect-video on larger screens */}
-              <div className="relative rounded-lg overflow-hidden bg-gray-100 mx-auto shadow-sm max-h-72 sm:max-h-none sm:aspect-video">
+              {/* Limit height on mobile using viewport height, use aspect-video on larger screens */}
+              <div className="relative rounded-lg overflow-hidden bg-gray-100 mx-auto shadow-sm max-h-[45vh] sm:max-h-none sm:aspect-video">
                 <img
                   src={normalizedPhoto.url}
                   alt="Photo preview"
