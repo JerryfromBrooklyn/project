@@ -7,7 +7,7 @@ import { PhotoService } from '../services/PhotoService';
 import { cn } from '../utils/cn';
 import { useAuth } from '../context/AuthContext';
 import { GoogleMaps } from './GoogleMaps';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '../supabaseClient';
 import SimplePhotoInfoModal from './SimplePhotoInfoModal';
 
 export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {

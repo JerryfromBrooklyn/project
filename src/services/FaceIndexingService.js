@@ -137,85 +137,83 @@ export class FaceIndexingService {
                 // Continue with database operations even if storage fails
             }
             
-            // First check if the user already has face data
-            const { data: existingData, error: fetchError } = await supabase
-                .from('face_data')
-                .select('*')
-                .eq('user_id', userId)
-                .maybeSingle();
-            
-            if (fetchError) {
-                console.error('[DEBUG-FACESAVE] Error fetching existing face data:', fetchError);
-                throw fetchError;
-            }
-            
-            console.log('[DEBUG-FACESAVE] Existing face data:', existingData);
-            
-            // Make sure faceId is defined - generate a fallback if needed
-            const validFaceId = faceId || `face_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-            console.log(`[DEBUG-FACESAVE] Using face ID: ${validFaceId} for user ${userId}`);
-            
-            // Prepare the face data object
-            const faceDataObj = {
-                aws_face_id: validFaceId,
-                attributes: attributes || {},
-                updated_at: new Date().toISOString()
-            };
-            
-            if (existingData) {
-                // Validate update data
-                const updateData = validateForTable('face_data', {
-                    user_id: userId,
-                    face_id: validFaceId,  // Use the validated face ID
-                    face_data: {
-                        ...existingData.face_data,
-                        aws_face_id: validFaceId,
-                        attributes: attributes || existingData.face_data.attributes
-                    },
-                    updated_at: new Date().toISOString()
-                });
-                
-                console.log('[DEBUG-FACESAVE] Updating existing face data:', updateData);
-                
-                // Update existing record
-                const { error } = await supabase
+            // Try to update face_data table if it exists
+            try {
+                // First check if the user already has face data
+                const { data: existingData, error: fetchError } = await supabase
                     .from('face_data')
-                    .update(updateData)
-                    .eq('id', existingData.id);
-                    
-                if (error) {
-                    console.error('[DEBUG-FACESAVE] Error updating face data:', error);
-                    throw error;
-                }
+                    .select('*')
+                    .eq('user_id', userId)
+                    .maybeSingle();
                 
-                console.log('[DEBUG-FACESAVE] Face data updated successfully');
-            } else {
-                // Validate insert data
-                const insertData = validateForTable('face_data', {
-                    user_id: userId,
-                    face_id: validFaceId,  // Use the validated face ID
-                    face_data: {
+                if (fetchError) {
+                    console.error('[DEBUG-FACESAVE] Error fetching existing face data:', fetchError);
+                    // Don't throw, continue with other operations
+                } else {
+                    console.log('[DEBUG-FACESAVE] Existing face data:', existingData);
+                
+                    // Make sure faceId is defined - generate a fallback if needed
+                    const validFaceId = faceId || `face_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+                    console.log(`[DEBUG-FACESAVE] Using face ID: ${validFaceId} for user ${userId}`);
+                    
+                    // Prepare the face data object
+                    const faceDataObj = {
                         aws_face_id: validFaceId,
-                        attributes: attributes || {}
+                        attributes: attributes || {},
+                        updated_at: new Date().toISOString()
+                    };
+                
+                    // Update or insert face data
+                    if (existingData) {
+                        // Update existing record
+                        const updateData = {
+                            user_id: userId,
+                            face_id: validFaceId,
+                            face_data: faceDataObj,
+                            updated_at: new Date().toISOString()
+                        };
+                        console.log('[DEBUG-FACESAVE] Updating existing face data:', updateData);
+                        
+                        const { error: updateError } = await supabase
+                            .from('face_data')
+                            .update(updateData)
+                            .eq('id', existingData.id);
+                        
+                        if (updateError) {
+                            console.error('[DEBUG-FACESAVE] Error updating face data:', updateError);
+                        } else {
+                            console.log('[DEBUG-FACESAVE] Face data updated successfully');
+                        }
+                    } else {
+                        // If we reach here, there's no record for this user
+                        // Create new record
+                        const insertData = {
+                            user_id: userId,
+                            face_id: validFaceId,
+                            face_data: faceDataObj,
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                        };
+                        
+                        console.log('[DEBUG-FACESAVE] Creating new face data record:', insertData);
+                        
+                        const { error: insertError } = await supabase
+                            .from('face_data')
+                            .insert(insertData);
+                            
+                        if (insertError) {
+                            console.error('[DEBUG-FACESAVE] Error inserting face data:', insertError);
+                        } else {
+                            console.log('[DEBUG-FACESAVE] Face data inserted successfully');
+                        }
                     }
-                });
-                
-                console.log('[DEBUG-FACESAVE] Creating new face data:', insertData);
-                
-                // Create new record
-                const { error } = await supabase
-                    .from('face_data')
-                    .insert(insertData);
-                    
-                if (error) {
-                    console.error('[DEBUG-FACESAVE] Error inserting face data:', error);
-                    throw error;
                 }
-                
-                console.log('[DEBUG-FACESAVE] Face data inserted successfully');
+            } catch (faceDataError) {
+                console.error('[DEBUG-FACESAVE] Error with face_data operations:', faceDataError);
+                // Continue with other operations
             }
             
-            // ADDED: Also update user_faces table for backward compatibility
+            // Try to update user_faces table if it exists
             try {
                 console.log('[DEBUG-FACESAVE] Updating user_faces table...');
                 const { data: existingFace, error: faceError } = await supabase
@@ -223,14 +221,15 @@ export class FaceIndexingService {
                     .select('*')
                     .eq('user_id', userId)
                     .maybeSingle();
-                    
+                
                 if (faceError) {
-                    console.error('[DEBUG-FACESAVE] Error checking user_faces table:', faceError);
+                    console.log('[DEBUG-FACESAVE] Error checking user_faces table:', faceError);
+                    // Table likely doesn't exist, skip this step
                 } else if (existingFace) {
                     // Update existing record
                     const { error: updateError } = await supabase
                         .from('user_faces')
-                        .update({ face_id: validFaceId })
+                        .update({ face_id: faceId })
                         .eq('user_id', userId);
                         
                     if (updateError) {
@@ -242,7 +241,7 @@ export class FaceIndexingService {
                     // Insert new record
                     const { error: insertError } = await supabase
                         .from('user_faces')
-                        .insert({ user_id: userId, face_id: validFaceId });
+                        .insert({ user_id: userId, face_id: faceId });
                         
                     if (insertError) {
                         console.error('[DEBUG-FACESAVE] Error inserting into user_faces:', insertError);
@@ -250,42 +249,39 @@ export class FaceIndexingService {
                         console.log('[DEBUG-FACESAVE] user_faces record created successfully');
                     }
                 }
-            } catch (faceTableError) {
-                console.error('[DEBUG-FACESAVE] Error managing user_faces table:', faceTableError);
-                // Continue with the process even if this fails
+            } catch (userFacesError) {
+                console.error('[DEBUG-FACESAVE] Error with user_faces operations:', userFacesError);
             }
             
-            // Also update profiles table if it exists and has face_id column
+            // Try to update profiles table if it exists
             try {
                 console.log('[DEBUG-FACESAVE] Updating profiles table...');
                 const { error: profileError } = await supabase
                     .from('profiles')
-                    .update({ face_id: validFaceId })
+                    .update({ face_id: faceId })
                     .eq('id', userId);
-                    
+                
                 if (profileError) {
                     console.log('[DEBUG-FACESAVE] Could not update profiles table:', profileError.message);
+                    // Column likely doesn't exist, skip this step
                 } else {
                     console.log('[DEBUG-FACESAVE] profiles table updated successfully');
                 }
             } catch (profileError) {
-                console.error('[DEBUG-FACESAVE] Error updating profiles table:', profileError);
-                // Continue with the process even if this fails
+                console.error('[DEBUG-FACESAVE] Error with profiles operations:', profileError);
             }
             
-            console.log(`Face data saved to database: User ${userId}, Face ID ${validFaceId}`);
+            console.log(`Face data saved to database: User ${userId}, Face ID ${faceId}`);
             
-            // Now find matches using the face ID
+            // Search for matches with the newly saved face ID
             console.log('[DEBUG-FACESAVE] Searching for matches with newly saved face...');
-            try {
-                const matchedPhotos = await this.searchFacesByFaceId(validFaceId, userId);
-                console.log(`[DEBUG-FACESAVE] Found ${matchedPhotos.length} matching photos`);
-            } catch (matchError) {
-                console.error('[DEBUG-FACESAVE] Error finding matches:', matchError);
-            }
+            const matchingPhotos = await this.searchFacesByFaceId(faceId, userId);
+            console.log('[DEBUG-FACESAVE] Found', matchingPhotos.length, 'matching photos');
+            
+            return true;
         } catch (error) {
             console.error('Error saving face data:', error);
-            throw error;
+            return false;
         }
     }
     static async searchFacesByFaceId(faceId, userId) {

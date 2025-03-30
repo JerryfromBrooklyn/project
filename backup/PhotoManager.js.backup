@@ -7,7 +7,7 @@ import { PhotoService } from '../services/PhotoService';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, RefreshCw, Filter, ChevronDown, Calendar, MapPin, Tag, Clock, Search, Wrench, Check } from 'lucide-react';
-import { supabase, supabaseAdmin, isSchemaValid, getCachedSchema, updateSchemaCache, getFaceIdFromCache, cacheFaceId } from '../supabaseClient';
+import { supabase, isSchemaValid, getCachedSchema, updateSchemaCache, getFaceIdFromCache, cacheFaceId } from '../supabaseClient';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
 import { getFaceId } from '../services/FaceStorageService';
@@ -1120,9 +1120,9 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             
             console.log('[DEBUG] Checking database schema...');
             
-            // Try to get the list of tables directly - use admin client to bypass RLS
+            // Try to get the list of tables directly
             console.log('[DEBUG] Fetching list of tables from information_schema');
-            const { data: tableInfo, error: tableError } = await supabaseAdmin
+            const { data: tableInfo, error: tableError } = await supabase
                 .from('information_schema.tables')
                 .select('table_name')
                 .eq('table_schema', 'public')
@@ -1138,9 +1138,9 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
                 console.log('[DEBUG] Tables in database:', tables);
             }
             
-            // Try a direct SQL query to look for stored procedures - use admin client
+            // Try a direct SQL query to look for stored procedures
             console.log('[DEBUG] Checking for available functions (RPCs)');
-            const functionQuery = await supabaseAdmin.rpc('list_functions');
+            const functionQuery = await supabase.rpc('list_functions');
             if (functionQuery.error) {
                 console.error('[DEBUG] Error listing functions:', functionQuery.error);
                 

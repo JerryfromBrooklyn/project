@@ -6,7 +6,7 @@ import { usePhotos } from '../features/photos/hooks/usePhotos';
 import LocalStorageDebugPanel from '../features/photos/components/LocalStorageDebugPanel';
 import SimplePhotoInfoModal from '../components/SimplePhotoInfoModal';
 import { PhotoService } from '../services/PhotoService';
-import { supabase } from '../utils/supabaseClient';
+import { supabase } from '../lib/supabaseClient';
 
 /**
  * Photos page component for displaying all photos

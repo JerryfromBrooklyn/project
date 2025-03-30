@@ -22,7 +22,7 @@ export class PhotoService {
         try {
             // Create a photos cache if it doesn't exist
             const cacheKey = `photos_cache_${userId}`;
-            const photosCache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+            let photosCache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
             
             // Store this photo data indexed by its ID
             photosCache[photoData.id] = {

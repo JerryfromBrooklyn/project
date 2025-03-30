@@ -17,31 +17,27 @@
  * =========================================================
  */
 
-import { createClient } from '@supabase/supabase-js';
-import * as dotenv from 'dotenv';
-import 'cross-fetch';
-// Load environment variables in Node.js environment
-if (typeof process !== 'undefined') {
-    dotenv.config();
-}
-// Get environment variables from either Vite or Node.js process
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://gmupwzjxirpkskolsuix.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdtdXB3empwaXJwa3Nrb2xzdWl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTQyMjE0NDgsImV4cCI6MjAyOTc5NzQ0OH0.q0G1M55xuYJl9jUz8KxcyD6Kx5FJ8c3LpZ5f9QCIx8k';
+// COMPATIBILITY LAYER - Forward all imports to the new centralized supabaseClient
+import { 
+  supabase, 
+  supabaseAdmin, 
+  getFaceIdFromCache, 
+  cacheFaceId, 
+  isSchemaValid, 
+  getCachedSchema, 
+  updateSchemaCache 
+} from '../supabaseClient';
 
-/**
- * Initialize the Supabase client
- */
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-});
+// Re-export everything from the new implementation
+export { 
+  supabase, 
+  supabaseAdmin, 
+  getFaceIdFromCache, 
+  cacheFaceId,
+  isSchemaValid, 
+  getCachedSchema, 
+  updateSchemaCache 
+};
 
-export default supabase;
+// Default export for compatibility
+export default supabase; 
