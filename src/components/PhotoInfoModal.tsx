@@ -589,7 +589,7 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
           exit="exit"
           onClick={e => e.stopPropagation()}
         >
-          {/* Header - sticky potentially? For now, just part of scroll */}
+          {/* Header - Non-shrinking */}
           <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
             <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Photo Details</h2>
             <button
@@ -601,23 +601,22 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
             </button>
           </div>
 
-          {/* Scrollable Content Area */}
-          <div className="flex-1 overflow-y-auto">
-            {/* Image preview - Constrain height on mobile */}
-            <div className="bg-gray-50 p-2 sm:p-4 border-b border-gray-100">
-              {/* Limit height on mobile using viewport height, use aspect-video on larger screens */}
-              <div className="relative rounded-lg overflow-hidden bg-gray-100 mx-auto shadow-sm max-h-[45vh] sm:max-h-none sm:aspect-video">
-                <img
-                  src={normalizedPhoto.url}
-                  alt="Photo preview"
-                  className="object-contain w-full h-full" // Keep object-contain
-                  onLoad={handleImageLoad}
-                />
-              </div>
+          {/* Image preview container - Fixed height on mobile, non-shrinking */}
+          <div className="flex-shrink-0 bg-gray-50 p-2 sm:p-4 border-b border-gray-100 h-[45vh] sm:h-auto">
+            <div className="relative rounded-lg overflow-hidden bg-gray-100 mx-auto shadow-sm h-full w-full sm:aspect-video">
+              <img
+                src={normalizedPhoto.url}
+                alt="Photo preview"
+                className="object-contain w-full h-full" // object-contain within fixed height container
+                onLoad={handleImageLoad}
+              />
             </div>
+          </div>
 
+          {/* Scrollable Details Area - Takes remaining space */}
+          <div className="flex-1 overflow-y-auto">
             {/* Action buttons */}
-            <div className="p-3 flex justify-center space-x-4 border-b border-gray-100">
+            <div className="p-3 flex justify-center space-x-4 border-b border-gray-100 flex-shrink-0">
               <button
                 onClick={handleDownload}
                 disabled={loading}
@@ -638,7 +637,7 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
               )}
             </div>
             
-            {/* Tabs */}
+            {/* Tabs - Sticky within this scrollable container */}
             <div className="sticky top-0 z-10 bg-white border-b border-gray-100 grid grid-cols-3">
               {/* Info Tab Button */}
               <button
@@ -691,13 +690,13 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
               </button>
             </div>
             
-            {/* Tab Content - Removed overflow-y-auto here */}
-            <div className="p-4"> 
+            {/* Tab Content */}
+            <div className="p-4">
               {activeTab === 'info' && <InfoTabContent />}
               {activeTab === 'faces' && <FacesTabContent />}
               {activeTab === 'matches' && <MatchesTabContent />}
             </div>
-          </div> {/* End Scrollable Content Area */}
+          </div> {/* End Scrollable Details Area */}
           
         </motion.div>
       </motion.div>
