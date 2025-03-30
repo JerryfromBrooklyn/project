@@ -9,32 +9,30 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import PhotosPage from './pages/PhotosPage';
 
-/**
- * Main application component
- */
-const App = () => {
+function App() {
   return (
-    <AuthProvider>
-      <PhotosProvider>
-        <BrowserRouter>
+    <BrowserRouter>
+      <AuthProvider>
+        <PhotosProvider>
           <Routes>
-            {/* Public routes */}
             <Route path="/login" element={<LoginPage />} />
-            
-            {/* Protected routes */}
-            <Route element={<ProtectedRoute />}>
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/photos" element={<PhotosPage />} />
-            </Route>
-            
-            {/* Redirects */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/photos" element={
+              <ProtectedRoute>
+                <PhotosPage />
+              </ProtectedRoute>
+            } />
+            {/* Redirect all other routes to dashboard or login */}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
-        </BrowserRouter>
-      </PhotosProvider>
-    </AuthProvider>
+        </PhotosProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
-};
+}
 
 export default App; 

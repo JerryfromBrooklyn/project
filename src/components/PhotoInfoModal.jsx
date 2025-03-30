@@ -1,7 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, User, AlertCircle, Calendar, Tag, Download, Share2, Building, UserCog, Image, Clock, Sparkles, Eye, Ruler, Smile, Sliders, Glasses, Laugh, Bean as Beard, FileType, HardDrive, Globe, Upload, Users } from 'lucide-react';
+import { X, User, AlertCircle, Calendar, Tag, Download, Share2, Building, UserCog, Image, Clock, Sparkles, Eye, Ruler, Smile, Sliders, Glasses, Laugh, Bean as Beard, FileType, HardDrive, Globe, Upload, Users, MapPin } from 'lucide-react';
 import { PhotoService } from '../services/PhotoService';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
@@ -254,18 +254,38 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
                     ] })
                 ] }, index));
             }) }), 
-            showMap && (_jsxs("div", { className: "mt-4", children: [
-                _jsx("h4", { className: "text-sm font-medium text-gray-700 mb-2", children: "Location" }), 
-                _jsx("div", { className: "h-48 rounded-xl overflow-hidden", children: _jsx(GoogleMapsComponent, { 
-                    location: {
-                        lat: enhancedPhoto.location.lat,
-                        lng: enhancedPhoto.location.lng,
-                        name: enhancedPhoto.location.name || ''
-                    }, 
-                    onLocationChange: () => { }, 
-                    height: "100%", 
-                    className: "w-full" 
-                }) })
+            (safeGet(enhancedPhoto, 'location.address', null) || safeGet(enhancedPhoto, 'location.name', null) || showMap) && (_jsxs("div", { className: "mt-4", children: [
+                _jsx("h4", { className: "text-sm font-medium text-gray-700 mb-2", children: "Location Details" }), 
+                  _jsxs("div", { className: "flex items-center p-3 bg-gray-50 rounded-xl mb-2", children: [
+                    _jsx("div", { className: "mr-2 text-gray-500", children: _jsx(Building, { className: "w-4 h-4" }) }),
+                    _jsxs("div", { children: [
+                      _jsx("div", { className: "text-sm font-medium text-gray-900", children: "Place Name" }),
+                      _jsx("div", { className: "text-xs text-gray-500", children: safeGet(enhancedPhoto, 'location.name', 'Unknown Location') })
+                    ] })
+                  ] }),
+                  _jsxs("div", { className: "flex items-center p-3 bg-gray-50 rounded-xl mb-2", children: [
+                    _jsx("div", { className: "mr-2 text-gray-500", children: _jsx(MapPin, { className: "w-4 h-4" }) }),
+                    _jsxs("div", { children: [
+                      _jsx("div", { className: "text-sm font-medium text-gray-900", children: "Address" }),
+                      _jsx("div", { className: "text-xs text-gray-500", children: safeGet(enhancedPhoto, 'location.address', 
+                        (safeGet(enhancedPhoto, 'location.lat', null) && safeGet(enhancedPhoto, 'location.lng', null)) 
+                          ? `${enhancedPhoto.location.lat.toFixed(6)}, ${enhancedPhoto.location.lng.toFixed(6)}`
+                          : 'No address available'
+                      ) })
+                    ] })
+                  ] }),
+                showMap && (
+                  _jsx("div", { className: "h-48 rounded-xl overflow-hidden", children: _jsx(GoogleMapsComponent, { 
+                      location: {
+                          lat: enhancedPhoto.location.lat,
+                          lng: enhancedPhoto.location.lng,
+                          name: enhancedPhoto.location.name || ''
+                      }, 
+                      onLocationChange: () => { }, 
+                      height: "100%", 
+                      className: "w-full" 
+                  }) })
+                )
             ] }))
         ] }));
     };
@@ -357,6 +377,22 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
             mouthOpen: attributes.mouthOpen || {
                 value: attributes.MouthOpen?.Value || false,
                 confidence: attributes.MouthOpen?.Confidence || 0
+            },
+            // Add quality metrics
+            quality: attributes.quality || {
+                brightness: attributes.Quality?.Brightness || 0,
+                sharpness: attributes.Quality?.Sharpness || 0
+            },
+            // Add pose information
+            pose: attributes.pose || attributes.Pose || null,
+            // Add beard and mustache
+            beard: attributes.beard || {
+                value: attributes.Beard?.Value || false,
+                confidence: attributes.Beard?.Confidence || 0
+            },
+            mustache: attributes.mustache || {
+                value: attributes.Mustache?.Value || false,
+                confidence: attributes.Mustache?.Confidence || 0
             }
         };
         
@@ -417,17 +453,70 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
                 label: "Eyes Open",
                 value: normalizedAttrs.eyesOpen?.value ? 'Yes' : 'No',
                 confidence: normalizedAttrs.eyesOpen?.confidence
+            },
+            {
+                icon: <Eye className="w-4 h-4" />,
+                label: "Mouth Open",
+                value: normalizedAttrs.mouthOpen?.value ? 'Yes' : 'No',
+                confidence: normalizedAttrs.mouthOpen?.confidence
             }
         ];
         
         // Only add beard if found in attributes
-        if (attributes.beard || attributes.Beard) {
+        if (normalizedAttrs.beard && (normalizedAttrs.beard.value || (attributes.beard?.value || attributes.Beard?.Value))) {
             details.push({
                 icon: <Beard className="w-4 h-4" />,
                 label: "Beard",
-                value: (attributes.beard?.value || attributes.Beard?.Value) ? 'Yes' : 'No',
-                confidence: attributes.beard?.confidence || attributes.Beard?.Confidence
+                value: 'Yes',
+                confidence: normalizedAttrs.beard.confidence
             });
+        }
+
+        // Only add mustache if found in attributes
+        if (normalizedAttrs.mustache && (normalizedAttrs.mustache.value || (attributes.mustache?.value || attributes.Mustache?.Value))) {
+            details.push({
+                icon: <Beard className="w-4 h-4" />,
+                label: "Mustache",
+                value: 'Yes',
+                confidence: normalizedAttrs.mustache.confidence
+            });
+        }
+
+        // Add sunglasses if present
+        if (normalizedAttrs.sunglasses && normalizedAttrs.sunglasses.value) {
+            details.push({
+                icon: <Glasses className="w-4 h-4" />,
+                label: "Sunglasses",
+                value: 'Yes',
+                confidence: normalizedAttrs.sunglasses.confidence
+            });
+        }
+
+        // Add image quality if available
+        if (normalizedAttrs.quality && (normalizedAttrs.quality.brightness > 0 || normalizedAttrs.quality.sharpness > 0)) {
+            details.push({
+                icon: <Sliders className="w-4 h-4" />,
+                label: "Image Quality",
+                value: `Brightness: ${Math.round(normalizedAttrs.quality.brightness * 100)}%, Sharpness: ${Math.round(normalizedAttrs.quality.sharpness * 100)}%`
+            });
+        }
+        
+        // Add pose information if available
+        if (normalizedAttrs.pose) {
+            const pose = normalizedAttrs.pose;
+            const poseString = [
+                pose.Roll ? `Roll: ${Math.round(pose.Roll)}°` : '',
+                pose.Yaw ? `Yaw: ${Math.round(pose.Yaw)}°` : '',
+                pose.Pitch ? `Pitch: ${Math.round(pose.Pitch)}°` : ''
+            ].filter(Boolean).join(', ');
+            
+            if (poseString) {
+                details.push({
+                    icon: <Ruler className="w-4 h-4" />,
+                    label: "Head Pose",
+                    value: poseString
+                });
+            }
         }
         
         return (

@@ -285,7 +285,16 @@ export class PhotoService {
                                 age: face.age,
                                 gender: face.gender,
                                 smile: face.smile,
-                                emotions: face.emotions
+                                emotions: face.emotions,
+                                // Add all additional attributes
+                                eyesOpen: face.eyesOpen,
+                                mouthOpen: face.mouthOpen,
+                                eyeglasses: face.eyeglasses,
+                                sunglasses: face.sunglasses,
+                                beard: face.beard,
+                                mustache: face.mustache,
+                                pose: face.pose,
+                                quality: face.quality
                             },
                             overallConfidence: face.confidence
                         };
@@ -424,6 +433,33 @@ export class PhotoService {
                 console.error('[DEBUG] Error processing faces (continuing upload):', processingError);
             }
             
+            // Prepare photo metadata
+            const photoMetadata = {
+                title: file.name,
+                event_details: {
+                    name: metadata.eventName || "Untitled Event",
+                    date: metadata.date || new Date().toISOString(),
+                    promoter: metadata.promoterName || "Unknown"
+                },
+                venue: {
+                    name: metadata.venueName || "Unknown Venue",
+                    id: null
+                },
+                location: metadata.location && metadata.location.name ? metadata.location : {
+                    lat: null,
+                    lng: null,
+                    name: "Unknown Location",
+                    address: null
+                },
+                date_taken: metadata.date || new Date().toISOString(),
+                // Add empty structures for things that will be populated by the service
+                tags: [],
+                matched_users: []
+            };
+            
+            console.log(`[DEBUG] Location data in metadata:`, JSON.stringify(metadata.location, null, 2));
+            console.log(`[DEBUG] Prepared metadata for ${file.name}:`, JSON.stringify(photoMetadata, null, 2));
+            
             // Create final photo record with all metadata
             let finalMetadata = {
                 id: photoId,
@@ -441,6 +477,7 @@ export class PhotoService {
                 faces: faces || [],
                 face_ids: faceIds || [],
                 matched_users: matchedUsers || [],
+                location: metadata?.location || { lat: null, lng: null, name: null, address: null },
                 ...metadata
             };
             
@@ -453,13 +490,15 @@ export class PhotoService {
                 
                 // Create metadata object with all additional data
                 const metadataObj = {
-                    location: metadata?.location || { lat: null, lng: null, name: null },
+                    location: metadata?.location || { lat: null, lng: null, name: null, address: null },
                     venue: metadata?.venue || { id: null, name: null },
                     event_details: metadata?.event_details || { date: null, name: null, type: null },
                     tags: metadata?.tags || [],
                     title: metadata?.title || file.name,
                     date_taken: metadata?.date_taken || new Date().toISOString()
                 };
+                
+                console.log('[DEBUG] Metadata being sent to database:', JSON.stringify(metadataObj, null, 2));
                 
                 // Save to localStorage as a backup before attempting database operations
                 this.saveToLocalStorage(userId, finalMetadata);
@@ -568,7 +607,7 @@ export class PhotoService {
                                 faces: faces || [],
                                 face_ids: faceIds || [],
                                 matched_users: matchedUsers || [],
-                                location: metadata?.location || { lat: null, lng: null, name: null },
+                                location: metadata?.location || { lat: null, lng: null, name: null, address: null },
                                 venue: metadata?.venue || { id: null, name: null },
                                 event_details: metadata?.event_details || { date: null, name: null, type: null },
                                 tags: metadata?.tags || [],
@@ -918,8 +957,46 @@ export class PhotoService {
                                     emotions: face.Emotions ? face.Emotions.map(emotion => ({
                                         type: emotion.Type,
                                         confidence: emotion.Confidence
-                                    })) : []
+                                    })) : [],
+                                    // Add additional facial attributes
+                                    eyesOpen: face.EyesOpen ? {
+                                        value: face.EyesOpen.Value,
+                                        confidence: face.EyesOpen.Confidence
+                                    } : null,
+                                    mouthOpen: face.MouthOpen ? {
+                                        value: face.MouthOpen.Value,
+                                        confidence: face.MouthOpen.Confidence
+                                    } : null,
+                                    eyeglasses: face.Eyeglasses ? {
+                                        value: face.Eyeglasses.Value,
+                                        confidence: face.Eyeglasses.Confidence
+                                    } : null,
+                                    sunglasses: face.Sunglasses ? {
+                                        value: face.Sunglasses.Value,
+                                        confidence: face.Sunglasses.Confidence
+                                    } : null,
+                                    beard: face.Beard ? {
+                                        value: face.Beard.Value,
+                                        confidence: face.Beard.Confidence
+                                    } : null,
+                                    mustache: face.Mustache ? {
+                                        value: face.Mustache.Value,
+                                        confidence: face.Mustache.Confidence
+                                    } : null,
+                                    pose: face.Pose ? face.Pose : null,
+                                    quality: face.Quality ? face.Quality : null,
+                                    // Also preserve the original Quality with uppercase properties
+                                    Quality: face.Quality ? {
+                                        Brightness: face.Quality.Brightness,
+                                        Sharpness: face.Quality.Sharpness
+                                    } : null
                                 };
+                                
+                                // Log full details of what we received and extracted
+                                console.log(`[PhotoService.detectFaces] Face ${index} full details:`, JSON.stringify({
+                                    original: face,
+                                    processed: processedFace
+                                }, null, 2));
                                 
                                 // Check for required attributes
                                 if (!processedFace.age) console.warn(`[PhotoService.detectFaces] WARNING: Face ${index} missing age range data`);

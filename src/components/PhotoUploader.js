@@ -176,6 +176,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                     matched_users: []
                 };
                 
+                console.log(`[DEBUG] Location data being uploaded:`, JSON.stringify(metadata.location, null, 2));
                 console.log(`[DEBUG] Prepared metadata for ${upload.file.name}:`, JSON.stringify(photoMetadata, null, 2));
                 
                 // Upload photo
@@ -360,10 +361,94 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         return (_jsx("div", { className: "mt-4 space-y-4", children: _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4", children: [_jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium mb-2", children: "Photo Information" }), _jsxs("div", { className: "space-y-2", children: [_jsxs("div", { className: "flex items-center p-2 bg-apple-gray-50 rounded-apple", children: [_jsx(Calendar, { className: "w-4 h-4 text-apple-gray-500 mr-2" }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium", children: "Date Taken" }), _jsx("div", { className: "text-xs text-apple-gray-500", children: new Date(upload.photoDetails.date_taken || upload.photoDetails.created_at).toLocaleDateString() })] })] }), _jsxs("div", { className: "flex items-center p-2 bg-apple-gray-50 rounded-apple", children: [_jsx(MapPin, { className: "w-4 h-4 text-apple-gray-500 mr-2" }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium", children: "Location" }), _jsx("div", { className: "text-xs text-apple-gray-500", children: upload.photoDetails.location?.name || 'Unknown' })] })] })] })] }), _jsxs("div", { children: [_jsx("h4", { className: "text-sm font-medium mb-2", children: "Face Detection" }), _jsx("div", { className: "space-y-2", children: upload.photoDetails.matched_users?.length ? (upload.photoDetails.matched_users.map((user, index) => (_jsxs("div", { className: "flex items-center p-2 bg-apple-gray-50 rounded-apple", children: [_jsx(User, { className: "w-4 h-4 text-apple-gray-500 mr-2" }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium", children: user.fullName }), _jsxs("div", { className: "text-xs text-apple-gray-500", children: [Math.round(user.confidence), "% match"] })] })] }, index)))) : (_jsxs("div", { className: "flex items-center p-2 bg-apple-gray-50 rounded-apple", children: [_jsx(AlertTriangle, { className: "w-4 h-4 text-apple-gray-500 mr-2" }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium", children: "No Matches Found" }), _jsx("div", { className: "text-xs text-apple-gray-500", children: "No registered faces were detected" })] })] })) })] })] }) }));
     };
 
-    return (_jsxs("div", { className: "w-full", children: [_jsxs("div", { className: "mb-6", children: [_jsxs("div", { className: "flex items-center justify-between mb-2", children: [_jsx("span", { className: "text-sm font-medium text-apple-gray-700", children: "Storage Usage" }), _jsxs("span", { className: "text-sm text-apple-gray-500", children: [(totalStorage / 1024 / 1024 / 1024).toFixed(2), "GB of 10GB"] })] }), _jsx("div", { className: "h-2 bg-apple-gray-100 rounded-full overflow-hidden", children: _jsx("div", { className: "h-full bg-apple-blue-500 transition-all duration-300", style: { width: `${(totalStorage / storageLimit) * 100}%` } }) })] }), _jsx(AnimatePresence, { children: showMetadataForm && (_jsxs(motion.div, { initial: { opacity: 0, y: -20 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -20 }, className: "mb-8 p-6 bg-white rounded-apple-xl border border-apple-gray-200", children: [_jsx("h3", { className: "text-lg font-medium text-apple-gray-900 mb-4", children: "Photo Details" }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4", children: [_jsxs("div", { children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(Calendar, { className: "w-4 h-4 mr-2" }), "Event Name*"] }), _jsx("input", { type: "text", value: metadata.eventName, onChange: (e) => setMetadata({ ...metadata, eventName: e.target.value }), className: "ios-input", placeholder: "Enter event name", required: true })] }), _jsxs("div", { children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(Building, { className: "w-4 h-4 mr-2" }), "Venue Name*"] }), _jsx("input", { type: "text", value: metadata.venueName, onChange: (e) => setMetadata({ ...metadata, venueName: e.target.value }), className: "ios-input", placeholder: "Enter venue name", required: true })] }), _jsxs("div", { children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(User, { className: "w-4 h-4 mr-2" }), "Promoter Name*"] }), _jsx("input", { type: "text", value: metadata.promoterName, onChange: (e) => setMetadata({ ...metadata, promoterName: e.target.value }), className: "ios-input", placeholder: "Enter promoter name", required: true })] }), _jsxs("div", { children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(Calendar, { className: "w-4 h-4 mr-2" }), "Date*"] }), _jsx("input", { type: "date", value: metadata.date, onChange: (e) => setMetadata({ ...metadata, date: e.target.value }), className: "ios-input", required: true })] }), _jsxs("div", { className: "md:col-span-2", children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(MapPin, { className: "w-4 h-4 mr-2" }), "Location (optional)"] }), _jsx(GoogleMaps, { location: metadata.location, onLocationChange: (location) => setMetadata({ ...metadata, location }), height: "300px", className: "rounded-apple overflow-hidden" })] })] }), _jsxs("div", { className: "flex justify-end space-x-4 mt-6", children: [_jsx("button", { onClick: () => {
-                                        setShowMetadataForm(false);
-                                        setPendingFiles([]);
-                                    }, className: "ios-button-secondary", children: "Cancel" }), _jsx("button", { onClick: processUploads, className: "ios-button-primary", children: "Continue Upload" })] })] })) }), _jsxs("div", { ...getRootProps(), className: cn("mt-4 p-10 border-2 border-dashed rounded-apple-xl text-center transition-colors duration-300", isDragActive
+    return (_jsxs("div", { className: "w-full", children: [_jsxs("div", { className: "mb-6", children: [_jsxs("div", { className: "flex items-center justify-between mb-2", children: [_jsx("span", { className: "text-sm font-medium text-apple-gray-700", children: "Storage Usage" }), _jsxs("span", { className: "text-sm text-apple-gray-500", children: [(totalStorage / 1024 / 1024 / 1024).toFixed(2), "GB of 10GB"] })] }), _jsx("div", { className: "h-2 bg-apple-gray-100 rounded-full overflow-hidden", children: _jsx("div", { className: "h-full bg-apple-blue-500 transition-all duration-300", style: { width: `${(totalStorage / storageLimit) * 100}%` } }) })] }), _jsx(AnimatePresence, { children: showMetadataForm && (_jsxs(motion.div, { initial: { opacity: 0, y: -20 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -20 }, className: "mb-8 p-6 bg-white rounded-apple-xl border border-apple-gray-200", children: [_jsx("h3", { className: "text-lg font-medium text-apple-gray-900 mb-4", children: "Photo Details" }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4", children: [
+                      _jsxs("div", { children: [
+                        _jsxs("label", { className: "ios-label flex items-center", children: [
+                          _jsx(Calendar, { className: "w-4 h-4 mr-2" }), 
+                          "Event Name*"
+                        ] }), 
+                        _jsx("input", { 
+                          type: "text", 
+                          value: metadata.eventName, 
+                          onChange: (e) => setMetadata({ ...metadata, eventName: e.target.value }), 
+                          className: "ios-input", 
+                          placeholder: "Enter event name", 
+                          required: true 
+                        })
+                      ] }), 
+                      _jsxs("div", { children: [
+                        _jsxs("label", { className: "ios-label flex items-center", children: [
+                          _jsx(Building, { className: "w-4 h-4 mr-2" }), 
+                          "Venue Name*"
+                        ] }), 
+                        _jsx("input", { 
+                          type: "text", 
+                          value: metadata.venueName, 
+                          onChange: (e) => setMetadata({ ...metadata, venueName: e.target.value }), 
+                          className: "ios-input", 
+                          placeholder: "Enter venue name", 
+                          required: true 
+                        })
+                      ] }), 
+                      _jsxs("div", { children: [
+                        _jsxs("label", { className: "ios-label flex items-center", children: [
+                          _jsx(User, { className: "w-4 h-4 mr-2" }), 
+                          "Promoter Name*"
+                        ] }), 
+                        _jsx("input", { 
+                          type: "text", 
+                          value: metadata.promoterName, 
+                          onChange: (e) => setMetadata({ ...metadata, promoterName: e.target.value }), 
+                          className: "ios-input", 
+                          placeholder: "Enter promoter name", 
+                          required: true 
+                        })
+                      ] }), 
+                      _jsxs("div", { children: [
+                        _jsxs("label", { className: "ios-label flex items-center", children: [
+                          _jsx(Calendar, { className: "w-4 h-4 mr-2" }), 
+                          "Date*"
+                        ] }), 
+                        _jsx("input", { 
+                          type: "date", 
+                          value: metadata.date, 
+                          onChange: (e) => setMetadata({ ...metadata, date: e.target.value }), 
+                          className: "ios-input", 
+                          required: true 
+                        })
+                      ] }), 
+                      _jsxs("div", { className: "md:col-span-2", children: [
+                        _jsxs("label", { className: "ios-label flex items-center", children: [
+                          _jsx(MapPin, { className: "w-4 h-4 mr-2" }), 
+                          "Location (optional)"
+                        ] }), 
+                        _jsx(GoogleMaps, { 
+                          location: metadata.location, 
+                          onLocationChange: (location) => {
+                            console.log('[DEBUG] Setting location data from GoogleMaps:', JSON.stringify(location, null, 2));
+                            setMetadata({ ...metadata, location });
+                          },
+                          height: "300px", 
+                          className: "rounded-apple overflow-hidden" 
+                        })
+                      ] })
+                    ] }), 
+                    _jsxs("div", { className: "flex justify-end space-x-4 mt-6", children: [
+                      _jsx("button", { 
+                        onClick: () => {
+                          setShowMetadataForm(false);
+                          setPendingFiles([]);
+                        }, 
+                        className: "ios-button-secondary", 
+                        children: "Cancel" 
+                      }), 
+                      _jsx("button", { 
+                        onClick: processUploads, 
+                        className: "ios-button-primary", 
+                        children: "Continue Upload" 
+                      })
+                    ] })
+                  ] })) }), _jsxs("div", { ...getRootProps(), className: cn("mt-4 p-10 border-2 border-dashed rounded-apple-xl text-center transition-colors duration-300", isDragActive
                     ? "border-apple-blue-500 bg-apple-blue-50"
                     : "border-apple-gray-200 bg-apple-gray-50", uploads.length > 0 && "mb-8"), children: [_jsx("input", { ...getInputProps(), multiple: true, type: "file", accept: "image/*", className: "hidden", "aria-label": "Upload files" }), _jsx("div", { className: "w-16 h-16 mx-auto mb-4 rounded-full bg-white flex items-center justify-center", children: _jsx(Upload, { className: "w-8 h-8 text-apple-gray-500" }) }), _jsx("p", { className: "text-apple-gray-500 mb-2", children: isDragActive
                             ? "Drop the photos or folders here"

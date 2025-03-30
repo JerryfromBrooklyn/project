@@ -1194,6 +1194,42 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
     const handleShare = async (photoId) => {
         console.log('Share photo:', photoId);
     };
+    
+    const handleDownload = async (photoId) => {
+        try {
+            // Find the photo by ID in our local photos array
+            const photo = photos.find(p => p.id === photoId);
+            
+            if (!photo || !photo.url) {
+                throw new Error('Photo not found or URL is missing');
+            }
+            
+            // Use the direct URL from the photo object
+            const response = await fetch(photo.url);
+            
+            if (!response.ok) {
+                throw new Error(`Failed to download: ${response.statusText}`);
+            }
+            
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            
+            // Create a temporary link element to trigger the download
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `photo-${photoId}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Clean up the object URL to prevent memory leaks
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Error downloading photo:', err);
+            setError('Failed to download photo. Please try again.');
+        }
+    };
+    
     const clearFilters = () => {
         setFilters({
             dateRange: {
@@ -1345,6 +1381,6 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
                                                                 }), className: "ios-input" })] })] })] }), _jsx("div", { className: "flex justify-end mt-4", children: _jsx("button", { onClick: clearFilters, className: "ios-button-secondary", children: "Clear Filters" }) })] }) })) })
         ] }),
         
-        _jsx(motion.div, { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, children: photos.length > 0 ? (_jsx(PhotoGrid, { photos: photos, onDelete: mode === 'upload' ? handlePhotoDelete : undefined, onShare: handleShare })) : (_jsx("div", { className: "text-center py-12 bg-apple-gray-50 rounded-apple-xl border-2 border-dashed border-apple-gray-200", children: _jsx("p", { className: "text-apple-gray-500", children: mode === 'upload' ? "No photos uploaded yet" : "No photos found with your face" }) })) })
+        _jsx(motion.div, { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, children: photos.length > 0 ? (_jsx(PhotoGrid, { photos: photos, onDelete: mode === 'upload' ? handlePhotoDelete : undefined, onShare: handleShare, onDownload: handleDownload })) : (_jsx("div", { className: "text-center py-12 bg-apple-gray-50 rounded-apple-xl border-2 border-dashed border-apple-gray-200", children: _jsx("p", { className: "text-apple-gray-500", children: mode === 'upload' ? "No photos uploaded yet" : "No photos found with your face" }) })) })
     ] }));
 };
