@@ -289,22 +289,22 @@ export class FaceIndexingService {
         try {
             console.log(`[FACE-MATCH] Searching for faces matching FaceId: ${faceId} for user ${userId}`);
             
-            // Search for similar faces in Rekognition
-            const command = new SearchFacesCommand({
-                CollectionId: COLLECTION_ID,
-                FaceId: faceId,
-                MaxFaces: 1000,
-                FaceMatchThreshold: 80 // More permissive threshold for better results
-            });
-            
-            const response = await rekognitionClient.send(command);
-            
-            if (!response.FaceMatches || response.FaceMatches.length === 0) {
-                console.log(`[FACE-MATCH] No matching faces found in AWS Rekognition`);
-                return [];
+            // First check AWS Rekognition for matches
+            try {
+                const { faces, error } = await this.searchFacesInAWS(faceId);
+                if (error) {
+                    console.error(`[FACE-MATCH] Error searching AWS:`, error);
+                } else {
+                    console.log(`[FACE-MATCH] Found ${faces.length} matching faces in AWS Rekognition`);
+                    
+                    // Log detail about each match for debugging
+                    faces.forEach((face, index) => {
+                        console.log(`[FACE-MATCH-DEBUG] Match ${index+1}: similarity=${face.Similarity}, externalImageId=${face.Face?.ExternalImageId}`);
+                    });
+                }
+            } catch (awsError) {
+                console.error(`[FACE-MATCH] AWS Rekognition search error:`, awsError);
             }
-            
-            console.log(`[FACE-MATCH] Found ${response.FaceMatches.length} matching faces in AWS Rekognition`);
             
             // Try to directly get photos from storage bucket - most reliable approach
             try {
@@ -393,7 +393,7 @@ export class FaceIndexingService {
                 
                 if (allPhotos.length === 0) {
                     // No photos found in storage - try one more approach with just AWS data
-                    return this.createSyntheticPhotosFromAWS(response.FaceMatches, userId);
+                    return this.createSyntheticPhotosFromAWS(faces, userId);
                 }
                 
                 return allPhotos;
@@ -401,7 +401,7 @@ export class FaceIndexingService {
             } catch (storageError) {
                 console.error(`[FACE-MATCH] Storage access error: ${storageError.message}`);
                 // Last resort - create synthetic photos from AWS data
-                return this.createSyntheticPhotosFromAWS(response.FaceMatches, userId);
+                return this.createSyntheticPhotosFromAWS(faces, userId);
             }
         } catch (error) {
             console.error(`[FACE-MATCH] Error: ${error.message}`);
@@ -1572,6 +1572,40 @@ export class FaceIndexingService {
             return true;
         } catch (e) {
             return false;
+        }
+    }
+    /**
+     * Search for face matches in AWS Rekognition
+     * @param {string} faceId - Face ID to search for
+     * @returns {Promise<Object>} - Object with faces array and error if any
+     */
+    static async searchFacesInAWS(faceId) {
+        try {
+            // Search for similar faces in Rekognition
+            const command = new SearchFacesCommand({
+                CollectionId: COLLECTION_ID,
+                FaceId: faceId,
+                MaxFaces: 1000,
+                FaceMatchThreshold: 80 // More permissive threshold for better results
+            });
+            
+            const response = await rekognitionClient.send(command);
+            
+            if (!response.FaceMatches || response.FaceMatches.length === 0) {
+                console.log(`[FACE-MATCH] No matching faces found in AWS Rekognition`);
+                return { faces: [], error: null };
+            }
+            
+            return { 
+                faces: response.FaceMatches,
+                error: null
+            };
+        } catch (error) {
+            console.error(`[FACE-MATCH] AWS Rekognition search error:`, error);
+            return { 
+                faces: [],
+                error: error
+            };
         }
     }
 }
