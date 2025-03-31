@@ -1082,7 +1082,9 @@ export class PhotoService {
             }
             if (error)
                 throw error;
-            return (data || []).map(photo => ({
+            
+            // Apply the filter to remove inferred matches before returning
+            const mappedPhotos = (data || []).map(photo => ({
                 id: photo.id,
                 url: photo.public_url,
                 eventId: photo.event_id,
@@ -1102,6 +1104,18 @@ export class PhotoService {
                 event_details: photo.event_details,
                 matched_users: photo.matched_users || []
             }));
+            
+            // Get the current user ID from the auth context or session
+            const currentUser = await this.getCurrentUser();
+            const userId = currentUser?.id;
+            
+            // Only filter if we have a user ID
+            if (userId) {
+                // Filter out inferred matches before returning
+                return this.filterOutInferredMatches(mappedPhotos, userId);
+            }
+            
+            return mappedPhotos;
         }
         catch (error) {
             console.error('Error fetching event photos:', error);
@@ -1149,7 +1163,8 @@ export class PhotoService {
             
             if (error) throw error;
             
-            return (data || []).map(photo => ({
+            // Apply the filter to remove inferred matches before returning
+            const mappedPhotos = (data || []).map(photo => ({
                 id: photo.id,
                 url: photo.public_url,
                 eventId: photo.event_id,
@@ -1169,6 +1184,9 @@ export class PhotoService {
                 event_details: photo.event_details,
                 matched_users: photo.matched_users || []
             }));
+            
+            // Filter out inferred matches before returning
+            return this.filterOutInferredMatches(mappedPhotos, userId);
         }
         catch (error) {
             console.error('Error fetching user photos:', error);
@@ -1543,14 +1561,40 @@ export class PhotoService {
             
             if (error) {
                 console.error('[DEBUG] Error getting current user:', error);
-                return { data: null, error };
+                return null;
             }
             
-            return { data: data.user, error: null };
+            return data.user;
         } catch (error) {
             console.error('[DEBUG] Exception getting current user:', error);
-            return { data: null, error };
+            return null;
         }
+    }
+
+    // Add this static method for filtering photos to exclude inferred matches
+    static filterOutInferredMatches(photos, userId) {
+        if (!photos || !Array.isArray(photos)) return [];
+        
+        console.log(`[PhotoService] Filtering out inferred matches for user ${userId}`);
+        
+        return photos.map(photo => {
+            // Return a new copy of the photo with matched_users filtered
+            if (photo.matched_users && Array.isArray(photo.matched_users)) {
+                // Keep only non-inferred matches for this user
+                const filteredMatches = photo.matched_users.filter(match => 
+                    !(match.inferred === true && 
+                     (match.userId === userId || match.user_id === userId))
+                );
+                
+                return {
+                    ...photo,
+                    matched_users: filteredMatches
+                };
+            }
+            
+            // No matched_users, return photo as-is
+            return photo;
+        });
     }
 }
 

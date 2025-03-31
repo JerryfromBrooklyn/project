@@ -853,68 +853,12 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         }
     }, [user]);
 
-    // Add this function right before the processPhotos function
+    // Replace the enhancePhotoMatches function with this simpler version
     const enhancePhotoMatches = (photos, currentUserId, currentUserFaceId) => {
-        if (!currentUserFaceId || photos.length === 0) return photos;
+        console.log("[DEBUG] Strict direct matching only - inferred matching disabled");
+        console.log(`[DEBUG] Using direct matching only for user: ${currentUserId}`);
         
-        console.log("[DEBUG] Enhancing photo matches for user:", currentUserId);
-        console.log("[DEBUG] Using face ID:", currentUserFaceId);
-        
-        // Extract all face matches from all photos
-        const allFaceMatches = photos.flatMap(photo => 
-            photo.matched_users || []
-        ).filter(match => match.faceId || match.face_id);
-        
-        // Count occurrences of each face ID to find common faces
-        const faceIdCounts = {};
-        allFaceMatches.forEach(match => {
-            const faceId = match.faceId || match.face_id;
-            if (faceId) {
-                faceIdCounts[faceId] = (faceIdCounts[faceId] || 0) + 1;
-            }
-        });
-        
-        console.log("[DEBUG] Face ID occurrence counts:", faceIdCounts);
-        
-        // Process each photo for potential matches
-        photos.forEach(photo => {
-            if (!photo.matched_users) {
-                photo.matched_users = [];
-            }
-            
-            // Check if photo already matches current user
-            const alreadyMatched = photo.matched_users.some(match => 
-                (match.userId === currentUserId) || 
-                (match.user_id === currentUserId)
-            );
-            
-            if (!alreadyMatched) {
-                // Get face IDs in this photo
-                const photoFaceIds = photo.matched_users
-                    .map(match => match.faceId || match.face_id)
-                    .filter(Boolean);
-                
-                // Find faces that appear in multiple photos (frequentlySeenFaces)
-                const frequentlySeenFaces = photoFaceIds.filter(faceId => 
-                    faceIdCounts[faceId] > 1
-                );
-                
-                if (frequentlySeenFaces.length > 0) {
-                    console.log("[DEBUG] Adding inferred match for user", currentUserId, "to photo", photo.id);
-                    console.log("[DEBUG] Frequent faces found:", frequentlySeenFaces);
-                    
-                    // Add current user as an inferred match
-                    photo.matched_users.push({
-                        userId: currentUserId,
-                        faceId: currentUserFaceId,
-                        confidence: 90, // Lower confidence for inferred matches
-                        similarity: 90, // Also add similarity for consistency
-                        inferred: true  // Mark as inferred for UI purposes
-                    });
-                }
-            }
-        });
-        
+        // Return photos as-is without adding inferred matches
         return photos;
     };
 
@@ -1085,8 +1029,9 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             
             if (userFaceId) {
                 console.log('[DEBUG] Using face ID for matching:', userFaceId);
+                console.log('[DEBUG] Strict direct matching only enabled - inferred matching disabled');
                 
-                // Apply enhanced matching logic
+                // Pass through enhancePhotoMatches but it won't modify the photos anymore
                 transformedPhotos = enhancePhotoMatches(transformedPhotos, currentUserId, userFaceId);
             } else {
                 console.log('[DEBUG] No face ID available for enhanced matching');
@@ -1095,10 +1040,20 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             const matchedPhotos = transformedPhotos.filter(photo => {
                 // Only include photos where the current user appears in matched_users
                 const matchedUsers = photo.matched_users || [];
-                return matchedUsers.some(match => match.userId === currentUserId || match.user_id === currentUserId);
+                const isDirectMatch = matchedUsers.some(match => 
+                    (match.userId === currentUserId || match.user_id === currentUserId) && 
+                    // Ensure it's not an inferred match (if such flag exists from previous runs)
+                    !match.inferred
+                );
+                
+                if (isDirectMatch) {
+                    console.log(`[DEBUG] Found direct match in photo ${photo.id}`);
+                }
+                
+                return isDirectMatch;
             });
             
-            console.log(`[DEBUG] Found ${matchedPhotos.length} photos matching user ID ${currentUserId} out of ${transformedPhotos.length} total`);
+            console.log(`[DEBUG] Found ${matchedPhotos.length} photos directly matching user ID ${currentUserId} out of ${transformedPhotos.length} total`);
             
             setPhotos(matchedPhotos);
             return matchedPhotos;
