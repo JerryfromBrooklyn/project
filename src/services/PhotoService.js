@@ -1421,105 +1421,165 @@ export class PhotoService {
             const faceIds = faceData.map(fd => fd.face_id);
             console.log('[DEBUG-MATCH] Face IDs:', faceIds);
             
+            // Use safer text-based filtering instead of JSON operators
+            // This avoids the 400 Bad Request errors with the 'cs' operator
+            const userIdPattern = `%"userId":"${userId}"%`;
+            
             // Get all photos that might match these faces but aren't already matched
             const { data: photos, error: photoError } = await supabase
                 .from('photos')
                 .select('*')
-                .not('matched_users', 'cs', `[{"userId":"${userId}"}]`);
+                .not('matched_users::text', 'ilike', userIdPattern);
                 
             if (photoError) {
                 console.error('[DEBUG-MATCH] Error fetching photos:', photoError);
-                throw photoError;
+                // Try alternative approach if that fails
+                try {
+                    // Get all photos and filter client-side
+                    const { data: allPhotos } = await supabase
+                        .from('photos')
+                        .select('*');
+                        
+                    // Filter manually to find photos without this user
+                    if (allPhotos) {
+                        const filteredPhotos = allPhotos.filter(photo => {
+                            if (!photo.matched_users) return true;
+                            const matches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
+                            return !matches.some(match => match.userId === userId);
+                        });
+                        console.log(`[DEBUG-MATCH] Using client-side filtering: found ${filteredPhotos.length} of ${allPhotos.length} photos`);
+                        photos = filteredPhotos;
+                    }
+                } catch (fallbackError) {
+                    console.error('[DEBUG-MATCH] Fallback query also failed:', fallbackError);
+                    throw photoError; // Use the original error
+                }
             }
-            
-            console.log(`[DEBUG-MATCH] Found ${photos?.length || 0} potential photos to match`);
             
             if (!photos || photos.length === 0) {
                 return { success: true, message: 'No new photos to match' };
             }
             
+            console.log(`[DEBUG-MATCH] Found ${photos.length} potential photos to match`);
+            
             // Check each photo for face matches
             let matchCount = 0;
             
-            for (const photo of photos) {
-                let hasMatch = false;
+            // Process in small batches to prevent overloading
+            const BATCH_SIZE = 5;
+            
+            for (let i = 0; i < photos.length; i += BATCH_SIZE) {
+                const batch = photos.slice(i, Math.min(i + BATCH_SIZE, photos.length));
                 
-                // Check if any of the user's face IDs match in this photo's faces array
-                if (Array.isArray(photo.faces)) {
-                    hasMatch = photo.faces.some(face => 
-                        face.faceId && faceIds.includes(face.faceId)
-                    );
-                }
+                console.log(`[DEBUG-MATCH] Processing batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(photos.length/BATCH_SIZE)}`);
                 
-                // Also check in the face_ids array
-                if (!hasMatch && Array.isArray(photo.face_ids)) {
-                    hasMatch = photo.face_ids.some(id => faceIds.includes(id));
-                }
-                
-                if (hasMatch) {
-                    console.log(`[DEBUG-MATCH] Found match in photo ${photo.id}`);
-                    
-                    // Get user data
-                    const { data: userData, error: userError } = await supabase
-                        .from('users')
-                        .select('id, full_name, avatar_url')
-                        .eq('id', userId)
-                        .single();
+                await Promise.all(batch.map(async (photo) => {
+                    try {
+                        let hasMatch = false;
                         
-                    if (userError) {
-                        console.error('[DEBUG-MATCH] Error fetching user data:', userError);
-                        continue;
-                    }
-                    
-                    console.log('[DEBUG-MATCH] User data:', userData);
-                    
-                    // Add user to matched_users if not already present
-                    const existingMatches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
-                    
-                    // Check if user is already in the matches
-                    if (existingMatches.some(match => match.userId === userId)) {
-                        console.log(`[DEBUG-MATCH] User ${userId} already in matches for photo ${photo.id}`);
-                        continue;
-                    }
-                    
-                    // Add the new match
-                    const newMatch = {
-                        userId,
-                        fullName: userData.full_name || 'Unknown User',
-                        avatarUrl: userData.avatar_url || null,
-                        confidence: 95 // Default high confidence since we're checking exact face ID matches
-                    };
-                    
-                    const updatedMatches = [...existingMatches, newMatch];
-                    console.log('[DEBUG-MATCH] Updated matches:', updatedMatches);
-                    
-                    // Update the photo
-                    const { error: updateError } = await supabase
-                        .from('photos')
-                        .update({ matched_users: updatedMatches })
-                        .eq('id', photo.id);
+                        // Check if any of the user's face IDs match in this photo's faces array
+                        if (Array.isArray(photo.faces)) {
+                            hasMatch = photo.faces.some(face => 
+                                face.faceId && faceIds.includes(face.faceId)
+                            );
+                        }
                         
-                    if (updateError) {
-                        console.error('[DEBUG-MATCH] Error updating photo:', updateError);
-                        continue;
+                        // Also check in the face_ids array
+                        if (!hasMatch && Array.isArray(photo.face_ids)) {
+                            hasMatch = photo.face_ids.some(id => faceIds.includes(id));
+                        }
+                        
+                        if (hasMatch) {
+                            console.log(`[DEBUG-MATCH] Found match in photo ${photo.id}`);
+                            
+                            // Get user data
+                            const { data: userData, error: userError } = await supabase
+                                .from('users')
+                                .select('id, full_name, avatar_url')
+                                .eq('id', userId)
+                                .single();
+                                
+                            if (userError) {
+                                console.error('[DEBUG-MATCH] Error fetching user data:', userError);
+                                return;
+                            }
+                            
+                            // Add user to matched_users if not already present
+                            const existingMatches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
+                            
+                            // Check if user is already in the matches
+                            if (existingMatches.some(match => match.userId === userId)) {
+                                console.log(`[DEBUG-MATCH] User ${userId} already in matches for photo ${photo.id}`);
+                                return;
+                            }
+                            
+                            // Add user to matched_users
+                            const newMatch = {
+                                userId: userId,
+                                fullName: userData.full_name || 'Unknown User',
+                                avatarUrl: userData.avatar_url,
+                                confidence: 95,
+                                similarity: 95
+                            };
+                            
+                            const updatedMatches = [...existingMatches, newMatch];
+                            
+                            // Update the photo with retries
+                            let updated = false;
+                            let retryCount = 0;
+                            const MAX_RETRIES = 3;
+                            
+                            while (!updated && retryCount < MAX_RETRIES) {
+                                try {
+                                    const { error: updateError } = await supabase
+                                        .from('photos')
+                                        .update({ 
+                                            matched_users: updatedMatches,
+                                            updated_at: new Date().toISOString()
+                                        })
+                                        .eq('id', photo.id);
+                                        
+                                    if (!updateError) {
+                                        updated = true;
+                                        matchCount++;
+                                        console.log(`[DEBUG-MATCH] Successfully updated photo ${photo.id}`);
+                                    } else {
+                                        console.error(`[DEBUG-MATCH] Error updating photo ${photo.id} (attempt ${retryCount + 1}):`, updateError);
+                                        retryCount++;
+                                        
+                                        // Exponential backoff
+                                        await new Promise(r => setTimeout(r, 200 * Math.pow(2, retryCount)));
+                                    }
+                                } catch (updateError) {
+                                    console.error(`[DEBUG-MATCH] Exception updating photo ${photo.id}:`, updateError);
+                                    retryCount++;
+                                    
+                                    // Exponential backoff
+                                    await new Promise(r => setTimeout(r, 200 * Math.pow(2, retryCount)));
+                                }
+                            }
+                        }
+                    } catch (photoError) {
+                        console.error(`[DEBUG-MATCH] Error processing photo ${photo.id}:`, photoError);
                     }
-                    
-                    console.log(`[DEBUG-MATCH] Successfully updated matches for photo ${photo.id}`);
-                    matchCount++;
+                }));
+                
+                // Add delay between batches to prevent overwhelming the API
+                if (i + BATCH_SIZE < photos.length) {
+                    await new Promise(r => setTimeout(r, 500));
                 }
             }
             
+            console.log(`[DEBUG-MATCH] Updated ${matchCount} photos with user ${userId}`);
+            
             return { 
                 success: true, 
-                matches: matchCount,
-                message: `Found ${matchCount} new matches` 
+                message: `Updated ${matchCount} photos with matches`,
+                matchCount
             };
         } catch (error) {
             console.error('[DEBUG-MATCH] Error processing matches:', error);
-            return { 
-                success: false, 
-                error: error.message 
-            };
+            return { success: false, message: error.message };
         }
     }
     

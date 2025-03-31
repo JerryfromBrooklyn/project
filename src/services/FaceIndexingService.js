@@ -390,55 +390,114 @@ export class FaceIndexingService {
                 console.log(`[FACE-MATCH] Using default user values after failed attempts`);
             }
             
-            // Step 4: Find matching photos - robust attempt
+            // Step 4: Find matching photos - process in small batches with safer queries
             console.log(`[FACE-MATCH] Searching for photos containing matched face IDs`);
             
-            // Try multiple query approaches to find photos with these face ids
-            const photosQueries = [];
+            // Process face IDs in smaller chunks to avoid overwhelming the database
+            const faceIdChunks = [];
+            const chunkSize = 3;
+            let allMatchingPhotos = [];
             
-            // Try RPC function first
-            photosQueries.push(
-                supabase.rpc('find_photos_with_face_ids', { face_id_list: matchedFaceIds })
-                .then(result => result)
-                .catch(error => ({ data: null, error }))
-            );
+            // Split face IDs into smaller chunks for processing
+            for (let i = 0; i < matchedFaceIds.length; i += chunkSize) {
+                faceIdChunks.push(matchedFaceIds.slice(i, Math.min(i + chunkSize, matchedFaceIds.length)));
+            }
             
-            // Try direct query on all_photos view
-            photosQueries.push(
-                supabase.from('all_photos')
-                    .select('id, faces, face_ids, matched_users, source_table')
-                    .then(result => result)
-                    .catch(error => ({ data: null, error }))
-            );
+            console.log(`[FACE-MATCH] Processing ${faceIdChunks.length} chunks of face IDs`);
             
-            // Try direct query on photos table
-            photosQueries.push(
-                supabase.from('photos')
-                    .select('id, faces, face_ids, matched_users')
-                    .then(result => result)
-                    .catch(error => ({ data: null, error }))
-            );
-            
-            // Execute all queries and take the first successful one
-            const photoResults = await Promise.all(photosQueries);
-            
-            let photos = null;
-            for (const result of photoResults) {
-                if (!result.error && Array.isArray(result.data) && result.data.length > 0) {
-                    photos = result.data;
-                    break;
+            // Process each chunk separately to avoid complex queries
+            for (let chunk = 0; chunk < faceIdChunks.length; chunk++) {
+                const currentFaceIds = faceIdChunks[chunk];
+                console.log(`[FACE-MATCH] Processing chunk ${chunk + 1}: ${currentFaceIds.join(', ')}`);
+                
+                // Try multiple approaches to find photos with these face IDs
+                let chunkPhotos = null;
+                
+                // Attempt 1: Try RPC function first (most efficient)
+                try {
+                    const { data: rpcData, error: rpcError } = await supabase.rpc(
+                        'find_photos_with_face_ids',
+                        { face_id_list: currentFaceIds }
+                    );
+                    
+                    if (!rpcError && rpcData?.length > 0) {
+                        chunkPhotos = rpcData;
+                        console.log(`[FACE-MATCH] Found ${chunkPhotos.length} photos via RPC`);
+                    }
+                } catch (rpcError) {
+                    console.log(`[FACE-MATCH] RPC method failed: ${rpcError.message}`);
+                }
+                
+                // Attempt 2: If RPC fails, try direct query on photos table with safer syntax
+                if (!chunkPhotos) {
+                    try {
+                        // Build OR conditions for each face ID (simpler query)
+                        const conditions = currentFaceIds.map(id => `face_ids.cs.{${id}}`).join(',');
+                        
+                        const { data: photoData, error: photoError } = await supabase
+                            .from('photos')
+                            .select('id, faces, face_ids, matched_users')
+                            .or(conditions);
+                            
+                        if (!photoError && photoData?.length > 0) {
+                            chunkPhotos = photoData;
+                            console.log(`[FACE-MATCH] Found ${chunkPhotos.length} photos via direct query`);
+                        }
+                    } catch (queryError) {
+                        console.log(`[FACE-MATCH] Direct query failed: ${queryError.message}`);
+                    }
+                }
+                
+                // Attempt 3: Last resort - fallback to simpler individual queries
+                if (!chunkPhotos) {
+                    chunkPhotos = [];
+                    
+                    // Try each face ID individually to avoid complex queries
+                    for (const singleFaceId of currentFaceIds) {
+                        try {
+                            const { data: singleData, error: singleError } = await supabase
+                                .from('photos')
+                                .select('id, faces, face_ids, matched_users')
+                                .contains('face_ids', [singleFaceId]);
+                                
+                            if (!singleError && singleData?.length > 0) {
+                                // Merge results, avoiding duplicates
+                                const newIds = singleData.filter(photo => 
+                                    !chunkPhotos.some(existing => existing.id === photo.id)
+                                );
+                                chunkPhotos.push(...newIds);
+                            }
+                        } catch (singleError) {
+                            console.log(`[FACE-MATCH] Single face ID query failed: ${singleError.message}`);
+                        }
+                    }
+                    
+                    console.log(`[FACE-MATCH] Found ${chunkPhotos.length} photos via individual queries`);
+                }
+                
+                if (chunkPhotos?.length > 0) {
+                    // Add photos to overall results, avoiding duplicates
+                    const uniqueNewPhotos = chunkPhotos.filter(photo => 
+                        !allMatchingPhotos.some(existing => existing.id === photo.id)
+                    );
+                    allMatchingPhotos.push(...uniqueNewPhotos);
+                }
+                
+                // Add delay between chunks
+                if (chunk < faceIdChunks.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 200));
                 }
             }
             
-            if (!photos || photos.length === 0) {
+            if (allMatchingPhotos.length === 0) {
                 console.log(`[FACE-MATCH] No photos found containing these face IDs`);
                 return [];
             }
             
-            console.log(`[FACE-MATCH] Found ${photos.length} photos to check for matches`);
+            console.log(`[FACE-MATCH] Found ${allMatchingPhotos.length} photos to check for matches`);
             
-            // Step 5: Filter to find exact matches
-            const matchingPhotos = photos.filter(photo => {
+            // Step 5: Filter to find exact matches - do this client-side to avoid complex queries
+            const matchingPhotos = allMatchingPhotos.filter(photo => {
                 // Check in face_ids array (string array)
                 if (Array.isArray(photo.face_ids)) {
                     for (const id of matchedFaceIds) {
@@ -462,181 +521,29 @@ export class FaceIndexingService {
             
             console.log(`[FACE-MATCH] Filtered to ${matchingPhotos.length} photos that contain matched faces`);
             
-            // Step 6: Update matched_users for each photo with better retry logic
+            // Step 6: Update photos in small batches (max 5 at a time)
             const updatedPhotoIds = [];
-            const MAX_RETRY_COUNT = 3;
+            const BATCH_SIZE = 5;
             
-            for (const photo of matchingPhotos) {
-                let tableName = photo.source_table || 'photos';
+            // Process updates in batches to reduce load
+            for (let i = 0; i < matchingPhotos.length; i += BATCH_SIZE) {
+                const batch = matchingPhotos.slice(i, Math.min(i + BATCH_SIZE, matchingPhotos.length));
                 
-                // Get match similarity from AWS response
-                let bestSimilarity = 95; // Default high similarity
-                let bestConfidence = 99.9; // Default high confidence
+                console.log(`[FACE-MATCH] Processing update batch ${Math.floor(i/BATCH_SIZE) + 1}: ${batch.length} photos`);
+                const batchPromises = batch.map(photo => this.updatePhotoWithUserMatch(photo, userId, userInfo, matchedFaceIds, response));
                 
-                // Find matching face ID in this photo
-                let matchingFaceId = null;
+                const batchResults = await Promise.allSettled(batchPromises);
                 
-                if (Array.isArray(photo.face_ids)) {
-                    matchingFaceId = photo.face_ids.find(id => matchedFaceIds.includes(id));
-                }
-                
-                if (!matchingFaceId && photo.faces && Array.isArray(photo.faces)) {
-                    const matchingFace = photo.faces.find(face => 
-                        face.faceId && matchedFaceIds.includes(face.faceId)
-                    );
-                    if (matchingFace) {
-                        matchingFaceId = matchingFace.faceId;
-                    }
-                }
-                
-                // Find similarity score from AWS response
-                if (matchingFaceId) {
-                    for (const match of response.FaceMatches) {
-                        if (match.Face?.FaceId === matchingFaceId) {
-                            bestSimilarity = match.Similarity || bestSimilarity;
-                            bestConfidence = match.Face.Confidence || bestConfidence;
-                            break;
-                        }
-                    }
-                }
-                
-                // Build the normalized user match object
-                const newMatch = {
-                    userId: userId,
-                    faceId: faceId,
-                    fullName: userInfo.full_name || 'Unknown User',
-                    email: userInfo.email || null,
-                    avatarUrl: userInfo.avatar_url || null,
-                    similarity: bestSimilarity,
-                    confidence: bestConfidence
-                };
-                
-                // Process matched_users with careful error handling
-                let existingMatches = [];
-                
-                try {
-                    if (photo.matched_users) {
-                        if (typeof photo.matched_users === 'string') {
-                            try {
-                                existingMatches = JSON.parse(photo.matched_users);
-                            } catch (e) {
-                                console.error(`[FACE-MATCH] Error parsing matched_users string:`, e);
-                                existingMatches = [];
-                            }
-                        } else if (Array.isArray(photo.matched_users)) {
-                            existingMatches = [...photo.matched_users];
-                        }
-                    }
+                // Count successful updates
+                const successfulUpdates = batchResults
+                    .filter(result => result.status === 'fulfilled' && result.value)
+                    .map(result => result.value);
                     
-                    // Check if user is already in matched_users
-                    const userExists = existingMatches.some(match => 
-                        (match.userId === userId || match.user_id === userId)
-                    );
-                    
-                    if (!userExists) {
-                        // Try updating with multiple retry attempts
-                        let updated = false;
-                        let retryCount = 0;
-                        
-                        while (!updated && retryCount < MAX_RETRY_COUNT) {
-                            try {
-                                // Add new match to existing matches
-                                const updatedMatches = [...existingMatches, newMatch];
-                                
-                                // First try the normal update - FIXED: stringify is removed as Supabase handles JSON automatically
-                                const { error: updateError } = await supabase
-                                    .from(tableName)
-                                    .update({ 
-                                        matched_users: updatedMatches,
-                                        updated_at: new Date().toISOString()
-                                    })
-                                    .eq('id', photo.id);
-                                
-                                if (updateError) {
-                                    console.error(`[FACE-MATCH] Error updating photo ${photo.id} (attempt ${retryCount + 1}):`, updateError);
-                                    
-                                    // If that fails, try with JSON stringified array in case the client needs it
-                                    try {
-                                        const { error: retryUpdateError } = await supabase
-                                            .from(tableName)
-                                            .update({ 
-                                                matched_users: JSON.stringify(updatedMatches),
-                                                updated_at: new Date().toISOString()
-                                            })
-                                            .eq('id', photo.id);
-                                            
-                                        if (!retryUpdateError) {
-                                            updated = true;
-                                            updatedPhotoIds.push(photo.id);
-                                            console.log(`[FACE-MATCH] Successfully added user ${userId} to photo ${photo.id} with JSON.stringify`);
-                                        } else {
-                                            // If both normal update approaches fail, try RPC function
-                                            const { error: rpcError } = await supabase.rpc(
-                                                'update_photo_matched_users',
-                                                { 
-                                                    p_photo_id: photo.id,
-                                                    p_user_match: newMatch,
-                                                    p_table_name: tableName
-                                                }
-                                            );
-                                            
-                                            if (!rpcError) {
-                                                updated = true;
-                                                updatedPhotoIds.push(photo.id);
-                                                console.log(`[FACE-MATCH] Successfully added user ${userId} to photo ${photo.id} via RPC`);
-                                            } else {
-                                                console.error(`[FACE-MATCH] RPC error:`, rpcError);
-                                            }
-                                        }
-                                    } catch (stringifyError) {
-                                        console.error(`[FACE-MATCH] Stringified update error:`, stringifyError);
-                                    }
-                                } else {
-                                    updated = true;
-                                    updatedPhotoIds.push(photo.id);
-                                    console.log(`[FACE-MATCH] Successfully added user ${userId} to photo ${photo.id}`);
-                                }
-                            } catch (retryError) {
-                                console.error(`[FACE-MATCH] Retry error for photo ${photo.id}:`, retryError);
-                            }
-                            
-                            retryCount++;
-                            
-                            // Wait a short time between retries
-                            if (!updated && retryCount < MAX_RETRY_COUNT) {
-                                await new Promise(resolve => setTimeout(resolve, 200 * retryCount));
-                            }
-                        }
-                        
-                        // Additional fallback if all update methods failed
-                        if (!updated) {
-                            try {
-                                // Final attempt with raw SQL via RPC
-                                const { error: finalError } = await supabase.rpc(
-                                    'update_photo_matched_users_raw',
-                                    {
-                                        p_photo_id: photo.id,
-                                        p_user_id: userId,
-                                        p_user_data: JSON.stringify(newMatch),
-                                        p_table: tableName
-                                    }
-                                );
-                                
-                                if (!finalError) {
-                                    updatedPhotoIds.push(photo.id);
-                                    console.log(`[FACE-MATCH] Successfully updated photo ${photo.id} with raw SQL fallback`);
-                                } else {
-                                    console.error(`[FACE-MATCH] Final update attempt failed for photo ${photo.id}:`, finalError);
-                                }
-                            } catch (finalError) {
-                                console.error(`[FACE-MATCH] Final fallback error:`, finalError);
-                            }
-                        }
-                    } else {
-                        console.log(`[FACE-MATCH] User ${userId} already exists in matched_users for photo ${photo.id}`);
-                    }
-                } catch (matchedUsersError) {
-                    console.error(`[FACE-MATCH] Error processing matched_users for photo ${photo.id}:`, matchedUsersError);
+                updatedPhotoIds.push(...successfulUpdates);
+                
+                // Add delay between batches
+                if (i + BATCH_SIZE < matchingPhotos.length) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
                 }
             }
             
@@ -646,6 +553,145 @@ export class FaceIndexingService {
             console.error('[FACE-MATCH] Error searching faces by FaceId:', error);
             return [];
         }
+    }
+    
+    // Helper method to update a single photo with user match
+    static async updatePhotoWithUserMatch(photo, userId, userInfo, matchedFaceIds, awsResponse) {
+        const tableName = photo.source_table || 'photos';
+        
+        // Get match similarity from AWS response
+        let bestSimilarity = 95; // Default high similarity
+        let bestConfidence = 99.9; // Default high confidence
+        
+        // Find matching face ID in this photo
+        let matchingFaceId = null;
+        
+        if (Array.isArray(photo.face_ids)) {
+            matchingFaceId = photo.face_ids.find(id => matchedFaceIds.includes(id));
+        }
+        
+        if (!matchingFaceId && photo.faces && Array.isArray(photo.faces)) {
+            const matchingFace = photo.faces.find(face => 
+                face.faceId && matchedFaceIds.includes(face.faceId)
+            );
+            if (matchingFace) {
+                matchingFaceId = matchingFace.faceId;
+            }
+        }
+        
+        // Find similarity score from AWS response
+        if (matchingFaceId && awsResponse?.FaceMatches) {
+            for (const match of awsResponse.FaceMatches) {
+                if (match.Face?.FaceId === matchingFaceId) {
+                    bestSimilarity = match.Similarity || bestSimilarity;
+                    bestConfidence = match.Face.Confidence || bestConfidence;
+                    break;
+                }
+            }
+        }
+        
+        // Build the normalized user match object
+        const newMatch = {
+            userId: userId,
+            faceId: matchingFaceId || matchedFaceIds[0],
+            fullName: userInfo.full_name || 'Unknown User',
+            email: userInfo.email || null,
+            avatarUrl: userInfo.avatar_url || null,
+            similarity: bestSimilarity,
+            confidence: bestConfidence
+        };
+        
+        // Process matched_users with careful error handling
+        let existingMatches = [];
+        
+        try {
+            if (photo.matched_users) {
+                if (typeof photo.matched_users === 'string') {
+                    try {
+                        existingMatches = JSON.parse(photo.matched_users);
+                    } catch (e) {
+                        console.error(`[FACE-MATCH] Error parsing matched_users string:`, e);
+                        existingMatches = [];
+                    }
+                } else if (Array.isArray(photo.matched_users)) {
+                    existingMatches = [...photo.matched_users];
+                }
+            }
+            
+            // Check if user is already in matched_users
+            const userExists = existingMatches.some(match => 
+                (match.userId === userId || match.user_id === userId)
+            );
+            
+            if (!userExists) {
+                // Try updating with multiple retry attempts
+                let updated = false;
+                let retryCount = 0;
+                const MAX_RETRY_COUNT = 3;
+                
+                while (!updated && retryCount < MAX_RETRY_COUNT) {
+                    try {
+                        // Add new match to existing matches
+                        const updatedMatches = [...existingMatches, newMatch];
+                        
+                        // Try to use RPC first (most reliable)
+                        const { error: rpcError } = await supabase.rpc(
+                            'update_photo_matched_users',
+                            { 
+                                p_photo_id: photo.id,
+                                p_user_match: newMatch,
+                                p_table_name: tableName
+                            }
+                        );
+                        
+                        if (!rpcError) {
+                            updated = true;
+                            console.log(`[FACE-MATCH] Successfully added user ${userId} to photo ${photo.id} via RPC`);
+                        } else {
+                            console.log(`[FACE-MATCH] RPC update failed: ${rpcError.message}, trying direct update`);
+                            
+                            // Fall back to direct update
+                            const { error: updateError } = await supabase
+                                .from(tableName)
+                                .update({ 
+                                    matched_users: updatedMatches,
+                                    updated_at: new Date().toISOString()
+                                })
+                                .eq('id', photo.id);
+                            
+                            if (updateError) {
+                                console.error(`[FACE-MATCH] Error updating photo ${photo.id} (attempt ${retryCount + 1}):`, updateError);
+                                retryCount++;
+                                
+                                // Exponential backoff
+                                const delay = 200 * Math.pow(2, retryCount);
+                                await new Promise(r => setTimeout(r, delay));
+                            } else {
+                                updated = true;
+                                console.log(`[FACE-MATCH] Successfully added user ${userId} to photo ${photo.id}`);
+                            }
+                        }
+                    } catch (retryError) {
+                        console.error(`[FACE-MATCH] Retry error for photo ${photo.id}:`, retryError);
+                        retryCount++;
+                        
+                        // Exponential backoff
+                        const delay = 200 * Math.pow(2, retryCount);
+                        await new Promise(r => setTimeout(r, delay));
+                    }
+                }
+                
+                if (updated) {
+                    return photo.id;
+                }
+            } else {
+                console.log(`[FACE-MATCH] User ${userId} already exists in matched_users for photo ${photo.id}`);
+            }
+        } catch (matchedUsersError) {
+            console.error(`[FACE-MATCH] Error processing matched_users for photo ${photo.id}:`, matchedUsersError);
+        }
+        
+        return null;
     }
     static async startBackgroundProcessing() {
         setInterval(() => {
@@ -1551,11 +1597,11 @@ export class FaceIndexingService {
             return false;
         }
     }
-    static async processBatchedFaceMatching(userId, faceId, batchSize = 50) {
+    static async processBatchedFaceMatching(userId, faceId, batchSize = 3) {
         try {
             console.log(`[FACE-MATCH] Processing batched face matching for user ${userId}`);
             
-            // Get total matches - similar to searchFacesByFaceId but without updating
+            // Step 1: Get face matches from AWS (one time only)
             const command = new SearchFacesCommand({
                 CollectionId: COLLECTION_ID,
                 FaceId: faceId,
@@ -1572,14 +1618,13 @@ export class FaceIndexingService {
             const matchedFaceIds = response.FaceMatches.map(match => match.Face?.FaceId || '')
                 .filter(id => !!id);
                 
-            // Also include the original face ID
             if (!matchedFaceIds.includes(faceId)) {
                 matchedFaceIds.push(faceId);
             }
             
             console.log(`[FACE-MATCH] Found ${matchedFaceIds.length} face IDs matching user ${userId}`);
             
-            // Get user data for matches
+            // Step 2: Get user data once (no repeating)
             const { data: userData, error: userError } = await supabase
                 .from('users')
                 .select('id, full_name, avatar_url')
@@ -1591,96 +1636,270 @@ export class FaceIndexingService {
                 return { processed: 0, total: 0, error: userError.message };
             }
             
-            // Find photos that need updating - only get IDs first
-            const { data: photosToUpdate, error: countError, count } = await supabase
-                .from('all_photos')
-                .select('id, source_table', { count: 'exact' })
-                .not('matched_users', 'cs', `[{"userId":"${userId}"}]`)
-                .or(
-                    matchedFaceIds.map(faceId => `face_ids.cs.{${faceId}}`).join(',')
+            // Step 3: Create the user match object once (reuse for all photos)
+            const newMatch = {
+                userId,
+                fullName: userData.full_name || 'Unknown User',
+                avatarUrl: userData.avatar_url || null,
+                confidence: 95,
+                faceId
+            };
+            
+            // Check if our RPC function exists
+            const updateRpcExists = await this.checkFunctionExists('update_photos_with_face_ids');
+            
+            // Step 4: Process face IDs in micro-batches to avoid overwhelming the DB
+            let totalProcessed = 0;
+            let totalPhotos = 0;
+            
+            // Split face IDs into very small chunks (3-5 max)
+            const faceIdChunks = [];
+            const microChunkSize = 3;
+            
+            for (let i = 0; i < matchedFaceIds.length; i += microChunkSize) {
+                faceIdChunks.push(matchedFaceIds.slice(i, Math.min(i + microChunkSize, matchedFaceIds.length)));
+            }
+            
+            console.log(`[FACE-MATCH] Split ${matchedFaceIds.length} face IDs into ${faceIdChunks.length} micro-chunks`);
+            
+            // Process each micro-chunk of face IDs
+            for (let chunkIndex = 0; chunkIndex < faceIdChunks.length; chunkIndex++) {
+                const currentChunk = faceIdChunks[chunkIndex];
+                console.log(`[FACE-MATCH] Processing face IDs chunk ${chunkIndex + 1}/${faceIdChunks.length}: ${currentChunk.join(', ')}`);
+                
+                // Step 5: Use direct RPC call instead of complex queries
+                // This is much more efficient as it runs on the server side
+                let processedCount = 0;
+                
+                if (updateRpcExists) {
+                    try {
+                        const { data: result, error: rpcError } = await supabase.rpc(
+                            'update_photos_with_face_ids',
+                            { 
+                                p_face_ids: currentChunk,
+                                p_user_id: userId,
+                                p_user_data: newMatch,
+                                p_batch_size: batchSize
+                            }
+                        );
+                        
+                        if (rpcError) {
+                            console.error(`[FACE-MATCH] RPC error for chunk ${chunkIndex+1}: ${rpcError.message}`);
+                        } else if (result) {
+                            console.log(`[FACE-MATCH] RPC success: ${result.processed_count} photos updated via RPC`);
+                            totalProcessed += result.processed_count;
+                            totalPhotos += result.total_count;
+                            
+                            // Skip manual processing if RPC was successful
+                            continue;
+                        }
+                    } catch (rpcError) {
+                        console.error(`[FACE-MATCH] RPC call failed: ${rpcError.message}`);
+                    }
+                } else {
+                    console.log('[FACE-MATCH] RPC function not available, using manual processing');
+                }
+                
+                // Fall back to manual processing if RPC fails or doesn't exist
+                processedCount = await this.processFaceIdChunkManually(
+                    currentChunk, 
+                    userId, 
+                    newMatch, 
+                    batchSize
                 );
                 
-            if (countError) {
-                console.error(`[FACE-MATCH] Error getting photo count: ${countError.message}`);
-                return { processed: 0, total: 0, error: countError.message };
-            }
-            
-            const totalPhotos = count || (photosToUpdate?.length || 0);
-            console.log(`[FACE-MATCH] Found ${totalPhotos} photos to update for user ${userId}`);
-            
-            if (!totalPhotos) {
-                return { processed: 0, total: 0 };
-            }
-            
-            // Process in batches
-            let processedCount = 0;
-            const photoIds = photosToUpdate.map(p => p.id);
-            const batchCount = Math.ceil(photoIds.length / batchSize);
-            
-            console.log(`[FACE-MATCH] Processing ${batchCount} batches of up to ${batchSize} photos each`);
-            
-            for (let i = 0; i < batchCount; i++) {
-                const batchStart = i * batchSize;
-                const batchEnd = Math.min((i + 1) * batchSize, photoIds.length);
-                const batch = photoIds.slice(batchStart, batchEnd);
-                
-                console.log(`[FACE-MATCH] Processing batch ${i+1} of ${batchCount}: ${batch.length} photos`);
-                
-                // Get full details for this batch
-                const { data: batchData, error: batchError } = await supabase
-                    .from('all_photos')
-                    .select('id, matched_users, source_table')
-                    .in('id', batch);
-                    
-                if (batchError) {
-                    console.error(`[FACE-MATCH] Error fetching batch ${i+1}: ${batchError.message}`);
-                    continue;
+                if (processedCount > 0) {
+                    totalProcessed += processedCount;
+                    totalPhotos += processedCount; // Estimate
                 }
                 
-                // Update each photo in the batch
-                for (const photo of batchData) {
-                    try {
-                        // Create user match object
-                        const newMatch = {
-                            userId,
-                            fullName: userData.full_name || 'Unknown User',
-                            avatarUrl: userData.avatar_url || null,
-                            confidence: 95,
-                            faceId
-                        };
-                        
-                        // Add to matched_users array
-                        const existingMatches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
-                        const updatedMatches = [...existingMatches, newMatch];
-                        
-                        // Update in correct table
-                        const tableName = photo.source_table || 'photos';
-                        const { error: updateError } = await supabase
-                            .from(tableName)
-                            .update({ matched_users: updatedMatches })
-                            .eq('id', photo.id);
-                            
-                        if (updateError) {
-                            console.error(`[FACE-MATCH] Error updating photo ${photo.id}: ${updateError.message}`);
-                        } else {
-                            processedCount++;
-                        }
-                    } catch (photoError) {
-                        console.error(`[FACE-MATCH] Error processing photo ${photo.id}: ${photoError.message}`);
-                    }
-                }
-                
-                // Add a small delay between batches to prevent rate limiting
-                if (i < batchCount - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                // Add exponential backoff delay between chunks
+                if (chunkIndex < faceIdChunks.length - 1) {
+                    const delayMs = Math.min(500 * Math.pow(1.5, chunkIndex), 10000); // Exponential backoff with 10s cap
+                    console.log(`[FACE-MATCH] Waiting ${delayMs}ms before next chunk...`);
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
                 }
             }
             
-            console.log(`[FACE-MATCH] Completed batched processing: updated ${processedCount} of ${totalPhotos} photos`);
-            return { processed: processedCount, total: totalPhotos };
+            console.log(`[FACE-MATCH] Completed batched processing: updated ${totalProcessed} of ${totalPhotos} photos`);
+            return { processed: totalProcessed, total: totalPhotos };
         } catch (error) {
             console.error(`[FACE-MATCH] Error in batch processing: ${error.message}`);
             return { processed: 0, total: 0, error: error.message };
+        }
+    }
+    
+    // Helper function to safely find photos without a specific user match
+    static async getPhotosWithoutUserMatch(userId, options = {}) {
+        const { limit = 10, offset = 0, faceIds = [] } = options;
+        
+        try {
+            console.log(`[FACE-MATCH] Finding photos without user ${userId} match`);
+            
+            // Approach 1: Use text-based filtering (most compatible)
+            // This avoids using JSON operators entirely by checking text representation
+            const userIdPattern = `%"userId":"${userId}"%`;
+            
+            let query = supabase
+                .from('photos')
+                .select('id, matched_users, face_ids')
+                .not('matched_users::text', 'ilike', userIdPattern)
+                .limit(limit)
+                .offset(offset);
+                
+            // Add face ID filter if provided
+            if (faceIds && faceIds.length > 0) {
+                // Use simple conditions for 1-3 face IDs
+                if (faceIds.length <= 3) {
+                    const conditions = faceIds.map(id => `face_ids::text ilike '%${id}%'`).join(' or ');
+                    query = query.or(conditions);
+                } else {
+                    // For larger sets, just get photos and filter client-side
+                    query = query.limit(limit * 2); // Get more to account for filtering
+                }
+            }
+            
+            const { data: photos, error } = await query;
+            
+            if (error) {
+                console.error(`[FACE-MATCH] Error finding photos: ${error.message}`);
+                return [];
+            }
+            
+            // If we used face IDs, filter the results client-side
+            if (faceIds && faceIds.length > 3 && photos) {
+                return photos.filter(photo => {
+                    // Check if any face ID matches
+                    if (Array.isArray(photo.face_ids)) {
+                        return photo.face_ids.some(id => faceIds.includes(id));
+                    }
+                    return false;
+                }).slice(0, limit);
+            }
+            
+            return photos || [];
+        } catch (error) {
+            console.error(`[FACE-MATCH] Error getting photos: ${error.message}`);
+            return [];
+        }
+    }
+    
+    static async processFaceIdChunkManually(faceIds, userId, userMatch, batchSize = 3) {
+        console.log(`[FACE-MATCH] Manual processing for ${faceIds.length} face IDs`);
+        let processedCount = 0;
+        
+        try {
+            // Get photos in small batches to avoid timeout
+            let offset = 0;
+            const limit = 5; // Tiny batches
+            let hasMore = true;
+            
+            while (hasMore) {
+                try {
+                    console.log(`[FACE-MATCH] Manual query batch: offset=${offset}, limit=${limit}`);
+                    
+                    // Use the safer helper method instead of direct problematic query
+                    const photos = await this.getPhotosWithoutUserMatch(userId, {
+                        limit,
+                        offset,
+                        faceIds
+                    });
+                    
+                    if (!photos || photos.length === 0) {
+                        console.log(`[FACE-MATCH] No more photos to process manually`);
+                        hasMore = false;
+                        break;
+                    }
+                    
+                    console.log(`[FACE-MATCH] Processing ${photos.length} photos manually`);
+                    
+                    // Process micro-batch of photos
+                    for (const photo of photos) {
+                        try {
+                            // Add user to matched_users with minimal processing
+                            const existingMatches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
+                            
+                            // Skip if user already exists
+                            if (existingMatches.some(m => m.userId === userId)) {
+                                continue;
+                            }
+                            
+                            const updatedMatches = [...existingMatches, userMatch];
+                            
+                            // Update with retry and backoff
+                            let updated = false;
+                            let retryCount = 0;
+                            const MAX_RETRIES = 3;
+                            
+                            while (!updated && retryCount < MAX_RETRIES) {
+                                try {
+                                    const { error: updateError } = await supabase
+                                        .from('photos')
+                                        .update({ matched_users: updatedMatches })
+                                        .eq('id', photo.id);
+                                    
+                                    if (!updateError) {
+                                        updated = true;
+                                        processedCount++;
+                                        console.log(`[FACE-MATCH] Successfully updated photo ${photo.id} manually`);
+                                    } else {
+                                        retryCount++;
+                                        // Exponential backoff
+                                        await new Promise(r => setTimeout(r, 200 * Math.pow(2, retryCount)));
+                                    }
+                                } catch (updateError) {
+                                    retryCount++;
+                                    console.error(`[FACE-MATCH] Update error (retry ${retryCount}): ${updateError.message}`);
+                                    await new Promise(r => setTimeout(r, 200 * Math.pow(2, retryCount)));
+                                }
+                            }
+                        } catch (photoError) {
+                            console.error(`[FACE-MATCH] Error processing photo ${photo.id}: ${photoError.message}`);
+                        }
+                        
+                        // Add small delay between each photo update
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                    
+                    offset += photos.length;
+                    
+                    // Add delay between batches with backoff
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                } catch (batchError) {
+                    console.error(`[FACE-MATCH] Batch error: ${batchError.message}`);
+                    hasMore = false;
+                }
+            }
+            
+            return processedCount;
+        } catch (error) {
+            console.error(`[FACE-MATCH] Manual processing error: ${error.message}`);
+            return processedCount;
+        }
+    }
+    // Check if a specific RPC function exists
+    static async checkFunctionExists(functionName) {
+        try {
+            // Try calling the function with minimal parameters
+            // We'll use a direct call with a try/catch rather than relying on list_functions
+            const { error } = await supabase.rpc(functionName, {});
+            
+            // If error contains "function not found" or similar, it doesn't exist
+            if (error && (
+                error.message.includes('function not found') || 
+                error.message.includes('not in the schema cache') ||
+                error.message.includes('Could not find the function')
+            )) {
+                return false;
+            }
+            
+            // If error is about parameters, the function exists but needed parameters
+            // That's enough to know it exists
+            return true;
+        } catch (error) {
+            console.error(`[FACE-MATCH] Error checking function ${functionName}:`, error);
+            return false;
         }
     }
 }
