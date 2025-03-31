@@ -1436,19 +1436,20 @@ export class PhotoService {
                 // Try alternative approach if that fails
                 try {
                     // Get all photos and filter client-side
-                    const { data: allPhotos } = await supabase
+                    const { data: allPhotoRecords, error: allPhotosError } = await supabase
                         .from('photos')
                         .select('*');
                         
                     // Filter manually to find photos without this user
-                    if (allPhotos) {
-                        const filteredPhotos = allPhotos.filter(photo => {
+                    if (allPhotoRecords) {
+                        const filteredPhotos = allPhotoRecords.filter(photo => {
                             if (!photo.matched_users) return true;
                             const matches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
                             return !matches.some(match => match.userId === userId);
                         });
-                        console.log(`[DEBUG-MATCH] Using client-side filtering: found ${filteredPhotos.length} of ${allPhotos.length} photos`);
-                        photos = filteredPhotos;
+                        console.log(`[DEBUG-MATCH] Using client-side filtering: found ${filteredPhotos.length} of ${allPhotoRecords.length} photos`);
+                        const matchablePhotos = filteredPhotos;
+                        photos = matchablePhotos;
                     }
                 } catch (fallbackError) {
                     console.error('[DEBUG-MATCH] Fallback query also failed:', fallbackError);
