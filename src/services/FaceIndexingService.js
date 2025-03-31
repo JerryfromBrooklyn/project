@@ -543,7 +543,7 @@ export class FaceIndexingService {
                                 // Add new match to existing matches
                                 const updatedMatches = [...existingMatches, newMatch];
                                 
-                                // First try the normal update
+                                // First try the normal update - FIXED: stringify is removed as Supabase handles JSON automatically
                                 const { error: updateError } = await supabase
                                     .from(tableName)
                                     .update({ 
@@ -555,26 +555,41 @@ export class FaceIndexingService {
                                 if (updateError) {
                                     console.error(`[FACE-MATCH] Error updating photo ${photo.id} (attempt ${retryCount + 1}):`, updateError);
                                     
-                                    // If that fails, try with RPC function if available
+                                    // If that fails, try with JSON stringified array in case the client needs it
                                     try {
-                                        const { error: rpcError } = await supabase.rpc(
-                                            'update_photo_matched_users',
-                                            { 
-                                                p_photo_id: photo.id,
-                                                p_user_match: newMatch,
-                                                p_table_name: tableName
-                                            }
-                                        );
-                                        
-                                        if (!rpcError) {
+                                        const { error: retryUpdateError } = await supabase
+                                            .from(tableName)
+                                            .update({ 
+                                                matched_users: JSON.stringify(updatedMatches),
+                                                updated_at: new Date().toISOString()
+                                            })
+                                            .eq('id', photo.id);
+                                            
+                                        if (!retryUpdateError) {
                                             updated = true;
                                             updatedPhotoIds.push(photo.id);
-                                            console.log(`[FACE-MATCH] Successfully added user ${userId} to photo ${photo.id} via RPC`);
+                                            console.log(`[FACE-MATCH] Successfully added user ${userId} to photo ${photo.id} with JSON.stringify`);
                                         } else {
-                                            console.error(`[FACE-MATCH] RPC error:`, rpcError);
+                                            // If both normal update approaches fail, try RPC function
+                                            const { error: rpcError } = await supabase.rpc(
+                                                'update_photo_matched_users',
+                                                { 
+                                                    p_photo_id: photo.id,
+                                                    p_user_match: newMatch,
+                                                    p_table_name: tableName
+                                                }
+                                            );
+                                            
+                                            if (!rpcError) {
+                                                updated = true;
+                                                updatedPhotoIds.push(photo.id);
+                                                console.log(`[FACE-MATCH] Successfully added user ${userId} to photo ${photo.id} via RPC`);
+                                            } else {
+                                                console.error(`[FACE-MATCH] RPC error:`, rpcError);
+                                            }
                                         }
-                                    } catch (rpcError) {
-                                        console.error(`[FACE-MATCH] RPC function error:`, rpcError);
+                                    } catch (stringifyError) {
+                                        console.error(`[FACE-MATCH] Stringified update error:`, stringifyError);
                                     }
                                 } else {
                                     updated = true;
@@ -590,6 +605,31 @@ export class FaceIndexingService {
                             // Wait a short time between retries
                             if (!updated && retryCount < MAX_RETRY_COUNT) {
                                 await new Promise(resolve => setTimeout(resolve, 200 * retryCount));
+                            }
+                        }
+                        
+                        // Additional fallback if all update methods failed
+                        if (!updated) {
+                            try {
+                                // Final attempt with raw SQL via RPC
+                                const { error: finalError } = await supabase.rpc(
+                                    'update_photo_matched_users_raw',
+                                    {
+                                        p_photo_id: photo.id,
+                                        p_user_id: userId,
+                                        p_user_data: JSON.stringify(newMatch),
+                                        p_table: tableName
+                                    }
+                                );
+                                
+                                if (!finalError) {
+                                    updatedPhotoIds.push(photo.id);
+                                    console.log(`[FACE-MATCH] Successfully updated photo ${photo.id} with raw SQL fallback`);
+                                } else {
+                                    console.error(`[FACE-MATCH] Final update attempt failed for photo ${photo.id}:`, finalError);
+                                }
+                            } catch (finalError) {
+                                console.error(`[FACE-MATCH] Final fallback error:`, finalError);
                             }
                         }
                     } else {
