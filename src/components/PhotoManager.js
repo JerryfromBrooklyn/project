@@ -903,6 +903,8 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
                     console.log("[DEBUG] Adding inferred match for user", currentUserId, "to photo", photo.id);
                     console.log("[DEBUG] Frequent faces found:", frequentlySeenFaces);
                     
+                    // --- DISABLE INFERRED MATCHING START ---
+                    /*
                     // Add current user as an inferred match
                     photo.matched_users.push({
                         userId: currentUserId,
@@ -911,6 +913,8 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
                         similarity: 90, // Also add similarity for consistency
                         inferred: true  // Mark as inferred for UI purposes
                     });
+                    */
+                   // --- DISABLE INFERRED MATCHING END ---
                 }
             }
         });
