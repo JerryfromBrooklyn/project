@@ -292,66 +292,144 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             
             if (mode === 'upload') {
                 console.log('[DEBUG] Fetching uploaded photos');
-                // Simply query storage bucket directly - most reliable approach
-                photos = await fetchFromStorageBucket();
+                // Get photos uploaded by the current user directly from storage
+                const { data: storageFiles, error: storageError } = await supabase.storage
+                    .from('photos')
+                    .list(user.id);
+                    
+                if (storageError) {
+                    console.error('[DEBUG] Error fetching from storage:', storageError);
+                    setError('Could not load your uploaded photos.');
+                    setLoading(false);
+                    return;
+                }
+                
+                if (!storageFiles || storageFiles.length === 0) {
+                    // No photos found - show friendly message
+                    setError('No uploaded photos found. Try uploading a photo first.');
+                    setPhotos([]);
+                    setLoading(false);
+                    return;
+                }
+                
+                console.log(`[DEBUG] Found ${storageFiles.length} files in storage bucket`);
+                
+                // Convert to photo objects
+                photos = storageFiles.map(file => {
+                    const storagePath = `${user.id}/${file.name}`;
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('photos')
+                        .getPublicUrl(storagePath);
+                        
+                    return {
+                        id: file.id || storagePath,
+                        url: publicUrl,
+                        public_url: publicUrl,
+                        storage_path: storagePath,
+                        uploaded_by: user.id,
+                        file_name: file.name,
+                        file_size: file.metadata?.size || 0,
+                        file_type: file.metadata?.mimetype || 'image/jpeg',
+                        created_at: file.created_at || new Date().toISOString(),
+                        matched_users: [],
+                        faces: []
+                    };
+                });
             } else {
                 console.log('[DEBUG] Fetching matched photos for user:', user.id);
                 
+                // First get the user's face ID
+                let faceId = currentUserFaceId;
+                
+                if (!faceId) {
+                    console.log('[DEBUG] No cached face ID, fetching from database...');
+                    faceId = await getUserFaceId();
+                }
+                
+                if (!faceId) {
+                    console.log('[DEBUG] No face ID found for user');
+                    setError('No face ID found. Please register your face first by uploading a photo with your face.');
+                    setLoading(false);
+                    return;
+                }
+                
+                console.log('[DEBUG] User face ID:', faceId);
+                
+                // Use the FaceIndexingService directly since database queries aren't working
                 try {
-                    // Try getting user's face ID from face_data table
-                    let faceId = null;
-                    const { data: faceData, error: faceError } = await supabase
-                        .from('face_data')
-                        .select('face_id')
-                        .eq('user_id', user.id)
-                        .single();
-                        
-                    if (!faceError && faceData && faceData.face_id) {
-                        faceId = faceData.face_id;
-                        console.log('[DEBUG] Found face ID:', faceId);
-                        
-                        // DIRECT API APPROACH: Directly call AWS Rekognition without any SQL functions
-                        // This works around all the missing SQL functions issues
-                        
-                        try {
-                            console.log('[DIRECT-API] Searching with user face ID:', faceId);
-                            
-                            // Create FaceIndexingService instance for direct API calls
-                            const searchResults = await window.FaceIndexingService.searchFacesByFaceId(faceId, user.id);
-                            
-                            if (searchResults && searchResults.length > 0) {
-                                console.log('[DIRECT-API] Found', searchResults.length, 'matching photos');
-                                photos = searchResults;
-                            } else {
-                                console.log('[DIRECT-API] No matching photos found via direct API');
-                            }
-                        } catch (directApiError) {
-                            console.error('[DIRECT-API] Error using direct API:', directApiError);
-                        }
-                    } else {
-                        console.log('[DEBUG] No face ID found for user. Face registration required.');
+                    console.log('[DEBUG] Using FaceIndexingService.searchFacesByFaceId directly');
+                    
+                    // Make sure FaceIndexingService is available on window
+                    if (!window.FaceIndexingService) {
+                        console.error('[DEBUG] FaceIndexingService not available on window');
+                        setError('Face matching service not available. Please refresh the page and try again.');
+                        setLoading(false);
+                        return;
                     }
-                } catch (err) {
-                    console.error('[DEBUG] Error with face ID lookup:', err);
+                    
+                    const matchedPhotos = await window.FaceIndexingService.searchFacesByFaceId(faceId, user.id);
+                    
+                    if (!matchedPhotos || matchedPhotos.length === 0) {
+                        console.log('[DEBUG] No matched photos found with FaceIndexingService');
+                        setError('No photos found with your face. This could mean either no one has uploaded photos with your face, or there was an issue with the face matching service.');
+                        setLoading(false);
+                        return;
+                    }
+                    
+                    console.log(`[DEBUG] Found ${matchedPhotos.length} photos with FaceIndexingService`);
+                    photos = matchedPhotos;
+                } catch (faceServiceError) {
+                    console.error('[DEBUG] Error using FaceIndexingService:', faceServiceError);
+                    setError('Face matching service error. Please try again later.');
+                    setLoading(false);
+                    return;
                 }
             }
             
-            // Show a clear error message if no photos found
             if (!photos || photos.length === 0) {
-                if (mode === 'matches') {
-                    setError('No matched photos found. This could mean either no one has uploaded photos with your face, or you need to complete face registration.');
-                } else {
-                    setError('No uploaded photos found. Try uploading a photo first.');
-                }
+                const modeMessage = mode === 'upload' 
+                    ? 'No uploaded photos found. Try uploading a photo first.'
+                    : 'No matched photos found. This could mean either no one has uploaded photos with your face, or you need to complete face registration.';
+                
+                setError(modeMessage);
                 setPhotos([]);
                 setLoading(false);
                 return;
             }
             
-            // Process any photos we found
-            console.log(`[DEBUG] Found ${photos.length} photos, processing...`);
-            const processedPhotos = await processPhotos(photos);
-            setPhotos(processedPhotos || []);
+            console.log(`[DEBUG] Processing ${photos.length} photos for display`);
+            
+            // Now process the photos with our helper function
+            const processedPhotos = photos.map(photo => {
+                // Deep clone to avoid mutating original
+                const processedPhoto = { ...photo };
+                
+                // Normalize URL field
+                if (!processedPhoto.url && processedPhoto.public_url) {
+                    processedPhoto.url = processedPhoto.public_url;
+                }
+                
+                // Ensure matched_users is an array
+                if (!processedPhoto.matched_users) {
+                    processedPhoto.matched_users = [];
+                }
+                
+                // Ensure faces is an array
+                if (!processedPhoto.faces) {
+                    processedPhoto.faces = [];
+                }
+                
+                // Ensure other required fields have defaults
+                processedPhoto.location = processedPhoto.location || { lat: null, lng: null, name: null };
+                processedPhoto.venue = processedPhoto.venue || { id: null, name: null };
+                processedPhoto.event_details = processedPhoto.event_details || { date: null, name: null, type: null };
+                processedPhoto.tags = processedPhoto.tags || [];
+                
+                return processedPhoto;
+            });
+            
+            console.log(`[DEBUG] Completed processing ${processedPhotos.length} photos`);
+            setPhotos(processedPhotos);
         } catch (err) {
             console.error('[DEBUG] Error in fetchPhotos:', err);
             setError('Failed to load photos. Please try again.');
