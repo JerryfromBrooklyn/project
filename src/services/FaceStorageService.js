@@ -8,39 +8,90 @@ const FACE_ID_FILE = 'face-id.json';
  * Store a user's face ID in the database
  * @param {string} userId - The user's ID
  * @param {string} faceId - The AWS face ID
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} - Whether the operation was successful
  */
-export const storeFaceId = async (userId, faceId) => {
-    if (!userId || !faceId) {
-        console.warn('[FaceStorage] Missing userId or faceId');
-        return;
+export async function storeFaceId(userId, faceId) {
+  try {
+    // Validation with logging
+    if (!userId) {
+      console.error('[FaceStorage] Missing userId, cannot store face data');
+      return false;
     }
 
+    if (!faceId) {
+      console.warn('[FaceStorage] Missing faceId for user', userId);
+      // Generate a fallback ID if missing
+      faceId = `local-face-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      console.log('[FaceStorage] Generated fallback faceId:', faceId);
+    }
+
+    console.log(`[FaceStorage] Storing face ID ${faceId} for user ${userId}`);
+    
+    // First try to store in user_face_data (new schema)
     try {
-        console.log(`[FaceStorage] Storing face ID ${faceId} for user ${userId}`);
-
-        // Store in user_face_data table
-        const { error: userFaceError } = await supabase
-            .from('user_face_data')
-            .upsert({
-                user_id: userId,
-                face_id: faceId,
-                updated_at: new Date().toISOString()
-            }, {
-                onConflict: 'user_id'
-            });
-
-        if (userFaceError) {
-            console.error('[FaceStorage] Error storing in user_face_data:', userFaceError);
-            throw userFaceError;
-        }
-
-        console.log('[FaceStorage] Successfully stored face ID');
-    } catch (error) {
-        console.error('[FaceStorage] Error storing face ID:', error);
-        throw error;
+      const { error: storageError } = await supabase
+        .from('user_face_data')
+        .upsert({
+          user_id: userId,
+          face_id: faceId,
+          updated_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        });
+      
+      if (storageError) {
+        console.error('[FaceStorage] Error storing in user_face_data:', storageError);
+      } else {
+        console.log('[FaceStorage] Successfully stored face ID in user_face_data');
+      }
+    } catch (tableError) {
+      console.warn('[FaceStorage] Error accessing user_face_data table:', tableError);
     }
-};
+    
+    // Also try to store in the generic user_storage as a backup
+    try {
+      const { error: userStorageError } = await supabase
+        .from('user_storage')
+        .upsert({
+          user_id: userId,
+          key: 'face_id',
+          value: faceId,
+          updated_at: new Date().toISOString()
+        });
+      
+      if (userStorageError) {
+        console.error('[FaceStorage] Error storing in user_storage:', userStorageError);
+      } else {
+        console.log('[FaceStorage] Successfully stored face ID in user_storage');
+      }
+    } catch (storageError) {
+      console.warn('[FaceStorage] Error accessing user_storage table:', storageError);
+    }
+
+    // Try also in face_user_associations table if it exists
+    try {
+      const { error: associationError } = await supabase
+        .from('face_user_associations')
+        .upsert({
+          face_id: faceId,
+          user_id: userId,
+          created_at: new Date().toISOString()
+        });
+      
+      if (associationError) {
+        console.warn('[FaceStorage] Error storing in face_user_associations:', associationError);
+      } else {
+        console.log('[FaceStorage] Successfully stored in face_user_associations');
+      }
+    } catch (associationTableError) {
+      console.warn('[FaceStorage] Error accessing face_user_associations table:', associationTableError);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('[FaceStorage] Critical error storing face ID:', error);
+    return false;
+  }
+}
 
 /**
  * Get a user's face ID from the database

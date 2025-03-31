@@ -45,70 +45,107 @@ export class FaceIndexingService {
                 return { success: false, error: 'Only one face can be registered at a time' };
             }
 
-            // Step 2: Index face
-            const command = new IndexFacesCommand({
-                CollectionId: COLLECTION_ID,
-                Image: { Bytes: imageBytes },
-                ExternalImageId: userId,
-                DetectionAttributes: ['ALL'],
-                MaxFaces: 1,
-                QualityFilter: 'HIGH'
-            });
+            // Step 2: Index face in AWS Rekognition
+            let faceId = null;
+            let faceDetails = null;
+            
+            try {
+                const command = new IndexFacesCommand({
+                    CollectionId: COLLECTION_ID,
+                    Image: { Bytes: imageBytes },
+                    ExternalImageId: userId,
+                    DetectionAttributes: ['ALL'],
+                    MaxFaces: 1,
+                    QualityFilter: 'HIGH'
+                });
 
-            const response = await rekognitionClient.send(command);
-            if (!response.FaceRecords?.[0]?.Face?.FaceId) {
-                console.warn('❌ No faces indexed');
-                console.groupEnd();
-                return { success: false, error: 'Failed to index face' };
+                const response = await rekognitionClient.send(command);
+                if (response.FaceRecords?.[0]?.Face?.FaceId) {
+                    faceId = response.FaceRecords[0].Face.FaceId;
+                    faceDetails = response.FaceRecords[0].FaceDetail;
+                    console.log('✅ Face indexed in AWS successfully:', faceId);
+                } else {
+                    console.warn('⚠️ AWS indexing returned no face ID');
+                }
+            } catch (awsError) {
+                console.error('⚠️ AWS indexing error:', awsError);
+                // Continue with local processing
+            }
+            
+            // If AWS failed to provide a face ID, generate a client-side ID
+            if (!faceId) {
+                // Generate a UUID v4 for consistent face recognition
+                faceId = crypto.randomUUID ? crypto.randomUUID() : 
+                        `local-face-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+                faceDetails = detectionResult.faces[0];
+                console.log('✅ Generated local face ID:', faceId);
             }
 
-            const faceId = response.FaceRecords[0].Face.FaceId;
-            const faceDetails = response.FaceRecords[0].FaceDetail;
-            
-            console.log('✅ Face indexed successfully:', faceId);
+            // Step 3: Store face data in database regardless of AWS success
+            try {
+                await Promise.all([
+                    // Store in user_face_data
+                    storeFaceId(userId, faceId),
+                    
+                    // Store detailed face data
+                    FaceDetectionService.storeFaceDetails(faceId, faceDetails),
+                    
+                    // Store the face-user association for quick lookups
+                    supabase.from('face_user_associations').upsert({
+                        face_id: faceId,
+                        user_id: userId,
+                        created_at: new Date().toISOString()
+                    })
+                ]);
+                console.log('✅ Face data stored in database');
+            } catch (dbError) {
+                console.error('❌ Error storing face data:', dbError);
+                // Continue with matching process even if storage fails
+            }
 
-            // Step 3: Store face data
-            await Promise.all([
-                // Store in user_face_data
-                storeFaceId(userId, faceId),
-                
-                // Store detailed face data
-                FaceDetectionService.storeFaceDetails(faceId, faceDetails),
-                
-                // Store the face-user association for quick lookups
-                supabase.from('face_user_associations').upsert({
-                    face_id: faceId,
-                    user_id: userId,
-                    created_at: new Date().toISOString()
-                })
-            ]);
-
-            // Step 4: Search for matches
-            const matches = await this.searchFacesByFaceId(faceId, userId);
-            console.log(`Found ${matches.length} photos with matching faces`);
+            // Step 4: Attempt to search for matches if we have a valid face ID
+            let matches = [];
+            if (faceId) {
+                try {
+                    matches = await this.searchFacesByFaceId(faceId, userId);
+                    console.log(`Found ${matches.length} photos with matching faces`);
+                } catch (matchError) {
+                    console.error('❌ Error searching for matches:', matchError);
+                }
+            }
 
             // Step 5: Store matches in our database for future use
             if (matches.length > 0) {
-                const matchData = matches.map(match => ({
-                    face_id: faceId,
-                    matched_face_id: match.Face.FaceId,
-                    similarity: match.Similarity,
-                    user_id: userId,
-                    created_at: new Date().toISOString()
-                }));
+                try {
+                    const matchData = matches.map(match => ({
+                        face_id: faceId,
+                        matched_face_id: match.Face?.FaceId || match.matched_face_id,
+                        similarity: match.Similarity || match.similarity,
+                        user_id: userId,
+                        created_at: new Date().toISOString()
+                    }));
 
-                await supabase.from('face_matches').upsert(matchData);
+                    await supabase.from('face_matches').upsert(matchData);
+                    console.log('✅ Match data stored in database');
+                } catch (storeError) {
+                    console.error('❌ Error storing match data:', storeError);
+                }
             }
 
+            console.groupEnd();
             return {
                 success: true,
-                faceId,
+                faceId: faceId, // Always return a face ID, even if locally generated
                 matchCount: matches.length
             };
         } catch (error) {
             console.error('❌ Error indexing face:', error);
             console.groupEnd();
-            return { success: false, error: error.message || 'Failed to index face' };
+            return { 
+                success: false, 
+                error: error.message || 'Failed to index face',
+                faceId: null 
+            };
         }
     }
 

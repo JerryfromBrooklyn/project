@@ -48,9 +48,11 @@ class FaceDetectionService {
       let imageBytes;
       if (typeof imageSource === 'string') {
         if (imageSource.startsWith('data:image')) {
+          console.log('[FACE-DETECT] Processing base64 image');
           const base64Data = imageSource.replace(/^data:image\/\w+;base64,/, '');
           imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
         } else {
+          console.log('[FACE-DETECT] Downloading image from storage:', imageSource);
           const { data, error } = await supabase.storage
             .from('photos')
             .download(imageSource);
@@ -58,10 +60,23 @@ class FaceDetectionService {
           imageBytes = new Uint8Array(await data.arrayBuffer());
         }
       } else if (imageSource instanceof Blob) {
+        console.log('[FACE-DETECT] Processing Blob image');
         imageBytes = new Uint8Array(await imageSource.arrayBuffer());
+      } else if (imageSource instanceof Uint8Array) {
+        console.log('[FACE-DETECT] Using provided Uint8Array directly');
+        imageBytes = imageSource;
       } else {
+        console.error('[FACE-DETECT] Invalid image source type:', typeof imageSource);
         throw new Error('Invalid image source');
       }
+
+      // Verify we have valid image bytes
+      if (!imageBytes || imageBytes.length === 0) {
+        console.error('[FACE-DETECT] Empty image bytes');
+        throw new Error('Invalid image data: empty bytes');
+      }
+
+      console.log('[FACE-DETECT] Image bytes length:', imageBytes.length);
 
       // Detect faces
       const command = new DetectFacesCommand({

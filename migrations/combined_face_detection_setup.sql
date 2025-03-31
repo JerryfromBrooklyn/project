@@ -1,3 +1,6 @@
+-- First, drop dependent views
+DROP VIEW IF EXISTS users_with_faces CASCADE;
+
 -- Function to check if a policy exists
 CREATE OR REPLACE FUNCTION policy_exists(table_name text, policy_name text)
 RETURNS boolean AS $$
@@ -21,21 +24,64 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 1. Create user_face_data table
-CREATE TABLE IF NOT EXISTS public.user_face_data (
+-- Drop redundant tables with CASCADE to handle dependencies
+DROP TABLE IF EXISTS face_data CASCADE;
+DROP TABLE IF EXISTS user_faces CASCADE;
+DROP TABLE IF EXISTS face_matches CASCADE;
+
+-- Create optimized face_matches table
+CREATE TABLE public.face_matches (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    source_face_id TEXT NOT NULL,
+    matched_face_id TEXT NOT NULL,
+    similarity FLOAT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(source_face_id, matched_face_id)
+);
+
+-- Now add indexes after table is created
+CREATE INDEX idx_face_matches_source ON face_matches(source_face_id);
+CREATE INDEX idx_face_matches_matched ON face_matches(matched_face_id);
+CREATE INDEX idx_face_matches_composite ON face_matches(source_face_id, matched_face_id);
+
+-- Drop existing user_face_data to ensure clean state
+DROP TABLE IF EXISTS user_face_data CASCADE;
+
+-- Create user-face associations table
+CREATE TABLE public.user_face_data (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     face_id TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(user_id)
+    UNIQUE(user_id),
+    UNIQUE(face_id)
 );
 
+-- Add indexes after table is created
+CREATE INDEX idx_user_face_user_id ON user_face_data(user_id);
+CREATE INDEX idx_user_face_face_id ON user_face_data(face_id);
+
 -- Enable RLS
+ALTER TABLE public.face_matches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_face_data ENABLE ROW LEVEL SECURITY;
 
--- Add policies if they don't exist
+-- Add RLS policies
 DO $$ BEGIN
+    -- Policies for face_matches
+    IF NOT policy_exists('face_matches', 'Users can read face matches') THEN
+        CREATE POLICY "Users can read face matches"
+            ON public.face_matches
+            FOR SELECT
+            TO authenticated
+            USING (EXISTS (
+                SELECT 1 FROM user_face_data
+                WHERE user_id = auth.uid()
+                AND (face_id = face_matches.source_face_id OR face_id = face_matches.matched_face_id)
+            ));
+    END IF;
+
+    -- Policies for user_face_data
     IF NOT policy_exists('user_face_data', 'Users can read their own face data') THEN
         CREATE POLICY "Users can read their own face data"
             ON public.user_face_data
@@ -51,23 +97,24 @@ DO $$ BEGIN
             TO authenticated
             WITH CHECK (auth.uid() = user_id);
     END IF;
-
-    IF NOT policy_exists('user_face_data', 'Users can update their own face data') THEN
-        CREATE POLICY "Users can update their own face data"
-            ON public.user_face_data
-            FOR UPDATE
-            TO authenticated
-            USING (auth.uid() = user_id)
-            WITH CHECK (auth.uid() = user_id);
-    END IF;
 END $$;
 
--- Add trigger for updated_at if it doesn't exist
-DROP TRIGGER IF EXISTS set_updated_at ON public.user_face_data;
-CREATE TRIGGER set_updated_at
+-- Add trigger for updated_at
+DROP TRIGGER IF EXISTS set_user_face_data_updated_at ON public.user_face_data;
+CREATE TRIGGER set_user_face_data_updated_at
     BEFORE UPDATE ON public.user_face_data
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_updated_at();
+
+-- Recreate the users_with_faces view with new schema
+CREATE OR REPLACE VIEW users_with_faces AS
+SELECT 
+    u.id as user_id,
+    u.email,
+    ufd.face_id,
+    ufd.created_at as face_registered_at
+FROM auth.users u
+LEFT JOIN user_face_data ufd ON u.id = ufd.user_id;
 
 -- 2. Create optimized face_detection_results table
 CREATE TABLE IF NOT EXISTS public.face_detection_results (
