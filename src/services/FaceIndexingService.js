@@ -73,12 +73,32 @@ export class FaceIndexingService {
                 storeFaceId(userId, faceId),
                 
                 // Store detailed face data
-                FaceDetectionService.storeFaceDetails(faceId, faceDetails)
+                FaceDetectionService.storeFaceDetails(faceId, faceDetails),
+                
+                // Store the face-user association for quick lookups
+                supabase.from('face_user_associations').upsert({
+                    face_id: faceId,
+                    user_id: userId,
+                    created_at: new Date().toISOString()
+                })
             ]);
 
             // Step 4: Search for matches
             const matches = await this.searchFacesByFaceId(faceId, userId);
             console.log(`Found ${matches.length} photos with matching faces`);
+
+            // Step 5: Store matches in our database for future use
+            if (matches.length > 0) {
+                const matchData = matches.map(match => ({
+                    face_id: faceId,
+                    matched_face_id: match.Face.FaceId,
+                    similarity: match.Similarity,
+                    user_id: userId,
+                    created_at: new Date().toISOString()
+                }));
+
+                await supabase.from('face_matches').upsert(matchData);
+            }
 
             return {
                 success: true,
@@ -94,9 +114,20 @@ export class FaceIndexingService {
 
     static async searchFacesByFaceId(faceId, userId) {
         try {
-            console.log(`[FACE-MATCH] Searching for faces matching FaceId: ${faceId} for user ${userId}`);
+            console.log(`[FACE-MATCH] Searching for faces matching FaceId: ${faceId}`);
 
-            // Search AWS Rekognition
+            // First check our database for existing matches
+            const { data: existingMatches } = await supabase
+                .from('face_matches')
+                .select('matched_face_id, similarity')
+                .eq('face_id', faceId);
+
+            if (existingMatches?.length > 0) {
+                console.log('[FACE-MATCH] Using existing matches from database');
+                return existingMatches;
+            }
+
+            // If no existing matches, search AWS
             const command = new SearchFacesCommand({
                 CollectionId: COLLECTION_ID,
                 FaceId: faceId,
@@ -107,33 +138,53 @@ export class FaceIndexingService {
             const response = await rekognitionClient.send(command);
             const matches = response.FaceMatches || [];
 
-            // Get matched face IDs
-            const matchedFaceIds = matches.map(match => match.Face.FaceId);
-            
-            // Update face_detection_results with matches
-            if (matchedFaceIds.length > 0) {
-                const { data: photos } = await supabase
-                    .from('face_detection_results')
-                    .select('image_path, face_ids')
-                    .contains('face_ids', matchedFaceIds);
+            // Store matches in database for future use
+            if (matches.length > 0) {
+                const matchData = matches.map(match => ({
+                    face_id: faceId,
+                    matched_face_id: match.Face.FaceId,
+                    similarity: match.Similarity,
+                    user_id: userId,
+                    created_at: new Date().toISOString()
+                }));
 
-                if (photos) {
-                    // Update matched photos
-                    await Promise.all(photos.map(photo => 
-                        supabase
-                            .from('face_detection_results')
-                            .update({
-                                face_ids: [...new Set([...(photo.face_ids || []), faceId])],
-                                last_accessed: new Date().toISOString()
-                            })
-                            .eq('image_path', photo.image_path)
-                    ));
-                }
+                await supabase.from('face_matches').upsert(matchData);
             }
 
             return matches;
         } catch (error) {
-            console.error('[FACE-MATCH] Error searching AWS:', error);
+            console.error('[FACE-MATCH] Error:', error);
+            return [];
+        }
+    }
+
+    static async getPhotosForUser(userId) {
+        try {
+            // Get user's face ID
+            const { data: userData } = await supabase
+                .from('user_face_data')
+                .select('face_id')
+                .eq('user_id', userId)
+                .single();
+
+            if (!userData?.face_id) {
+                return [];
+            }
+
+            // Get all matches for this face ID
+            const { data: matches } = await supabase
+                .from('face_matches')
+                .select(`
+                    matched_face_id,
+                    similarity,
+                    photos!inner(*)
+                `)
+                .eq('face_id', userData.face_id)
+                .order('similarity', { ascending: false });
+
+            return matches?.map(match => match.photos) || [];
+        } catch (error) {
+            console.error('[FACE-MATCH] Error getting photos:', error);
             return [];
         }
     }
