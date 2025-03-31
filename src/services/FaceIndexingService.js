@@ -23,6 +23,7 @@ import { FACE_MATCH_THRESHOLD } from '../config/aws-config';
 import { supabase } from '../lib/supabaseClient';
 import { validateForTable } from '../utils/databaseValidator';
 import { storeFaceId } from './FaceStorageService';
+import FaceDetectionService from './FaceDetectionService';
 
 export class FaceIndexingService {
     static async indexFace(imageBytes, userId) {
@@ -799,36 +800,51 @@ export class FaceIndexingService {
             return [];
         }
     }
-    static async detectFacesWithRetry(imageBytes) {
-        let retries = 0;
-        let lastError;
-        while (retries < this.MAX_RETRIES) {
+    static async detectFaces(imageBytes) {
+        try {
+            console.log('[FaceIndexing] Detecting faces in image...');
+            
+            // Convert Uint8Array to Blob for proper handling
+            const blob = new Blob([imageBytes], { type: 'application/octet-stream' });
+            
+            // Use our new service for safer face detection
+            const faces = await FaceDetectionService.getFaces(blob);
+            
+            console.log(`[FaceIndexing] Successfully detected ${faces.length} faces`);
+            return faces;
+        } catch (error) {
+            console.error('[FaceIndexing] Error detecting faces:', error);
+            return []; // Return empty array as safe fallback
+        }
+    }
+    static async detectFacesWithRetry(imageBytes, maxRetries = 3) {
+        let attempt = 0;
+        let lastError = null;
+        
+        while (attempt < maxRetries) {
             try {
-                console.log(`Attempt ${retries + 1} to detect faces...`);
-                const command = new DetectFacesCommand({
-                    Image: { Bytes: imageBytes },
-                    Attributes: ['ALL']
-                });
-                const response = await rekognitionClient.send(command);
-                if (!response.FaceDetails || response.FaceDetails.length === 0) {
-                    console.log('No faces detected in image');
-                    return [];
-                }
-                console.log(`Successfully detected ${response.FaceDetails.length} faces`);
-                return response.FaceDetails;
-            }
-            catch (error) {
-                console.error(`Face detection attempt ${retries + 1} failed:`, error);
+                attempt++;
+                console.log(`[FaceIndexing] Face detection attempt ${attempt}/${maxRetries}`);
+                
+                // Use our more reliable detection method
+                const faces = await this.detectFaces(imageBytes);
+                
+                // Success! Return the faces
+                return faces;
+            } catch (error) {
                 lastError = error;
-                retries++;
-                if (retries < this.MAX_RETRIES) {
-                    const delay = this.RETRY_DELAY * retries;
-                    console.log(`Waiting ${delay}ms before retry...`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
+                console.warn(`[FaceIndexing] Detection attempt ${attempt} failed:`, error);
+                
+                // Wait longer between retries
+                await new Promise(r => setTimeout(r, 500 * attempt));
             }
         }
-        throw lastError || new Error('Failed to detect faces after all retries');
+        
+        console.error(`[FaceIndexing] All ${maxRetries} face detection attempts failed`);
+        console.error('[FaceIndexing] Last error:', lastError);
+        
+        // Return empty array as safe fallback
+        return [];
     }
     static async initialize() {
         try {
