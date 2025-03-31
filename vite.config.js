@@ -7,6 +7,9 @@ export default {
   // Basic build configuration
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      external: ['react-hot-toast']
+    }
   },
   
   // Server configuration (development only)
