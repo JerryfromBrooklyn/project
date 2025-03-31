@@ -442,7 +442,7 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         return results;
     };
 
-    // Modify fetchFromBothTables function (around line 390)
+    // Modify fetchFromBothTables function (around line 445)
     const fetchFromBothTables = async (currentMode) => {
         console.log(`[DEBUG] Fetching from both tables for mode: ${currentMode}`);
         let combinedPhotos = [];
@@ -451,61 +451,66 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         const processAndAdd = (photos, sourceTable) => {
             if (!photos || !Array.isArray(photos)) return;
             photos.forEach(photo => {
-                if (!uniquePhotoIds.has(photo.id)) {
+                // Use photo_id or id as the unique identifier
+                const photoIdentifier = photo.photo_id || photo.id;
+                if (photoIdentifier && !uniquePhotoIds.has(photoIdentifier)) {
                     combinedPhotos.push({ ...photo, source_table: sourceTable });
-                    uniquePhotoIds.add(photo.id);
+                    uniquePhotoIds.add(photoIdentifier);
                 }
             });
         };
 
         try {
-            // Try RPC first
-            console.log(`[DEBUG] Trying RPC query in fetchFromBothTables with user ID: ${user.id}`);
-            const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_photos', {
-                p_user_id: user.id,
-                p_mode: currentMode
-            });
+            // Removed RPC attempt as it doesn't exist
+            // console.log(`[DEBUG] Trying RPC query ...`);
             
-            if (!rpcError && rpcData) {
-                console.log(`[DEBUG] RPC successful, got ${rpcData.length} photos`);
-                processAndAdd(rpcData, 'rpc_result');
-            } else {
-                console.warn('[DEBUG] RPC failed or returned no data, falling back to table queries:', rpcError);
+            // Direct table queries
+            console.log(`[DEBUG] Falling back to table queries`);
+            const tables = ['photos', 'simple_photos'];
+            for (const table of tables) {
+                let query = supabase.from(table).select('*');
 
-                // Fallback to direct table queries
-                const tables = ['photos', 'simple_photos'];
-                for (const table of tables) {
-                    let query = supabase.from(table).select('*');
-
-                    if (currentMode === 'matches') {
-                        // Filter photos where matched_users array contains an object with the user's ID
-                        // Using Supabase JSONB contains syntax: column->>key, eq, value
-                        // Or more broadly using `cs` for array contains
-                        if (user?.id) {
-                           // Using cs operator for array of objects containment
-                           // Note: The exact syntax might depend on your Supabase version and data structure
-                           query = query.contains('matched_users', [{ user_id: user.id }]); 
-                           // Alternative: query = query.contains('matched_users', [{ userId: user.id }]);
-                           // If the above don't work, try a text search (less efficient)
-                           // query = query.textSearch('matched_users::text', `'${user.id}'`);
-                        }
-                    } else { // mode === 'upload'
-                        query = query.eq('uploaded_by', user.id);
+                if (currentMode === 'matches') {
+                    if (user?.id) {
+                        // Construct the JSON string for the object to check containment
+                        // Check both possible key names (user_id and userId)
+                        const containsUserObject1 = JSON.stringify([{ user_id: user.id }]);
+                        const containsUserObject2 = JSON.stringify([{ userId: user.id }]);
+                        
+                        // Use the OR filter to check for either structure within the matched_users array
+                        query = query.or(`matched_users.cs.${containsUserObject1},matched_users.cs.${containsUserObject2}`);
+                        
+                        console.log(`[DEBUG] Querying ${table} for matches containing user: ${user.id}`);
+                    } else {
+                        // If no user ID, don't fetch matches
+                        console.warn(`[DEBUG] No user ID available for match query on table ${table}`);
+                        continue; // Skip this table query
                     }
-                    
-                    query = query.order('created_at', { ascending: false });
-
-                    const { data, error } = await query;
-                    
-                    if (error) {
-                        console.error(`[DEBUG] Error fetching from ${table}:`, error);
-                    } else if (data) {
-                        console.log(`[DEBUG] Fetched ${data.length} photos from ${table}`);
-                        processAndAdd(data, table);
+                } else { // mode === 'upload'
+                    if (user?.id) {
+                        query = query.eq('uploaded_by', user.id);
+                    } else {
+                        console.warn(`[DEBUG] No user ID available for upload query on table ${table}`);
+                        continue; // Skip this table query
                     }
                 }
-            }
+                
+                query = query.order('created_at', { ascending: false });
 
+                const { data, error } = await query;
+                
+                if (error) {
+                    // Log specific errors, especially the JSON syntax one
+                    console.error(`[DEBUG] Error fetching from ${table}:`, error.message, `(Code: ${error.code})`);
+                    if (error.code === '22P02') { // Invalid text representation (JSON syntax error)
+                         console.error(`[DEBUG] Potential issue with JSON structure or query syntax for table ${table}.`);
+                    }
+                } else if (data) {
+                    console.log(`[DEBUG] Fetched ${data.length} photos from ${table}`);
+                    processAndAdd(data, table);
+                }
+            }
+            
             console.log(`[DEBUG] Combined ${combinedPhotos.length} unique photos from all queries`);
             return combinedPhotos;
         } catch (error) {

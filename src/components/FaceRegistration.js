@@ -26,6 +26,7 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
     const [faceDetected, setFaceDetected] = useState(false);
     const [isCheckingFace, setIsCheckingFace] = useState(false);
     const [indexResult, setIndexResult] = useState(null);
+    const [detectedAttributes, setDetectedAttributes] = useState(null);
     const { user } = useAuth();
     const checkFaceInterval = useRef(null);
     useEffect(() => {
@@ -174,6 +175,7 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
             
             // Detect face attributes with AWS Rekognition
             console.log('Detecting face attributes...');
+            let faceAttributes;
             try {
                 const detectCommand = new DetectFacesCommand({
                     Image: { Bytes: imageBytes },
@@ -183,7 +185,8 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
                 if (!detectResponse.FaceDetails?.length) {
                     throw new Error('No face detected in the image');
                 }
-                const faceAttributes = detectResponse.FaceDetails[0];
+                faceAttributes = detectResponse.FaceDetails[0];
+                setDetectedAttributes(faceAttributes);
                 console.log('Face attributes detected successfully');
             } catch (detectError) {
                 console.error('Face detection error:', detectError);
@@ -237,14 +240,16 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
                 
                 if (!indexResult.success) {
                     console.warn('Face indexing warning:', indexResult.error);
-                    // We'll continue with a backup process
+                    if (faceAttributes) {
+                       indexResult.faceAttributes = faceAttributes;
+                    }
                 }
                 // Store the result in state for UI display
                 setIndexResult(indexResult);
             } catch (indexError) {
                 console.error('Face indexing error:', indexError);
                 // We'll continue with a backup process
-                indexResult = { success: false, error: indexError.message };
+                indexResult = { success: false, error: indexError.message, faceAttributes: faceAttributes };
             }
             
             // Extract the face ID - either from the indexing result or generate a fallback
@@ -362,7 +367,8 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
                 
                 console.log('Face indexed and registered successfully');
                 console.log('Face registration complete!');
-                onSuccess();
+                setLoading(false);
+                onSuccess(faceId, detectedAttributes);
             } else {
                 // Using direct insert (existing code)
                 
@@ -397,29 +403,34 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
                 // Add success callback for direct insert
                 console.log('Face indexed and registered successfully via direct insert');
                 console.log('Face registration complete!');
-                onSuccess();
+                setLoading(false);
+                onSuccess(faceId, detectedAttributes);
             }
-        }
-        finally {
-            setLoading(false);
+        } catch (error) {
+           console.error("Error during face registration:", error);
+           setError(error.message || 'An unexpected error occurred during registration.');
+           setLoading(false);
+        } finally {
+            // No longer setting loading state here
+            // setLoading(false); 
         }
     };
     return (_jsx(motion.div, { initial: { opacity: 0, scale: 0.95 }, animate: { opacity: 1, scale: 1 }, exit: { opacity: 0, scale: 0.95 }, className: "fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm", children: _jsx("div", { className: "bg-white rounded-apple-2xl shadow-apple-lg overflow-hidden max-w-lg w-full", children: _jsxs("div", { className: "p-6", children: [_jsxs("div", { className: "flex justify-between items-center mb-6", children: [_jsx("h2", { className: "text-2xl font-semibold text-apple-gray-900", children: "Face Registration" }), _jsx("button", { onClick: onClose, className: "p-2 rounded-full hover:bg-apple-gray-100 text-apple-gray-500", children: _jsx(X, { className: "w-5 h-5" }) })] }), error && (_jsxs("div", { className: "mb-6 p-4 bg-red-50 text-red-600 rounded-apple flex items-center", children: [_jsx(AlertTriangle, { className: "w-5 h-5 mr-2" }), error] })), devices.length > 1 && (_jsxs("div", { className: "mb-4", children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(Video, { className: "w-4 h-4 mr-2" }), "Camera"] }), _jsx("select", { value: selectedDeviceId, onChange: handleDeviceChange, className: "ios-input", children: devices.map(device => (_jsx("option", { value: device.deviceId, children: device.label || `Camera ${devices.indexOf(device) + 1}` }, device.deviceId))) })] })), _jsx("div", { className: "relative aspect-video overflow-hidden rounded-apple-xl bg-black mb-6", children: capturedImage ? (
                         // When image is captured, show it with detected attributes overlay
                         _jsxs("div", { className: "relative w-full h-full", children: [
                             _jsx("img", { src: capturedImage, alt: "Captured face", className: "w-full h-full object-cover" }),
-                            indexResult && indexResult.faceAttributes && (
-                                _jsxs("div", { className: "absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 text-xs", children: [
-                                    _jsx("div", { className: "font-semibold mb-1", children: "Detected Attributes:" }),
+                            detectedAttributes && (
+                                _jsxs("div", { className: "absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 text-xs backdrop-blur-sm", children: [
+                                    _jsx("div", { className: "font-semibold mb-1", children: "Detected Attributes (Preview):" }),
                                     _jsxs("div", { className: "grid grid-cols-2 gap-1", children: [
-                                        indexResult.faceAttributes.Gender && (
+                                        detectedAttributes.Gender && (
                                             _jsxs("div", { children: [
-                                                "Gender: ", indexResult.faceAttributes.Gender.Value, " (", Math.round(indexResult.faceAttributes.Gender.Confidence), "%)"
+                                                "Gender: ", detectedAttributes.Gender.Value, " (", Math.round(detectedAttributes.Gender.Confidence), "%)"
                                             ] })
                                         ),
-                                        indexResult.faceAttributes.AgeRange && (
+                                        detectedAttributes.AgeRange && (
                                             _jsxs("div", { children: [
-                                                "Age: ", indexResult.faceAttributes.AgeRange.Low, "-", indexResult.faceAttributes.AgeRange.High
+                                                "Age: ", detectedAttributes.AgeRange.Low, "-", detectedAttributes.AgeRange.High
                                             ] })
                                         )
                                     ] })
@@ -438,5 +449,5 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
                             _jsx("div", { className: cn("absolute inset-0 border-4 transition-colors duration-300", faceDetected ? "border-apple-green-500" : "border-white/20") }),
                             !isCheckingFace && !faceDetected && (_jsx("div", { className: "absolute inset-0 flex items-center justify-center bg-black/25", children: _jsxs("div", { className: "text-white text-center", children: [_jsx(AlertTriangle, { className: "w-8 h-8 mx-auto mb-2" }), _jsx("p", { children: "No face detected" })] }) }))
                         ] })
-                    ) }), _jsx("div", { className: "flex gap-3", children: capturedImage ? (_jsxs(_Fragment, { children: [_jsxs("button", { onClick: retake, className: "ios-button-secondary flex items-center", children: [_jsx(RotateCcw, { className: "w-5 h-5 mr-2" }), "Retake"] }), _jsx("button", { onClick: handleRegistration, disabled: loading, className: cn("ios-button-primary flex-1", loading && "opacity-50 cursor-not-allowed"), children: loading ? (_jsxs(_Fragment, { children: [_jsx("div", { className: "w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" }), "Registering..."] })) : (_jsxs(_Fragment, { children: [_jsx(Check, { className: "w-5 h-5 mr-2" }), "Confirm & Register"] })) })] })) : (_jsxs("button", { onClick: capture, disabled: !faceDetected, className: cn("ios-button-primary flex-1", !faceDetected && "opacity-50 cursor-not-allowed"), children: [_jsx(Camera, { className: "w-5 h-5 mr-2" }), faceDetected ? "Capture Photo" : "Position Your Face"] })) })] }) }) }));
+                    ) }), _jsx("div", { className: "flex gap-3", children: capturedImage ? (_jsxs(_Fragment, { children: [_jsxs("button", { onClick: retake, className: "ios-button-secondary flex items-center", children: [_jsx(RotateCcw, { className: "w-5 h-5 mr-2" }), "Retake"] }), _jsx("button", { onClick: handleRegistration, disabled: loading, className: cn("ios-button-primary flex-1", loading && "opacity-50 cursor-not-allowed"), children: loading ? (_jsxs(_Fragment, { children: [_jsx("div", { className: "w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" }), "Registering..."] })) : (_jsxs(_Fragment, { children: [_jsx(Check, { className: "w-5 h-5 mr-2" }), "Confirm & Register"] }) })] })) : (_jsxs("button", { onClick: capture, disabled: !faceDetected, className: cn("ios-button-primary flex-1", !faceDetected && "opacity-50 cursor-not-allowed"), children: [_jsx(Camera, { className: "w-5 h-5 mr-2" }), faceDetected ? "Capture Photo" : "Position Your Face"] })) })] }) }) }));
 };
