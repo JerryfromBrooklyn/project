@@ -1,11 +1,21 @@
 import { supabase } from '../lib/supabaseClient';
+import { RekognitionClient, DetectFacesCommand } from '@aws-sdk/client-rekognition';
+
+// Initialize AWS Rekognition client once
+const rekognitionClient = new RekognitionClient({
+  region: 'us-east-1', // Your AWS region
+  credentials: {
+    accessKeyId: import.meta.env.VITE_AWS_ACCESS_KEY_ID,
+    secretAccessKey: import.meta.env.VITE_AWS_SECRET_ACCESS_KEY
+  }
+});
 
 /**
  * Service for handling face detection with proper error handling
  */
 class FaceDetectionService {
   /**
-   * Detect faces in an image using AWS Rekognition via Supabase Edge Function
+   * Detect faces in an image using AWS Rekognition directly
    * @param {string|Blob} imageSource - Either a base64 string, Blob, or storage path
    * @param {Object} options - Additional options
    * @returns {Promise<Object>} - Face detection results with safe fallbacks
@@ -14,46 +24,49 @@ class FaceDetectionService {
     try {
       console.log('[FACE-DETECT] Starting face detection');
       
-      // Prepare the payload based on the type of imageSource
-      const payload = {};
-      
+      // Get image bytes
+      let imageBytes;
       if (typeof imageSource === 'string') {
-        // Check if it's a base64 string or a storage path
         if (imageSource.startsWith('data:image')) {
-          payload.imageData = imageSource;
+          // Convert base64 to binary
+          const base64Data = imageSource.replace(/^data:image\/\w+;base64,/, '');
+          imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
         } else {
-          payload.storagePath = imageSource;
+          // Download from storage
+          const { data, error } = await supabase.storage
+            .from('photos')
+            .download(imageSource);
+          if (error) throw error;
+          imageBytes = new Uint8Array(await data.arrayBuffer());
         }
       } else if (imageSource instanceof Blob) {
-        // Convert Blob to base64
-        payload.imageData = await this.blobToBase64(imageSource);
+        imageBytes = new Uint8Array(await imageSource.arrayBuffer());
       } else {
         throw new Error('Invalid image source. Must be base64 string, storage path, or Blob');
       }
       
-      // Add any additional options
-      Object.assign(payload, options);
-      
-      // Call the Supabase Edge Function with the new endpoint
-      const { data, error } = await supabase.functions.invoke('face-detection', {
-        body: payload
+      // Create and send the DetectFaces command
+      const command = new DetectFacesCommand({
+        Image: {
+          Bytes: imageBytes
+        },
+        Attributes: ['ALL']
       });
+
+      const response = await rekognitionClient.send(command);
       
-      if (error) {
-        console.error('[FACE-DETECT] Error calling face detection edge function:', error);
-        return this.getSafeResponse('Error calling face detection service', error);
-      }
-      
-      if (!data) {
-        console.warn('[FACE-DETECT] No data returned from face detection function');
-        return this.getSafeResponse('No data returned from face detection service');
-      }
-      
-      console.log(`[FACE-DETECT] Detection completed successfully. Found ${data.faceCount} faces.`);
-      return data;
+      const result = {
+        success: true,
+        message: 'Faces detected successfully',
+        faceCount: response.FaceDetails?.length || 0,
+        faces: response.FaceDetails || []
+      };
+
+      console.log(`[FACE-DETECT] Detection completed successfully. Found ${result.faceCount} faces.`);
+      return result;
     } catch (error) {
-      console.error('[FACE-DETECT] Unexpected error in face detection:', error);
-      return this.getSafeResponse('Unexpected error in face detection', error);
+      console.error('[FACE-DETECT] Error in face detection:', error);
+      return this.getSafeResponse('Error in face detection', error);
     }
   }
   
