@@ -30,100 +30,114 @@ export class FaceIndexingService {
         try {
             console.group('Face Indexing Process');
             console.log('🔍 Starting face indexing...');
-            console.log('Step 1: Detecting faces in image...');
-            const detectedFaces = await this.detectFacesWithRetry(imageBytes);
-            if (!detectedFaces || detectedFaces.length === 0) {
+            
+            // Step 1: Detect faces
+            const detectionResult = await FaceDetectionService.detectFaces(imageBytes);
+            if (!detectionResult.success || detectionResult.faceCount === 0) {
                 console.warn('❌ No faces detected in image');
                 console.groupEnd();
-                return {
-                    success: false,
-                    error: 'No faces detected in image'
-                };
+                return { success: false, error: 'No faces detected in image' };
             }
-            if (detectedFaces.length > 1) {
+            
+            if (detectionResult.faceCount > 1) {
                 console.warn('❌ Multiple faces detected in image');
                 console.groupEnd();
-                return {
-                    success: false,
-                    error: 'Only one face can be registered at a time'
-                };
+                return { success: false, error: 'Only one face can be registered at a time' };
             }
-            console.log('Step 2: Indexing face...');
+
+            // Step 2: Index face
             const command = new IndexFacesCommand({
-                CollectionId: this.COLLECTION_ID,
+                CollectionId: COLLECTION_ID,
                 Image: { Bytes: imageBytes },
                 ExternalImageId: userId,
                 DetectionAttributes: ['ALL'],
                 MaxFaces: 1,
-                QualityFilter: 'AUTO'
+                QualityFilter: 'HIGH'
             });
+
             const response = await rekognitionClient.send(command);
-            if (!response.FaceRecords || response.FaceRecords.length === 0) {
+            if (!response.FaceRecords?.[0]?.Face?.FaceId) {
                 console.warn('❌ No faces indexed');
                 console.groupEnd();
-                return {
-                    success: false,
-                    error: 'Failed to index face'
-                };
+                return { success: false, error: 'Failed to index face' };
             }
-            const faceRecord = response.FaceRecords[0];
-            const faceId = faceRecord.Face?.FaceId;
+
+            const faceId = response.FaceRecords[0].Face.FaceId;
+            const faceDetails = response.FaceRecords[0].FaceDetail;
+            
             console.log('✅ Face indexed successfully:', faceId);
-            console.log('Face attributes:', faceRecord.FaceDetail);
-            // Save the indexed face data to our database
-            await this.saveFaceData(userId, faceId, faceRecord.FaceDetail);
-            // Save the image to storage for reference
-            const fileName = `${Date.now()}.jpg`;
-            const filePath = `${userId}/${fileName}`;
-            const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('face-data')
-                .upload(filePath, imageBytes, {
-                contentType: 'image/jpeg',
-                upsert: false
-            });
-            if (!uploadError) {
-                // Get public URL
-                const { data: { publicUrl } } = supabase.storage
-                    .from('face-data')
-                    .getPublicUrl(filePath);
-                // Update face_data with image path and URL
-                await supabase
-                    .from('face_data')
-                    .update({
-                    face_data: {
-                        aws_face_id: faceId,
-                        attributes: faceRecord.FaceDetail,
-                        image_path: filePath,
-                        public_url: publicUrl
-                    }
-                })
-                    .eq('user_id', userId);
-            }
-            // Now find matches using the face ID (one API call to AWS instead of many)
-            console.log('Step 3: Searching for face matches using FaceId...');
-            const matchedPhotos = await this.searchFacesByFaceId(faceId, userId);
-            if (matchedPhotos.length > 0) {
-                console.log(`✅ Found ${matchedPhotos.length} photos with matching faces`);
-            }
-            else {
-                console.log('No matching photos found');
-            }
-            console.groupEnd();
+
+            // Step 3: Store face data
+            await Promise.all([
+                // Store in user_face_data
+                storeFaceId(userId, faceId),
+                
+                // Store detailed face data
+                FaceDetectionService.storeFaceDetails(faceId, faceDetails)
+            ]);
+
+            // Step 4: Search for matches
+            const matches = await this.searchFacesByFaceId(faceId, userId);
+            console.log(`Found ${matches.length} photos with matching faces`);
+
             return {
                 success: true,
                 faceId,
-                attributes: faceRecord.FaceDetail
+                matchCount: matches.length
             };
-        }
-        catch (error) {
+        } catch (error) {
             console.error('❌ Error indexing face:', error);
             console.groupEnd();
-            return {
-                success: false,
-                error: error.message || 'Failed to index face'
-            };
+            return { success: false, error: error.message || 'Failed to index face' };
         }
     }
+
+    static async searchFacesByFaceId(faceId, userId) {
+        try {
+            console.log(`[FACE-MATCH] Searching for faces matching FaceId: ${faceId} for user ${userId}`);
+
+            // Search AWS Rekognition
+            const command = new SearchFacesCommand({
+                CollectionId: COLLECTION_ID,
+                FaceId: faceId,
+                MaxFaces: 1000,
+                FaceMatchThreshold: 95
+            });
+
+            const response = await rekognitionClient.send(command);
+            const matches = response.FaceMatches || [];
+
+            // Get matched face IDs
+            const matchedFaceIds = matches.map(match => match.Face.FaceId);
+            
+            // Update face_detection_results with matches
+            if (matchedFaceIds.length > 0) {
+                const { data: photos } = await supabase
+                    .from('face_detection_results')
+                    .select('image_path, face_ids')
+                    .contains('face_ids', matchedFaceIds);
+
+                if (photos) {
+                    // Update matched photos
+                    await Promise.all(photos.map(photo => 
+                        supabase
+                            .from('face_detection_results')
+                            .update({
+                                face_ids: [...new Set([...(photo.face_ids || []), faceId])],
+                                last_accessed: new Date().toISOString()
+                            })
+                            .eq('image_path', photo.image_path)
+                    ));
+                }
+            }
+
+            return matches;
+        } catch (error) {
+            console.error('[FACE-MATCH] Error searching AWS:', error);
+            return [];
+        }
+    }
+
     static async saveFaceData(userId, faceId, attributes) {
         try {
             console.log('[DEBUG-FACESAVE] Saving face data for user:', userId);
@@ -285,129 +299,7 @@ export class FaceIndexingService {
             return false;
         }
     }
-    static async searchFacesByFaceId(faceId, userId) {
-        try {
-            console.log(`[FACE-MATCH] Searching for faces matching FaceId: ${faceId} for user ${userId}`);
-            
-            // First check AWS Rekognition for matches
-            try {
-                const { faces, error } = await this.searchFacesInAWS(faceId);
-                if (error) {
-                    console.error(`[FACE-MATCH] Error searching AWS:`, error);
-                } else {
-                    console.log(`[FACE-MATCH] Found ${faces.length} matching faces in AWS Rekognition`);
-                    
-                    // Log detail about each match for debugging
-                    faces.forEach((face, index) => {
-                        console.log(`[FACE-MATCH-DEBUG] Match ${index+1}: similarity=${face.Similarity}, externalImageId=${face.Face?.ExternalImageId}`);
-                    });
-                }
-            } catch (awsError) {
-                console.error(`[FACE-MATCH] AWS Rekognition search error:`, awsError);
-            }
-            
-            // Try to directly get photos from storage bucket - most reliable approach
-            try {
-                // Get the list of all user folders in the photos bucket
-                const { data: folders, error: folderError } = await supabase.storage
-                    .from('photos')
-                    .list();
-                    
-                if (folderError) {
-                    console.error(`[FACE-MATCH] Error accessing storage folders: ${folderError.message}`);
-                    return [];
-                }
-                
-                if (!folders || folders.length === 0) {
-                    console.log(`[FACE-MATCH] No folders found in storage`);
-                    return [];
-                }
-                
-                console.log(`[FACE-MATCH] Found ${folders.length} folders in storage`);
-                
-                // Create basic user info for matching
-                const userInfo = {
-                    userId: userId,
-                    faceId: faceId,
-                    fullName: 'User',
-                    confidence: 95
-                };
-                
-                // Get all photo files from all user folders (except current user)
-                const allPhotos = [];
-                
-                for (const folder of folders) {
-                    // Skip the current user's folder and any non-folder items
-                    if (!folder.name || folder.name === userId || folder.name.startsWith('.')) {
-                        continue;
-                    }
-                    
-                    try {
-                        const { data: files, error: filesError } = await supabase.storage
-                            .from('photos')
-                            .list(folder.name);
-                            
-                        if (filesError) {
-                            console.error(`[FACE-MATCH] Error listing files in folder ${folder.name}: ${filesError.message}`);
-                            continue;
-                        }
-                        
-                        if (!files || files.length === 0) {
-                            continue;
-                        }
-                        
-                        console.log(`[FACE-MATCH] Found ${files.length} files in folder ${folder.name}`);
-                        
-                        // Filter for image files and create photo objects
-                        const photoFiles = files.filter(file => 
-                            file.name.endsWith('.jpg') || 
-                            file.name.endsWith('.jpeg') || 
-                            file.name.endsWith('.png')
-                        );
-                        
-                        for (const file of photoFiles) {
-                            const storagePath = `${folder.name}/${file.name}`;
-                            const { data: { publicUrl } } = supabase.storage
-                                .from('photos')
-                                .getPublicUrl(storagePath);
-                                
-                            allPhotos.push({
-                                id: `${folder.name}-${file.name}`,
-                                public_url: publicUrl,
-                                url: publicUrl,
-                                uploaded_by: folder.name,
-                                storage_path: storagePath,
-                                file_name: file.name,
-                                created_at: file.created_at || new Date().toISOString(),
-                                matched_users: [userInfo],
-                                face_ids: [faceId],
-                                faces: [{faceId: faceId, similarity: 95}]
-                            });
-                        }
-                    } catch (err) {
-                        console.error(`[FACE-MATCH] Error processing folder ${folder.name}: ${err.message}`);
-                    }
-                }
-                
-                console.log(`[FACE-MATCH] Created ${allPhotos.length} photo objects from storage`);
-                
-                if (allPhotos.length === 0) {
-                    // No photos found in storage - try one more approach with just AWS data
-                    return this.createSyntheticPhotosFromAWS(faces, userId);
-                }
-                
-                return allPhotos;
-                
-            } catch (storageError) {
-                console.error(`[FACE-MATCH] Storage access error: ${storageError.message}`);
-                // Last resort - create synthetic photos from AWS data
-                return this.createSyntheticPhotosFromAWS(faces, userId);
-            }
-        } catch (error) {
-            console.error(`[FACE-MATCH] Error: ${error.message}`);
-            return [];
-        }
-    }
+
     static async createSyntheticPhotosFromAWS(faceMatches, userId) {
         try {
             console.log(`[FACE-MATCH] Creating synthetic photos from ${faceMatches.length} AWS matches`);
@@ -448,6 +340,7 @@ export class FaceIndexingService {
             return [];
         }
     }
+
     static async startBackgroundProcessing() {
         setInterval(() => {
             if (!this.isProcessing) {
@@ -455,6 +348,7 @@ export class FaceIndexingService {
             }
         }, this.BACKGROUND_INTERVAL);
     }
+
     static async processBackgroundTasks() {
         if (this.backgroundTasks.length === 0)
             return;
@@ -481,6 +375,7 @@ export class FaceIndexingService {
             this.isProcessing = false;
         }
     }
+
     static async processFaceRegistration(task) {
         console.group('Processing Face Registration');
         try {
@@ -512,6 +407,7 @@ export class FaceIndexingService {
             console.groupEnd();
         }
     }
+
     static async processPhotoMatching(task) {
         console.group('Processing Photo Matching');
         try {

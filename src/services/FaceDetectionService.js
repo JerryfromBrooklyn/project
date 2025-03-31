@@ -21,7 +21,7 @@ class FaceDetectionService {
    * @param {string|Blob} imageSource - Image source
    * @returns {Promise<Object>} Detection results
    */
-  static async detectFaces(imageSource, options = {}) {
+  static async detectFaces(imageSource) {
     try {
       console.log('[FACE-DETECT] Starting face detection');
       
@@ -85,15 +85,24 @@ class FaceDetectionService {
           .upsert({
             image_path: imageSource,
             face_count: result.faceCount,
-            faces: result.faces,
-            created_at: new Date().toISOString()
+            face_ids: [], // Will be populated when faces are indexed
+            confidence_scores: result.faces.map(f => f.Confidence),
+            last_accessed: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           });
       }
 
       return result;
     } catch (error) {
       console.error('[FACE-DETECT] Error:', error);
-      return this.getSafeResponse('Face detection failed', error);
+      return {
+        success: false,
+        message: 'Face detection failed',
+        faceCount: 0,
+        faces: [],
+        error: error.toString()
+      };
     }
   }
 
@@ -148,21 +157,40 @@ class FaceDetectionService {
   }
 
   /**
-   * Create a safe default response for face detection
-   * @param {string} message - Error message
-   * @param {Error} error - Original error object (optional)
-   * @returns {Object} - Safe response object
+   * Extract essential face data for storage
+   * @param {Object} face - Face details from AWS
+   * @returns {Object} Essential face data
    */
-  static getSafeResponse(message = 'Face detection failed', error = null) {
+  static extractEssentialFaceData(face) {
     return {
-      success: false,
-      message,
-      faceCount: 0,
-      faces: [],
-      error: error ? error.toString() : undefined
+      confidence: face.Confidence,
+      boundingBox: face.BoundingBox,
+      landmarks: face.Landmarks,
+      pose: face.Pose,
+      quality: face.Quality
     };
   }
-  
+
+  /**
+   * Store detailed face data
+   * @param {string} faceId - AWS face ID
+   * @param {Object} faceDetails - Full face details
+   */
+  static async storeFaceDetails(faceId, faceDetails) {
+    try {
+      await supabase
+        .from('face_details')
+        .upsert({
+          face_id: faceId,
+          details: faceDetails,
+          last_accessed: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+    } catch (error) {
+      console.error('[FACE-DETECT] Error storing face details:', error);
+    }
+  }
+
   /**
    * Convert a Blob to base64 string
    * @param {Blob} blob - Image blob

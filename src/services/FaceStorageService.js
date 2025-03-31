@@ -1,128 +1,84 @@
 // FaceStorageService.js - Utility to store and retrieve face IDs using Supabase Storage
-import { supabase, supabaseAdmin, getFaceIdFromCache, cacheFaceId } from '../lib/supabaseClient'; // Using the correct path
+import { supabase } from '../lib/supabaseClient';
 
 const STORAGE_BUCKET = 'user-data';
 const FACE_ID_FILE = 'face-id.json';
 
 /**
- * Stores a user's face ID in a dedicated storage file
+ * Store a user's face ID in the database
  * @param {string} userId - The user's ID
- * @param {string} faceId - The face ID from AWS Rekognition
- * @returns {Promise<boolean>} - Success status
+ * @param {string} faceId - The AWS face ID
+ * @returns {Promise<void>}
  */
 export const storeFaceId = async (userId, faceId) => {
-  try {
     if (!userId || !faceId) {
-      console.error('[FaceStorage] Missing userId or faceId');
-      return false;
+        console.warn('[FaceStorage] Missing userId or faceId');
+        return;
     }
 
-    console.log(`[FaceStorage] Storing face ID ${faceId} for user ${userId}`);
-    
-    // Store the face ID in a user-specific file using supabaseAdmin for permissions
-    const filePath = `${userId}/${FACE_ID_FILE}`;
-    const content = JSON.stringify({ faceId, updatedAt: new Date().toISOString() });
-    
     try {
-      // Use supabaseAdmin for guaranteed permissions
-      const { error } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(filePath, content, {
-          upsert: true,
-          contentType: 'application/json'
-        });
-        
-      if (error) {
+        console.log(`[FaceStorage] Storing face ID ${faceId} for user ${userId}`);
+
+        // Store in user_face_data table
+        const { error: userFaceError } = await supabase
+            .from('user_face_data')
+            .upsert({
+                user_id: userId,
+                face_id: faceId,
+                updated_at: new Date().toISOString()
+            }, {
+                onConflict: 'user_id'
+            });
+
+        if (userFaceError) {
+            console.error('[FaceStorage] Error storing in user_face_data:', userFaceError);
+            throw userFaceError;
+        }
+
+        console.log('[FaceStorage] Successfully stored face ID');
+    } catch (error) {
         console.error('[FaceStorage] Error storing face ID:', error);
-        return false;
-      }
-      
-      // Cache the face ID for future use
-      cacheFaceId(userId, faceId);
-      
-      // Also store in localStorage as a fallback
-      localStorage.setItem(`faceId_${userId}`, JSON.stringify({ faceId, updatedAt: new Date().toISOString() }));
-      
-      console.log(`[FaceStorage] Successfully stored face ID for user ${userId}`);
-      return true;
-    } catch (uploadError) {
-      console.error('[FaceStorage] Upload error:', uploadError);
-      // We'll still return true because the face ID may be saved in the database
-      // This is just a backup storage mechanism
-      return true;
+        throw error;
     }
-  } catch (err) {
-    console.error('[FaceStorage] Unexpected error storing face ID:', err);
-    return false;
-  }
 };
 
 /**
- * Retrieves a user's face ID from storage
+ * Get a user's face ID from the database
  * @param {string} userId - The user's ID
  * @returns {Promise<string|null>} - The face ID or null if not found
  */
 export const getFaceId = async (userId) => {
-  try {
     if (!userId) {
-      console.error('[FaceStorage] Missing userId');
-      return null;
+        console.warn('[FaceStorage] Missing userId');
+        return null;
     }
-    
-    // Check cache first
-    const cachedFaceId = getFaceIdFromCache(userId);
-    if (cachedFaceId) {
-      console.log(`[FaceStorage] Retrieved face ID ${cachedFaceId} for user ${userId} (from cache)`);
-      return cachedFaceId;
-    }
-    
-    console.log(`[FaceStorage] Retrieving face ID for user ${userId}`);
-    
-    // Get the face ID file for this user
-    const filePath = `${userId}/${FACE_ID_FILE}`;
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .download(filePath);
-      
-    if (error) {
-      // Check if error is due to network issues
-      if (error.statusCode === 0 || error.message?.includes('network')) {
-        console.warn(`[FaceStorage] Network error when retrieving face ID for ${userId}. Using fallback.`);
-        // Try to get from localStorage as fallback
-        const fallbackData = localStorage.getItem(`faceId_${userId}`);
-        if (fallbackData) {
-          try {
-            const { faceId } = JSON.parse(fallbackData);
-            if (faceId) {
-              cacheFaceId(userId, faceId);
-              return faceId;
-            }
-          } catch (e) {
-            console.error('[FaceStorage] Error parsing fallback data:', e);
-          }
+
+    try {
+        console.log(`[FaceStorage] Getting face ID for user ${userId}`);
+
+        // Try user_face_data table
+        const { data, error } = await supabase
+            .from('user_face_data')
+            .select('face_id')
+            .eq('user_id', userId)
+            .single();
+
+        if (error) {
+            console.error('[FaceStorage] Error getting face ID:', error);
+            return null;
         }
-      }
-      
-      console.log(`[FaceStorage] Face ID file not found for user ${userId}:`, error);
-      return null;
+
+        if (data?.face_id) {
+            console.log('[FaceStorage] Found face ID:', data.face_id);
+            return data.face_id;
+        }
+
+        console.log('[FaceStorage] No face ID found');
+        return null;
+    } catch (error) {
+        console.error('[FaceStorage] Error getting face ID:', error);
+        return null;
     }
-    
-    // Parse the JSON content
-    const text = await data.text();
-    const { faceId } = JSON.parse(text);
-    
-    // Cache the result
-    cacheFaceId(userId, faceId);
-    
-    // Also store in localStorage for offline fallback
-    localStorage.setItem(`faceId_${userId}`, JSON.stringify({ faceId, updatedAt: new Date().toISOString() }));
-    
-    console.log(`[FaceStorage] Retrieved face ID ${faceId} for user ${userId}`);
-    return faceId;
-  } catch (err) {
-    console.error('[FaceStorage] Error retrieving face ID:', err);
-    return null;
-  }
 };
 
 /**
