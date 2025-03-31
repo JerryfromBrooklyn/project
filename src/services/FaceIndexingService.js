@@ -286,160 +286,170 @@ export class FaceIndexingService {
     }
     static async searchFacesByFaceId(faceId, userId) {
         try {
-            console.log(`Searching for faces matching FaceId: ${faceId}`);
-            // Use SearchFaces API (which is more efficient than SearchFacesByImage)
+            console.log(`[FACE-MATCH] Searching for faces matching FaceId: ${faceId} for user ${userId}`);
+            
+            // Step 1: Use AWS Rekognition SearchFaces API to find similar faces
             const command = new SearchFacesCommand({
-                CollectionId: this.COLLECTION_ID,
+                CollectionId: COLLECTION_ID,
                 FaceId: faceId,
                 FaceMatchThreshold: FACE_MATCH_THRESHOLD,
-                MaxFaces: 1000 // Set high to get all possible matches in one call
+                MaxFaces: 1000 // Get as many matches as possible
             });
+            
+            console.log(`[FACE-MATCH] Querying AWS Rekognition for matches to face ID: ${faceId}`);
             const response = await rekognitionClient.send(command);
+            
             if (!response.FaceMatches?.length) {
-                console.log('No matching faces found');
+                console.log(`[FACE-MATCH] No matching faces found in AWS collection`);
                 return [];
             }
-            console.log(`Found ${response.FaceMatches.length} matching faces in AWS collection`);
+            
+            console.log(`[FACE-MATCH] Found ${response.FaceMatches.length} matching faces in AWS Rekognition`);
+            
             // Get the matched face IDs from AWS
             const matchedFaceIds = response.FaceMatches.map(match => match.Face?.FaceId || '').filter(id => !!id);
-            console.log(`Matching face IDs: ${matchedFaceIds.slice(0, 5).join(', ')}${matchedFaceIds.length > 5 ? ' (and more)' : ''}`);
-            // First, let's fetch all the photos from the database and manually filter them
-            // This is a more robust approach than using the filter operator which might be incompatible with the data structure
-            console.log('Fetching all photos to check for matches...');
-            const { data: allPhotos, error: photosError } = await supabase
-                .from('photos')
-                .select('id, faces, matched_users, face_ids');
-            if (photosError) {
-                console.error('Error fetching photos:', photosError);
-                return [];
+            console.log(`[FACE-MATCH] Matching face IDs from AWS: ${matchedFaceIds.slice(0, 5).join(', ')}${matchedFaceIds.length > 5 ? '...' : ''}`);
+            
+            // Also include the original face ID in our search
+            if (!matchedFaceIds.includes(faceId)) {
+                matchedFaceIds.push(faceId);
             }
-            if (!allPhotos?.length) {
-                console.log('No photos found in database');
-                return [];
-            }
-            console.log(`Fetched ${allPhotos.length} photos from database. Checking for matches...`);
-            // Log the structure of the first photo to help debug
-            if (allPhotos.length > 0) {
-                console.log('First photo structure:', JSON.stringify(allPhotos[0], null, 2));
-            }
-            // Find photos that have matching face IDs in various possible fields
-            const matchingPhotos = allPhotos.filter(photo => {
-                // Check if any face in the faces array matches the AWS face IDs
-                if (Array.isArray(photo.faces)) {
-                    const hasFaceMatch = photo.faces.some(face => face.faceId && matchedFaceIds.includes(face.faceId));
-                    if (hasFaceMatch)
-                        return true;
-                }
-                // Check face_ids if available
-                if (Array.isArray(photo.face_ids)) {
-                    const hasFaceIdMatch = photo.face_ids.some(id => matchedFaceIds.includes(id));
-                    if (hasFaceIdMatch)
-                        return true;
-                }
-                return false;
-            });
-            // If we didn't find matches in the photos table, check the unassociated_faces table
-            if (matchingPhotos.length === 0) {
-                console.log('No matches found in photos table, checking unassociated_faces table...');
-                try {
-                    const { data: unassociatedFaces, error: unassociatedError } = await supabase
-                        .from('unassociated_faces')
-                        .select('photo_id')
-                        .in('face_id', matchedFaceIds);
-                    if (unassociatedError) {
-                        console.error('Error checking unassociated_faces:', unassociatedError);
-                    }
-                    else if (unassociatedFaces && unassociatedFaces.length > 0) {
-                        console.log(`Found ${unassociatedFaces.length} matches in unassociated_faces table`);
-                        // Get the unique photo IDs
-                        const photoIds = [...new Set(unassociatedFaces.map(face => face.photo_id))];
-                        // Fetch these photos
-                        const { data: additionalPhotos, error: additionalError } = await supabase
-                            .from('photos')
-                            .select('id, faces, matched_users, face_ids')
-                            .in('id', photoIds);
-                        if (additionalError) {
-                            console.error('Error fetching additional photos:', additionalError);
-                        }
-                        else if (additionalPhotos && additionalPhotos.length > 0) {
-                            console.log(`Fetched ${additionalPhotos.length} additional photos`);
-                            matchingPhotos.push(...additionalPhotos);
-                        }
-                    }
-                }
-                catch (error) {
-                    console.error('Error querying unassociated_faces:', error);
-                }
-            }
-            if (!matchingPhotos.length) {
-                console.log('No photos found with matching face IDs after manual filtering');
-                return [];
-            }
-            console.log(`Found ${matchingPhotos.length} photos with matching face IDs`);
-            // For each photo, check if the user is already matched
-            const photosToUpdate = matchingPhotos.filter(photo => {
-                if (!Array.isArray(photo.matched_users))
-                    return true; // If no matched_users, definitely need to update
-                return !photo.matched_users.some((match) => match.userId === userId);
-            });
-            if (photosToUpdate.length === 0) {
-                console.log('User already matched with all photos');
-                return [];
-            }
-            console.log(`Found ${photosToUpdate.length} photos to update with new match`);
+            
             // Get user data for the match
+            console.log(`[FACE-MATCH] Fetching user data for ${userId}`);
             const { data: userData, error: userError } = await supabase
                 .from('users')
-                .select(`
-          id,
-          full_name,
-          avatar_url
-        `)
+                .select('id, full_name, avatar_url')
                 .eq('id', userId)
                 .single();
-            if (userError || !userData) {
-                console.log('User data not found:', userError);
+            
+            if (userError) {
+                console.error(`[FACE-MATCH] Error fetching user data:`, userError);
                 return [];
             }
-            // Update each photo with the new match
+            
+            // Step 2: Search all photos directly instead of using a lookup table
+            // First get photos from the photos table
+            console.log(`[FACE-MATCH] Searching photos using face IDs`);
+            
+            // This query fetches any photos that might contain these faces
+            // We'll need to check several fields where face IDs might be stored
+            const { data: photosWithFaces, error: photosError } = await supabase
+                .from('all_photos')
+                .select('id, faces, face_ids, matched_users, source_table')
+                .not('matched_users', 'cs', `[{"userId":"${userId}"}]`);
+            
+            if (photosError) {
+                console.error(`[FACE-MATCH] Error fetching photos:`, photosError);
+                return [];
+            }
+            
+            console.log(`[FACE-MATCH] Found ${photosWithFaces?.length || 0} total unmatched photos to check`);
+            
+            // Filter photos that contain any of the matched face IDs
+            const matchingPhotos = [];
+            
+            for (const photo of (photosWithFaces || [])) {
+                let hasMatch = false;
+                
+                // Check in the face_ids array
+                if (Array.isArray(photo.face_ids)) {
+                    hasMatch = photo.face_ids.some(id => 
+                        matchedFaceIds.includes(id)
+                    );
+                }
+                
+                // Also check in the faces JSONB array
+                if (!hasMatch && photo.faces && Array.isArray(photo.faces)) {
+                    hasMatch = photo.faces.some(face => 
+                        face.faceId && matchedFaceIds.includes(face.faceId)
+                    );
+                }
+                
+                if (hasMatch) {
+                    matchingPhotos.push(photo);
+                }
+            }
+            
+            console.log(`[FACE-MATCH] Found ${matchingPhotos.length} photos matching user ${userId}`);
+            
+            // Step 3: Update each matching photo with the user's info
             const updatedPhotoIds = [];
-            for (const photo of photosToUpdate) {
-                // Find a matching face to get the confidence score
-                let confidence = FACE_MATCH_THRESHOLD; // Default confidence threshold
-                // Try to find confidence from faces array
+            
+            for (const photo of matchingPhotos) {
+                // Find matching face to get confidence score
+                let confidence = 95; // Default high confidence
+                let similarity = 90; // Default similarity
+                
+                // Try to find confidence from the faces array
                 if (Array.isArray(photo.faces)) {
-                    const matchingFace = photo.faces.find(face => face.faceId && matchedFaceIds.includes(face.faceId));
-                    if (matchingFace && matchingFace.confidence) {
-                        confidence = matchingFace.confidence;
+                    for (const face of photo.faces) {
+                        if (face.faceId && matchedFaceIds.includes(face.faceId)) {
+                            confidence = face.confidence || confidence;
+                            break;
+                        }
                     }
                 }
-                // Create the new match object
+                
+                // Find matching AWS face for similarity score
+                for (const match of response.FaceMatches) {
+                    if (match.Face?.FaceId && matchedFaceIds.includes(match.Face.FaceId)) {
+                        similarity = match.Similarity || similarity;
+                        break;
+                    }
+                }
+                
+                // Create new match object
                 const newMatch = {
                     userId,
                     fullName: userData.full_name || 'Unknown User',
                     avatarUrl: userData.avatar_url || null,
-                    confidence
+                    confidence,
+                    similarity,
+                    faceId
                 };
-                // Update the photo
+                
+                console.log(`[FACE-MATCH] Adding user ${userId} to matched_users for photo ${photo.id}`);
+                
+                // Add email field if we have it
+                try {
+                    const { data: profileData } = await supabase
+                        .from('profiles')
+                        .select('email')
+                        .eq('id', userId)
+                        .single();
+                        
+                    if (profileData?.email) {
+                        newMatch.email = profileData.email;
+                    }
+                } catch (err) {
+                    console.log(`[FACE-MATCH] Could not fetch email for user ${userId}`);
+                }
+                
+                // Update the photo based on which table it's from
                 const existingMatches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
                 const updatedMatches = [...existingMatches, newMatch];
-                console.log(`Updating photo ${photo.id} with matched user ${userId}, confidence: ${confidence}`);
+                
+                // Determine which table to update
+                const tableName = photo.source_table || 'photos';
+                
                 const { error: updateError } = await supabase
-                    .from('photos')
+                    .from(tableName)
                     .update({ matched_users: updatedMatches })
                     .eq('id', photo.id);
-                if (!updateError) {
+                    
+                if (updateError) {
+                    console.error(`[FACE-MATCH] Error updating photo ${photo.id}:`, updateError);
+                } else {
                     updatedPhotoIds.push(photo.id);
-                    console.log(`Successfully updated photo ${photo.id} with new user match`);
-                }
-                else {
-                    console.error(`Error updating photo ${photo.id}:`, updateError);
+                    console.log(`[FACE-MATCH] Successfully added user ${userId} to photo ${photo.id}`);
                 }
             }
+            
+            console.log(`[FACE-MATCH] Updated ${updatedPhotoIds.length} photos with user ${userId}`);
             return updatedPhotoIds;
-        }
-        catch (error) {
-            console.error('Error searching faces by FaceId:', error);
+        } catch (error) {
+            console.error('[FACE-MATCH] Error searching faces by FaceId:', error);
             return [];
         }
     }

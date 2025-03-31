@@ -188,6 +188,19 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
             // Additional logging for storage-based approach
             console.log('Storing face ID in backup storage system');
             
+            // Store face ID in the storage system
+            await storeFaceId(user.id, faceId);
+            
+            // IMPORTANT: Force a match scan for all existing photos
+            console.log('[FACE-MATCH] Triggering photo matching for newly registered user');
+            try {
+                await FaceIndexingService.searchFacesByFaceId(faceId, user.id);
+                console.log('[FACE-MATCH] Successfully matched user with existing photos');
+            } catch (matchError) {
+                console.error('[FACE-MATCH] Error matching user with photos:', matchError);
+                // Continue with registration even if matching fails
+            }
+            
             // If using direct RPC
             if (FACE_REGISTER_METHOD === 'RPC') {
                 console.log('Using RPC method to register face');
