@@ -1,38 +1,56 @@
 import { supabase } from '../lib/supabaseClient';
-import { RekognitionClient, DetectFacesCommand } from '@aws-sdk/client-rekognition';
+import { RekognitionClient, DetectFacesCommand, IndexFacesCommand, SearchFacesByImageCommand } from '@aws-sdk/client-rekognition';
 
 // Initialize AWS Rekognition client once
 const rekognitionClient = new RekognitionClient({
-  region: 'us-east-1', // Your AWS region
+  region: 'us-east-1',
   credentials: {
     accessKeyId: import.meta.env.VITE_AWS_ACCESS_KEY_ID,
     secretAccessKey: import.meta.env.VITE_AWS_SECRET_ACCESS_KEY
   }
 });
 
+const COLLECTION_ID = 'user-faces';
+
 /**
  * Service for handling face detection with proper error handling
  */
 class FaceDetectionService {
   /**
-   * Detect faces in an image using AWS Rekognition directly
-   * @param {string|Blob} imageSource - Either a base64 string, Blob, or storage path
-   * @param {Object} options - Additional options
-   * @returns {Promise<Object>} - Face detection results with safe fallbacks
+   * Detect faces in an image and store the results
+   * @param {string|Blob} imageSource - Image source
+   * @returns {Promise<Object>} Detection results
    */
   static async detectFaces(imageSource, options = {}) {
     try {
       console.log('[FACE-DETECT] Starting face detection');
       
+      // First check if we have cached results for this image
+      if (typeof imageSource === 'string' && !imageSource.startsWith('data:image')) {
+        const { data: existingResults } = await supabase
+          .from('face_detection_results')
+          .select('*')
+          .eq('image_path', imageSource)
+          .single();
+        
+        if (existingResults) {
+          console.log('[FACE-DETECT] Using cached results');
+          return {
+            success: true,
+            message: 'Using cached face detection results',
+            faceCount: existingResults.face_count,
+            faces: existingResults.faces
+          };
+        }
+      }
+
       // Get image bytes
       let imageBytes;
       if (typeof imageSource === 'string') {
         if (imageSource.startsWith('data:image')) {
-          // Convert base64 to binary
           const base64Data = imageSource.replace(/^data:image\/\w+;base64,/, '');
           imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
         } else {
-          // Download from storage
           const { data, error } = await supabase.storage
             .from('photos')
             .download(imageSource);
@@ -42,14 +60,12 @@ class FaceDetectionService {
       } else if (imageSource instanceof Blob) {
         imageBytes = new Uint8Array(await imageSource.arrayBuffer());
       } else {
-        throw new Error('Invalid image source. Must be base64 string, storage path, or Blob');
+        throw new Error('Invalid image source');
       }
-      
-      // Create and send the DetectFaces command
+
+      // Detect faces
       const command = new DetectFacesCommand({
-        Image: {
-          Bytes: imageBytes
-        },
+        Image: { Bytes: imageBytes },
         Attributes: ['ALL']
       });
 
@@ -62,14 +78,75 @@ class FaceDetectionService {
         faces: response.FaceDetails || []
       };
 
-      console.log(`[FACE-DETECT] Detection completed successfully. Found ${result.faceCount} faces.`);
+      // Cache results if this is a stored image
+      if (typeof imageSource === 'string' && !imageSource.startsWith('data:image')) {
+        await supabase
+          .from('face_detection_results')
+          .upsert({
+            image_path: imageSource,
+            face_count: result.faceCount,
+            faces: result.faces,
+            created_at: new Date().toISOString()
+          });
+      }
+
       return result;
     } catch (error) {
-      console.error('[FACE-DETECT] Error in face detection:', error);
-      return this.getSafeResponse('Error in face detection', error);
+      console.error('[FACE-DETECT] Error:', error);
+      return this.getSafeResponse('Face detection failed', error);
     }
   }
-  
+
+  /**
+   * Index a face in the collection
+   * @param {Uint8Array} imageBytes - Image data
+   * @returns {Promise<string>} Face ID
+   */
+  static async indexFace(imageBytes) {
+    try {
+      const command = new IndexFacesCommand({
+        CollectionId: COLLECTION_ID,
+        Image: { Bytes: imageBytes },
+        DetectionAttributes: ['ALL'],
+        MaxFaces: 1,
+        QualityFilter: 'HIGH'
+      });
+
+      const response = await rekognitionClient.send(command);
+      
+      if (!response.FaceRecords?.[0]?.Face?.FaceId) {
+        throw new Error('No face indexed');
+      }
+
+      return response.FaceRecords[0].Face.FaceId;
+    } catch (error) {
+      console.error('[FACE-INDEX] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search for matching faces
+   * @param {Uint8Array} imageBytes - Image data
+   * @returns {Promise<Array>} Matching faces
+   */
+  static async searchFaces(imageBytes) {
+    try {
+      const command = new SearchFacesByImageCommand({
+        CollectionId: COLLECTION_ID,
+        Image: { Bytes: imageBytes },
+        MaxFaces: 100,
+        FaceMatchThreshold: 90
+      });
+
+      const response = await rekognitionClient.send(command);
+      return response.FaceMatches || [];
+    } catch (error) {
+      console.error('[FACE-SEARCH] Error:', error);
+      return [];
+    }
+  }
+
   /**
    * Create a safe default response for face detection
    * @param {string} message - Error message
@@ -79,7 +156,7 @@ class FaceDetectionService {
   static getSafeResponse(message = 'Face detection failed', error = null) {
     return {
       success: false,
-      message: message,
+      message,
       faceCount: 0,
       faces: [],
       error: error ? error.toString() : undefined
@@ -106,8 +183,7 @@ class FaceDetectionService {
    * @returns {Array} - Array of face details or empty array if none
    */
   static extractFaces(response) {
-    if (!response || !response.success || !response.faces) {
-      console.warn('[FACE-DETECT] No valid faces to extract');
+    if (!response?.success || !response?.faces) {
       return [];
     }
     
