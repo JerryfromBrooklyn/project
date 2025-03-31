@@ -54,7 +54,6 @@ export async function storeFaceId(userId, faceId) {
         .upsert({
           user_id: userId,
           key: 'face_id',
-          value: faceId,
           updated_at: new Date().toISOString()
         });
       

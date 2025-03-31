@@ -1,0 +1,745 @@
+lockdown-install.js:1 Removing unpermitted intrinsics
+chunk-TAAGB4MZ.js?v=03a47c19:21580 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+supabaseClient.js:65 [Supabase] Initializing with URL: https://gmupwzjxirpkskolsuix.supabase.co
+supabaseClient.js:66 [Supabase] Anon key available: true
+supabaseClient.js:67 [Supabase] Service key available: true
+supabaseClient.js:77 Multiple GoTrueClient instances detected in the same browser context. It is not an error, but this should be avoided as it may produce undefined behavior when used concurrently under the same storage key.
+_GoTrueClient @ @supabase_supabase-js.js?v=03a47c19:5042
+SupabaseAuthClient @ @supabase_supabase-js.js?v=03a47c19:6908
+_initSupabaseAuthClient @ @supabase_supabase-js.js?v=03a47c19:7104
+SupabaseClient @ @supabase_supabase-js.js?v=03a47c19:6977
+createClient @ @supabase_supabase-js.js?v=03a47c19:7144
+(anonymous) @ supabaseClient.js:77
+aws-config.js:43 Checking for existing face collection...
+aws-config.js:86 [DEBUG] Testing AWS Rekognition connectivity...
+FaceIndexingService.js:874 Face Collection Initialization
+FaceIndexingService.js:875 🔄 Initializing face collection...
+FaceIndexingService.js:1693 [DEBUG] Exposing FaceIndexingService globally
+aws-config.js:86 [DEBUG] Testing AWS Rekognition connectivity...
+react-router-dom.js?v=03a47c19:4410 ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+warnOnce @ react-router-dom.js?v=03a47c19:4410
+logDeprecation @ react-router-dom.js?v=03a47c19:4413
+logV6DeprecationWarnings @ react-router-dom.js?v=03a47c19:4416
+(anonymous) @ react-router-dom.js?v=03a47c19:5291
+commitHookEffectListMount @ chunk-TAAGB4MZ.js?v=03a47c19:16936
+commitPassiveMountOnFiber @ chunk-TAAGB4MZ.js?v=03a47c19:18184
+commitPassiveMountEffects_complete @ chunk-TAAGB4MZ.js?v=03a47c19:18157
+commitPassiveMountEffects_begin @ chunk-TAAGB4MZ.js?v=03a47c19:18147
+commitPassiveMountEffects @ chunk-TAAGB4MZ.js?v=03a47c19:18137
+flushPassiveEffectsImpl @ chunk-TAAGB4MZ.js?v=03a47c19:19518
+flushPassiveEffects @ chunk-TAAGB4MZ.js?v=03a47c19:19475
+(anonymous) @ chunk-TAAGB4MZ.js?v=03a47c19:19356
+workLoop @ chunk-TAAGB4MZ.js?v=03a47c19:197
+flushWork @ chunk-TAAGB4MZ.js?v=03a47c19:176
+performWorkUntilDeadline @ chunk-TAAGB4MZ.js?v=03a47c19:384
+react-router-dom.js?v=03a47c19:4410 ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+warnOnce @ react-router-dom.js?v=03a47c19:4410
+logDeprecation @ react-router-dom.js?v=03a47c19:4413
+logV6DeprecationWarnings @ react-router-dom.js?v=03a47c19:4419
+(anonymous) @ react-router-dom.js?v=03a47c19:5291
+commitHookEffectListMount @ chunk-TAAGB4MZ.js?v=03a47c19:16936
+commitPassiveMountOnFiber @ chunk-TAAGB4MZ.js?v=03a47c19:18184
+commitPassiveMountEffects_complete @ chunk-TAAGB4MZ.js?v=03a47c19:18157
+commitPassiveMountEffects_begin @ chunk-TAAGB4MZ.js?v=03a47c19:18147
+commitPassiveMountEffects @ chunk-TAAGB4MZ.js?v=03a47c19:18137
+flushPassiveEffectsImpl @ chunk-TAAGB4MZ.js?v=03a47c19:19518
+flushPassiveEffects @ chunk-TAAGB4MZ.js?v=03a47c19:19475
+(anonymous) @ chunk-TAAGB4MZ.js?v=03a47c19:19356
+workLoop @ chunk-TAAGB4MZ.js?v=03a47c19:197
+flushWork @ chunk-TAAGB4MZ.js?v=03a47c19:176
+performWorkUntilDeadline @ chunk-TAAGB4MZ.js?v=03a47c19:384
+App.js:35 [App] Initializing application resources...
+serviceRoleInit.js:23 [Admin] Starting service resources initialization...
+BackgroundTaskService.js:26 [TASK] Initializing background task processor: batch size 20, interval 60000ms
+BackgroundTaskService.js:42 [TASK] Starting background task processor
+BackgroundTaskService.js:80 [TASK] Checking for pending tasks
+BackgroundTaskService.js:62 [TASK] Stopping background task processor
+App.js:35 [App] Initializing application resources...
+serviceRoleInit.js:23 [Admin] Starting service resources initialization...
+BackgroundTaskService.js:26 [TASK] Initializing background task processor: batch size 20, interval 60000ms
+BackgroundTaskService.js:42 [TASK] Starting background task processor
+BackgroundTaskService.js:80 [TASK] Checking for pending tasks
+aws-config.js:90 [DEBUG] Successfully connected to AWS Rekognition
+aws-config.js:91 [DEBUG] Available collections: (2) ['shmong-faces', 'user-faces']
+aws-config.js:102 [INFO] AWS Rekognition is properly configured and working
+aws-config.js:71 Face collection already exists
+FaceIndexingService.js:890 ✅ Face collection already exists
+aws-config.js:90 [DEBUG] Successfully connected to AWS Rekognition
+aws-config.js:91 [DEBUG] Available collections: (2) ['shmong-faces', 'user-faces']
+main.tsx:10 [INFO] AWS Rekognition is properly configured
+Dashboard.js:715 Warning: A props object containing a "key" prop is being spread into JSX:
+  let props = {key: someKey, onClick: ..., className: ..., children: ...};
+  <button {...props} />
+React keys must be passed directly to JSX without using spread:
+  let props = {onClick: ..., className: ..., children: ...};
+  <button key={someKey} {...props} />
+    at Dashboard (http://localhost:5184/src/pages/Dashboard.js:18:7)
+    at Suspense
+    at ProtectedRoute (http://localhost:5184/src/App.js:51:3)
+    at RenderedRoute (http://localhost:5184/node_modules/.vite/deps/react-router-dom.js?v=03a47c19:4104:5)
+    at Routes (http://localhost:5184/node_modules/.vite/deps/react-router-dom.js?v=03a47c19:4575:5)
+    at AuthProvider (http://localhost:5184/src/context/AuthContext.js:10:3)
+    at Router (http://localhost:5184/node_modules/.vite/deps/react-router-dom.js?v=03a47c19:4518:15)
+    at BrowserRouter (http://localhost:5184/node_modules/.vite/deps/react-router-dom.js?v=03a47c19:5267:5)
+    at App (http://localhost:5184/src/App.js:109:3)
+printWarning @ chunk-PL7FREAV.js?v=03a47c19:64
+error @ chunk-PL7FREAV.js?v=03a47c19:48
+jsxWithValidation @ chunk-PL7FREAV.js?v=03a47c19:868
+jsxWithValidationStatic @ chunk-PL7FREAV.js?v=03a47c19:883
+(anonymous) @ Dashboard.js:715
+renderNavigationButtons @ Dashboard.js:713
+Dashboard @ Dashboard.js:905
+renderWithHooks @ chunk-TAAGB4MZ.js?v=03a47c19:11568
+updateFunctionComponent @ chunk-TAAGB4MZ.js?v=03a47c19:14602
+mountLazyComponent @ chunk-TAAGB4MZ.js?v=03a47c19:14853
+beginWork @ chunk-TAAGB4MZ.js?v=03a47c19:15938
+beginWork$1 @ chunk-TAAGB4MZ.js?v=03a47c19:19781
+performUnitOfWork @ chunk-TAAGB4MZ.js?v=03a47c19:19226
+workLoopConcurrent @ chunk-TAAGB4MZ.js?v=03a47c19:19217
+renderRootConcurrent @ chunk-TAAGB4MZ.js?v=03a47c19:19192
+performConcurrentWorkOnRoot @ chunk-TAAGB4MZ.js?v=03a47c19:18706
+workLoop @ chunk-TAAGB4MZ.js?v=03a47c19:197
+flushWork @ chunk-TAAGB4MZ.js?v=03a47c19:176
+performWorkUntilDeadline @ chunk-TAAGB4MZ.js?v=03a47c19:384
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           POST https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/rpc/process_face_matching_queue 404 (Not Found)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+BackgroundTaskService.js:93 [TASK] RPC not available, using client-side implementation: Could not find the function public.process_face_matching_queue(p_batch_size) in the schema cache
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           POST https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/rpc/process_face_matching_queue 404 (Not Found)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+BackgroundTaskService.js:93 [TASK] RPC not available, using client-side implementation: Could not find the function public.process_face_matching_queue(p_batch_size) in the schema cache
+supabaseAdmin.js:47 [Admin] Bucket user-data already exists
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           GET https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/profiles?select=role&id=eq.6a42ebd6-c1dc-403a-8f5a-464d0e541f28 406 (Not Acceptable)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           GET https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/background_tasks?select=id%2Ctask_type%2Cuser_id%2Cdata%2Cattempts&status=eq.pending&scheduled_for=lte.2025-03-31T13%3A40%3A12.339Z&order=scheduled_for.asc&limit=20 404 (Not Found)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+BackgroundTaskService.js:108 [TASK] Error fetching pending tasks: relation "public.background_tasks" does not exist
+processTasks @ BackgroundTaskService.js:108
+await in processTasks
+start @ BackgroundTaskService.js:46
+initialize @ BackgroundTaskService.js:29
+(anonymous) @ App.js:72
+commitHookEffectListMount @ chunk-TAAGB4MZ.js?v=03a47c19:16936
+invokePassiveEffectMountInDEV @ chunk-TAAGB4MZ.js?v=03a47c19:18352
+invokeEffectsInDev @ chunk-TAAGB4MZ.js?v=03a47c19:19729
+commitDoubleInvokeEffectsInDEV @ chunk-TAAGB4MZ.js?v=03a47c19:19714
+flushPassiveEffectsImpl @ chunk-TAAGB4MZ.js?v=03a47c19:19531
+flushPassiveEffects @ chunk-TAAGB4MZ.js?v=03a47c19:19475
+(anonymous) @ chunk-TAAGB4MZ.js?v=03a47c19:19356
+workLoop @ chunk-TAAGB4MZ.js?v=03a47c19:197
+flushWork @ chunk-TAAGB4MZ.js?v=03a47c19:176
+performWorkUntilDeadline @ chunk-TAAGB4MZ.js?v=03a47c19:384
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           GET https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/background_tasks?select=id%2Ctask_type%2Cuser_id%2Cdata%2Cattempts&status=eq.pending&scheduled_for=lte.2025-03-31T13%3A40%3A12.340Z&order=scheduled_for.asc&limit=20 404 (Not Found)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+BackgroundTaskService.js:108 [TASK] Error fetching pending tasks: relation "public.background_tasks" does not exist
+processTasks @ BackgroundTaskService.js:108
+await in processTasks
+start @ BackgroundTaskService.js:46
+initialize @ BackgroundTaskService.js:29
+(anonymous) @ App.js:72
+commitHookEffectListMount @ chunk-TAAGB4MZ.js?v=03a47c19:16936
+commitPassiveMountOnFiber @ chunk-TAAGB4MZ.js?v=03a47c19:18184
+commitPassiveMountEffects_complete @ chunk-TAAGB4MZ.js?v=03a47c19:18157
+commitPassiveMountEffects_begin @ chunk-TAAGB4MZ.js?v=03a47c19:18147
+commitPassiveMountEffects @ chunk-TAAGB4MZ.js?v=03a47c19:18137
+flushPassiveEffectsImpl @ chunk-TAAGB4MZ.js?v=03a47c19:19518
+flushPassiveEffects @ chunk-TAAGB4MZ.js?v=03a47c19:19475
+(anonymous) @ chunk-TAAGB4MZ.js?v=03a47c19:19356
+workLoop @ chunk-TAAGB4MZ.js?v=03a47c19:197
+flushWork @ chunk-TAAGB4MZ.js?v=03a47c19:176
+performWorkUntilDeadline @ chunk-TAAGB4MZ.js?v=03a47c19:384
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           GET https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/admins?select=id&id=eq.6a42ebd6-c1dc-403a-8f5a-464d0e541f28 406 (Not Acceptable)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+supabaseAdmin.js:47 [Admin] Bucket user-data already exists
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           GET https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/profiles?select=role&id=eq.6a42ebd6-c1dc-403a-8f5a-464d0e541f28 406 (Not Acceptable)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           GET https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/admins?select=id&id=eq.6a42ebd6-c1dc-403a-8f5a-464d0e541f28 406 (Not Acceptable)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+supabaseAdmin.js:47 [Admin] Bucket photos already exists
+supabaseAdmin.js:47 [Admin] Bucket photos already exists
+supabaseAdmin.js:47 [Admin] Bucket face-data already exists
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           HEAD https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/user_faces?select=count 404 (Not Found)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+supabaseAdmin.js:47 [Admin] Bucket face-data already exists
+serviceRoleInit.js:34 [Admin] Service resources initialization complete
+App.js:38 [App] Application resources initialized successfully
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           HEAD https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/user_faces?select=count 404 (Not Found)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+serviceRoleInit.js:34 [Admin] Service resources initialization complete
+App.js:38 [App] Application resources initialized successfully
+FaceRegistration.js:426 Warning: Each child in a list should have a unique "key" prop.
+
+Check the render method of `FaceRegistration`. See https://reactjs.org/link/warning-keys for more information.
+    at div
+    at FaceRegistration (http://localhost:5184/src/components/FaceRegistration.js:21:3)
+    at PresenceChild (http://localhost:5184/node_modules/.vite/deps/framer-motion.js?v=03a47c19:121:24)
+    at AnimatePresence (http://localhost:5184/node_modules/.vite/deps/framer-motion.js?v=03a47c19:210:26)
+    at div
+    at Dashboard (http://localhost:5184/src/pages/Dashboard.js:18:7)
+    at Suspense
+    at ProtectedRoute (http://localhost:5184/src/App.js:51:3)
+    at RenderedRoute (http://localhost:5184/node_modules/.vite/deps/react-router-dom.js?v=03a47c19:4104:5)
+    at Routes (http://localhost:5184/node_modules/.vite/deps/react-router-dom.js?v=03a47c19:4575:5)
+    at AuthProvider (http://localhost:5184/src/context/AuthContext.js:10:3)
+    at Router (http://localhost:5184/node_modules/.vite/deps/react-router-dom.js?v=03a47c19:4518:15)
+    at BrowserRouter (http://localhost:5184/node_modules/.vite/deps/react-router-dom.js?v=03a47c19:5267:5)
+    at App (http://localhost:5184/src/App.js:109:3)
+printWarning @ chunk-PL7FREAV.js?v=03a47c19:64
+error @ chunk-PL7FREAV.js?v=03a47c19:48
+validateExplicitKey @ chunk-PL7FREAV.js?v=03a47c19:724
+validateChildKeys @ chunk-PL7FREAV.js?v=03a47c19:737
+jsxWithValidation @ chunk-PL7FREAV.js?v=03a47c19:855
+jsxWithValidationDynamic @ chunk-PL7FREAV.js?v=03a47c19:888
+FaceRegistration @ FaceRegistration.js:426
+renderWithHooks @ chunk-TAAGB4MZ.js?v=03a47c19:11568
+mountIndeterminateComponent @ chunk-TAAGB4MZ.js?v=03a47c19:14946
+beginWork @ chunk-TAAGB4MZ.js?v=03a47c19:15934
+beginWork$1 @ chunk-TAAGB4MZ.js?v=03a47c19:19781
+performUnitOfWork @ chunk-TAAGB4MZ.js?v=03a47c19:19226
+workLoopSync @ chunk-TAAGB4MZ.js?v=03a47c19:19165
+renderRootSync @ chunk-TAAGB4MZ.js?v=03a47c19:19144
+performSyncWorkOnRoot @ chunk-TAAGB4MZ.js?v=03a47c19:18902
+flushSyncCallbacks @ chunk-TAAGB4MZ.js?v=03a47c19:9135
+(anonymous) @ chunk-TAAGB4MZ.js?v=03a47c19:18655
+FaceRegistration.js:35 Getting video devices...
+FaceRegistration.js:35 Getting video devices...
+FaceRegistration.js:38 Found video devices: (8) [InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo]
+FaceRegistration.js:38 Found video devices: (8) [InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo]
+FaceRegistration.js:86 Detecting faces in webcam frame...
+FaceRegistration.js:93 Face detection result: No face detected
+FaceRegistration.js:86 Detecting faces in webcam frame...
+FaceRegistration.js:93 Face detection result: Face detected
+FaceRegistration.js:114 Capturing image...
+FaceRegistration.js:117 Image captured successfully
+FaceRegistration.js:169 Starting face registration process...
+FaceRegistration.js:177 Detecting face attributes...
+FaceRegistration.js:190 Face attributes detected successfully
+FaceRegistration.js:205 Uploading image to storage...
+FaceRegistration.js:217 Image uploaded successfully
+FaceRegistration.js:233 Starting face indexing process with AWS Rekognition
+FaceIndexingService.js:31 Face Indexing Process
+FaceIndexingService.js:32 🔍 Starting face indexing...
+FaceDetectionService.js:26 [FACE-DETECT] Starting face detection
+FaceDetectionService.js:66 [FACE-DETECT] Using provided Uint8Array directly
+FaceDetectionService.js:79 [FACE-DETECT] Image bytes length: 34668
+FaceIndexingService.js:66 ✅ Face indexed in AWS successfully: bdd4a596-3bf5-4877-9f3c-d59ed25e42f4
+FaceStorageService.js:28 [FaceStorage] Storing face ID bdd4a596-3bf5-4877-9f3c-d59ed25e42f4 for user 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           POST https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/user_face_data 409 (Conflict)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+FaceStorageService.js:42 [FaceStorage] Error storing in user_face_data: {code: '23505', details: null, hint: null, message: 'duplicate key value violates unique constraint "user_face_data_user_id_key"'}
+storeFaceId @ FaceStorageService.js:42
+await in storeFaceId
+indexFace @ FaceIndexingService.js:88
+await in indexFace
+handleRegistration @ FaceRegistration.js:236
+await in handleRegistration
+callCallback2 @ chunk-TAAGB4MZ.js?v=03a47c19:3674
+invokeGuardedCallbackDev @ chunk-TAAGB4MZ.js?v=03a47c19:3699
+invokeGuardedCallback @ chunk-TAAGB4MZ.js?v=03a47c19:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-TAAGB4MZ.js?v=03a47c19:3736
+executeDispatch @ chunk-TAAGB4MZ.js?v=03a47c19:7016
+processDispatchQueueItemsInOrder @ chunk-TAAGB4MZ.js?v=03a47c19:7036
+processDispatchQueue @ chunk-TAAGB4MZ.js?v=03a47c19:7045
+dispatchEventsForPlugins @ chunk-TAAGB4MZ.js?v=03a47c19:7053
+(anonymous) @ chunk-TAAGB4MZ.js?v=03a47c19:7177
+batchedUpdates$1 @ chunk-TAAGB4MZ.js?v=03a47c19:18941
+batchedUpdates @ chunk-TAAGB4MZ.js?v=03a47c19:3579
+dispatchEventForPluginEventSystem @ chunk-TAAGB4MZ.js?v=03a47c19:7176
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-TAAGB4MZ.js?v=03a47c19:5478
+dispatchEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5472
+dispatchDiscreteEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5449
+FaceStorageService.js:63 [FaceStorage] Successfully stored face ID in user_storage
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           POST https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/face_user_associations 409 (Conflict)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+FaceStorageService.js:80 [FaceStorage] Error storing in face_user_associations: {code: '23505', details: null, hint: null, message: 'duplicate key value violates unique constraint "face_user_associations_face_id_key"'}
+storeFaceId @ FaceStorageService.js:80
+await in storeFaceId
+indexFace @ FaceIndexingService.js:88
+await in indexFace
+handleRegistration @ FaceRegistration.js:236
+await in handleRegistration
+callCallback2 @ chunk-TAAGB4MZ.js?v=03a47c19:3674
+invokeGuardedCallbackDev @ chunk-TAAGB4MZ.js?v=03a47c19:3699
+invokeGuardedCallback @ chunk-TAAGB4MZ.js?v=03a47c19:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-TAAGB4MZ.js?v=03a47c19:3736
+executeDispatch @ chunk-TAAGB4MZ.js?v=03a47c19:7016
+processDispatchQueueItemsInOrder @ chunk-TAAGB4MZ.js?v=03a47c19:7036
+processDispatchQueue @ chunk-TAAGB4MZ.js?v=03a47c19:7045
+dispatchEventsForPlugins @ chunk-TAAGB4MZ.js?v=03a47c19:7053
+(anonymous) @ chunk-TAAGB4MZ.js?v=03a47c19:7177
+batchedUpdates$1 @ chunk-TAAGB4MZ.js?v=03a47c19:18941
+batchedUpdates @ chunk-TAAGB4MZ.js?v=03a47c19:3579
+dispatchEventForPluginEventSystem @ chunk-TAAGB4MZ.js?v=03a47c19:7176
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-TAAGB4MZ.js?v=03a47c19:5478
+dispatchEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5472
+dispatchDiscreteEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5449
+FaceIndexingService.js:100 ✅ Face data stored in database
+FaceIndexingService.js:163 [FACE-MATCH] Searching for faces matching FaceId: bdd4a596-3bf5-4877-9f3c-d59ed25e42f4
+FaceIndexingService.js:187 [FACE-MATCH] No suitable matches in DB, querying AWS Rekognition...
+FaceIndexingService.js:197 [FACE-MATCH] Found 70 matches from AWS Rekognition
+FaceIndexingService.js:221 [FACE-MATCH] Stored 70 new matches in database
+FaceIndexingService.js:111 Found 70 photos with matching faces
+FaceIndexingService.js:137 ✅ Match data stored/updated in database
+FaceRegistration.js:259 Face indexed successfully with ID: bdd4a596-3bf5-4877-9f3c-d59ed25e42f4
+FaceRegistration.js:262 Storing face ID in backup storage system
+FaceStorageService.js:28 [FaceStorage] Storing face ID bdd4a596-3bf5-4877-9f3c-d59ed25e42f4 for user 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           POST https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/user_face_data 409 (Conflict)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+FaceStorageService.js:42 [FaceStorage] Error storing in user_face_data: {code: '23505', details: null, hint: null, message: 'duplicate key value violates unique constraint "user_face_data_user_id_key"'}
+storeFaceId @ FaceStorageService.js:42
+await in storeFaceId
+handleRegistration @ FaceRegistration.js:263
+await in handleRegistration
+callCallback2 @ chunk-TAAGB4MZ.js?v=03a47c19:3674
+invokeGuardedCallbackDev @ chunk-TAAGB4MZ.js?v=03a47c19:3699
+invokeGuardedCallback @ chunk-TAAGB4MZ.js?v=03a47c19:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-TAAGB4MZ.js?v=03a47c19:3736
+executeDispatch @ chunk-TAAGB4MZ.js?v=03a47c19:7016
+processDispatchQueueItemsInOrder @ chunk-TAAGB4MZ.js?v=03a47c19:7036
+processDispatchQueue @ chunk-TAAGB4MZ.js?v=03a47c19:7045
+dispatchEventsForPlugins @ chunk-TAAGB4MZ.js?v=03a47c19:7053
+(anonymous) @ chunk-TAAGB4MZ.js?v=03a47c19:7177
+batchedUpdates$1 @ chunk-TAAGB4MZ.js?v=03a47c19:18941
+batchedUpdates @ chunk-TAAGB4MZ.js?v=03a47c19:3579
+dispatchEventForPluginEventSystem @ chunk-TAAGB4MZ.js?v=03a47c19:7176
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-TAAGB4MZ.js?v=03a47c19:5478
+dispatchEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5472
+dispatchDiscreteEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5449
+FaceStorageService.js:63 [FaceStorage] Successfully stored face ID in user_storage
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           POST https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/face_user_associations 409 (Conflict)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+FaceStorageService.js:80 [FaceStorage] Error storing in face_user_associations: {code: '23505', details: null, hint: null, message: 'duplicate key value violates unique constraint "face_user_associations_face_id_key"'}
+storeFaceId @ FaceStorageService.js:80
+await in storeFaceId
+handleRegistration @ FaceRegistration.js:263
+await in handleRegistration
+callCallback2 @ chunk-TAAGB4MZ.js?v=03a47c19:3674
+invokeGuardedCallbackDev @ chunk-TAAGB4MZ.js?v=03a47c19:3699
+invokeGuardedCallback @ chunk-TAAGB4MZ.js?v=03a47c19:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-TAAGB4MZ.js?v=03a47c19:3736
+executeDispatch @ chunk-TAAGB4MZ.js?v=03a47c19:7016
+processDispatchQueueItemsInOrder @ chunk-TAAGB4MZ.js?v=03a47c19:7036
+processDispatchQueue @ chunk-TAAGB4MZ.js?v=03a47c19:7045
+dispatchEventsForPlugins @ chunk-TAAGB4MZ.js?v=03a47c19:7053
+(anonymous) @ chunk-TAAGB4MZ.js?v=03a47c19:7177
+batchedUpdates$1 @ chunk-TAAGB4MZ.js?v=03a47c19:18941
+batchedUpdates @ chunk-TAAGB4MZ.js?v=03a47c19:3579
+dispatchEventForPluginEventSystem @ chunk-TAAGB4MZ.js?v=03a47c19:7176
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-TAAGB4MZ.js?v=03a47c19:5478
+dispatchEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5472
+dispatchDiscreteEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5449
+FaceRegistration.js:267 [FACE-MATCH] Queuing background face matching task
+FaceIndexingService.js:1349 [FACE-MATCH] Queuing background matching task for user 6a42ebd6-c1dc-403a-8f5a-464d0e541f28 with face ID bdd4a596-3bf5-4877-9f3c-d59ed25e42f4
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           POST https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/rpc/queue_face_matching_task 404 (Not Found)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+FaceIndexingService.js:1363 [FACE-MATCH] RPC not available, falling back to client-side implementation: Could not find the function public.queue_face_matching_task(face_id, user_id) in the schema cache
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           POST https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/background_tasks 404 (Not Found)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+FaceIndexingService.js:1382 [FACE-MATCH] Error queuing background task: undefined
+queueFaceMatchingTask @ FaceIndexingService.js:1382
+await in queueFaceMatchingTask
+handleRegistration @ FaceRegistration.js:269
+await in handleRegistration
+callCallback2 @ chunk-TAAGB4MZ.js?v=03a47c19:3674
+invokeGuardedCallbackDev @ chunk-TAAGB4MZ.js?v=03a47c19:3699
+invokeGuardedCallback @ chunk-TAAGB4MZ.js?v=03a47c19:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-TAAGB4MZ.js?v=03a47c19:3736
+executeDispatch @ chunk-TAAGB4MZ.js?v=03a47c19:7016
+processDispatchQueueItemsInOrder @ chunk-TAAGB4MZ.js?v=03a47c19:7036
+processDispatchQueue @ chunk-TAAGB4MZ.js?v=03a47c19:7045
+dispatchEventsForPlugins @ chunk-TAAGB4MZ.js?v=03a47c19:7053
+(anonymous) @ chunk-TAAGB4MZ.js?v=03a47c19:7177
+batchedUpdates$1 @ chunk-TAAGB4MZ.js?v=03a47c19:18941
+batchedUpdates @ chunk-TAAGB4MZ.js?v=03a47c19:3579
+dispatchEventForPluginEventSystem @ chunk-TAAGB4MZ.js?v=03a47c19:7176
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-TAAGB4MZ.js?v=03a47c19:5478
+dispatchEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5472
+dispatchDiscreteEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5449
+FaceRegistration.js:282 [FACE-MATCH] Queue failed, falling back to direct matching
+FaceIndexingService.js:163 [FACE-MATCH] Searching for faces matching FaceId: bdd4a596-3bf5-4877-9f3c-d59ed25e42f4
+FaceIndexingService.js:177 [FACE-MATCH] Using 70 existing matches from database
+FaceStorageService.js:28 [FaceStorage] Storing face ID bdd4a596-3bf5-4877-9f3c-d59ed25e42f4 for user 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           POST https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/user_face_data 409 (Conflict)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+FaceStorageService.js:42 [FaceStorage] Error storing in user_face_data: {code: '23505', details: null, hint: null, message: 'duplicate key value violates unique constraint "user_face_data_user_id_key"'}
+storeFaceId @ FaceStorageService.js:42
+await in storeFaceId
+handleRegistration @ FaceRegistration.js:376
+await in handleRegistration
+callCallback2 @ chunk-TAAGB4MZ.js?v=03a47c19:3674
+invokeGuardedCallbackDev @ chunk-TAAGB4MZ.js?v=03a47c19:3699
+invokeGuardedCallback @ chunk-TAAGB4MZ.js?v=03a47c19:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-TAAGB4MZ.js?v=03a47c19:3736
+executeDispatch @ chunk-TAAGB4MZ.js?v=03a47c19:7016
+processDispatchQueueItemsInOrder @ chunk-TAAGB4MZ.js?v=03a47c19:7036
+processDispatchQueue @ chunk-TAAGB4MZ.js?v=03a47c19:7045
+dispatchEventsForPlugins @ chunk-TAAGB4MZ.js?v=03a47c19:7053
+(anonymous) @ chunk-TAAGB4MZ.js?v=03a47c19:7177
+batchedUpdates$1 @ chunk-TAAGB4MZ.js?v=03a47c19:18941
+batchedUpdates @ chunk-TAAGB4MZ.js?v=03a47c19:3579
+dispatchEventForPluginEventSystem @ chunk-TAAGB4MZ.js?v=03a47c19:7176
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-TAAGB4MZ.js?v=03a47c19:5478
+dispatchEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5472
+dispatchDiscreteEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5449
+FaceStorageService.js:63 [FaceStorage] Successfully stored face ID in user_storage
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           POST https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/face_user_associations 409 (Conflict)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+FaceStorageService.js:80 [FaceStorage] Error storing in face_user_associations: {code: '23505', details: null, hint: null, message: 'duplicate key value violates unique constraint "face_user_associations_face_id_key"'}
+storeFaceId @ FaceStorageService.js:80
+await in storeFaceId
+handleRegistration @ FaceRegistration.js:376
+await in handleRegistration
+callCallback2 @ chunk-TAAGB4MZ.js?v=03a47c19:3674
+invokeGuardedCallbackDev @ chunk-TAAGB4MZ.js?v=03a47c19:3699
+invokeGuardedCallback @ chunk-TAAGB4MZ.js?v=03a47c19:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-TAAGB4MZ.js?v=03a47c19:3736
+executeDispatch @ chunk-TAAGB4MZ.js?v=03a47c19:7016
+processDispatchQueueItemsInOrder @ chunk-TAAGB4MZ.js?v=03a47c19:7036
+processDispatchQueue @ chunk-TAAGB4MZ.js?v=03a47c19:7045
+dispatchEventsForPlugins @ chunk-TAAGB4MZ.js?v=03a47c19:7053
+(anonymous) @ chunk-TAAGB4MZ.js?v=03a47c19:7177
+batchedUpdates$1 @ chunk-TAAGB4MZ.js?v=03a47c19:18941
+batchedUpdates @ chunk-TAAGB4MZ.js?v=03a47c19:3579
+dispatchEventForPluginEventSystem @ chunk-TAAGB4MZ.js?v=03a47c19:7176
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-TAAGB4MZ.js?v=03a47c19:5478
+dispatchEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5472
+dispatchDiscreteEvent @ chunk-TAAGB4MZ.js?v=03a47c19:5449
+FaceRegistration.js:379 Matching face with existing photos...
+FaceRegistration.js:152 Searching for matches in existing photos...
+FaceIndexingService.js:163 [FACE-MATCH] Searching for faces matching FaceId: bdd4a596-3bf5-4877-9f3c-d59ed25e42f4
+FaceIndexingService.js:177 [FACE-MATCH] Using 70 existing matches from database
+FaceRegistration.js:160 Found 70 matching photos
+FaceRegistration.js:383 Successfully matched with 70 existing photos
+FaceRegistration.js:404 Face indexed and registered successfully via direct insert
+FaceRegistration.js:405 Face registration complete!
+Dashboard.js:121 [Dashboard] Registration successful. Face ID: bdd4a596-3bf5-4877-9f3c-d59ed25e42f4
+PhotoManager.js:184 Setting up realtime subscription for photo matches...
+PhotoManager.js:764 [FACE-ID] Getting face ID for user: 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+PhotoManager.js:287 [DEBUG] Fetching photos...
+PhotoManager.js:313 [DEBUG] Fetching matched photos for user: 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+PhotoManager.js:317 [DEBUG] No cached face ID, fetching from database...
+PhotoManager.js:764 [FACE-ID] Getting face ID for user: 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+PhotoManager.js:241 Cleaning up realtime subscriptions
+PhotoManager.js:184 Setting up realtime subscription for photo matches...
+PhotoManager.js:764 [FACE-ID] Getting face ID for user: 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+PhotoManager.js:287 [DEBUG] Fetching photos...
+PhotoManager.js:313 [DEBUG] Fetching matched photos for user: 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+PhotoManager.js:317 [DEBUG] No cached face ID, fetching from database...
+PhotoManager.js:764 [FACE-ID] Getting face ID for user: 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+PhotoManager.js:774 [FACE-ID] Found face ID in user_face_data table: ed88dc62-a617-4c8a-8f33-6bb97bd4b4a4
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           GET https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/profiles?select=role&id=eq.6a42ebd6-c1dc-403a-8f5a-464d0e541f28 406 (Not Acceptable)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+PhotoManager.js:774 [FACE-ID] Found face ID in user_face_data table: ed88dc62-a617-4c8a-8f33-6bb97bd4b4a4
+PhotoManager.js:321 [DEBUG] User face ID obtained: ed88dc62-a617-4c8a-8f33-6bb97bd4b4a4
+PhotoManager.js:334 [DEBUG] Using FaceIndexingService.searchFacesByFaceId directly
+FaceIndexingService.js:163 [FACE-MATCH] Searching for faces matching FaceId: ed88dc62-a617-4c8a-8f33-6bb97bd4b4a4
+PhotoManager.js:774 [FACE-ID] Found face ID in user_face_data table: ed88dc62-a617-4c8a-8f33-6bb97bd4b4a4
+FaceIndexingService.js:177 [FACE-MATCH] Using 69 existing matches from database
+PhotoManager.js:343 [DEBUG] Found 69 potential matching photo/face IDs
+PhotoManager.js:447 [DEBUG] Fetching from both tables for mode: matches
+PhotoManager.js:465 [DEBUG] Falling back to table queries
+PhotoManager.js:764 [FACE-ID] Getting face ID for user: 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+@supabase_supabase-js.js?v=03a47c19:3900 
+            
+            
+           GET https://gmupwzjxirpkskolsuix.supabase.co/rest/v1/profiles?select=role&id=eq.6a42ebd6-c1dc-403a-8f5a-464d0e541f28 406 (Not Acceptable)
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3900
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3921
+fulfilled @ @supabase_supabase-js.js?v=03a47c19:3873
+Promise.then
+step @ @supabase_supabase-js.js?v=03a47c19:3886
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3888
+__awaiter6 @ @supabase_supabase-js.js?v=03a47c19:3870
+(anonymous) @ @supabase_supabase-js.js?v=03a47c19:3911
+then @ @supabase_supabase-js.js?v=03a47c19:89
+PhotoManager.js:774 [FACE-ID] Found face ID in user_face_data table: ed88dc62-a617-4c8a-8f33-6bb97bd4b4a4
+PhotoManager.js:321 [DEBUG] User face ID obtained: ed88dc62-a617-4c8a-8f33-6bb97bd4b4a4
+PhotoManager.js:334 [DEBUG] Using FaceIndexingService.searchFacesByFaceId directly
+FaceIndexingService.js:163 [FACE-MATCH] Searching for faces matching FaceId: ed88dc62-a617-4c8a-8f33-6bb97bd4b4a4
+FaceIndexingService.js:177 [FACE-MATCH] Using 69 existing matches from database
+PhotoManager.js:343 [DEBUG] Found 69 potential matching photo/face IDs
+PhotoManager.js:447 [DEBUG] Fetching from both tables for mode: matches
+PhotoManager.js:465 [DEBUG] Falling back to table queries
+PhotoManager.js:764 [FACE-ID] Getting face ID for user: 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+PhotoManager.js:774 [FACE-ID] Found face ID in user_face_data table: ed88dc62-a617-4c8a-8f33-6bb97bd4b4a4
+PhotoManager.js:473 [DEBUG] Using face_matches table to find photos for face ID: ed88dc62-a617-4c8a-8f33-6bb97bd4b4a4
+PhotoManager.js:774 [FACE-ID] Found face ID in user_face_data table: ed88dc62-a617-4c8a-8f33-6bb97bd4b4a4
+PhotoManager.js:473 [DEBUG] Using face_matches table to find photos for face ID: ed88dc62-a617-4c8a-8f33-6bb97bd4b4a4
+PhotoManager.js:484 [DEBUG] Found 69 matching entries in face_matches table
+PhotoManager.js:491 [DEBUG] Extracted 69 matched face IDs and 1 matched user IDs
+PhotoManager.js:494 [DEBUG] Matched face ID examples: (3) ['41299774-0805-4422-a5f8-dc0b79880d38', '2b118a1f-38da-4418-b744-62350919853e', '5767c3db-f234-4d79-baab-4fa098f5ede1']
+PhotoManager.js:495 [DEBUG] Matched user ID examples: ['6a42ebd6-c1dc-403a-8f5a-464d0e541f28']
+PhotoManager.js:484 [DEBUG] Found 69 matching entries in face_matches table
+PhotoManager.js:491 [DEBUG] Extracted 69 matched face IDs and 1 matched user IDs
+PhotoManager.js:494 [DEBUG] Matched face ID examples: (3) ['41299774-0805-4422-a5f8-dc0b79880d38', '2b118a1f-38da-4418-b744-62350919853e', '5767c3db-f234-4d79-baab-4fa098f5ede1']
+PhotoManager.js:495 [DEBUG] Matched user ID examples: ['6a42ebd6-c1dc-403a-8f5a-464d0e541f28']
+PhotoManager.js:551 [DEBUG] No photos found through standard queries, trying direct database query...
+PhotoManager.js:551 [DEBUG] No photos found through standard queries, trying direct database query...
+PhotoManager.js:651 [DEBUG] Querying photos for matches containing user: 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+PhotoManager.js:651 [DEBUG] Querying photos for matches containing user: 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+PhotoManager.js:677 [DEBUG] Fetched 0 photos from photos
+PhotoManager.js:651 [DEBUG] Querying simple_photos for matches containing user: 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+PhotoManager.js:677 [DEBUG] Fetched 0 photos from photos
+PhotoManager.js:651 [DEBUG] Querying simple_photos for matches containing user: 6a42ebd6-c1dc-403a-8f5a-464d0e541f28
+PhotoManager.js:677 [DEBUG] Fetched 0 photos from simple_photos
+PhotoManager.js:682 [DEBUG] Combined 0 unique photos from all queries
+PhotoManager.js:354 [DEBUG] Fetched 0 total photos for potential matching
+PhotoManager.js:364 [DEBUG] Processing 0 photos for display
+PhotoManager.js:987 [DEBUG] No photos to process
+PhotoManager.js:1355 [PHOTO-FILTER] Filtering 0 photos for mode: matches
+PhotoManager.js:1358 [PHOTO-FILTER] No photos to filter
+PhotoManager.js:441 [FILTER] Applied search/filters, 0 photos remaining
+PhotoManager.js:372 [DEBUG] Final photo count after filtering: 0
+PhotoManager.js:1587 Warning: Each child in a list should have a unique "key" prop.
+
+Check the render method of `PhotoManager`. See https://reactjs.org/link/warning-keys for more information.
+    at http://localhost:5184/node_modules/.vite/deps/lucide-react.js?v=03a47c19:1457:7
+    at PhotoManager (http://localhost:5184/src/components/PhotoManager.js:16:3)
+    at div
+    at div
+    at main
+    at div
+    at Dashboard (http://localhost:5184/src/pages/Dashboard.js:18:7)
+    at Suspense
+    at ProtectedRoute (http://localhost:5184/src/App.js:51:3)
+    at RenderedRoute (http://localhost:5184/node_modules/.vite/deps/react-router-dom.js?v=03a47c19:4104:5)
+    at Routes (http://localhost:5184/node_modules/.vite/deps/react-router-dom.js?v=03a47c19:4575:5)
+    at AuthProvider (http://localhost:5184/src/context/AuthContext.js:10:3)
+    at Router (http://localhost:5184/node_modules/.vite/deps/react-router-dom.js?v=03a47c19:4518:15)
+    at BrowserRouter (http://localhost:5184/node_modules/.vite/deps/react-router-dom.js?v=03a47c19:5267:5)
+    at App (http://localhost:5184/src/App.js:109:3)
+printWarning @ chunk-PL7FREAV.js?v=03a47c19:64
+error @ chunk-PL7FREAV.js?v=03a47c19:48
+validateExplicitKey @ chunk-PL7FREAV.js?v=03a47c19:724
+validateChildKeys @ chunk-PL7FREAV.js?v=03a47c19:737
+jsxWithValidation @ chunk-PL7FREAV.js?v=03a47c19:855
+jsxWithValidationDynamic @ chunk-PL7FREAV.js?v=03a47c19:888
+PhotoManager @ PhotoManager.js:1587
+renderWithHooks @ chunk-TAAGB4MZ.js?v=03a47c19:11568
+updateFunctionComponent @ chunk-TAAGB4MZ.js?v=03a47c19:14602
+beginWork @ chunk-TAAGB4MZ.js?v=03a47c19:15944
+beginWork$1 @ chunk-TAAGB4MZ.js?v=03a47c19:19781
+performUnitOfWork @ chunk-TAAGB4MZ.js?v=03a47c19:19226
+workLoopSync @ chunk-TAAGB4MZ.js?v=03a47c19:19165
+renderRootSync @ chunk-TAAGB4MZ.js?v=03a47c19:19144
+performConcurrentWorkOnRoot @ chunk-TAAGB4MZ.js?v=03a47c19:18706
+workLoop @ chunk-TAAGB4MZ.js?v=03a47c19:197
+flushWork @ chunk-TAAGB4MZ.js?v=03a47c19:176
+performWorkUntilDeadline @ chunk-TAAGB4MZ.js?v=03a47c19:384
+PhotoManager.js:677 [DEBUG] Fetched 0 photos from simple_photos
+PhotoManager.js:682 [DEBUG] Combined 0 unique photos from all queries
+PhotoManager.js:354 [DEBUG] Fetched 0 total photos for potential matching
+PhotoManager.js:364 [DEBUG] Processing 0 photos for display
+PhotoManager.js:987 [DEBUG] No photos to process
+PhotoManager.js:1355 [PHOTO-FILTER] Filtering 0 photos for mode: matches
+PhotoManager.js:1358 [PHOTO-FILTER] No photos to filter
+PhotoManager.js:441 [FILTER] Applied search/filters, 0 photos remaining
+PhotoManager.js:372 [DEBUG] Final photo count after filtering: 0

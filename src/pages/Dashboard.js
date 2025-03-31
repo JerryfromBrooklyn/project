@@ -5,7 +5,7 @@ import {
 } from "react/jsx-runtime";
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { motion, AnimatePresence } from "framer-runtime";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   LogOut,
   Camera,
@@ -49,36 +49,36 @@ export const Dashboard = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [faceData, setFaceData] = useState(null);
 
-  useEffect(() => {
-    const fetchFaceData = async () => {
-      if (!user) return;
-      try {
-        const { data, error } = await supabase
-          .from('user_face_data') 
-          .select('face_id, created_at, updated_at')
-          .eq('user_id', user.id)
-          .maybeSingle();
+  const fetchFaceData = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('user_face_data') 
+        .select('face_id, created_at, updated_at')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') {
-          throw error;
-        }
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
 
-        if (data) {
-          setFaceData({ 
-            face_id: data.face_id,
-            created_at: data.created_at,
-            updated_at: data.updated_at,
-            attributes: { message: 'Attributes not stored in this table' }
-          }); 
-        } else {
-          setFaceData(null);
-        }
-      } catch (err) {
-        console.error('Error fetching face data:', err);
+      if (data) {
+        setFaceData({ 
+          face_id: data.face_id,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+          attributes: { message: 'Attributes not stored in this table' }
+        }); 
+      } else {
         setFaceData(null);
       }
-    };
+    } catch (err) {
+      console.error('Error fetching face data:', err);
+      setFaceData(null);
+    }
+  };
 
+  useEffect(() => {
     fetchFaceData();
   }, [user]);
 

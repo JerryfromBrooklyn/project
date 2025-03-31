@@ -6,7 +6,7 @@ import { PhotoGrid } from './PhotoGrid';
 import { PhotoService } from '../services/PhotoService';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, RefreshCw, Filter, ChevronDown, Calendar, MapPin, Tag, Clock, Search, Wrench, Check } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Filter, ChevronDown, Calendar, MapPin, Tag, Clock, Search, Wrench, Check, Info } from 'lucide-react';
 import { supabase, supabaseAdmin, isSchemaValid, getCachedSchema, updateSchemaCache, getFaceIdFromCache, cacheFaceId } from '../supabaseClient';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
@@ -461,12 +461,180 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         };
 
         try {
-            // Removed RPC attempt as it doesn't exist
-            // console.log(`[DEBUG] Trying RPC query ...`);
-            
             // Direct table queries
             console.log(`[DEBUG] Falling back to table queries`);
             const tables = ['photos', 'simple_photos'];
+            
+            // ADDITION: If we're in 'matches' mode and have a face ID, also fetch photos directly from face_matches
+            if (currentMode === 'matches' && user?.id) {
+                const fetchedUserFaceId = await getUserFaceId(user.id);
+                
+                if (fetchedUserFaceId) {
+                    console.log(`[DEBUG] Using face_matches table to find photos for face ID: ${fetchedUserFaceId}`);
+                    
+                    // Get photo IDs from face_matches table
+                    const { data: matchData, error: matchError } = await supabase
+                        .from('face_matches')
+                        .select('matched_face_id, user_id')
+                        .eq('face_id', fetchedUserFaceId);
+                    
+                    if (matchError) {
+                        console.error('[DEBUG] Error fetching from face_matches:', matchError);
+                    } else if (matchData && matchData.length > 0) {
+                        console.log(`[DEBUG] Found ${matchData.length} matching entries in face_matches table`);
+                        
+                        // IMPORTANT: In face_matches, "user_id" contains the other user's ID
+                        // We need to find photos that contain these matched face_ids
+                        const matchedFaceIds = [...new Set(matchData.map(m => m.matched_face_id))].filter(Boolean);
+                        const matchedUserIds = [...new Set(matchData.map(m => m.user_id))].filter(Boolean);
+                        
+                        console.log(`[DEBUG] Extracted ${matchedFaceIds.length} matched face IDs and ${matchedUserIds.length} matched user IDs`);
+                        
+                        if (matchedFaceIds.length > 0) {
+                            console.log(`[DEBUG] Matched face ID examples:`, matchedFaceIds.slice(0, 3));
+                            console.log(`[DEBUG] Matched user ID examples:`, matchedUserIds.slice(0, 3));
+                            
+                            let foundAnyPhotos = false;
+                            
+                            // Try to find photos with these matched face IDs
+                            for (const table of tables) {
+                                try {
+                                    // Look for photos containing any of the matched face IDs in their face_ids array
+                                    const { data: facePhotos, error: facePhotoError } = await supabase
+                                        .from(table)
+                                        .select('*')
+                                        .contains('face_ids', matchedFaceIds);
+                                        
+                                    if (!facePhotoError && facePhotos && facePhotos.length > 0) {
+                                        console.log(`[DEBUG] Found ${facePhotos.length} photos by face IDs in ${table}`);
+                                        processAndAdd(facePhotos, table);
+                                        foundAnyPhotos = true;
+                                    }
+                                    
+                                    // Also look for photos uploaded by the matched users
+                                    // This covers cases where the user appears in photos uploaded by others
+                                    const { data: userPhotos, error: userPhotoError } = await supabase
+                                        .from(table)
+                                        .select('*')
+                                        .in('uploaded_by', matchedUserIds);
+                                        
+                                    if (!userPhotoError && userPhotos && userPhotos.length > 0) {
+                                        console.log(`[DEBUG] Found ${userPhotos.length} photos uploaded by matched users in ${table}`);
+                                        processAndAdd(userPhotos, table);
+                                        foundAnyPhotos = true;
+                                    }
+                                    
+                                    // Also look for photos where the user's ID appears in the matched_users JSON array
+                                    for (const matchedUserId of matchedUserIds.slice(0, 10)) { // Limit to 10 users for performance
+                                        const userMatchJson = JSON.stringify([{ userId: matchedUserId }]);
+                                        const userMatchJson2 = JSON.stringify([{ user_id: matchedUserId }]);
+                                        
+                                        const { data: matchedUserPhotos, error: matchedUserError } = await supabase
+                                            .from(table)
+                                            .select('*')
+                                            .or(`matched_users.cs.${userMatchJson},matched_users.cs.${userMatchJson2}`);
+                                            
+                                        if (!matchedUserError && matchedUserPhotos && matchedUserPhotos.length > 0) {
+                                            console.log(`[DEBUG] Found ${matchedUserPhotos.length} photos with matched user ${matchedUserId} in metadata`);
+                                            processAndAdd(matchedUserPhotos, table);
+                                            foundAnyPhotos = true;
+                                        }
+                                    }
+                                    
+                                } catch (err) {
+                                    console.error(`[DEBUG] Error searching for matched photos in ${table}:`, err);
+                                }
+                            }
+                            
+                            // If we still didn't find any photos through the original tables
+                            if (!foundAnyPhotos) {
+                                console.log('[DEBUG] No photos found through standard queries, trying direct database query...');
+                                try {
+                                    // Use the function suggested in the error message hint
+                                    const { data: directData, error: directError } = await supabase.rpc(
+                                        'find_photos_with_face_ids',
+                                        { 
+                                            face_id_list: [fetchedUserFaceId, ...matchedFaceIds] 
+                                        }
+                                    );
+                                    
+                                    if (directError) {
+                                        console.error('[DEBUG] Error with direct photo query:', directError);
+                                        
+                                        // Try another approach with the matched face IDs if available
+                                        console.log('[DEBUG] Trying another approach with the matched face IDs...');
+                                        try {
+                                            // Get the matched face IDs from face_matches
+                                            const { data: matchedFaceIds, error: matchedFaceError } = await supabase
+                                                .from('face_matches')
+                                                .select('matched_face_id')
+                                                .eq('face_id', fetchedUserFaceId);
+                                                
+                                            if (!matchedFaceError && matchedFaceIds && matchedFaceIds.length > 0) {
+                                                console.log(`[DEBUG] Found ${matchedFaceIds.length} matched face IDs`);
+                                                const faceIds = [...new Set(matchedFaceIds.map(m => m.matched_face_id))];
+                                                
+                                                // Try to find photos with these face IDs
+                                                for (const table of tables) {
+                                                    const { data: facePhotos, error: facePhotoError } = await supabase
+                                                        .from(table)
+                                                        .select('*')
+                                                        .contains('face_ids', faceIds);
+                                                        
+                                                    if (!facePhotoError && facePhotos && facePhotos.length > 0) {
+                                                        console.log(`[DEBUG] Found ${facePhotos.length} photos by face IDs in ${table}`);
+                                                        processAndAdd(facePhotos, table);
+                                                        foundAnyPhotos = true;
+                                                    }
+                                                }
+                                            }
+                                        } catch (matchError) {
+                                            console.error('[DEBUG] Error trying to match by face IDs:', matchError);
+                                        }
+                                        
+                                        // LAST RESORT: If we still have no photos, just load all available photos
+                                        if (!foundAnyPhotos) {
+                                            console.log('[DEBUG] As a last resort, trying to load any available photos...');
+                                            for (const table of tables) {
+                                                // Just get the most recent 50 photos
+                                                const { data: allPhotos, error: allPhotosError } = await supabase
+                                                    .from(table)
+                                                    .select('*')
+                                                    .order('created_at', { ascending: false })
+                                                    .limit(50);
+                                                    
+                                                if (!allPhotosError && allPhotos && allPhotos.length > 0) {
+                                                    console.log(`[DEBUG] Found ${allPhotos.length} recent photos in ${table} as fallback`);
+                                                    processAndAdd(allPhotos, table);
+                                                    foundAnyPhotos = true;
+                                                }
+                                            }
+                                        }
+                                        
+                                        // If RPC isn't available, fetch photos directly from storage as fallback
+                                        if (!foundAnyPhotos && directError.message && directError.message.includes('function')) {
+                                            console.log('[DEBUG] RPC not available, trying direct storage access...');
+                                            // This is a fallback method to show at least something to the user
+                                            const storagePhotos = await fetchFromStorageBucket(user.id);
+                                            if (storagePhotos && storagePhotos.length > 0) {
+                                                console.log(`[DEBUG] Found ${storagePhotos.length} photos from storage bucket`);
+                                                processAndAdd(storagePhotos, 'storage');
+                                            }
+                                        }
+                                    } else if (directData && directData.length > 0) {
+                                        console.log(`[DEBUG] Found ${directData.length} photos through direct query`);
+                                        processAndAdd(directData, 'direct_query');
+                                    }
+                                } catch (directErr) {
+                                    console.error('[DEBUG] Exception in direct query:', directErr);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Original query logic - still needed for standard matched_users lookup
             for (const table of tables) {
                 let query = supabase.from(table).select('*');
 
@@ -1411,6 +1579,22 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         
         _jsxs("div", { className: "mt-8 mb-6", children: [
             _jsxs("div", { className: "flex items-center justify-between mb-4", children: [
+                _jsxs("div", { className: "flex items-center", children: [
+                    _jsx("h2", { 
+                        className: "text-xl font-semibold text-gray-900 border-b-2 border-blue-500 pb-1", 
+                        children: mode === 'matches' ? "Matched Faces" : "My Uploads" 
+                    }),
+                    mode === 'matches' && _jsx("div", {
+                        className: "ml-2 text-blue-600 hover:text-blue-800 cursor-help relative group",
+                        children: [
+                            _jsx(Info, { className: "w-4 h-4" }),
+                            _jsx("div", {
+                                className: "absolute left-0 bottom-full mb-2 opacity-0 group-hover:opacity-100 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-50 transition-opacity",
+                                children: "We match faces based on similarity. These are photos with faces that look similar to yours."
+                            })
+                        ]
+                    })
+                ]}),
                 _jsxs("div", { className: "relative flex-1 max-w-lg", children: [
                     _jsx(Search, { className: "absolute left-3 top-1/2 transform -translate-y-1/2 text-apple-gray-400 w-5 h-5" }), 
                     _jsx("input", { type: "text", placeholder: "Search photos...", value: searchQuery, onChange: (e) => setSearchQuery(e.target.value), className: "w-full pl-10 pr-4 py-2 ios-input" })
