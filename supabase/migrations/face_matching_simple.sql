@@ -105,4 +105,28 @@ $$;
 -- Grant execute permission
 GRANT EXECUTE ON FUNCTION public.update_photos_with_face_ids TO authenticated;
 GRANT EXECUTE ON FUNCTION public.update_photos_with_face_ids TO anon;
-GRANT EXECUTE ON FUNCTION public.update_photos_with_face_ids TO service_role; 
+GRANT EXECUTE ON FUNCTION public.update_photos_with_face_ids TO service_role;
+
+-- Create function to get photos that match a specific user
+CREATE OR REPLACE FUNCTION public.get_user_matched_photos(
+  p_user_id UUID
+)
+RETURNS SETOF photos
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT p.*
+  FROM photos p
+  WHERE 
+    -- Using text search for JSON which is more reliable
+    p.matched_users::text LIKE '%"userId":"' || p_user_id || '"%'
+  ORDER BY p.created_at DESC;
+END;
+$$;
+
+-- Grant execute permissions
+GRANT EXECUTE ON FUNCTION public.get_user_matched_photos TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_user_matched_photos TO anon;
+GRANT EXECUTE ON FUNCTION public.get_user_matched_photos TO service_role; 
