@@ -855,8 +855,8 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
 
     // Replace the enhancePhotoMatches function with this simpler version
     const enhancePhotoMatches = (photos, currentUserId, currentUserFaceId) => {
-        console.log("[DEBUG] Strict direct matching only - inferred matching disabled");
-        console.log(`[DEBUG] Using direct matching only for user: ${currentUserId}`);
+        console.log("[DEBUG] Strict direct matching disabled - inferred matching enabled");
+        console.log(`[DEBUG] Using both direct and inferred matching for user: ${currentUserId}`);
         
         // Return photos as-is without adding inferred matches
         return photos;
@@ -1029,7 +1029,7 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             
             if (userFaceId) {
                 console.log('[DEBUG] Using face ID for matching:', userFaceId);
-                console.log('[DEBUG] Strict direct matching only enabled - inferred matching disabled');
+                console.log('[DEBUG] Strict direct matching disabled - inferred matching enabled');
                 
                 // Pass through enhancePhotoMatches but it won't modify the photos anymore
                 transformedPhotos = enhancePhotoMatches(transformedPhotos, currentUserId, userFaceId);
@@ -1038,22 +1038,52 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             }
             
             const matchedPhotos = transformedPhotos.filter(photo => {
-                // Only include photos where the current user appears in matched_users
+                // Include photos where the current user appears in matched_users
                 const matchedUsers = photo.matched_users || [];
+                
+                // ORIGINAL: Strict direct matching - only user ID in matched_users
+                // const isDirectMatch = matchedUsers.some(match => 
+                //     (match.userId === currentUserId || match.user_id === currentUserId) && 
+                //     // Ensure it's not an inferred match (if such flag exists from previous runs)
+                //     !match.inferred
+                // );
+                
+                // NEW: Allow both direct and inferred matches
+                // Direct match: user ID in matched_users
                 const isDirectMatch = matchedUsers.some(match => 
-                    (match.userId === currentUserId || match.user_id === currentUserId) && 
-                    // Ensure it's not an inferred match (if such flag exists from previous runs)
-                    !match.inferred
+                    (match.userId === currentUserId || match.user_id === currentUserId)
                 );
+                
+                // Inferred match: face ID in photo's faces or face_ids
+                let isInferredMatch = false;
+                
+                // Check if user's face ID is in photo's face_ids array
+                if (userFaceId && photo.face_ids && Array.isArray(photo.face_ids)) {
+                    if (photo.face_ids.includes(userFaceId)) {
+                        console.log(`[DEBUG] Found inferred match via face_ids array in photo ${photo.id}`);
+                        isInferredMatch = true;
+                    }
+                }
+                
+                // Check if user's face ID is in photo's faces array
+                if (!isInferredMatch && userFaceId && photo.faces && Array.isArray(photo.faces)) {
+                    isInferredMatch = photo.faces.some(face => 
+                        face.faceId === userFaceId || face.face_id === userFaceId
+                    );
+                    if (isInferredMatch) {
+                        console.log(`[DEBUG] Found inferred match via faces array in photo ${photo.id}`);
+                    }
+                }
                 
                 if (isDirectMatch) {
                     console.log(`[DEBUG] Found direct match in photo ${photo.id}`);
                 }
                 
-                return isDirectMatch;
+                // Include either direct or inferred matches
+                return isDirectMatch || isInferredMatch;
             });
             
-            console.log(`[DEBUG] Found ${matchedPhotos.length} photos directly matching user ID ${currentUserId} out of ${transformedPhotos.length} total`);
+            console.log(`[DEBUG] Found ${matchedPhotos.length} photos matching user ID ${currentUserId} out of ${transformedPhotos.length} total`);
             
             setPhotos(matchedPhotos);
             return matchedPhotos;
