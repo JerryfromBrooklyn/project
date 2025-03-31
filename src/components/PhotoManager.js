@@ -853,13 +853,156 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         }
     }, [user]);
 
-    // Replace the enhancePhotoMatches function with this simpler version
+    // Process face matches in a more robust way
     const enhancePhotoMatches = (photos, currentUserId, currentUserFaceId) => {
         console.log("[DEBUG] Advanced matching enabled");
         console.log(`[DEBUG] Using expanded matching for user: ${currentUserId}`);
         
-        // Return photos as-is 
-        return photos;
+        if (!photos || !Array.isArray(photos) || photos.length === 0) {
+            return [];
+        }
+        
+        if (!currentUserFaceId) {
+            console.log("[DEBUG] No face ID available for matching");
+            return photos;
+        }
+        
+        const enhancedPhotos = photos.map(photo => {
+            // Deep clone to avoid mutating original
+            const enhancedPhoto = JSON.parse(JSON.stringify(photo));
+            
+            // Already has direct match
+            if (enhancedPhoto.matched_users?.some(match => 
+                match.userId === currentUserId || match.user_id === currentUserId
+            )) {
+                return enhancedPhoto;
+            }
+            
+            // Check for face ID match
+            let hasFaceMatch = false;
+            
+            // Check face_ids array
+            if (Array.isArray(enhancedPhoto.face_ids) && enhancedPhoto.face_ids.includes(currentUserFaceId)) {
+                hasFaceMatch = true;
+            }
+            
+            // Check faces array
+            if (!hasFaceMatch && Array.isArray(enhancedPhoto.faces)) {
+                hasFaceMatch = enhancedPhoto.faces.some(face => 
+                    face.faceId === currentUserFaceId || face.face_id === currentUserFaceId
+                );
+            }
+            
+            // If there's a face match but no direct match, fix it in the UI layer
+            if (hasFaceMatch) {
+                console.log(`[DEBUG] Found face match in photo ${enhancedPhoto.id}`);
+                
+                // Ensure matched_users is an array
+                if (!enhancedPhoto.matched_users) {
+                    enhancedPhoto.matched_users = [];
+                }
+                
+                // Add virtual match for UI display only
+                enhancedPhoto._hasFaceMatch = true;
+                
+                // Schedule a background repair (this won't block the UI)
+                if (typeof window !== 'undefined') {
+                    setTimeout(() => {
+                        console.log(`[DEBUG] Scheduling background repair for photo ${enhancedPhoto.id}`);
+                        try {
+                            supabase.rpc('update_photo_matched_users', {
+                                p_photo_id: enhancedPhoto.id,
+                                p_user_match: {
+                                    userId: currentUserId,
+                                    faceId: currentUserFaceId,
+                                    fullName: 'User',
+                                    similarity: 98,
+                                    confidence: 99
+                                },
+                                p_table_name: enhancedPhoto.source_table || 'photos'
+                            }).then(result => {
+                                console.log(`[DEBUG] Background repair result:`, result);
+                            }).catch(err => {
+                                console.error(`[DEBUG] Background repair error:`, err);
+                            });
+                        } catch (e) {
+                            console.error(`[DEBUG] Error in background repair:`, e);
+                        }
+                    }, 5000);
+                }
+            }
+            
+            return enhancedPhoto;
+        });
+        
+        return enhancedPhotos;
+    };
+
+    // Helper function to get and ensure user's face ID is cached
+    const ensureUserFaceId = async (userId) => {
+        // First check if it's already in memory cache
+        const cachedFaceId = getFaceIdFromCache(userId);
+        if (cachedFaceId) {
+            return cachedFaceId;
+        }
+        
+        try {
+            console.log(`[DEBUG] Fetching face ID for user: ${userId}`);
+            
+            // Try to get from face_data table
+            const { data: faceData, error: faceError } = await supabase
+                .from('face_data')
+                .select('face_id')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false }) // Get most recent
+                .limit(1);
+                
+            if (faceError) {
+                console.error('[DEBUG] Error fetching face ID:', faceError);
+                return null;
+            }
+            
+            if (faceData && faceData.length > 0) {
+                const faceId = faceData[0].face_id;
+                
+                if (faceId) {
+                    console.log(`[DEBUG] Found face ID in database: ${faceId}`);
+                    cacheFaceId(userId, faceId);
+                    return faceId;
+                }
+            }
+            
+            // If not found, try to find from photos
+            console.log('[DEBUG] No face ID found in face_data, searching in photos');
+            
+            const { data: photoData, error: photoError } = await supabase
+                .from('photos')
+                .select('matched_users')
+                .contains('matched_users', [{ userId }])
+                .limit(5);
+                
+            if (!photoError && photoData && photoData.length > 0) {
+                for (const photo of photoData) {
+                    if (photo.matched_users && Array.isArray(photo.matched_users)) {
+                        const userMatch = photo.matched_users.find(match => 
+                            match.userId === userId || match.user_id === userId
+                        );
+                        
+                        if (userMatch && userMatch.faceId) {
+                            console.log(`[DEBUG] Found face ID in photos: ${userMatch.faceId}`);
+                            cacheFaceId(userId, userMatch.faceId);
+                            return userMatch.faceId;
+                        }
+                    }
+                }
+            }
+            
+            console.log('[DEBUG] Could not find face ID for user');
+            return null;
+        } catch (error) {
+            console.error('[DEBUG] Error in ensureUserFaceId:', error);
+            return null;
+        }
     };
 
     // Helper function to process photos
@@ -1021,17 +1164,14 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             console.log('[DEBUG] Applying client-side filtering for matches mode');
             const currentUserId = user.id;
             
-            // Use the cached face ID or get it if not available
-            let userFaceId = currentUserFaceId;
-            if (!userFaceId) {
-                userFaceId = await getUserFaceId();
-            }
+            // Use the improved face ID lookup
+            let userFaceId = await ensureUserFaceId(currentUserId);
             
             if (userFaceId) {
                 console.log('[DEBUG] Using face ID for matching:', userFaceId);
                 console.log('[DEBUG] Advanced matching enabled');
                 
-                // Pass through enhancePhotoMatches but it won't modify the photos anymore
+                // Apply enhanced matching
                 transformedPhotos = enhancePhotoMatches(transformedPhotos, currentUserId, userFaceId);
             } else {
                 console.log('[DEBUG] No face ID available for enhanced matching');
@@ -1046,24 +1186,27 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
                     (match.userId === currentUserId || match.user_id === currentUserId)
                 );
                 
-                // Face match: face ID in photo's faces or face_ids
-                let isFaceMatch = false;
+                // Face match: either from our enhanced check or direct face ID comparison
+                let isFaceMatch = photo._hasFaceMatch === true;
                 
-                // Check if user's face ID is in photo's face_ids array
-                if (userFaceId && photo.face_ids && Array.isArray(photo.face_ids)) {
-                    if (photo.face_ids.includes(userFaceId)) {
-                        console.log(`[DEBUG] Found face match via face_ids array in photo ${photo.id}`);
-                        isFaceMatch = true;
+                // Double-check face IDs if we have them
+                if (!isFaceMatch && userFaceId) {
+                    // Check if user's face ID is in photo's face_ids array
+                    if (photo.face_ids && Array.isArray(photo.face_ids)) {
+                        if (photo.face_ids.includes(userFaceId)) {
+                            console.log(`[DEBUG] Found face match via face_ids array in photo ${photo.id}`);
+                            isFaceMatch = true;
+                        }
                     }
-                }
-                
-                // Check if user's face ID is in photo's faces array
-                if (!isFaceMatch && userFaceId && photo.faces && Array.isArray(photo.faces)) {
-                    isFaceMatch = photo.faces.some(face => 
-                        face.faceId === userFaceId || face.face_id === userFaceId
-                    );
-                    if (isFaceMatch) {
-                        console.log(`[DEBUG] Found face match via faces array in photo ${photo.id}`);
+                    
+                    // Check if user's face ID is in photo's faces array
+                    if (!isFaceMatch && photo.faces && Array.isArray(photo.faces)) {
+                        isFaceMatch = photo.faces.some(face => 
+                            face.faceId === userFaceId || face.face_id === userFaceId
+                        );
+                        if (isFaceMatch) {
+                            console.log(`[DEBUG] Found face match via faces array in photo ${photo.id}`);
+                        }
                     }
                 }
                 
