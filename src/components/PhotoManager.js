@@ -39,6 +39,7 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
     });
     const { user } = useAuth();
     const [currentUserFaceId, setCurrentUserFaceId] = useState(null);
+    const [matchedPhotoIds, setMatchedPhotoIds] = useState([]);
 
     // Check if user is admin
     useEffect(() => {
@@ -283,160 +284,102 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         try {
             setLoading(true);
             setError(null);
-            
-            if (!user) return;
-
             console.log('[DEBUG] Fetching photos...');
             
-            let photos = [];
-            
-            if (mode === 'upload') {
-                console.log('[DEBUG] Fetching uploaded photos');
-                // Get photos uploaded by the current user directly from storage
-                const { data: storageFiles, error: storageError } = await supabase.storage
-                    .from('photos')
-                    .list(user.id);
-                    
-                if (storageError) {
-                    console.error('[DEBUG] Error fetching from storage:', storageError);
-                    setError('Could not load your uploaded photos.');
-                    setLoading(false);
-                    return;
-                }
-                
-                if (!storageFiles || storageFiles.length === 0) {
-                    // No photos found - show friendly message
-                    setError('No uploaded photos found. Try uploading a photo first.');
-                    setPhotos([]);
-                    setLoading(false);
-                    return;
-                }
-                
-                console.log(`[DEBUG] Found ${storageFiles.length} files in storage bucket`);
-                
-                // Convert to photo objects
-                photos = storageFiles.map(file => {
-                    const storagePath = `${user.id}/${file.name}`;
-                    const { data: { publicUrl } } = supabase.storage
-                        .from('photos')
-                        .getPublicUrl(storagePath);
-                        
-                    return {
-                        id: file.id || storagePath,
-                        url: publicUrl,
-                        public_url: publicUrl,
-                        storage_path: storagePath,
-                        uploaded_by: user.id,
-                        file_name: file.name,
-                        file_size: file.metadata?.size || 0,
-                        file_type: file.metadata?.mimetype || 'image/jpeg',
-                        created_at: file.created_at || new Date().toISOString(),
-                        matched_users: [],
-                        faces: []
-                    };
-                });
-            } else {
-                console.log('[DEBUG] Fetching matched photos for user:', user.id);
-                
-                // First get the user's face ID
-                let faceId = currentUserFaceId;
-                
-                if (!faceId) {
-                    console.log('[DEBUG] No cached face ID, fetching from database...');
-                    faceId = await getUserFaceId(user.id);
-                }
-                
-                if (!faceId) {
-                    console.log('[DEBUG] No face ID found for user');
-                    setError('No face ID found. Please register your face first by uploading a photo with your face.');
-                    setLoading(false);
-                    return;
-                }
-                
-                console.log('[DEBUG] User face ID:', faceId);
-                
-                // Use the FaceIndexingService directly since database queries aren't working
-                try {
-                    console.log('[DEBUG] Using FaceIndexingService.searchFacesByFaceId directly');
-                    
-                    // Make sure FaceIndexingService is available on window
-                    if (!window.FaceIndexingService) {
-                        console.error('[DEBUG] FaceIndexingService not available on window');
-                        setError('Face matching service not available. Please refresh the page and try again.');
-                        setLoading(false);
-                        return;
-                    }
-                    
-                    const matchedPhotos = await window.FaceIndexingService.searchFacesByFaceId(faceId, user.id);
-                    
-                    if (!matchedPhotos || matchedPhotos.length === 0) {
-                        console.log('[DEBUG] No matched photos found with FaceIndexingService');
-                        setError('No photos found with your face. This could mean either no one has uploaded photos with your face, or there was an issue with the face matching service.');
-                        setLoading(false);
-                        return;
-                    }
-                    
-                    console.log(`[DEBUG] Found ${matchedPhotos.length} photos with FaceIndexingService`);
-                    photos = matchedPhotos;
-                } catch (faceServiceError) {
-                    console.error('[DEBUG] Error using FaceIndexingService:', faceServiceError);
-                    setError('Face matching service error. Please try again later.');
-                    setLoading(false);
-                    return;
-                }
-            }
-            
-            if (!photos || photos.length === 0) {
-                const modeMessage = mode === 'upload' 
-                    ? 'No uploaded photos found. Try uploading a photo first.'
-                    : 'No matched photos found. This could mean either no one has uploaded photos with your face, or you need to complete face registration.';
-                
-                setError(modeMessage);
-                setPhotos([]);
+            // Ensure we have a user ID
+            if (!user?.id) {
+                console.warn('[DEBUG] No user ID available for fetching photos.');
                 setLoading(false);
                 return;
             }
             
-            console.log(`[DEBUG] Processing ${photos.length} photos for display`);
+            // Ensure we have valid filters
+            const activeFilters = { 
+                ...filters, 
+                dateRange: {
+                    start: filters.dateRange.start || '',
+                    end: filters.dateRange.end || ''
+                },
+                timeRange: {
+                    start: filters.timeRange.start || '',
+                    end: filters.timeRange.end || ''
+                }
+            };
             
-            // Now process the photos with our helper function
-            const processedPhotos = photos.map(photo => {
-                // Deep clone to avoid mutating original
-                const processedPhoto = { ...photo };
+            let photosToProcess = [];
+            let fetchedUserFaceId = currentUserFaceId; // Start with cached ID if available
+            
+            if (mode === 'matches') {
+                console.log('[DEBUG] Fetching matched photos for user:', user.id);
                 
-                // Normalize URL field
-                if (!processedPhoto.url && processedPhoto.public_url) {
-                    processedPhoto.url = processedPhoto.public_url;
+                // Ensure we have the user's face ID
+                if (!fetchedUserFaceId) {
+                    console.log('[DEBUG] No cached face ID, fetching from database...');
+                    fetchedUserFaceId = await getUserFaceId(user.id);
+                    if (fetchedUserFaceId) {
+                        setCurrentUserFaceId(fetchedUserFaceId); // Update state cache
+                        console.log('[DEBUG] User face ID obtained:', fetchedUserFaceId);
+                    } else {
+                        console.warn('[DEBUG] Could not obtain user face ID. Cannot fetch matches.');
+                        setError('Could not find your registered face. Please try registering again.');
+                        setPhotos([]); // Clear photos if we can't match
+                        setLoading(false);
+                        return;
+                    }
                 }
                 
-                // Ensure matched_users is an array
-                if (!processedPhoto.matched_users) {
-                    processedPhoto.matched_users = [];
+                // Try to get face matches directly from FaceIndexingService
+                let photoIdsFromService = [];
+                if (fetchedUserFaceId) {
+                    console.log('[DEBUG] Using FaceIndexingService.searchFacesByFaceId directly');
+                    try {
+                        const matchesFromService = await FaceIndexingService.searchFacesByFaceId(fetchedUserFaceId, user.id);
+                        if (matchesFromService && Array.isArray(matchesFromService)) {
+                            photoIdsFromService = matchesFromService.map(match => 
+                                typeof match === 'object' ? (match.photo_id || match.photoId || match.id || match.Face?.FaceId) : match
+                            ).filter(Boolean);
+                            
+                            if (photoIdsFromService.length > 0) {
+                                console.log(`[DEBUG] Found ${photoIdsFromService.length} potential matching photo/face IDs`);
+                                setMatchedPhotoIds(photoIdsFromService); // Store these for filtering
+                            }
+                        }
+                    } catch (error) {
+                        console.error('[DEBUG] Error getting matches from service:', error);
+                    }
                 }
                 
-                // Ensure faces is an array
-                if (!processedPhoto.faces) {
-                    processedPhoto.faces = [];
-                }
+                // Fetch all photos and filter later
+                photosToProcess = await fetchFromBothTables('matches');
+                console.log(`[DEBUG] Fetched ${photosToProcess.length} total photos for potential matching`);
                 
-                // Ensure other required fields have defaults
-                processedPhoto.location = processedPhoto.location || { lat: null, lng: null, name: null };
-                processedPhoto.venue = processedPhoto.venue || { id: null, name: null };
-                processedPhoto.event_details = processedPhoto.event_details || { date: null, name: null, type: null };
-                processedPhoto.tags = processedPhoto.tags || [];
+            } else { // mode === 'upload'
+                console.log('[DEBUG] Fetching uploaded photos for user:', user.id);
+                photosToProcess = await fetchFromBothTables('upload');
+                console.log(`[DEBUG] Fetched ${photosToProcess.length} uploaded photos`);
+            }
+            
+            // Process photos to ensure consistent structure
+            if (Array.isArray(photosToProcess)) {
+                console.log(`[DEBUG] Processing ${photosToProcess.length} photos for display`);
+                const processedPhotos = await processPhotos(photosToProcess);
                 
-                return processedPhoto;
-            });
+                // Filter by mode (matches or uploads)
+                const filteredByModePhotos = filterPhotosByMode(processedPhotos, mode, user.id, fetchedUserFaceId);
+                
+                // Apply search/filter UI inputs
+                const filteredAndSearchedPhotos = applySearchAndFilter(filteredByModePhotos, searchQuery, activeFilters);
+                console.log(`[DEBUG] Final photo count after filtering: ${filteredAndSearchedPhotos.length}`);
+                
+                setPhotos(filteredAndSearchedPhotos);
+            } else {
+                console.warn('[DEBUG] photosToProcess was not an array');
+                setPhotos([]);
+            }
             
-            console.log(`[DEBUG] Completed processing ${processedPhotos.length} photos`);
-            
-            // Add this code after the processing
-            const filteredPhotos = filterPhotosByMode(processedPhotos, mode, user.id, currentUserFaceId);
-            setPhotos(filteredPhotos);
-        } catch (err) {
-            console.error('[DEBUG] Error in fetchPhotos:', err);
-            setError('Failed to load photos. Please try again.');
-            setPhotos([]);
+        } catch (error) {
+            console.error('[DEBUG] Error fetching photos:', error);
+            setError('Failed to fetch photos. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -679,56 +622,65 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
      * @returns {Promise<string|null>} - The user's face ID or null
      */
     const getUserFaceId = async (userId) => {
+        if (!userId) {
+            console.warn('[FACE-ID] No userId provided');
+            return null;
+        }
+
         try {
             console.log('[FACE-ID] Getting face ID for user:', userId);
-            
-            // Try the face_data table first
-            const { data: faceData, error: faceError } = await supabase
-                .from('face_data')
-                .select('face_id')
-                .eq('user_id', userId)
-                .single();
-            
-            if (faceData && faceData.face_id) {
-                console.log('[FACE-ID] Found face ID in face_data table:', faceData.face_id);
-                return faceData.face_id;
-            }
-            
-            if (faceError && faceError.code !== 'PGRST116') {
-                console.error('[FACE-ID] Error fetching from face_data:', faceError);
-            }
-            
-            // Try the user_face_data table as fallback
+
+            // Try the user_face_data table first (new schema)
             const { data: userData, error: userError } = await supabase
                 .from('user_face_data')
                 .select('face_id')
                 .eq('user_id', userId)
                 .single();
-            
+
             if (userData && userData.face_id) {
                 console.log('[FACE-ID] Found face ID in user_face_data table:', userData.face_id);
                 return userData.face_id;
             }
-            
-            if (userError && userError.code !== 'PGRST116') {
+
+            if (userError && userError.code !== 'PGRST116') { // Ignore 'No rows found' error
                 console.error('[FACE-ID] Error fetching from user_face_data:', userError);
             }
-            
+
+            // Try the face_data table as a fallback (old schema - might still exist?)
+            try {
+                const { data: faceData, error: faceError } = await supabase
+                    .from('face_data') // This table should ideally be removed later
+                    .select('face_id')
+                    .eq('user_id', userId)
+                    .single();
+
+                if (faceData && faceData.face_id) {
+                    console.warn('[FACE-ID] Found face ID in DEPRECATED face_data table:', faceData.face_id);
+                    return faceData.face_id;
+                }
+
+                if (faceError && faceError.code !== 'PGRST116' && faceError.code !== '42P01') { // Ignore 'No rows' and 'table does not exist'
+                    console.error('[FACE-ID] Error fetching from deprecated face_data:', faceError);
+                }
+            } catch (deprecatedTableError) {
+                 console.warn('[FACE-ID] Could not query deprecated face_data table.');
+            }
+
             // Try getting from localStorage as last resort
             try {
                 const localFaceId = localStorage.getItem(`user_face_id_${userId}`);
                 if (localFaceId) {
-                    console.log('[FACE-ID] Found face ID in localStorage:', localFaceId);
+                    console.warn('[FACE-ID] Found face ID in localStorage (fallback):', localFaceId);
                     return localFaceId;
                 }
             } catch (lsError) {
                 console.warn('[FACE-ID] Error checking localStorage:', lsError);
             }
-            
+
             console.warn('[FACE-ID] No face ID found for user:', userId);
             return null;
         } catch (error) {
-            console.error('[FACE-ID] Error getting user face ID:', error);
+            console.error('[FACE-ID] Critical error getting user face ID:', error);
             return null;
         }
     };
@@ -1278,9 +1230,30 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         let filteredPhotos = [...photos];
         
         if (mode === 'matches') {
-            console.log(`[PHOTO-FILTER] Applying strict match filtering with userFaceId: ${userFaceId}`);
+            console.log(`[PHOTO-FILTER] Applying match filtering with userFaceId: ${userFaceId}`);
             
-            // For 'my photos' tab, filter to show only photos with direct matches (not inferred)
+            // If we don't have a face ID yet, try to get it from the photo metadata
+            // This handles the case where userFaceId wasn't properly passed in
+            if (!userFaceId) {
+                console.log('[PHOTO-FILTER] No userFaceId provided, attempting to extract from photo metadata');
+                
+                // Try to find the face ID in the photos' metadata
+                for (const photo of photos) {
+                    if (photo.matched_users && Array.isArray(photo.matched_users)) {
+                        const userMatch = photo.matched_users.find(m => 
+                            m.userId === currentUserId || m.user_id === currentUserId
+                        );
+                        
+                        if (userMatch && (userMatch.faceId || userMatch.face_id)) {
+                            userFaceId = userMatch.faceId || userMatch.face_id;
+                            console.log(`[PHOTO-FILTER] Extracted userFaceId from photo metadata: ${userFaceId}`);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // For 'my photos' tab, show ALL photos with potential matches for user's face
             filteredPhotos = photos.filter(photo => {
                 // Log face IDs for debugging
                 if (photo.faces && Array.isArray(photo.faces) && photo.faces.length > 0) {
@@ -1290,53 +1263,77 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
                     }
                 }
                 
-                // Check 1: Direct user match in matched_users with high confidence
+                // Check 1: Direct user match in matched_users (relaxed confidence threshold)
                 if (photo.matched_users && Array.isArray(photo.matched_users)) {
                     const directMatch = photo.matched_users.some(match => {
                         const isUserMatch = match.userId === currentUserId || match.user_id === currentUserId;
-                        const hasHighConfidence = (match.confidence > 95 || match.similarity > 95);
-                        const isNotInferred = !match.inferred;
+                        const hasReasonableConfidence = (match.confidence > 80 || match.similarity > 80);
                         
-                        return isUserMatch && hasHighConfidence && isNotInferred;
+                        if (isUserMatch && hasReasonableConfidence) {
+                            console.log(`[PHOTO-FILTER] Found direct user match in photo ${photo.id} with confidence ${match.confidence || match.similarity}`);
+                            return true;
+                        }
+                        return false;
                     });
                     
-                    if (directMatch) {
-                        console.log(`[PHOTO-FILTER] Found direct high-confidence user match in photo ${photo.id}`);
-                        return true;
-                    }
+                    if (directMatch) return true;
                 }
                 
-                // Check 2: User's face ID match in the face_detection_results table
-                // This would be handled by the new database table we created
-                if (photo.face_detection_results) {
-                    const hasFaceIdMatch = photo.face_detection_results.face_ids && 
-                                           Array.isArray(photo.face_detection_results.face_ids) && 
-                                           photo.face_detection_results.face_ids.includes(userFaceId);
+                // Check 2: User's face ID match in any structure
+                // Try multiple property paths that might contain the face ID
+                if (userFaceId) {
+                    // Check in face_detection_results
+                    if (photo.face_detection_results) {
+                        const hasFaceIdMatch = photo.face_detection_results.face_ids && 
+                                             Array.isArray(photo.face_detection_results.face_ids) && 
+                                             photo.face_detection_results.face_ids.includes(userFaceId);
+                        
+                        if (hasFaceIdMatch) {
+                            console.log(`[PHOTO-FILTER] Found face ID match in face_detection_results for photo ${photo.id}`);
+                            return true;
+                        }
+                    }
                     
-                    if (hasFaceIdMatch) {
-                        console.log(`[PHOTO-FILTER] Found face ID match in face_detection_results for photo ${photo.id}`);
-                        return true;
+                    // Check in faces array
+                    if (photo.faces && Array.isArray(photo.faces)) {
+                        const exactFaceMatch = photo.faces.some(face => 
+                            (face.faceId === userFaceId) || 
+                            (face.face_id === userFaceId) ||
+                            (face.id === userFaceId)
+                        );
+                        
+                        if (exactFaceMatch) {
+                            console.log(`[PHOTO-FILTER] Found exact face ID match in faces array for photo ${photo.id}`);
+                            return true;
+                        }
                     }
-                }
-                
-                // Check 3: Exact face ID match in the faces array
-                if (userFaceId && photo.faces && Array.isArray(photo.faces)) {
-                    const exactFaceMatch = photo.faces.some(face => 
-                        face.faceId === userFaceId || face.face_id === userFaceId
-                    );
                     
-                    if (exactFaceMatch) {
-                        console.log(`[PHOTO-FILTER] Found exact face ID match in faces array for photo ${photo.id}`);
-                        return true;
+                    // Check in face_ids array
+                    if (photo.face_ids && Array.isArray(photo.face_ids)) {
+                        if (photo.face_ids.includes(userFaceId)) {
+                            console.log(`[PHOTO-FILTER] Found face ID in face_ids array for photo ${photo.id}`);
+                            return true;
+                        }
+                    }
+                    
+                    // Check in AWS-specific face_matches data structure
+                    if (photo.face_matches && Array.isArray(photo.face_matches)) {
+                        const faceMatch = photo.face_matches.some(match => 
+                            match.Face?.FaceId === userFaceId || 
+                            match.matched_face_id === userFaceId
+                        );
+                        
+                        if (faceMatch) {
+                            console.log(`[PHOTO-FILTER] Found face ID in AWS face_matches for photo ${photo.id}`);
+                            return true;
+                        }
                     }
                 }
                 
-                // Check 4: Face ID in the face_ids array
-                if (userFaceId && photo.face_ids && Array.isArray(photo.face_ids)) {
-                    if (photo.face_ids.includes(userFaceId)) {
-                        console.log(`[PHOTO-FILTER] Found face ID in face_ids array for photo ${photo.id}`);
-                        return true;
-                    }
+                // Check for photo ID in user's matched photos array
+                if (matchedPhotoIds && Array.isArray(matchedPhotoIds) && matchedPhotoIds.includes(photo.id)) {
+                    console.log(`[PHOTO-FILTER] Found photo ID in user's matched photos list: ${photo.id}`);
+                    return true;
                 }
                 
                 // Not a match for this user

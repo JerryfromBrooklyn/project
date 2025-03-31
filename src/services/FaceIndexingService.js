@@ -121,12 +121,21 @@ export class FaceIndexingService {
                         face_id: faceId,
                         matched_face_id: match.Face?.FaceId || match.matched_face_id,
                         similarity: match.Similarity || match.similarity,
+                        confidence: match.Similarity || match.similarity, // Use similarity as confidence
                         user_id: userId,
-                        created_at: new Date().toISOString()
+                        photo_id: match.PhotoId || match.Face?.ExternalImageId || null, // Include photo_id
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
                     }));
 
-                    await supabase.from('face_matches').upsert(matchData);
-                    console.log('✅ Match data stored in database');
+                    const { error: upsertError } = await supabase.from('face_matches').upsert(matchData, {
+                        onConflict: 'face_id, matched_face_id' // Upsert based on face pair
+                    });
+                    if (upsertError) {
+                        console.error('❌ Error upserting match data:', upsertError);
+                    } else {
+                        console.log('✅ Match data stored/updated in database');
+                    }
                 } catch (storeError) {
                     console.error('❌ Error storing match data:', storeError);
                 }
@@ -154,26 +163,38 @@ export class FaceIndexingService {
             console.log(`[FACE-MATCH] Searching for faces matching FaceId: ${faceId}`);
 
             // First check our database for existing matches
-            const { data: existingMatches } = await supabase
+            const { data: existingMatches, error: dbError } = await supabase
                 .from('face_matches')
-                .select('matched_face_id, similarity')
-                .eq('face_id', faceId);
+                .select('matched_face_id, similarity, photo_id') // Include photo_id
+                .eq('face_id', faceId)
+                .gt('similarity', 80) // Only consider reasonably confident matches
+                .not('photo_id', 'is', null); // Ensure we have a photo associated
 
-            if (existingMatches?.length > 0) {
-                console.log('[FACE-MATCH] Using existing matches from database');
-                return existingMatches;
+            if (dbError) {
+                console.error('[FACE-MATCH] Database error checking existing matches:', dbError);
+                // Don't throw, proceed to AWS check
+            } else if (existingMatches?.length > 0) {
+                console.log(`[FACE-MATCH] Using ${existingMatches.length} existing matches from database`);
+                // Return in a format consistent with AWS response if needed, or just the relevant data
+                return existingMatches.map(match => ({
+                    Face: { FaceId: match.matched_face_id }, // Mimic AWS structure
+                    Similarity: match.similarity,
+                    PhotoId: match.photo_id // Add photo ID
+                }));
             }
 
             // If no existing matches, search AWS
+            console.log('[FACE-MATCH] No suitable matches in DB, querying AWS Rekognition...');
             const command = new SearchFacesCommand({
                 CollectionId: COLLECTION_ID,
                 FaceId: faceId,
                 MaxFaces: 1000,
-                FaceMatchThreshold: 95
+                FaceMatchThreshold: FACE_MATCH_THRESHOLD // Use configured threshold
             });
 
             const response = await rekognitionClient.send(command);
             const matches = response.FaceMatches || [];
+            console.log(`[FACE-MATCH] Found ${matches.length} matches from AWS Rekognition`);
 
             // Store matches in database for future use
             if (matches.length > 0) {
@@ -181,17 +202,35 @@ export class FaceIndexingService {
                     face_id: faceId,
                     matched_face_id: match.Face.FaceId,
                     similarity: match.Similarity,
+                    // Assuming confidence is derived from similarity or AWS response
+                    confidence: match.Similarity, // Use similarity as confidence for now
                     user_id: userId,
-                    created_at: new Date().toISOString()
+                    // We need to associate photo_id here if possible, otherwise store without it
+                    photo_id: match.Face.ExternalImageId || null, // Check if ExternalImageId is the photo ID
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
                 }));
 
-                await supabase.from('face_matches').upsert(matchData);
+                const { error: insertError } = await supabase.from('face_matches').upsert(matchData, {
+                     onConflict: 'face_id, matched_face_id' // Define conflict resolution if needed
+                });
+                
+                if (insertError) {
+                    console.error('[FACE-MATCH] Error storing AWS matches in database:', insertError);
+                } else {
+                     console.log(`[FACE-MATCH] Stored ${matchData.length} new matches in database`);
+                }
             }
 
-            return matches;
+            // Return AWS matches with PhotoId added if possible
+            return matches.map(match => ({
+                ...match,
+                PhotoId: match.Face.ExternalImageId || null
+            }));
+            
         } catch (error) {
-            console.error('[FACE-MATCH] Error:', error);
-            return [];
+            console.error('[FACE-MATCH] Error in searchFacesByFaceId:', error);
+            return []; // Return empty array on error
         }
     }
 
