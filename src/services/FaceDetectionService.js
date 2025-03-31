@@ -34,8 +34,8 @@ class FaceDetectionService {
       // Add any additional options
       Object.assign(payload, options);
       
-      // Call the Supabase Edge Function
-      const { data, error } = await supabase.functions.invoke('detect-faces', {
+      // Call the Supabase Edge Function with the new endpoint
+      const { data, error } = await supabase.functions.invoke('face-detection', {
         body: payload
       });
       
