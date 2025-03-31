@@ -292,170 +292,70 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             
             if (mode === 'upload') {
                 console.log('[DEBUG] Fetching uploaded photos');
-                // Get photos uploaded by the current user
-                const { data: uploadedPhotos, error: uploadError } = await supabase
-                    .from('photos')
-                    .select('*')
-                    .eq('uploaded_by', user.id)
-                    .order('created_at', { ascending: false });
-                    
-                if (uploadError) {
-                    console.error('[DEBUG] Error fetching uploaded photos:', uploadError);
-                    // Try fallback to storage bucket
-                    const storagePhotos = await fetchFromStorageBucket();
-                    photos = storagePhotos;
-                } else {
-                    photos = uploadedPhotos || [];
-                }
+                // Simply query storage bucket directly - most reliable approach
+                photos = await fetchFromStorageBucket();
             } else {
                 console.log('[DEBUG] Fetching matched photos for user:', user.id);
                 
-                // First try to get the user's face ID from the cache
-                let faceId = await getFaceIdFromCache(user.id);
-                
-                if (!faceId) {
-                    // If not in cache, try to get it from the face_data table
-                    try {
-                        const { data: faceData, error: faceError } = await supabase
-                            .from('face_data')
-                            .select('face_id')
-                            .eq('user_id', user.id)
-                            .single();
-                            
-                        if (!faceError && faceData && faceData.face_id) {
-                            faceId = faceData.face_id;
-                            // Cache it for future use
-                            await cacheFaceId(user.id, faceId);
-                        }
-                    } catch (faceError) {
-                        console.error('[DEBUG] Error getting face ID:', faceError);
-                    }
-                }
-                
-                console.log('[DEBUG] User face ID:', faceId);
-                
-                // Try multiple approaches to find matches
-                
-                // Approach 1: Check for text match in matched_users (most reliable)
-                const userIdPattern = `%"userId":"${user.id}"%`;
-                
-                const { data: matchedPhotos, error: matchError } = await supabase
-                    .from('photos')
-                    .select('*')
-                    .filter('matched_users::text', 'ilike', userIdPattern)
-                    .order('created_at', { ascending: false });
-                    
-                if (matchError) {
-                    console.error('[DEBUG] Error with matched_users text search:', matchError);
-                } else if (matchedPhotos && matchedPhotos.length > 0) {
-                    console.log(`[DEBUG] Found ${matchedPhotos.length} photos using text search`);
-                    photos = matchedPhotos;
-                } else {
-                    console.log('[DEBUG] No photos found with text search, trying RPC');
-                    
-                    // Approach 2: Try the server-side function
-                    try {
-                        const { data: rpcPhotos, error: rpcError } = await supabase.rpc('get_user_matched_photos', {
-                            p_user_id: user.id
-                        });
+                try {
+                    // Try getting user's face ID from face_data table
+                    let faceId = null;
+                    const { data: faceData, error: faceError } = await supabase
+                        .from('face_data')
+                        .select('face_id')
+                        .eq('user_id', user.id)
+                        .single();
                         
-                        if (!rpcError && rpcPhotos && rpcPhotos.length > 0) {
-                            console.log(`[DEBUG] Found ${rpcPhotos.length} photos using RPC`);
-                            photos = rpcPhotos;
-                        } else {
-                            console.log('[DEBUG] No photos found with RPC, trying face ID lookup');
+                    if (!faceError && faceData && faceData.face_id) {
+                        faceId = faceData.face_id;
+                        console.log('[DEBUG] Found face ID:', faceId);
+                        
+                        // DIRECT API APPROACH: Directly call AWS Rekognition without any SQL functions
+                        // This works around all the missing SQL functions issues
+                        
+                        try {
+                            console.log('[DIRECT-API] Searching with user face ID:', faceId);
                             
-                            // Approach 3: If we have a face ID, use that to find photos
-                            if (faceId) {
-                                const { data: facePhotos, error: faceError } = await supabase
-                                    .from('photos')
-                                    .select('*')
-                                    .filter('face_ids', 'cs', `{${faceId}}`)
-                                    .order('created_at', { ascending: false });
-                                    
-                                if (!faceError && facePhotos && facePhotos.length > 0) {
-                                    console.log(`[DEBUG] Found ${facePhotos.length} photos using face ID`);
-                                    
-                                    // Update matched_users for these photos
-                                    const updatePromises = facePhotos.map(async photo => {
-                                        // Only update if user isn't already in matched_users
-                                        if (!photo.matched_users || !photo.matched_users.some(m => m.userId === user.id)) {
-                                            const newMatch = {
-                                                userId: user.id,
-                                                faceId: faceId,
-                                                confidence: 95
-                                            };
-                                            
-                                            const updatedMatches = photo.matched_users ? 
-                                                [...photo.matched_users, newMatch] : 
-                                                [newMatch];
-                                                
-                                            await supabase
-                                                .from('photos')
-                                                .update({ matched_users: updatedMatches })
-                                                .eq('id', photo.id);
-                                                
-                                            return { ...photo, matched_users: updatedMatches };
-                                        }
-                                        return photo;
-                                    });
-                                    
-                                    // Wait for all updates to complete
-                                    photos = await Promise.all(updatePromises);
-                                }
+                            // Create FaceIndexingService instance for direct API calls
+                            const searchResults = await window.FaceIndexingService.searchFacesByFaceId(faceId, user.id);
+                            
+                            if (searchResults && searchResults.length > 0) {
+                                console.log('[DIRECT-API] Found', searchResults.length, 'matching photos');
+                                photos = searchResults;
+                            } else {
+                                console.log('[DIRECT-API] No matching photos found via direct API');
                             }
+                        } catch (directApiError) {
+                            console.error('[DIRECT-API] Error using direct API:', directApiError);
                         }
-                    } catch (rpcError) {
-                        console.error('[DEBUG] Error using RPC:', rpcError);
+                    } else {
+                        console.log('[DEBUG] No face ID found for user. Face registration required.');
                     }
+                } catch (err) {
+                    console.error('[DEBUG] Error with face ID lookup:', err);
                 }
             }
             
-            console.log(`[DEBUG] Total photos found: ${photos.length}`);
-            
-            // Apply filters if any
-            let filteredPhotos = [...photos];
-            
-            if (filters.dateRange.start) {
-                filteredPhotos = filteredPhotos.filter(photo => 
-                    photo.date_taken && new Date(photo.date_taken) >= new Date(filters.dateRange.start)
-                );
+            // Show a clear error message if no photos found
+            if (!photos || photos.length === 0) {
+                if (mode === 'matches') {
+                    setError('No matched photos found. This could mean either no one has uploaded photos with your face, or you need to complete face registration.');
+                } else {
+                    setError('No uploaded photos found. Try uploading a photo first.');
+                }
+                setPhotos([]);
+                setLoading(false);
+                return;
             }
             
-            if (filters.dateRange.end) {
-                filteredPhotos = filteredPhotos.filter(photo => 
-                    photo.date_taken && new Date(photo.date_taken) <= new Date(filters.dateRange.end)
-                );
-            }
-            
-            if (filters.location.name) {
-                filteredPhotos = filteredPhotos.filter(photo => 
-                    photo.location && photo.location.name && 
-                    photo.location.name.toLowerCase().includes(filters.location.name.toLowerCase())
-                );
-            }
-            
-            if (filters.tags.length > 0) {
-                filteredPhotos = filteredPhotos.filter(photo => 
-                    photo.tags && filters.tags.some(tag => photo.tags.includes(tag))
-                );
-            }
-            
-            if (searchQuery) {
-                filteredPhotos = filteredPhotos.filter(photo => 
-                    (photo.title && photo.title.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                    (photo.description && photo.description.toLowerCase().includes(searchQuery.toLowerCase()))
-                );
-            }
-            
-            console.log(`[DEBUG] After filtering: ${filteredPhotos.length} photos`);
-            
-            // Process and normalize photos
-            const processedPhotos = await processPhotos(filteredPhotos);
-            setPhotos(processedPhotos);
+            // Process any photos we found
+            console.log(`[DEBUG] Found ${photos.length} photos, processing...`);
+            const processedPhotos = await processPhotos(photos);
+            setPhotos(processedPhotos || []);
         } catch (err) {
             console.error('[DEBUG] Error in fetchPhotos:', err);
             setError('Failed to load photos. Please try again.');
+            setPhotos([]);
         } finally {
             setLoading(false);
         }
