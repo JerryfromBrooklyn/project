@@ -385,175 +385,135 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         }
     };
 
-    // Helper function to fetch from both tables separately
-    const fetchFromBothTables = async (queryMode) => {
+    // Add the applySearchAndFilter function definition (can be placed near filterPhotosByMode)
+    const applySearchAndFilter = (photos, query, filters) => {
+        let results = [...photos];
+
+        // Apply search query
+        if (query) {
+            const lowerQuery = query.toLowerCase();
+            results = results.filter(photo => 
+                (photo.file_name && photo.file_name.toLowerCase().includes(lowerQuery)) ||
+                (photo.tags && photo.tags.some(tag => tag.toLowerCase().includes(lowerQuery))) ||
+                (photo.venue && photo.venue.name && photo.venue.name.toLowerCase().includes(lowerQuery)) ||
+                (photo.event_details && photo.event_details.name && photo.event_details.name.toLowerCase().includes(lowerQuery))
+            );
+        }
+
+        // Apply date range filter
+        if (filters.dateRange.start) {
+            results = results.filter(photo => new Date(photo.created_at) >= new Date(filters.dateRange.start));
+        }
+        if (filters.dateRange.end) {
+            results = results.filter(photo => new Date(photo.created_at) <= new Date(filters.dateRange.end));
+        }
+
+        // Apply time range filter
+        if (filters.timeRange.start) {
+            results = results.filter(photo => {
+                const photoTime = new Date(photo.created_at).toLocaleTimeString('en-US', { hour12: false });
+                return photoTime >= filters.timeRange.start;
+            });
+        }
+        if (filters.timeRange.end) {
+            results = results.filter(photo => {
+                const photoTime = new Date(photo.created_at).toLocaleTimeString('en-US', { hour12: false });
+                return photoTime <= filters.timeRange.end;
+            });
+        }
+
+        // Apply tags filter
+        if (filters.tags.length > 0) {
+            results = results.filter(photo => 
+                filters.tags.every(filterTag => 
+                    photo.tags && photo.tags.some(photoTag => photoTag.toLowerCase() === filterTag.toLowerCase())
+                )
+            );
+        }
+        
+        // Apply location filter (basic check for now)
+        if (filters.location.lat && filters.location.lng) {
+            // Placeholder for potential future geo-filtering logic
+            // For now, just logs that location filter is active
+            console.log('[FILTER] Location filter is active but not implemented yet');
+        }
+
+        console.log(`[FILTER] Applied search/filters, ${results.length} photos remaining`);
+        return results;
+    };
+
+    // Modify fetchFromBothTables function (around line 390)
+    const fetchFromBothTables = async (currentMode) => {
+        console.log(`[DEBUG] Fetching from both tables for mode: ${currentMode}`);
+        let combinedPhotos = [];
+        let uniquePhotoIds = new Set();
+
+        const processAndAdd = (photos, sourceTable) => {
+            if (!photos || !Array.isArray(photos)) return;
+            photos.forEach(photo => {
+                if (!uniquePhotoIds.has(photo.id)) {
+                    combinedPhotos.push({ ...photo, source_table: sourceTable });
+                    uniquePhotoIds.add(photo.id);
+                }
+            });
+        };
+
         try {
-            console.log('[DEBUG] Trying to fetch from both photos and simple_photos tables separately');
+            // Try RPC first
+            console.log(`[DEBUG] Trying RPC query in fetchFromBothTables with user ID: ${user.id}`);
+            const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_photos', {
+                p_user_id: user.id,
+                p_mode: currentMode
+            });
             
-            // Query both tables
-            const queries = [];
-            
-            // Mode-specific queries
-            if (queryMode === 'upload') {
-                // Query simple_photos for uploads
-                queries.push(
-                    supabase
-                        .from('simple_photos')
-                        .select('*')
-                        .eq('uploaded_by', user.id)
-                        .order('created_at', { ascending: false })
-                );
-                
-                // Query photos for uploads
-                queries.push(
-                    supabase
-                        .from('photos')
-                        .select('*')
-                        .eq('uploaded_by', user.id)
-                        .order('created_at', { ascending: false })
-                );
+            if (!rpcError && rpcData) {
+                console.log(`[DEBUG] RPC successful, got ${rpcData.length} photos`);
+                processAndAdd(rpcData, 'rpc_result');
             } else {
-                // Correctly format matched_users queries with proper JSON encoding
-                const userId = user.id;
-                
-                console.log('[DEBUG] Using simplified query approach in fetchFromBothTables');
-                
-                // Basic approach: use contains with proper format
-                queries.push(
-                    supabase
-                        .from('photos')
-                        .select('*')
-                        .contains('matched_users', [{"userId": userId}])
-                        .order('created_at', { ascending: false })
-                );
-                
-                // Try alternative field name format
-                queries.push(
-                    supabase
-                        .from('photos')
-                        .select('*')
-                        .contains('matched_users', [{"user_id": userId}])
-                        .order('created_at', { ascending: false })
-                );
-                
-                // Same for simple_photos table
-                queries.push(
-                    supabase
-                        .from('simple_photos')
-                        .select('*')
-                        .contains('matched_users', [{"userId": userId}])
-                        .order('created_at', { ascending: false })
-                );
-                
-                queries.push(
-                    supabase
-                        .from('simple_photos')
-                        .select('*')
-                        .contains('matched_users', [{"user_id": userId}])
-                        .order('created_at', { ascending: false })
-                );
-                
-                // Try a simple text search as fallback
-                queries.push(
-                    supabase
-                        .from('photos')
-                        .select('*')
-                        .filter('matched_users::text', 'like', `%${userId}%`)
-                        .order('created_at', { ascending: false })
-                );
-                
-                // Also try the RPC
-                if (supabase.rpc && typeof supabase.rpc === 'function') {
-                    try {
-                        console.log('[DEBUG] Trying RPC query in fetchFromBothTables with user ID:', userId);
-                        const rpcPromise = new Promise((resolve, reject) => {
-                            supabase.rpc('get_matched_photos_for_user', { user_id_param: userId })
-                                .then(result => {
-                                    console.log('[DEBUG] RPC result in fetchFromBothTables:', result);
-                                    resolve(result);
-                                })
-                                .catch(err => {
-                                    console.error('[DEBUG] RPC error in fetchFromBothTables:', err);
-                                    resolve({ data: [], error: err });
-                                }); 
-                        });
-                        queries.push(rpcPromise);
-                    } catch (e) {
-                        console.error('[DEBUG] Error setting up RPC query in fetchFromBothTables:', e);
+                console.warn('[DEBUG] RPC failed or returned no data, falling back to table queries:', rpcError);
+
+                // Fallback to direct table queries
+                const tables = ['photos', 'simple_photos'];
+                for (const table of tables) {
+                    let query = supabase.from(table).select('*');
+
+                    if (currentMode === 'matches') {
+                        // Filter photos where matched_users array contains an object with the user's ID
+                        // Using Supabase JSONB contains syntax: column->>key, eq, value
+                        // Or more broadly using `cs` for array contains
+                        if (user?.id) {
+                           // Using cs operator for array of objects containment
+                           // Note: The exact syntax might depend on your Supabase version and data structure
+                           query = query.contains('matched_users', [{ user_id: user.id }]); 
+                           // Alternative: query = query.contains('matched_users', [{ userId: user.id }]);
+                           // If the above don't work, try a text search (less efficient)
+                           // query = query.textSearch('matched_users::text', `'${user.id}'`);
+                        }
+                    } else { // mode === 'upload'
+                        query = query.eq('uploaded_by', user.id);
+                    }
+                    
+                    query = query.order('created_at', { ascending: false });
+
+                    const { data, error } = await query;
+                    
+                    if (error) {
+                        console.error(`[DEBUG] Error fetching from ${table}:`, error);
+                    } else if (data) {
+                        console.log(`[DEBUG] Fetched ${data.length} photos from ${table}`);
+                        processAndAdd(data, table);
                     }
                 }
             }
-            
-            // Make sure all queries are valid Promise objects that can be caught
-            const safeQueries = queries.map(q => {
-                try {
-                    // More robust check for Promise-like objects
-                    if (q && typeof q.then === 'function') {
-                        // Properly wrap in a new Promise to ensure catch works
-                        return Promise.resolve(q)
-                            .then(result => result)
-                            .catch(e => ({ data: [], error: e }));
-                    } else {
-                        console.error('[DEBUG] Invalid query found in queries array:', q);
-                        return Promise.resolve({ data: [], error: 'Invalid query' });
-                    }
-                } catch (err) {
-                    // Last resort error handling
-                    console.error('[DEBUG] Error wrapping query in safe promise:', err);
-                    return Promise.resolve({ data: [], error: err });
-                }
-            });
-            
-            // Execute all queries
-            const results = await Promise.all(safeQueries);
-            
-            // Filter out error results and combine valid data
-            const validResults = results.filter(r => !r.error && Array.isArray(r.data));
-            const combinedPhotos = validResults.flatMap(r => r.data || []);
-            
-            // Remove duplicates by ID
-            const uniquePhotos = combinedPhotos.reduce((acc, photo) => {
-                if (!acc.some(p => p.id === photo.id)) {
-                    acc.push(photo);
-                }
-                return acc;
-            }, []);
-            
-            // Sort photos by created_at date, newest first
-            uniquePhotos.sort((a, b) => {
-                const dateA = new Date(a.created_at || a.createdAt || 0);
-                const dateB = new Date(b.created_at || b.createdAt || 0);
-                return dateB - dateA; // Descending order (newest first)
-            });
-            
-            console.log(`[DEBUG] Combined ${uniquePhotos.length} unique photos from all queries`);
-            
-            if (uniquePhotos.length > 0) {
-                return await processPhotos(uniquePhotos);
-            } else {
-                // Only fetch from storage if we're in 'upload' mode
-                // For 'matches' mode, if there are no matches in the database, we shouldn't show any photos
-                if (queryMode === 'upload') {
-                    console.log('[DEBUG] No photos found in database tables, trying storage lookup');
-                    return await fetchFromStorageBucket(user.id);
-                } else {
-                    console.log('[DEBUG] No matched photos found in database tables, returning empty array');
-                    setPhotos([]);
-                    return [];
-                }
-            }
+
+            console.log(`[DEBUG] Combined ${combinedPhotos.length} unique photos from all queries`);
+            return combinedPhotos;
         } catch (error) {
-            console.error('[DEBUG] Error fetching from both tables:', error);
-            // Only fall back to storage for 'upload' mode
-            if (queryMode === 'upload') {
-                return await fetchFromStorageBucket(user.id);
-            } else {
-                setPhotos([]);
-                return [];
-            }
+            console.error('[DEBUG] Error in fetchFromBothTables:', error);
+            return [];
         }
     };
-    
+
     /**
      * Fetch photos directly from storage bucket
      * @param {string} userId - The user ID to fetch photos for
@@ -1131,13 +1091,13 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
 
     useEffect(() => {
         if (user) {
-            fetchPhotos();
-            // Only check schema if we don't have valid cached data
-            if (!isSchemaValid()) {
-                checkDatabaseSchema();
-            }
+            setIsAdmin(user.user_metadata?.role === 'admin');
+            fetchPhotos(); // Fetch photos on mount/user change
+            // Remove the schema check
+            // checkDatabaseSchema(); 
+            // checkFunctions();
         }
-    }, [user, eventId, mode, filters, searchQuery]);
+    }, [user, mode, eventId]); // Re-fetch when mode or eventId changes
     const handlePhotoUpload = async (photoId) => {
         await fetchPhotos();
     };
