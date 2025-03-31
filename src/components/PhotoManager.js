@@ -1277,80 +1277,78 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         // Apply different filtering based on mode
         let filteredPhotos = [...photos];
         
-        if (mode === 'matches') {
-            // For matches, only show photos where the current user is matched
-            console.log(`[PHOTO-FILTER] Applying strict match filtering with userFaceId: ${userFaceId}`);
+        // Helper function to check if a photo contains the user's face with high confidence
+        const hasUserFace = (photo) => {
+            // For debugging purposes, log face IDs in this photo
+            if (photo.faces && Array.isArray(photo.faces) && photo.faces.length > 0) {
+                const faceIds = photo.faces.map(f => f.faceId || f.face_id).filter(Boolean);
+                if (faceIds.length > 0) {
+                    console.log(`[PHOTO-FILTER-DEBUG] Photo ${photo.id} has faces with IDs:`, faceIds);
+                }
+            }
             
-            filteredPhotos = photos.filter(photo => {
-                // For debugging purposes, log face IDs in this photo
-                if (photo.faces && Array.isArray(photo.faces) && photo.faces.length > 0) {
-                    const faceIds = photo.faces.map(f => f.faceId || f.face_id).filter(Boolean);
-                    if (faceIds.length > 0) {
-                        console.log(`[PHOTO-FILTER-DEBUG] Photo ${photo.id} has faces with IDs:`, faceIds);
-                    }
-                }
-                
-                // More strict check for matched_users - must be exact user ID match with high confidence
-                if (photo.matched_users && Array.isArray(photo.matched_users)) {
-                    const exactMatch = photo.matched_users.some(match => {
-                        const isUserMatch = match.userId === currentUserId || match.user_id === currentUserId;
-                        const hasHighConfidence = (match.confidence > 90 || match.similarity > 90);
-                        const isNotInferred = !match.inferred;
-                        
-                        if (isUserMatch && hasHighConfidence && isNotInferred) {
-                            console.log(`[PHOTO-FILTER] Found high-confidence direct user match in photo ${photo.id}`);
-                            return true;
-                        }
-                        return false;
-                    });
+            // Check for high-confidence user matches
+            if (photo.matched_users && Array.isArray(photo.matched_users)) {
+                const exactMatch = photo.matched_users.some(match => {
+                    const isUserMatch = match.userId === currentUserId || match.user_id === currentUserId;
+                    const hasHighConfidence = (match.confidence > 90 || match.similarity > 90);
+                    const isNotInferred = !match.inferred;
                     
-                    if (exactMatch) return true;
-                }
-                
-                // Strict check for face ID match - must have exact face ID
-                if (userFaceId && photo.faces && Array.isArray(photo.faces)) {
-                    for (const face of photo.faces) {
-                        // Check for exact faceId match
-                        if (face.faceId === userFaceId || face.face_id === userFaceId) {
-                            console.log(`[PHOTO-FILTER] Found exact face ID match in photo ${photo.id}`);
-                            return true;
-                        }
-                        
-                        // Check in the matches array with very high confidence
-                        if (face.matches && Array.isArray(face.matches)) {
-                            const highConfidenceMatch = face.matches.some(match => 
-                                (match.face_id === userFaceId || match.faceId === userFaceId) && 
-                                match.confidence > 95 && 
-                                !match.inferred
-                            );
-                            if (highConfidenceMatch) {
-                                console.log(`[PHOTO-FILTER] Found face match with very high confidence in photo ${photo.id}`);
-                                return true;
-                            }
-                        }
-                    }
-                }
-                
-                // Check the explicit face_ids array with exact match
-                if (userFaceId && photo.face_ids && Array.isArray(photo.face_ids)) {
-                    if (photo.face_ids.includes(userFaceId)) {
-                        console.log(`[PHOTO-FILTER] Found face ID in face_ids array for photo ${photo.id}`);
+                    if (isUserMatch && hasHighConfidence && isNotInferred) {
+                        console.log(`[PHOTO-FILTER] Found high-confidence direct user match in photo ${photo.id}`);
                         return true;
                     }
-                }
+                    return false;
+                });
                 
-                // Not a match for this user
-                return false;
-            });
+                if (exactMatch) return true;
+            }
             
-            console.log(`[PHOTO-FILTER] Found ${filteredPhotos.length} photos with matches for user ID: ${currentUserId}`);
+            // Check for exact face ID matches
+            if (userFaceId && photo.faces && Array.isArray(photo.faces)) {
+                for (const face of photo.faces) {
+                    // Check for exact faceId match
+                    if (face.faceId === userFaceId || face.face_id === userFaceId) {
+                        console.log(`[PHOTO-FILTER] Found exact face ID match in photo ${photo.id}`);
+                        return true;
+                    }
+                    
+                    // Check in the matches array with very high confidence
+                    if (face.matches && Array.isArray(face.matches)) {
+                        const highConfidenceMatch = face.matches.some(match => 
+                            (match.face_id === userFaceId || match.faceId === userFaceId) && 
+                            match.confidence > 95 && 
+                            !match.inferred
+                        );
+                        if (highConfidenceMatch) {
+                            console.log(`[PHOTO-FILTER] Found face match with very high confidence in photo ${photo.id}`);
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            // Check the explicit face_ids array
+            if (userFaceId && photo.face_ids && Array.isArray(photo.face_ids)) {
+                if (photo.face_ids.includes(userFaceId)) {
+                    console.log(`[PHOTO-FILTER] Found face ID in face_ids array for photo ${photo.id}`);
+                    return true;
+                }
+            }
+            
+            return false;
+        };
+
+        if (mode === 'matches') {
+            // For 'my photos' tab, only show photos that contain the user's face
+            filteredPhotos = photos.filter(photo => hasUserFace(photo));
+            console.log(`[PHOTO-FILTER] Found ${filteredPhotos.length} photos containing user's face for user ID: ${currentUserId}`);
         } else if (mode === 'upload') {
-            // For uploads, only show photos uploaded by the current user
+            // For uploads tab, show all photos uploaded by the user
             filteredPhotos = photos.filter(photo => 
                 photo.uploadedBy === currentUserId || 
                 photo.uploaded_by === currentUserId
             );
-            
             console.log(`[PHOTO-FILTER] Found ${filteredPhotos.length} photos uploaded by user: ${currentUserId}`);
         }
         
