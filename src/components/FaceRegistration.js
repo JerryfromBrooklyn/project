@@ -11,6 +11,7 @@ import { rekognitionClient } from '../config/aws-config';
 import { DetectFacesCommand } from '@aws-sdk/client-rekognition';
 import { FaceIndexingService } from '../services/FaceIndexingService';
 import { storeFaceId } from '../services/FaceStorageService';
+import { toast } from 'react-hot-toast';
 
 // Define face registration method - use default 'direct' method
 const FACE_REGISTER_METHOD = 'direct'; // Options: 'RPC', 'direct'
@@ -185,20 +186,34 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
             );
             console.log('Face indexed successfully with ID:', faceId);
             
-            // Additional logging for storage-based approach
+            // Store face ID in storage system
             console.log('Storing face ID in backup storage system');
-            
-            // Store face ID in the storage system
             await storeFaceId(user.id, faceId);
             
-            // IMPORTANT: Force a match scan for all existing photos
-            console.log('[FACE-MATCH] Triggering photo matching for newly registered user');
+            // Queue background face matching instead of doing it synchronously
+            console.log('[FACE-MATCH] Queuing background face matching task');
             try {
-                await FaceIndexingService.searchFacesByFaceId(faceId, user.id);
-                console.log('[FACE-MATCH] Successfully matched user with existing photos');
+                const queueResult = await FaceIndexingService.queueFaceMatchingTask(user.id, faceId);
+                
+                if (queueResult) {
+                    console.log('[FACE-MATCH] Successfully queued background matching task');
+                    
+                    // Show a notification to the user
+                    toast({
+                        title: 'Face Registration Complete',
+                        description: 'Your face has been registered. Matching with existing photos will happen automatically in the background.',
+                        status: 'success',
+                        duration: 5000,
+                        isClosable: true,
+                    });
+                } else {
+                    // If queuing fails, fall back to doing a quick direct match
+                    console.log('[FACE-MATCH] Queue failed, falling back to direct matching');
+                    await FaceIndexingService.searchFacesByFaceId(faceId, user.id);
+                }
             } catch (matchError) {
-                console.error('[FACE-MATCH] Error matching user with photos:', matchError);
-                // Continue with registration even if matching fails
+                console.error('[FACE-MATCH] Error in face matching:', matchError);
+                // Continue registration process even if matching fails
             }
             
             // If using direct RPC

@@ -23,6 +23,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LandingPage } from './pages/LandingPage';
 import { initializeServiceResources } from './lib/serviceRoleInit';
+import BackgroundTaskService from './services/BackgroundTaskService';
 
 // Lazy load dashboard to improve initial load time
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -66,6 +67,18 @@ function App() {
     useEffect(() => {
         // Initialize service resources when the app loads
         initializeApp();
+        
+        // Initialize background task processor
+        BackgroundTaskService.initialize({
+            batchSize: 20,
+            checkInterval: 60000, // Check every minute
+            autoStart: true
+        });
+        
+        // Clean up when component unmounts
+        return () => {
+            BackgroundTaskService.stop();
+        };
     }, []);
 
     return (_jsx(Router, { children: _jsx(AuthProvider, { children: _jsxs(Routes, { children: [_jsx(Route, { path: "/", element: _jsx(PublicRoute, { children: _jsx(LandingPage, {}) }) }), _jsx(Route, { path: "/dashboard", element: _jsx(ProtectedRoute, { children: _jsx(Suspense, { fallback: _jsx("div", { className: "min-h-screen flex items-center justify-center", children: _jsx("div", { className: "animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900" }) }), children: _jsx(Dashboard, {}) }) }) }), _jsx(Route, { path: "*", element: _jsx(Navigate, { to: "/", replace: true }) })] }) }) }));

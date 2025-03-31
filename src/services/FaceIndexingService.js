@@ -1311,6 +1311,205 @@ export class FaceIndexingService {
             return [];
         }
     }
+    static async queueFaceMatchingTask(userId, faceId) {
+        try {
+            console.log(`[FACE-MATCH] Queuing background matching task for user ${userId} with face ID ${faceId}`);
+            
+            // First try to use the RPC if available
+            try {
+                const { data, error } = await supabase.rpc('queue_face_matching_task', {
+                    user_id: userId,
+                    face_id: faceId
+                });
+                
+                if (!error) {
+                    console.log(`[FACE-MATCH] Successfully queued background task: ${JSON.stringify(data)}`);
+                    return true;
+                }
+                
+                console.log(`[FACE-MATCH] RPC not available, falling back to client-side implementation: ${error.message}`);
+            } catch (rpcError) {
+                console.log(`[FACE-MATCH] RPC error, using fallback: ${rpcError.message}`);
+            }
+            
+            // Fallback: Store the task in a background_tasks table
+            const { error: insertError } = await supabase
+                .from('background_tasks')
+                .insert({
+                    task_type: 'face_matching',
+                    user_id: userId,
+                    data: {
+                        face_id: faceId,
+                        created_at: new Date().toISOString()
+                    },
+                    status: 'pending'
+                });
+            
+            if (insertError) {
+                console.error(`[FACE-MATCH] Error queuing background task: ${insertError.message}`);
+                return false;
+            }
+            
+            console.log(`[FACE-MATCH] Successfully queued background task via direct insert`);
+            return true;
+        } catch (error) {
+            console.error(`[FACE-MATCH] Error queueing face matching task: ${error.message}`);
+            return false;
+        }
+    }
+    static async processBatchedFaceMatching(userId, faceId, batchSize = 50) {
+        try {
+            console.log(`[FACE-MATCH] Processing batched face matching for user ${userId}`);
+            
+            // Get total matches - similar to searchFacesByFaceId but without updating
+            const command = new SearchFacesCommand({
+                CollectionId: COLLECTION_ID,
+                FaceId: faceId,
+                FaceMatchThreshold: FACE_MATCH_THRESHOLD,
+                MaxFaces: 1000
+            });
+            
+            const response = await rekognitionClient.send(command);
+            if (!response.FaceMatches?.length) {
+                console.log(`[FACE-MATCH] No matching faces found for user ${userId}`);
+                return { processed: 0, total: 0 };
+            }
+            
+            const matchedFaceIds = response.FaceMatches.map(match => match.Face?.FaceId || '')
+                .filter(id => !!id);
+                
+            // Also include the original face ID
+            if (!matchedFaceIds.includes(faceId)) {
+                matchedFaceIds.push(faceId);
+            }
+            
+            console.log(`[FACE-MATCH] Found ${matchedFaceIds.length} face IDs matching user ${userId}`);
+            
+            // Get user data for matches
+            const { data: userData, error: userError } = await supabase
+                .from('users')
+                .select('id, full_name, avatar_url')
+                .eq('id', userId)
+                .single();
+                
+            if (userError) {
+                console.error(`[FACE-MATCH] Error fetching user data: ${userError.message}`);
+                return { processed: 0, total: 0, error: userError.message };
+            }
+            
+            // Try to get user's email too
+            let userEmail = null;
+            try {
+                const { data: profileData } = await supabase
+                    .from('profiles')
+                    .select('email')
+                    .eq('id', userId)
+                    .single();
+                    
+                if (profileData?.email) {
+                    userEmail = profileData.email;
+                }
+            } catch (err) {
+                console.log(`[FACE-MATCH] Could not fetch email for user ${userId}: ${err.message}`);
+            }
+            
+            // Find photos that need updating - only get IDs first
+            const { data: photosToUpdate, error: countError, count } = await supabase
+                .from('all_photos')
+                .select('id, source_table', { count: 'exact' })
+                .not('matched_users', 'cs', `[{"userId":"${userId}"}]`)
+                .or(
+                    matchedFaceIds.map(faceId => `face_ids.cs.{${faceId}}`).join(',')
+                );
+                
+            if (countError) {
+                console.error(`[FACE-MATCH] Error getting photo count: ${countError.message}`);
+                return { processed: 0, total: 0, error: countError.message };
+            }
+            
+            const totalPhotos = count || (photosToUpdate?.length || 0);
+            console.log(`[FACE-MATCH] Found ${totalPhotos} photos to update for user ${userId}`);
+            
+            if (!totalPhotos) {
+                return { processed: 0, total: 0 };
+            }
+            
+            // Process in batches
+            let processedCount = 0;
+            const photoIds = photosToUpdate.map(p => p.id);
+            const batchCount = Math.ceil(photoIds.length / batchSize);
+            
+            console.log(`[FACE-MATCH] Processing ${batchCount} batches of up to ${batchSize} photos each`);
+            
+            for (let i = 0; i < batchCount; i++) {
+                const batchStart = i * batchSize;
+                const batchEnd = Math.min((i + 1) * batchSize, photoIds.length);
+                const batch = photoIds.slice(batchStart, batchEnd);
+                
+                console.log(`[FACE-MATCH] Processing batch ${i+1} of ${batchCount}: ${batch.length} photos`);
+                
+                // Get full details for this batch
+                const { data: batchData, error: batchError } = await supabase
+                    .from('all_photos')
+                    .select('id, matched_users, source_table')
+                    .in('id', batch);
+                    
+                if (batchError) {
+                    console.error(`[FACE-MATCH] Error fetching batch ${i+1}: ${batchError.message}`);
+                    continue;
+                }
+                
+                // Update each photo in the batch
+                for (const photo of batchData) {
+                    try {
+                        // Create user match object
+                        const newMatch = {
+                            userId,
+                            fullName: userData.full_name || 'Unknown User',
+                            avatarUrl: userData.avatar_url || null,
+                            confidence: 95,
+                            faceId
+                        };
+                        
+                        // Add email if available
+                        if (userEmail) {
+                            newMatch.email = userEmail;
+                        }
+                        
+                        // Add to matched_users array
+                        const existingMatches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
+                        const updatedMatches = [...existingMatches, newMatch];
+                        
+                        // Update in correct table
+                        const tableName = photo.source_table || 'photos';
+                        const { error: updateError } = await supabase
+                            .from(tableName)
+                            .update({ matched_users: updatedMatches })
+                            .eq('id', photo.id);
+                            
+                        if (updateError) {
+                            console.error(`[FACE-MATCH] Error updating photo ${photo.id}: ${updateError.message}`);
+                        } else {
+                            processedCount++;
+                        }
+                    } catch (photoError) {
+                        console.error(`[FACE-MATCH] Error processing photo ${photo.id}: ${photoError.message}`);
+                    }
+                }
+                
+                // Add a small delay between batches to prevent rate limiting
+                if (i < batchCount - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+            
+            console.log(`[FACE-MATCH] Completed batched processing: updated ${processedCount} of ${totalPhotos} photos`);
+            return { processed: processedCount, total: totalPhotos };
+        } catch (error) {
+            console.error(`[FACE-MATCH] Error in batch processing: ${error.message}`);
+            return { processed: 0, total: 0, error: error.message };
+        }
+    }
 }
 Object.defineProperty(FaceIndexingService, "COLLECTION_ID", {
     enumerable: true,
