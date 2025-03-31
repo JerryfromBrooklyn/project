@@ -22,6 +22,7 @@ import { supabase, supabaseAdmin } from '../supabaseClient';
 import { motion } from 'framer-motion';
 import { Check, AlertTriangle, RefreshCw, Key, UserCheck, AlertCircle, Monitor, Play, Wrench, Search, X, User } from 'lucide-react';
 import { FaceIndexingService } from '../services/FaceIndexingService';
+import { toast } from 'react-hot-toast';
 
 // Constants for AWS
 const COLLECTION_ID = 'shmong-faces';
@@ -34,6 +35,10 @@ const AdminTools = () => {
   const [resetId, setResetId] = useState(null);
   const [pollInterval, setPollInterval] = useState(null);
   const [message, setMessage] = useState(null);
+  const [repairUserId, setRepairUserId] = useState('');
+  const [repairFaceId, setRepairFaceId] = useState('');
+  const [repairing, setRepairing] = useState(false);
+  const [repairResult, setRepairResult] = useState(null);
   
   // Set up polling for status updates
   useEffect(() => {
@@ -1400,6 +1405,70 @@ const AdminTools = () => {
                   }
   };
   
+  const handleRepairUserMatches = async () => {
+    if (!repairUserId || !repairFaceId) {
+      toast.error('Both User ID and Face ID are required');
+      return;
+    }
+    
+    try {
+      setRepairing(true);
+      setRepairResult(null);
+      
+      // Call the database function to repair matches
+      const { data, error } = await supabase.rpc('repair_user_matches', {
+        p_user_id: repairUserId,
+        p_face_id: repairFaceId
+      });
+      
+      if (error) {
+        console.error('Error repairing user matches:', error);
+        toast.error(`Error: ${error.message}`);
+        setRepairResult({ success: false, message: error.message });
+      } else {
+        console.log('Repair result:', data);
+        toast.success(`Successfully repaired ${data.updated_count} photos for user`);
+        setRepairResult(data);
+      }
+    } catch (err) {
+      console.error('Error in repair function:', err);
+      toast.error(`Error: ${err.message}`);
+      setRepairResult({ success: false, message: err.message });
+    } finally {
+      setRepairing(false);
+    }
+  };
+
+  // Check if we can retrieve user's face ID
+  const handleUserLookup = async () => {
+    if (!repairUserId) {
+      toast.error('User ID is required');
+      return;
+    }
+    
+    try {
+      // Get face ID for user
+      const { data, error } = await supabase
+        .from('face_data')
+        .select('face_id')
+        .eq('user_id', repairUserId)
+        .limit(1);
+        
+      if (error) {
+        console.error('Error looking up face ID:', error);
+        toast.error(`Error: ${error.message}`);
+      } else if (data && data.length > 0) {
+        setRepairFaceId(data[0].face_id);
+        toast.success('Face ID found and populated');
+      } else {
+        toast.warning('No face ID found for this user');
+      }
+    } catch (err) {
+      console.error('Error in user lookup:', err);
+      toast.error(`Error: ${err.message}`);
+    }
+  };
+
   return (
     <div className="ios-card max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -1754,6 +1823,83 @@ const AdminTools = () => {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+      
+      <hr className="my-4" />
+      
+      <div className="repair-tools-section">
+        <h3>Repair User Face Matches</h3>
+        <p className="text-sm mb-4">
+          Use this tool to repair the face matching data for a specific user. This helps when a user's 
+          face ID is in photos but they aren't properly included in the matched_users arrays.
+        </p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">User ID</label>
+            <div className="flex">
+              <input
+                type="text"
+                className="flex-grow px-3 py-2 border rounded-l text-sm"
+                placeholder="User ID to repair (UUID)"
+                value={repairUserId}
+                onChange={(e) => setRepairUserId(e.target.value)}
+              />
+              <button
+                className="bg-blue-500 text-white px-3 py-2 rounded-r text-sm hover:bg-blue-600"
+                onClick={handleUserLookup}
+              >
+                Look Up
+              </button>
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium mb-1">Face ID</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border rounded text-sm"
+              placeholder="Face ID to match"
+              value={repairFaceId}
+              onChange={(e) => setRepairFaceId(e.target.value)}
+            />
+          </div>
+        </div>
+        
+        <div className="flex justify-end mb-4">
+          <button
+            className="bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600 disabled:opacity-50"
+            onClick={handleRepairUserMatches}
+            disabled={!repairUserId || !repairFaceId || repairing}
+          >
+            {repairing ? 'Repairing...' : 'Repair User Matches'}
+          </button>
+        </div>
+        
+        {repairResult && (
+          <div className={`p-4 rounded mb-4 ${repairResult.success ? 'bg-green-100' : 'bg-red-100'}`}>
+            <h4 className="font-bold mb-2">Repair Result</h4>
+            {repairResult.success ? (
+              <div>
+                <p>Successfully repaired {repairResult.updated_count} photos</p>
+                <p className="text-xs mt-2">User ID: {repairResult.user_id}</p>
+                <p className="text-xs">Face ID: {repairResult.face_id}</p>
+              </div>
+            ) : (
+              <p className="text-red-700">{repairResult.message}</p>
+            )}
+          </div>
+        )}
+        
+        <div className="text-xs text-gray-500 mt-2">
+          <p>Instructions:</p>
+          <ol className="list-decimal ml-4">
+            <li>Enter the user ID of the person with missing matches</li>
+            <li>Click "Look Up" to automatically find their face ID</li>
+            <li>Or manually enter a known face ID</li>
+            <li>Click "Repair User Matches" to update all photos</li>
+          </ol>
         </div>
       </div>
     </div>
