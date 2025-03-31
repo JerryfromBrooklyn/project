@@ -1290,17 +1290,21 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
                     }
                 }
                 
-                // More strict check for matched_users - must be exact user ID match
+                // More strict check for matched_users - must be exact user ID match with high confidence
                 if (photo.matched_users && Array.isArray(photo.matched_users)) {
-                    const exactMatch = photo.matched_users.some(match => 
-                        (match.userId === currentUserId || match.user_id === currentUserId) && 
-                        // Only count high confidence matches (>80%)
-                        (match.confidence > 80 || match.similarity > 80)
-                    );
-                    if (exactMatch) {
-                        console.log(`[PHOTO-FILTER] Found direct user match in photo ${photo.id}`);
-                        return true;
-                    }
+                    const exactMatch = photo.matched_users.some(match => {
+                        const isUserMatch = match.userId === currentUserId || match.user_id === currentUserId;
+                        const hasHighConfidence = (match.confidence > 90 || match.similarity > 90);
+                        const isNotInferred = !match.inferred;
+                        
+                        if (isUserMatch && hasHighConfidence && isNotInferred) {
+                            console.log(`[PHOTO-FILTER] Found high-confidence direct user match in photo ${photo.id}`);
+                            return true;
+                        }
+                        return false;
+                    });
+                    
+                    if (exactMatch) return true;
                 }
                 
                 // Strict check for face ID match - must have exact face ID
@@ -1312,14 +1316,15 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
                             return true;
                         }
                         
-                        // Check in the matches array with high confidence
+                        // Check in the matches array with very high confidence
                         if (face.matches && Array.isArray(face.matches)) {
                             const highConfidenceMatch = face.matches.some(match => 
                                 (match.face_id === userFaceId || match.faceId === userFaceId) && 
-                                match.confidence > 85
+                                match.confidence > 95 && 
+                                !match.inferred
                             );
                             if (highConfidenceMatch) {
-                                console.log(`[PHOTO-FILTER] Found face match with high confidence in photo ${photo.id}`);
+                                console.log(`[PHOTO-FILTER] Found face match with very high confidence in photo ${photo.id}`);
                                 return true;
                             }
                         }
@@ -1339,7 +1344,7 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             });
             
             console.log(`[PHOTO-FILTER] Found ${filteredPhotos.length} photos with matches for user ID: ${currentUserId}`);
-        } else if (mode === 'uploads') {
+        } else if (mode === 'upload') {
             // For uploads, only show photos uploaded by the current user
             filteredPhotos = photos.filter(photo => 
                 photo.uploadedBy === currentUserId || 
