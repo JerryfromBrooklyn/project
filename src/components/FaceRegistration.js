@@ -11,7 +11,7 @@ import { rekognitionClient } from '../config/aws-config';
 import { DetectFacesCommand } from '@aws-sdk/client-rekognition';
 import { FaceIndexingService } from '../services/FaceIndexingService';
 import { storeFaceId } from '../services/FaceStorageService';
-import { toast } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 
 // Define face registration method - use default 'direct' method
 const FACE_REGISTER_METHOD = 'direct'; // Options: 'RPC', 'direct'
