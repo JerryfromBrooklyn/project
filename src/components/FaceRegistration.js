@@ -138,6 +138,30 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
             return;
         setLoading(true);
         setError(null);
+        
+        /**
+         * Match a user's face with all existing photos in the database
+         */
+        async function matchExistingPhotos(userId, faceId) {
+          try {
+            // The searchFacesByFaceId method already updates photos with matches
+            // and returns the IDs of updated photos
+            console.log('Searching for matches in existing photos...');
+            const matchedPhotoIds = await FaceIndexingService.searchFacesByFaceId(faceId, userId);
+            
+            if (!matchedPhotoIds || matchedPhotoIds.length === 0) {
+              console.log('No matching photos found');
+              return { success: true, matchCount: 0 };
+            }
+            
+            console.log(`Found ${matchedPhotoIds.length} matching photos`);
+            return { success: true, matchCount: matchedPhotoIds.length };
+          } catch (error) {
+            console.error('Error matching existing photos:', error);
+            return { success: false, error: error.message };
+          }
+        }
+        
         try {
             console.log('Starting face registration process...');
             // Convert base64 to blob
@@ -267,6 +291,31 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
                 // Directly call our storage method as a backup
                 await storeFaceId(user.id, faceId);
                 
+                // NEW: Match against existing photos
+                console.log('Matching face with existing photos...');
+                const matchResult = await matchExistingPhotos(user.id, faceId);
+                      
+                if (matchResult.success) {
+                  console.log(`Successfully matched with ${matchResult.matchCount} existing photos`);
+                  if (matchResult.matchCount > 0) {
+                    toast({
+                      title: 'Face Registration Complete',
+                      description: `Face registered successfully! Found you in ${matchResult.matchCount} existing photos.`,
+                      status: 'success',
+                      duration: 5000,
+                      isClosable: true,
+                    });
+                  } else {
+                    toast({
+                      title: 'Face Registration Complete',
+                      description: 'Face registered successfully',
+                      status: 'success',
+                      duration: 5000,
+                      isClosable: true,
+                    });
+                  }
+                }
+                
                 console.log('Face indexed and registered successfully');
                 console.log('Face registration complete!');
                 onSuccess();
@@ -275,6 +324,31 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
                 
                 // Directly call our storage method as a backup
                 await storeFaceId(user.id, faceId);
+                
+                // NEW: Match against existing photos
+                console.log('Matching face with existing photos...');
+                const matchResult = await matchExistingPhotos(user.id, faceId);
+                      
+                if (matchResult.success) {
+                  console.log(`Successfully matched with ${matchResult.matchCount} existing photos`);
+                  if (matchResult.matchCount > 0) {
+                    toast({
+                      title: 'Face Registration Complete',
+                      description: `Face registered successfully! Found you in ${matchResult.matchCount} existing photos.`,
+                      status: 'success',
+                      duration: 5000,
+                      isClosable: true,
+                    });
+                  } else {
+                    toast({
+                      title: 'Face Registration Complete',
+                      description: 'Face registered successfully',
+                      status: 'success',
+                      duration: 5000,
+                      isClosable: true,
+                    });
+                  }
+                }
                 
                 // Add success callback for direct insert
                 console.log('Face indexed and registered successfully via direct insert');
