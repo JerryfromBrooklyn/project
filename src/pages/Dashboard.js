@@ -32,8 +32,8 @@ import {
   Glasses,
 } from "lucide-react";
 import { cn } from "../utils/cn";
-import { FaceRegistration } from "../components/FaceRegistration";
-import { PhotoManager } from "../components/PhotoManager";
+import { FaceRegistration } from "../components/FaceRegistration.jsx";
+import { PhotoManager } from "../components/PhotoManager.jsx";
 import AdminTools from "../components/AdminTools.jsx";
 import { supabase } from "../lib/supabaseClient";
 
@@ -137,30 +137,68 @@ export const Dashboard = () => {
     checkAdminStatus();
   }, [user]);
 
-  const handleRegistrationSuccess = () => {
+  const handleRegistrationSuccess = (faceId) => {
+    console.log("[Dashboard] Face registration completed successfully with faceId:", faceId);
     setFaceRegistered(true);
     setShowRegistrationModal(false);
-    // Refetch face data to get the new image URL and attributes
-    if (user) {
-      supabase
-        .from("face_data")
-        .select("face_data")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle() // Use maybeSingle here too
-        .then(({ data, error }) => {
-          if (!error && data) {
-            setFaceAttributes(data.face_data.attributes || null);
-            const {
-              data: { publicUrl },
-            } = supabase.storage
-              .from("face-data")
-              .getPublicUrl(data.face_data.image_path);
-            setFaceImageUrl(publicUrl);
+    
+    // Add a short delay to ensure database writes have completed
+    setTimeout(async () => {
+      try {
+        console.log("[Dashboard] Refreshing face data after registration...");
+        // Refetch face data to get the new image URL and attributes
+        const { data, error } = await supabase
+          .from("face_data")
+          .select("*")  // Select all columns to see what we're getting
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+          
+        console.log("[Dashboard] Face data query result:", data);
+        
+        if (error) {
+          console.error("[Dashboard] Error fetching face data:", error);
+          return;
+        }
+        
+        if (!data) {
+          console.error("[Dashboard] No face data found for user:", user.id);
+          return;
+        }
+        
+        // Log the complete data structure to debug
+        console.log("[Dashboard] Retrieved face_data:", JSON.stringify(data, null, 2));
+        
+        // Update state with the face data
+        if (data.face_data && data.face_data.attributes) {
+          console.log("[Dashboard] Setting face attributes:", data.face_data.attributes);
+          setFaceAttributes(data.face_data.attributes);
+        } else {
+          console.warn("[Dashboard] face_data.attributes is missing");
+        }
+        
+        // Get the image URL
+        if (data.face_data && data.face_data.image_path) {
+          console.log("[Dashboard] Getting public URL for:", data.face_data.image_path);
+          const { data: urlData } = supabase.storage
+            .from("face-data")
+            .getPublicUrl(data.face_data.image_path);
+            
+          if (urlData && urlData.publicUrl) {
+            console.log("[Dashboard] Setting image URL:", urlData.publicUrl);
+            setFaceImageUrl(urlData.publicUrl);
+          } else {
+            console.warn("[Dashboard] Failed to get public URL");
           }
-        });
-    }
+        } else {
+          console.warn("[Dashboard] face_data.image_path is missing");
+        }
+        
+      } catch (err) {
+        console.error("[Dashboard] Error in handleRegistrationSuccess:", err);
+      }
+    }, 1000); // 1 second delay
   };
 
   const renderFaceAttributes = () => {
@@ -378,7 +416,7 @@ export const Dashboard = () => {
           _jsx("p", {
             className: "text-apple-gray-600",
             children:
-              "Your face has been registered successfully, but no detailed attributes were detected. Try re-registering in good lighting with a clear view of your face.",
+              "Your face has been registered successfully, but no detailed attributes were detected. Try re-registering your face to get detailed insights.",
           }),
         ],
       });

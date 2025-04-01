@@ -44,6 +44,44 @@ export const storeFaceId = async (userId, faceId) => {
       localStorage.setItem(`faceId_${userId}`, JSON.stringify({ faceId, updatedAt: new Date().toISOString() }));
       
       console.log(`[FaceStorage] Successfully stored face ID for user ${userId}`);
+      
+      // CRITICAL: Also store in the face_data table to ensure data is accessible
+      const timestamp = new Date().toISOString();
+      const imagePath = `${userId}/${timestamp}.jpg`; // This should match the path used in FaceRegistration.jsx
+      
+      // First, delete any existing records for this user
+      const { error: deleteError } = await supabase
+        .from('face_data')
+        .delete()
+        .eq('user_id', userId);
+        
+      if (deleteError) {
+        console.warn('[FaceStorage] Error deleting existing face data:', deleteError);
+        // Continue with insertion attempt
+      }
+      
+      // Now insert a new record
+      const { error: dbError } = await supabase
+        .from('face_data')
+        .insert({
+          user_id: userId,
+          face_id: faceId,
+          face_data: {
+            face_id: faceId,
+            image_path: imagePath,
+            attributes: {}, // The attributes will be updated by FaceIndexingService later
+            created_at: timestamp
+          },
+          created_at: timestamp
+        });
+        
+      if (dbError) {
+        console.error('[FaceStorage] Error storing face data in DB:', dbError);
+        // We still return true because the face ID was saved in storage
+        return true;
+      }
+      
+      console.log(`[FaceStorage] Successfully stored face data in DB for user ${userId}`);
       return true;
     } catch (uploadError) {
       console.error('[FaceStorage] Upload error:', uploadError);

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { FaceRegistration } from '../components/FaceRegistration';
-import { PhotoManager } from '../components/PhotoManager';
+import { PhotoManager } from '../components/PhotoManager.jsx';
 import { supabase } from '../lib/supabaseClient';
 
 interface FaceAttributes {

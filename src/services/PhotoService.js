@@ -210,468 +210,136 @@ export class PhotoService {
     static async uploadPhoto(file, eventId, folderPath, metadata) {
         try {
             console.log('[PhotoService.uploadPhoto] Starting photo upload process');
-            console.log('[PhotoService.uploadPhoto] File:', file.name, 'Size:', file.size, 'Type:', file.type);
+            let processedFile = file; // Use let as it might be reassigned by compression
             
-            // Compress the image before uploading if it's an image
-            if (file.type.startsWith('image/')) {
-                console.log('[PhotoService.uploadPhoto] Compressing image before upload...');
-                file = await this.compressImage(file);
-                console.log('[PhotoService.uploadPhoto] Compression complete, new size:', file.size);
+            // Compress if it's an image
+            if (processedFile.type.startsWith('image/')) {
+                console.log('[PhotoService.uploadPhoto] Compressing image...');
+                processedFile = await this.compressImage(processedFile);
+                console.log('[PhotoService.uploadPhoto] Compression complete, new size:', processedFile.size);
             }
             
-            // Generate a unique ID for this photo
             const photoId = uuidv4();
-            console.log('[PhotoService.uploadPhoto] Created photoId:', photoId);
+            console.log('[PhotoService.uploadPhoto] Generated photoId:', photoId);
             
-            // Determine storage path
             const { data: userData, error: userError } = await supabase.auth.getUser();
-            
-            if (userError) {
-                console.error('[DEBUG] Error getting current user:', userError);
-                throw new Error(`Error getting current user: ${userError.message}`);
+            if (userError || !userData?.user) {
+                throw new Error(`Authentication error: ${userError?.message || 'No user found'}`);
             }
-            
-            if (!userData || !userData.user) {
-                console.error('[DEBUG] No authenticated user found');
-                throw new Error('No authenticated user found');
-            }
-            
             const userId = userData.user.id;
-            console.log('[PhotoService.uploadPhoto] User ID for upload:', userId);
+            console.log('[PhotoService.uploadPhoto] User ID:', userId);
             
-            const storagePath = `${userId}/${photoId}-${file.name}`;
+            // Construct path using the processed file name
+            const storagePath = `${userId}/${photoId}-${processedFile.name}`;
             console.log('[PhotoService.uploadPhoto] Storage path:', storagePath);
             
-            // Upload to storage bucket
-            console.log('[PhotoService.uploadPhoto] Starting file upload to storage bucket "photos"...');
+            // 1. Upload to storage
+            console.log('[PhotoService.uploadPhoto] Uploading file to storage...');
             const { data: storageData, error: storageError } = await supabase.storage
                 .from('photos')
-                .upload(storagePath, file, { upsert: true });
-                
-            if (storageError) {
-                console.error('[DEBUG] Storage upload error:', storageError);
-                throw new Error(`Error uploading to storage: ${storageError.message}`);
+                .upload(storagePath, processedFile, { upsert: true });
+            
+            if (storageError) throw new Error(`Storage upload failed: ${storageError.message}`);
+            console.log('[PhotoService.uploadPhoto] Storage upload successful:', storageData);
+
+            // 2. Get Public URL
+            const { data: urlData } = supabase.storage.from('photos').getPublicUrl(storagePath);
+            const publicUrl = urlData?.publicUrl;
+            if (!publicUrl) {
+                 console.warn('[PhotoService.uploadPhoto] Could not get public URL for photo', photoId);
+                 // Proceed anyway, URL might not be strictly needed immediately
             }
-            
-            console.log('[PhotoService.uploadPhoto] File uploaded successfully to storage:', storageData);
-            
-            // Get public URL
-            const { data: { publicUrl } } = supabase.storage
-                .from('photos')
-                .getPublicUrl(storagePath);
-                
-            console.log('[PhotoService.uploadPhoto] Generated public URL:', publicUrl);
-            
-            // Detect faces in the uploaded image
-            let faces = [];
-            let faceIds = [];
-            let matchedUsers = [];
-            
-            try {
-                console.log('[PhotoService.uploadPhoto] Calling detectFaces method...');
-                const facesResult = await this.detectFaces(photoId, publicUrl);
-                console.log('[PhotoService.uploadPhoto] Detected faces result:', facesResult.length, 'faces found');
-                
-                if (facesResult && facesResult.length > 0) {
-                    // Process face attributes (age, gender, emotions)
-                    console.log('[PhotoService.uploadPhoto] Processing face attributes for', facesResult.length, 'faces');
-                    const processedFaces = facesResult.map((face, index) => {
-                        console.log(`[PhotoService.uploadPhoto] Processing face ${index} attributes`);
-                        return {
-                            faceId: `local-${photoId.substring(0, 10)}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-                            confidence: face.confidence,
-                            boundingBox: face.boundingBox,
-                            attributes: {
-                                age: face.age,
-                                gender: face.gender,
-                                smile: face.smile,
-                                emotions: face.emotions,
-                                // Add all additional attributes
-                                eyesOpen: face.eyesOpen,
-                                mouthOpen: face.mouthOpen,
-                                eyeglasses: face.eyeglasses,
-                                sunglasses: face.sunglasses,
-                                beard: face.beard,
-                                mustache: face.mustache,
-                                pose: face.pose,
-                                quality: face.quality
-                            },
-                            overallConfidence: face.confidence
-                        };
-                    });
-                    
-                    console.log('[PhotoService.uploadPhoto] Processed face attributes:', JSON.stringify(processedFaces, null, 2));
-                    
-                    faces = processedFaces;
-                    
-                    // Assign face IDs for indexing
-                    console.log('[PhotoService.uploadPhoto] Indexing', faces.length, 'faces for future matching...');
-                    faceIds = faces.map(face => face.faceId);
-                    console.log('[PhotoService.uploadPhoto] Added face_ids to metadata:', faceIds);
-                    
-                    // Search for face matches
-                    console.log('[PhotoService.uploadPhoto] Searching for face matches in registered users...');
-                    try {
-                        // Check if the function exists before calling it
-                        if (typeof FaceIndexingService.searchFacesByImage === 'function') {
-                            console.log('[PhotoService.uploadPhoto] Calling FaceIndexingService.searchFacesByImage');
-                            const faceMatches = await FaceIndexingService.searchFacesByImage(photoId, publicUrl);
-                            console.log('[PhotoService.uploadPhoto] Found', faceMatches.length, 'matching users!', faceMatches);
-                            
-                            // Filter matches with valid confidence
-                            const validMatches = faceMatches.filter(match => match.confidence >= 80);
-                            console.log('[PhotoService.uploadPhoto]', validMatches.length, 'valid matches to save to database');
-                            
-                            if (validMatches.length > 0) {
-                                // Get user information for each match and add it to the matched_users array
-                                const enhancedMatches = [];
-                                
-                                for (const match of validMatches) {
-                                    try {
-                                        // Get user data from the users table
-                                        const { data: userData, error: userError } = await supabase
-                                            .from('users')
-                                            .select('id, email, full_name, avatar_url')
-                                            .eq('id', match.userId)
-                                            .single();
-                                        
-                                        if (userError) {
-                                            console.error('[PhotoService.uploadPhoto] Error fetching user data:', userError);
-                                            
-                                            // Try falling back to the profiles table
-                                            const { data: profileData, error: profileError } = await supabase
-                                                .from('profiles')
-                                                .select('id, username, full_name, avatar_url')
-                                                .eq('id', match.userId)
-                                                .single();
-                                                
-                                            if (profileError) {
-                                                console.error('[PhotoService.uploadPhoto] Error fetching profile data:', profileError);
-                                                // Add match with basic information
-                                                enhancedMatches.push({
-                                                    userId: match.userId,
-                                                    faceId: match.faceId || null,
-                                                    fullName: 'Unknown User',
-                                                    email: null,
-                                                    avatarUrl: null,
-                                                    similarity: match.similarity || 0,
-                                                    confidence: match.confidence || match.similarity || 0
-                                                });
-                                            } else {
-                                                // Add match with profile information
-                                                enhancedMatches.push({
-                                                    userId: match.userId,
-                                                    faceId: match.faceId || null,
-                                                    fullName: profileData.full_name || profileData.username || 'Unknown User',
-                                                    email: null, 
-                                                    avatarUrl: profileData.avatar_url,
-                                                    similarity: match.similarity || 0,
-                                                    confidence: match.confidence || match.similarity || 0
-                                                });
-                                                console.log('[PhotoService.uploadPhoto] Enhanced match with profile data:', {
-                                                    userId: match.userId,
-                                                    fullName: profileData.full_name || profileData.username || 'Unknown User'
-                                                });
-                                            }
-                                        } else {
-                                            // Add match with complete user information
-                                            enhancedMatches.push({
-                                                userId: match.userId,
-                                                faceId: match.faceId || null,
-                                                fullName: userData.full_name || userData.email || 'Unknown User',
-                                                email: userData.email || null,
-                                                avatarUrl: userData.avatar_url,
-                                                similarity: match.similarity || 0,
-                                                confidence: match.confidence || match.similarity || 0
-                                            });
-                                            console.log('[PhotoService.uploadPhoto] Enhanced match with user data:', {
-                                                userId: match.userId,
-                                                fullName: userData.full_name || userData.email || 'Unknown User'
-                                            });
-                                        }
-                                    } catch (matchProcessingError) {
-                                        console.error('[PhotoService.uploadPhoto] Error processing match:', matchProcessingError);
-                                        // Add basic match data in case of error
-                                        enhancedMatches.push({
-                                            userId: match.userId,
-                                            faceId: match.faceId || null,
-                                            fullName: 'Unknown User',
-                                            email: null,
-                                            avatarUrl: null,
-                                            similarity: match.similarity || 0,
-                                            confidence: match.confidence || match.similarity || 0
-                                        });
-                                    }
-                                }
-                                
-                                matchedUsers = enhancedMatches;
-                                console.log('[PhotoService.uploadPhoto] Added matched_users to metadata:', matchedUsers);
-                            }
-                        } else {
-                            console.warn('[PhotoService.uploadPhoto] WARNING: searchFacesByImage function not available, skipping face matching');
-                        }
-                    } catch (faceMatchError) {
-                        console.error('[PhotoService.uploadPhoto] ERROR during face matching (continuing upload):', faceMatchError);
-                        console.error('[PhotoService.uploadPhoto] Face matching error stack:', faceMatchError.stack);
-                    }
-                } else {
-                    console.log('[PhotoService.uploadPhoto] No faces detected in the uploaded image');
-                }
-            } catch (faceError) {
-                console.error('[PhotoService.uploadPhoto] ERROR during face detection (continuing upload):', faceError);
-                console.error('[PhotoService.uploadPhoto] Face detection error stack:', faceError.stack);
-            }
-            
-            // Process any additional uploaded faces
-            try {
-                if (faces.length > 0 && typeof FaceIndexingService.processFaces === 'function') {
-                    await FaceIndexingService.processFaces(photoId, faces);
-                } else {
-                    console.log('[DEBUG] processFaces function not available or no faces to process');
-                }
-            } catch (processingError) {
-                console.error('[DEBUG] Error processing faces (continuing upload):', processingError);
-            }
-            
-            // Prepare photo metadata
-            const photoMetadata = {
-                title: file.name,
-                event_details: {
-                    name: metadata.eventName || "Untitled Event",
-                    date: metadata.date || new Date().toISOString(),
-                    promoter: metadata.promoterName || "Unknown"
-                },
-                venue: {
-                    name: metadata.venueName || "Unknown Venue",
-                    id: null
-                },
-                location: metadata.location && metadata.location.name ? metadata.location : {
-                    lat: null,
-                    lng: null,
-                    name: "Unknown Location",
-                    address: null
-                },
-                date_taken: metadata.date || new Date().toISOString(),
-                // Add empty structures for things that will be populated by the service
-                tags: [],
-                matched_users: []
-            };
-            
-            console.log(`[DEBUG] Location data in metadata:`, JSON.stringify(metadata.location, null, 2));
-            console.log(`[DEBUG] Prepared metadata for ${file.name}:`, JSON.stringify(photoMetadata, null, 2));
-            
-            // Create final photo record with all metadata
-            let finalMetadata = {
+            console.log('[PhotoService.uploadPhoto] Public URL:', publicUrl);
+
+            // 3. Prepare minimal photo data for initial DB insert
+            // We insert basic info first, then trigger face matching
+            const initialPhotoData = {
                 id: photoId,
                 uploaded_by: userId,
-                user_id: userId,
+                user_id: userId, // Assuming user_id is the same as uploaded_by
                 storage_path: storagePath,
+                path: storagePath, // Include path if used
                 public_url: publicUrl,
-                url: publicUrl,
-                file_size: file.size,
-                size: file.size,
-                file_type: file.type,
-                type: file.type,
-                title: metadata?.title || file.name,
-                created_at: new Date().toISOString(),
-                faces: faces || [],
-                face_ids: faceIds || [],
-                matched_users: matchedUsers || [],
-                location: metadata?.location || { lat: null, lng: null, name: null, address: null },
-                ...metadata
+                url: publicUrl, // Include url if used
+                file_size: processedFile.size,
+                size: processedFile.size, // Include size if used
+                file_type: processedFile.type,
+                type: processedFile.type, // Include type if used
+                event_id: eventId || null,
+                // Initialize potentially null fields
+                faces: [],
+                matched_users: [],
+                face_ids: [],
+                tags: [],
+                location: null,
+                venue: null,
+                event_details: null,
+                title: metadata?.title || null,
+                description: metadata?.description || null,
+                date_taken: metadata?.date_taken || null
             };
             
-            console.log('[DEBUG] Uploading photo to database:', photoId);
-            console.log('[DEBUG] Full photo record:', finalMetadata);
-            
-            // Use the new complete_photo_insert RPC function as the primary method
-            try {
-                console.log('[DEBUG] Using complete_photo_insert RPC function...');
-                
-                // Create metadata object with all additional data
-                const metadataObj = {
-                    location: metadata?.location || { lat: null, lng: null, name: null, address: null },
-                    venue: metadata?.venue || { id: null, name: null },
-                    event_details: metadata?.event_details || { date: null, name: null, type: null },
-                    tags: metadata?.tags || [],
-                    title: metadata?.title || file.name,
-                    date_taken: metadata?.date_taken || new Date().toISOString()
-                };
-                
-                console.log('[DEBUG] Metadata being sent to database:', JSON.stringify(metadataObj, null, 2));
-                
-                // Save to localStorage as a backup before attempting database operations
-                this.saveToLocalStorage(userId, finalMetadata);
-                console.log('[DEBUG] Photo data backed up to localStorage');
-                
-                // Call the RPC function with all data including faces
-                const { data: rpcData, error: rpcError } = await supabase.rpc(
-                    'complete_photo_insert',
-                    {
-                        p_id: photoId,
-                        p_user_id: userId,
-                        p_storage_path: storagePath,
-                        p_public_url: publicUrl,
-                        p_file_size: file.size,
-                        p_file_type: file.type,
-                        p_faces: faces || [],
-                        p_face_ids: faceIds || [],
-                        p_matched_users: matchedUsers || [],
-                        p_metadata: metadataObj
-                    }
-                );
-                
-                if (rpcError) {
-                    console.error('[DEBUG] Error calling complete_photo_insert:', rpcError);
-                    
-                    // If the new function fails, fall back to the original methods as a backup
-                    console.log('[DEBUG] Falling back to original insertion methods...');
-                    
-                    // Try direct insert with all data as before
-                    const { data, error } = await supabase
-                        .from('photos')
-                        .insert(finalMetadata)
+            // 4. Insert minimal data into database (use Admin client if needed for triggers/RLS bypass)
+            console.log('[PhotoService.uploadPhoto] Inserting initial photo record...');
+            // Consider using supabaseAdmin if this needs to bypass RLS or trigger specific backend logic
+            const { data: insertData, error: insertError } = await supabase
+                 .from('photos') // Or 'simple_photos' if that's the target
+                 .insert(initialPhotoData)
                         .select()
                         .single();
                         
-                    if (error) {
-                        console.log('[DEBUG] Database direct insert error:', error);
-                        
-                        // If that fails, try with minimal record (permissions issue)
-                        try {
-                            console.log('[DEBUG] Trying minimal record insert due to permission error...');
-                            const minimalRecord = {
-                                id: photoId,
-                                uploaded_by: userId,
-                                user_id: userId,
-                                storage_path: storagePath,
-                                public_url: publicUrl,
-                                url: publicUrl,
-                                file_size: file.size,
-                                size: file.size,
-                                file_type: file.type,
-                                type: file.type
-                            };
-                            
-                            const { data: minData, error: minError } = await supabase
-                                .from('photos')
-                                .insert(minimalRecord)
-                                .select()
-                                .single();
-                                
-                            if (minError) {
-                                console.log('[DEBUG] All database insertion methods failed');
-                                console.log('[DEBUG] Photo uploaded to storage but database record failed');
-                            }
-                        } catch (minimalErr) {
-                            console.error('[DEBUG] Minimal record insert failed:', minimalErr);
-                        }
-                    }
-                } else {
-                    console.log('[DEBUG] complete_photo_insert succeeded with result:', rpcData);
-                }
-                
-                // Verify the photo exists in database using our new function
-                try {
-                    console.log('[DEBUG] Verifying photo record was created...');
-                    
-                    // Use our new verification function instead of direct table query
-                    const { data: verifyData, error: verifyError } = await supabase.rpc(
-                        'verify_photo_exists',
-                        { p_photo_id: photoId }
-                    );
-                    
-                    if (verifyError) {
-                        console.error('[DEBUG] Error verifying photo record:', verifyError);
-                        
-                        // Fall back to localStorage data if verification fails
-                        console.log('[DEBUG] Using cached data as fallback');
-                        const cachedData = this.getFromLocalStorage(userId, photoId);
-                        if (cachedData) {
-                            console.log('[DEBUG] Found cached photo data:', cachedData.id);
-                        }
-                    } else if (!verifyData || verifyData.source_table === 'none') {
-                        console.error('[DEBUG] Photo record not found after database operations!');
-                        
-                        // If the record wasn't found, ensure it gets added to simple_photos
-                        const { error: insertError } = await supabase
-                            .from('simple_photos')
-                            .insert({
-                                id: photoId,
-                                uploaded_by: userId,
-                                storage_path: storagePath,
-                                public_url: publicUrl,
-                                file_size: file.size,
-                                file_type: file.type,
-                                title: metadata?.title || file.name,
-                                faces: faces || [],
-                                face_ids: faceIds || [],
-                                matched_users: matchedUsers || [],
-                                location: metadata?.location || { lat: null, lng: null, name: null, address: null },
-                                venue: metadata?.venue || { id: null, name: null },
-                                event_details: metadata?.event_details || { date: null, name: null, type: null },
-                                tags: metadata?.tags || [],
-                                date_taken: metadata?.date_taken || new Date().toISOString()
-                            });
-                            
-                        if (insertError) {
-                            console.error('[DEBUG] Error inserting into simple_photos:', insertError);
-                            
-                            // Try one more time with a smaller payload
-                            const { error: retryError } = await supabase
-                                .from('simple_photos')
-                                .insert({
-                                    id: photoId,
-                                    uploaded_by: userId,
-                                    storage_path: storagePath,
-                                    public_url: publicUrl,
-                                    file_size: file.size,
-                                    file_type: file.type,
-                                    title: metadata?.title || file.name,
-                                    matched_users: matchedUsers || []
-                                });
-                                
-                            if (retryError) {
-                                console.error('[DEBUG] Retry also failed:', retryError);
-                            } else {
-                                console.log('[DEBUG] Successfully inserted minimal photo data into simple_photos table');
-                            }
-                        } else {
-                            console.log('[DEBUG] Successfully inserted photo into simple_photos table');
-                        }
-                    } else {
-                        console.log('[DEBUG] Photo record verified in database:', verifyData.id, 'in table:', verifyData.source_table);
-                    }
-                } catch (verifyErr) {
-                    console.error('[DEBUG] Exception during photo verification:', verifyErr);
-                }
-
-                // Skip database verification - using the finalMetadata directly
-                console.log('[DEBUG] Skipping database verification - using finalMetadata directly');
-                // This implements Solution 1 - using data we already have instead of verifying
-            } catch (dbError) {
-                console.error('[DEBUG] Database error:', dbError);
-                
-                // Allow upload to "succeed" even with DB errors, since the file is in storage
-                console.log('[DEBUG] Photo uploaded to storage but database record failed');
+            if (insertError) {
+                // Attempt cleanup: delete the file from storage if DB insert fails?
+                console.error('[PhotoService.uploadPhoto] Database insert failed:', insertError);
+                // Consider deleting from storage: await supabase.storage.from('photos').remove([storagePath]);
+                throw new Error(`Database insert failed: ${insertError.message}`);
             }
+            console.log('[PhotoService.uploadPhoto] Initial DB record created:', insertData?.id);
+
+            // 5. Trigger Asynchronous Face Matching (IMPORTANT)
+            console.log('[PhotoService.uploadPhoto] Triggering asynchronous face processing...');
+            // Read file into bytes *again* (or pass from earlier if feasible)
+            const arrayBuffer = await processedFile.arrayBuffer();
+            const imageBytes = new Uint8Array(arrayBuffer);
             
-            console.log('[DEBUG] Photo uploaded successfully:', photoId);
-            
-            // Return success response with photo details
+            // Call the refactored service method - NO `await` here for async!
+            FaceIndexingService.processPhotoUpload(photoId, imageBytes)
+                .then(result => {
+                    if (result.success) {
+                        console.log(`[Background] Photo ${photoId}: Face processing completed. Matches found: ${result.matchesFound}`);
+                        // Optionally update the photo record again here with face count or match status if needed
+                } else {
+                        console.error(`[Background] Photo ${photoId}: Face processing failed: ${result.error}`);
+                        // Log error, maybe update photo status to 'matching_failed'
+                    }
+                })
+                .catch(err => {
+                    console.error(`[Background] Photo ${photoId}: Uncaught error during face processing: ${err}`);
+                });
+
+            // 6. Return success indication immediately to the UI
+            console.log('[PhotoService.uploadPhoto] Upload process initiated. Face matching running in background.');
             return {
                 success: true,
-                photoId,
                 url: publicUrl,
-                photoMetadata: finalMetadata
+                photoId: photoId,
+                // Return initial metadata, not waiting for faces
+                photoMetadata: {
+                     ...initialPhotoData,
+                     faces: [], // Indicate faces haven't been processed yet
+                     matched_users: [] // Indicate matches haven't been processed yet
+                } 
+            };
+
+        } catch (error) {
+            console.error('[PhotoService.uploadPhoto] Upload failed:', error);
+            return {
+                success: false,
+                error: error.message
             };
         }
-        catch (err) {
-            console.error('[PhotoService.uploadPhoto] ERROR during photo upload:', err);
-            console.error('[PhotoService.uploadPhoto] Upload error stack:', err.stack);
-            throw err;
-        }
     }
+
     static async updatePhotoMetadata(photoId, metadata) {
         try {
             let retries = 0;
@@ -741,6 +409,7 @@ export class PhotoService {
             return false;
         }
     }
+
     static async batchUpdatePhotos(photoIds, data) {
         try {
             let retries = 0;
@@ -827,6 +496,7 @@ export class PhotoService {
             return false;
         }
     }
+
     static async renameFolder(oldPath, newName) {
         try {
             let retries = 0;
@@ -860,6 +530,7 @@ export class PhotoService {
             return false;
         }
     }
+
     static async getUserStorageUsage(userId) {
         try {
             // First check if user has a storage record
@@ -890,6 +561,7 @@ export class PhotoService {
             return { error: error };
         }
     }
+
     static async detectFaces(photoId, imageUrl) {
         try {
             console.log('[PhotoService.detectFaces] Starting face detection for photo:', photoId);
@@ -1044,6 +716,7 @@ export class PhotoService {
             return [];
         }
     }
+
     static async getPhotosForEvent(eventId) {
         try {
             let retries = 0;
@@ -1108,6 +781,7 @@ export class PhotoService {
             throw error;
         }
     }
+
     static async getPhotosForUser(userId) {
         try {
             let retries = 0;
@@ -1175,6 +849,7 @@ export class PhotoService {
             throw error;
         }
     }
+
     static async updatePhotoPermissions(photoId, permissions) {
         try {
             let retries = 0;
@@ -1208,6 +883,7 @@ export class PhotoService {
             throw error;
         }
     }
+
     static async deletePhoto(photoId) {
         try {
             // Get photo details
@@ -1270,6 +946,7 @@ export class PhotoService {
             throw error;
         }
     }
+
     static async downloadPhoto(photoId) {
         try {
             let retries = 0;
@@ -1330,6 +1007,7 @@ export class PhotoService {
             throw error;
         }
     }
+
     static async getPhotoById(photoId) {
         try {
             let retries = 0;
@@ -1378,6 +1056,7 @@ export class PhotoService {
             throw error;
         }
     }
+
     // Process matches between user faces and photos
     static async processMatches(userId) {
         try {
@@ -1550,6 +1229,350 @@ export class PhotoService {
         } catch (error) {
             console.error('[DEBUG] Exception getting current user:', error);
             return { data: null, error };
+        }
+    }
+
+    /**
+     * Analyzes and compares a photo with a user's face
+     * Uses multiple fallback approaches to ensure reliability
+     * @param {string} photoId - The ID of the photo to analyze
+     * @param {string} userId - The ID of the user for comparison
+     * @returns {Promise<Object>} - Analysis results with match confidence
+     */
+    static async analyzePhotoForUser(photoId, userId) {
+        console.log(`[PhotoService.analyzePhotoForUser] Analyzing photo ${photoId} for user ${userId}`);
+        
+        try {
+            // First try: Use Supabase RPC if available
+            console.log(`[PhotoService] Attempting to use Supabase RPC for analysis...`);
+            try {
+                const { supabase } = await import('../lib/supabaseClient');
+                const { data, error } = await supabase.rpc('match_faces_with_aws_data', {
+                    p_photo_id: photoId,
+                    p_user_id: userId
+                });
+                
+                if (!error && data?.success) {
+                    console.log(`[PhotoService] RPC analysis successful:`, data);
+                    return {
+                        success: true,
+                        confidence: data.similarity,
+                        faceDetails: data.face_details,
+                        matchCount: data.match_count,
+                        method: 'supabase_rpc'
+                    };
+                }
+                
+                console.warn(`[PhotoService] RPC analysis failed:`, error || 'No data returned');
+                
+                // Fall through to next approach if RPC fails
+            } catch (rpcError) {
+                console.warn(`[PhotoService] RPC analysis error:`, rpcError);
+                // Fall through to next approach
+            }
+            
+            // Second try: Use Edge Function endpoint directly
+            console.log(`[PhotoService] Attempting to use Edge Function for analysis...`);
+            try {
+                // Get supabase URL and key from environment
+                const { supabase } = await import('../lib/supabaseClient');
+                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://gmupwzjxirpkskolsuix.supabase.co';
+                
+                // Get the anon key directly from environment or try to find it another way
+                let supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+                
+                // If not available in environment, try to get from localStorage (if browser)
+                if (!supabaseKey && typeof localStorage !== 'undefined') {
+                    try {
+                        const storedKey = localStorage.getItem('supabase.auth.token');
+                        if (storedKey) {
+                            const parsedToken = JSON.parse(storedKey);
+                            supabaseKey = parsedToken?.currentSession?.access_token;
+                        }
+                    } catch (e) {
+                        console.warn('[PhotoService] Error retrieving token from localStorage:', e);
+                    }
+                }
+                
+                // Fallback to a hardcoded key - only for development, remove in production!
+                if (!supabaseKey) {
+                    console.warn('[PhotoService] No Supabase key found, using anonymous session');
+                    const { data: { session }, error: authError } = await supabase.auth.getSession();
+                    
+                    if (authError) {
+                        throw new Error(`Auth error: ${authError.message}`);
+                    }
+                    
+                    supabaseKey = session?.access_token;
+                }
+                
+                if (!supabaseKey) {
+                    throw new Error('No Supabase key available for authorization');
+                }
+                
+                console.log(`[PhotoService] Calling Edge Function at ${supabaseUrl}/functions/v1/compare-faces`);
+                
+                const response = await fetch(`${supabaseUrl}/functions/v1/compare-faces`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${supabaseKey}`
+                    },
+                    body: JSON.stringify({ photoId, userId })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`[PhotoService] Edge Function HTTP error ${response.status}:`, errorText);
+                    console.error('[PhotoService] Request details:', {
+                        url: `${supabaseUrl}/functions/v1/compare-faces`,
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + (supabaseKey ? '****' + supabaseKey.substring(supabaseKey.length - 4) : 'undefined')
+                        },
+                        body: JSON.stringify({ photoId, userId })
+                    });
+                    throw new Error(`HTTP error ${response.status}: ${errorText.substring(0, 100)}${errorText.length > 100 ? '...' : ''}`);
+                }
+                
+                const result = await response.json();
+                console.log(`[PhotoService] Edge Function result:`, result);
+                
+                if (result.success) {
+                    return {
+                        success: true,
+                        confidence: result.similarity,
+                        faceDetails: result.face_details,
+                        matchCount: result.match_count,
+                        method: 'edge_function'
+                    };
+                }
+                
+                throw new Error(result.message || 'Function returned success: false');
+            } catch (edgeFunctionError) {
+                console.warn(`[PhotoService] Edge Function error:`, edgeFunctionError);
+                
+                // Log more details about the error for debugging
+                if (edgeFunctionError.name === 'TypeError' && edgeFunctionError.message.includes('Failed to fetch')) {
+                    console.error('[PhotoService] Network error - likely CORS issue or Function not accessible');
+                } else if (edgeFunctionError.message.includes('401')) {
+                    console.error('[PhotoService] Authentication error - check your JWT token/API key');
+                }
+                
+                // Fall through to next approach
+            }
+            
+            // Final try: Direct AWS SDK call with error handling
+            console.log(`[PhotoService] Attempting direct AWS SDK call for analysis...`);
+            try {
+                // Load AWS config and SDK
+                const { rekognitionClient, COLLECTION_ID } = await import('../config/aws-config');
+                const { CompareFacesCommand } = await import('@aws-sdk/client-rekognition');
+                
+                // 1. Get user's face image
+                const { data: faceData } = await supabase
+                    .from('face_data')
+                    .select('face_data')
+                    .eq('user_id', userId)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .single();
+                    
+                if (!faceData?.face_data?.image_path) {
+                    throw new Error('No face image found for user');
+                }
+                
+                // 2. Download face image
+                const { data: faceImageData } = await supabase.storage
+                    .from('face-data')
+                    .download(faceData.face_data.image_path);
+                    
+                if (!faceImageData) {
+                    throw new Error('Failed to download face image');
+                }
+                
+                const faceArrayBuffer = await faceImageData.arrayBuffer();
+                const faceBytes = new Uint8Array(faceArrayBuffer);
+                
+                // 3. Get photo image path
+                const { data: photoData } = await supabase
+                    .from('photos')
+                    .select('storage_path')
+                    .eq('id', photoId)
+                    .single();
+                    
+                if (!photoData?.storage_path) {
+                    throw new Error('No storage path found for photo');
+                }
+                
+                // 4. Download photo image
+                const { data: photoImageData } = await supabase.storage
+                    .from('photos')
+                    .download(photoData.storage_path);
+                    
+                if (!photoImageData) {
+                    throw new Error('Failed to download photo image');
+                }
+                
+                const photoArrayBuffer = await photoImageData.arrayBuffer();
+                const photoBytes = new Uint8Array(photoArrayBuffer);
+                
+                // 5. Call AWS Rekognition
+                const command = new CompareFacesCommand({
+                    SourceImage: { Bytes: faceBytes },
+                    TargetImage: { Bytes: photoBytes },
+                    SimilarityThreshold: 70
+                });
+                
+                const response = await rekognitionClient.send(command);
+                
+                if (response.FaceMatches && response.FaceMatches.length > 0) {
+                    const bestMatch = response.FaceMatches[0];
+                    
+                    console.log(`[PhotoService] Direct AWS analysis successful:`, bestMatch);
+                    return {
+                        success: true,
+                        confidence: bestMatch.Similarity / 100,
+                        faceDetails: bestMatch.Face,
+                        boundingBox: bestMatch.Face.BoundingBox,
+                        method: 'direct_aws'
+                    };
+                } else {
+                    console.log(`[PhotoService] Direct AWS analysis found no matches`);
+                    return {
+                        success: false,
+                        message: 'No face matches found',
+                        method: 'direct_aws'
+                    };
+                }
+            } catch (awsError) {
+                console.warn(`[PhotoService] Direct AWS analysis error:`, awsError);
+                
+                // Fallback: Just indicate failure, don't simulate
+                return {
+                    success: false,
+                    message: `All methods failed. Last error (AWS): ${awsError.message}`,
+                    method: 'all_failed'
+                };
+            }
+        } catch (err) {
+            console.error(`[PhotoService] All analysis approaches failed:`, err);
+            return {
+                success: false,
+                message: err.message,
+                method: 'all_failed'
+            };
+        }
+    }
+  
+    /**
+     * Returns all images that matched with a specific user
+     * @param {string} userId - User ID to find matches for
+     * @returns {Promise<Array>} - Array of matched photos with confidence scores
+     */
+    static async getUserMatchedPhotos(userId) {
+        try {
+            console.log(`[PhotoService] Getting matched photos for user ${userId}`);
+            const { supabase } = await import('../lib/supabaseClient');
+            
+            // First try: Get matches from photo_faces table
+            const { data: matchData, error: matchError } = await supabase
+                .from('photo_faces')
+                .select('photo_id, confidence, created_at')
+                .eq('user_id', userId);
+                
+            if (matchError) {
+                console.warn(`[PhotoService] Database match query error:`, matchError);
+                // Fall through to localStorage
+            } else if (matchData && matchData.length > 0) {
+                console.log(`[PhotoService] Found ${matchData.length} matches in database`);
+                
+                // Fetch the actual photos
+                const photoIds = matchData.map(match => match.photo_id);
+                const { data: photos, error: photosError } = await supabase
+                    .from('photos')
+                    .select('*')
+                    .in('id', photoIds);
+                    
+                if (photosError || !photos) {
+                    console.warn(`[PhotoService] Error fetching matched photos:`, photosError);
+                    // Fall through to localStorage
+                } else {
+                    // Combine photos with match data
+                    const enrichedPhotos = photos.map(photo => {
+                        const match = matchData.find(m => m.photo_id === photo.id);
+                        return {
+                            ...photo,
+                            match_confidence: match?.confidence || null,
+                            match_date: match?.created_at || null,
+                            match_source: 'database'
+                        };
+                    });
+                    
+                    console.log(`[PhotoService] Returning ${enrichedPhotos.length} matched photos from database`);
+                    return enrichedPhotos;
+                }
+            }
+            
+            // Second try: Get matches from localStorage
+            try {
+                const localStorageKey = `face_matches_${userId}`;
+                const localMatchesJson = localStorage.getItem(localStorageKey);
+                
+                if (localMatchesJson) {
+                    const localMatches = JSON.parse(localMatchesJson);
+                    
+                    if (localMatches && localMatches.length > 0) {
+                        console.log(`[PhotoService] Found ${localMatches.length} matches in localStorage`);
+                        
+                        // Fetch the actual photos
+                        const photoIds = localMatches.map(match => match.photo_id).filter(Boolean);
+                        
+                        if (photoIds.length === 0) {
+                            console.warn(`[PhotoService] No valid photo IDs in localStorage matches`);
+                            return [];
+                        }
+                        
+                        const { data: photos, error: photosError } = await supabase
+                            .from('photos')
+                            .select('*')
+                            .in('id', photoIds);
+                            
+                        if (photosError || !photos) {
+                            console.warn(`[PhotoService] Error fetching localStorage matched photos:`, photosError);
+                            return localMatches.map(match => ({
+                                id: match.photo_id,
+                                match_confidence: match.similarity || match.confidence || null,
+                                match_date: match.created_at || new Date().toISOString(),
+                                match_source: 'localStorage_only'
+                            }));
+                        }
+                        
+                        // Combine photos with match data
+                        const enrichedPhotos = photos.map(photo => {
+                            const match = localMatches.find(m => m.photo_id === photo.id);
+                            return {
+                                ...photo,
+                                match_confidence: match?.similarity || match?.confidence || null,
+                                match_date: match?.created_at || null,
+                                match_source: 'localStorage'
+                            };
+                        });
+                        
+                        console.log(`[PhotoService] Returning ${enrichedPhotos.length} matched photos from localStorage`);
+                        return enrichedPhotos;
+                    }
+                }
+            } catch (localError) {
+                console.warn(`[PhotoService] Error processing localStorage matches:`, localError);
+            }
+            
+            console.log(`[PhotoService] No matches found in database or localStorage`);
+            return [];
+        } catch (err) {
+            console.error(`[PhotoService] Error getting user matched photos:`, err);
+            return [];
         }
     }
 }
