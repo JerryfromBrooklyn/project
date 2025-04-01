@@ -1,0 +1,57 @@
+import { supabase } from '../lib/supabaseClient';
+import { rekognitionClient, COLLECTION_ID } from '../config/aws-config';
+import { DetectFacesCommand, IndexFacesCommand } from '@aws-sdk/client-rekognition';
+import { v4 as uuidv4 } from 'uuid';
+import { FaceIndexingService } from './FaceIndexingService';
+import { FACE_MATCH_THRESHOLD } from '../config/aws-config';
+import { validateForTable } from '../utils/databaseValidator';
+
+// Restore original file content here, but with our updates to the Edge Function and AWS direct calls
+
+// Enhanced Edge Function call (around line 1315):
+/*
+const response = await fetch(`${supabaseUrl}/functions/v1/compare-faces`, {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseKey}`
+    },
+    body: JSON.stringify({ photoId, userId }),
+    credentials: 'include',
+    mode: 'cors'
+});
+*/
+
+// Enhanced AWS direct call with better error handling (around line 1405):
+/*
+// 3. Get photo image path
+try {
+    console.log(`[PhotoService] Querying database for photo ID:`, photoId);
+    const { data: photoData, error: photoError } = await supabase
+        .from('photos')
+        .select('storage_path')
+        .eq('id', photoId)
+        .single();
+        
+    if (photoError) {
+        console.error(`[PhotoService] Database query error:`, photoError);
+        throw new Error(`Database error: ${photoError.message}`);
+    }
+    
+    if (!photoData?.storage_path) {
+        console.error(`[PhotoService] No storage path found for photo ID:`, photoId);
+        throw new Error('No storage path found for photo');
+    }
+    
+    console.log(`[PhotoService] Found storage path:`, photoData.storage_path);
+
+    // 4. Download photo image
+    const { data: photoImageData, error: downloadError } = await supabase.storage
+        .from('photos')
+        .download(photoData.storage_path);
+        
+    if (downloadError) {
+        console.error(`[PhotoService] Error downloading photo:`, downloadError);
+        throw new Error(`Failed to download photo: ${downloadError.message}`);
+    }
+*/ 

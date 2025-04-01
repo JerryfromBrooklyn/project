@@ -1233,18 +1233,20 @@ export class PhotoService {
     }
 
     /**
-     * Analyzes a photo for a specific user using multiple fallback methods
-     * @param {string} photoId - ID of the photo to analyze 
-     * @param {string} userId - ID of the user to compare with
-     * @returns {Promise<Object>} - Analysis results with confidence score
+     * Analyzes and compares a photo with a user's face
+     * Uses multiple fallback approaches to ensure reliability
+     * @param {string} photoId - The ID of the photo to analyze
+     * @param {string} userId - The ID of the user for comparison
+     * @returns {Promise<Object>} - Analysis results with match confidence
      */
     static async analyzePhotoForUser(photoId, userId) {
+        console.log(`[PhotoService.analyzePhotoForUser] Analyzing photo ${photoId} for user ${userId}`);
+        
         try {
-            // First try: Use Supabase RPC function that calls our Edge Function
+            // First try: Use Supabase RPC if available
             console.log(`[PhotoService] Attempting to use Supabase RPC for analysis...`);
             try {
                 const { supabase } = await import('../lib/supabaseClient');
-                
                 const { data, error } = await supabase.rpc('match_faces_with_aws_data', {
                     p_photo_id: photoId,
                     p_user_id: userId
@@ -1310,57 +1312,44 @@ export class PhotoService {
                 
                 console.log(`[PhotoService] Calling Edge Function at ${supabaseUrl}/functions/v1/compare-faces`);
                 
-                // Try with no-cors mode first if we have CORS issues
-                const fetchOptions = {
+                const response = await fetch(`${supabaseUrl}/functions/v1/compare-faces`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${supabaseKey}`
                     },
-                    body: JSON.stringify({ photoId, userId }),
-                    credentials: 'include',
-                    mode: 'cors' // We'll try with cors first
-                };
+                    body: JSON.stringify({ photoId, userId })
+                });
                 
-                try {
-                    const response = await fetch(`${supabaseUrl}/functions/v1/compare-faces`, fetchOptions);
-                    
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        console.error(`[PhotoService] Edge Function HTTP error ${response.status}:`, errorText);
-                        throw new Error(`HTTP error ${response.status}: ${errorText.substring(0, 100)}${errorText.length > 100 ? '...' : ''}`);
-                    }
-                    
-                    const result = await response.json();
-                    console.log(`[PhotoService] Edge Function result:`, result);
-                    
-                    if (result.success) {
-                        return {
-                            success: true,
-                            confidence: result.similarity,
-                            faceDetails: result.face_details,
-                            matchCount: result.match_count,
-                            method: 'edge_function'
-                        };
-                    }
-                    
-                    throw new Error(result.message || 'Function returned success: false');
-                } catch (fetchError) {
-                    // If the error is specifically a CORS error, log it clearly
-                    if (fetchError.message && (
-                        fetchError.message.includes('Failed to fetch') || 
-                        fetchError.message.includes('CORS') ||
-                        fetchError.message.includes('NetworkError')
-                    )) {
-                        console.error('[PhotoService] CORS error detected. Please make sure your Edge Function has CORS headers:', fetchError);
-                        console.error('To fix this, update your Edge Function with proper CORS headers:');
-                        console.error('- Add: Access-Control-Allow-Origin: *');
-                        console.error('- Add: Access-Control-Allow-Methods: POST, OPTIONS');
-                        console.error('- Add: Access-Control-Allow-Headers: authorization, x-client-info, apikey, content-type');
-                        throw new Error('CORS error: The Edge Function needs to be updated with CORS headers');
-                    }
-                    throw fetchError;
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`[PhotoService] Edge Function HTTP error ${response.status}:`, errorText);
+                    console.error('[PhotoService] Request details:', {
+                        url: `${supabaseUrl}/functions/v1/compare-faces`,
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + (supabaseKey ? '****' + supabaseKey.substring(supabaseKey.length - 4) : 'undefined')
+                        },
+                        body: JSON.stringify({ photoId, userId })
+                    });
+                    throw new Error(`HTTP error ${response.status}: ${errorText.substring(0, 100)}${errorText.length > 100 ? '...' : ''}`);
                 }
+                
+                const result = await response.json();
+                console.log(`[PhotoService] Edge Function result:`, result);
+                
+                if (result.success) {
+                    return {
+                        success: true,
+                        confidence: result.similarity,
+                        faceDetails: result.face_details,
+                        matchCount: result.match_count,
+                        method: 'edge_function'
+                    };
+                }
+                
+                throw new Error(result.message || 'Function returned success: false');
             } catch (edgeFunctionError) {
                 console.warn(`[PhotoService] Edge Function error:`, edgeFunctionError);
                 
@@ -1407,115 +1396,55 @@ export class PhotoService {
                 const faceBytes = new Uint8Array(faceArrayBuffer);
                 
                 // 3. Get photo image path
-                try {
-                    console.log(`[PhotoService] Querying database for photo ID:`, photoId);
+                const { data: photoData, error: photoError } = await supabase
+                    .from('photos')
+                    .select('storage_path')
+                    .eq('id', photoId)
+                    .single();
                     
-                    // First check the photos table
-                    let { data: photoResults, error: photoError } = await supabase
-                        .from('photos')
-                        .select('storage_path')
-                        .eq('id', photoId);
-                        
-                    // If not found in photos table, try the simple_photos table
-                    if (!photoResults || photoResults.length === 0) {
-                        console.log(`[PhotoService] Not found in photos table, checking simple_photos...`);
-                        ({ data: photoResults, error: photoError } = await supabase
-                            .from('simple_photos')
-                            .select('storage_path')
-                            .eq('id', photoId));
-                    }
-                    
-                    // If not found in simple_photos, try all_photos view
-                    if (!photoResults || photoResults.length === 0) {
-                        console.log(`[PhotoService] Not found in simple_photos, checking all_photos...`);
-                        ({ data: photoResults, error: photoError } = await supabase
-                            .from('all_photos') 
-                            .select('storage_path')
-                            .eq('id', photoId));
-                    }
-                    
-                    if (photoError) {
-                        console.error(`[PhotoService] Database query error:`, photoError);
-                        throw new Error(`Database error: ${photoError.message}`);
-                    }
-                    
-                    // Get the first result if available
-                    let photoData = null;
-                    if (photoResults && photoResults.length > 0) {
-                        photoData = photoResults[0];
-                        console.log(`[PhotoService] Found photo in database:`, photoData);
-                    } else {
-                        // Try to get the photo directly from the UI component
-                        console.log(`[PhotoService] No photo found in database, trying to use passed photo object directly...`);
-                        
-                        // Try to get the photo from PhotoManager.jsx
-                        try {
-                            // Attempt to construct a path from the ID if we have to
-                            const constructedPath = `photos/${photoId}.png`;
-                            console.log(`[PhotoService] Using constructed storage path: ${constructedPath}`);
-                            
-                            photoData = { storage_path: constructedPath };
-                        } catch (pathError) {
-                            console.error(`[PhotoService] Error constructing path:`, pathError);
-                            throw new Error(`No photo found with ID: ${photoId}`);
-                        }
-                    }
-                    
-                    if (!photoData?.storage_path) {
-                        console.error(`[PhotoService] No storage path found for photo ID:`, photoId);
-                        throw new Error('No storage path found for photo');
-                    }
-                    
-                    console.log(`[PhotoService] Using storage path:`, photoData.storage_path);
+                if (!photoData?.storage_path) {
+                    throw new Error('No storage path found for photo');
+                }
                 
-                    // 4. Download photo image
-                    const { data: photoImageData, error: downloadError } = await supabase.storage
-                        .from('photos')
-                        .download(photoData.storage_path);
-                        
-                    if (downloadError) {
-                        console.error(`[PhotoService] Error downloading photo:`, downloadError);
-                        throw new Error(`Failed to download photo: ${downloadError.message}`);
-                    }
+                // 4. Download photo image
+                const { data: photoImageData } = await supabase.storage
+                    .from('photos')
+                    .download(photoData.storage_path);
                     
-                    if (!photoImageData) {
-                        throw new Error('Failed to download photo image');
-                    }
+                if (!photoImageData) {
+                    throw new Error('Failed to download photo image');
+                }
+                
+                const photoArrayBuffer = await photoImageData.arrayBuffer();
+                const photoBytes = new Uint8Array(photoArrayBuffer);
+                
+                // 5. Call AWS Rekognition
+                const command = new CompareFacesCommand({
+                    SourceImage: { Bytes: faceBytes },
+                    TargetImage: { Bytes: photoBytes },
+                    SimilarityThreshold: 70
+                });
+                
+                const response = await rekognitionClient.send(command);
+                
+                if (response.FaceMatches && response.FaceMatches.length > 0) {
+                    const bestMatch = response.FaceMatches[0];
                     
-                    const photoArrayBuffer = await photoImageData.arrayBuffer();
-                    const photoBytes = new Uint8Array(photoArrayBuffer);
-                    
-                    // 5. Call AWS Rekognition
-                    const command = new CompareFacesCommand({
-                        SourceImage: { Bytes: faceBytes },
-                        TargetImage: { Bytes: photoBytes },
-                        SimilarityThreshold: 70
-                    });
-                    
-                    const response = await rekognitionClient.send(command);
-                    
-                    if (response.FaceMatches && response.FaceMatches.length > 0) {
-                        const bestMatch = response.FaceMatches[0];
-                        
-                        console.log(`[PhotoService] Direct AWS analysis successful:`, bestMatch);
-                        return {
-                            success: true,
-                            confidence: bestMatch.Similarity / 100,
-                            faceDetails: bestMatch.Face,
-                            boundingBox: bestMatch.Face.BoundingBox,
-                            method: 'direct_aws'
-                        };
-                    } else {
-                        console.log(`[PhotoService] Direct AWS analysis found no matches`);
-                        return {
-                            success: false,
-                            message: 'No face matches found',
-                            method: 'direct_aws'
-                        };
-                    }
-                } catch (photoError) {
-                    console.error(`[PhotoService] Error handling photo:`, photoError);
-                    throw photoError;
+                    console.log(`[PhotoService] Direct AWS analysis successful:`, bestMatch);
+                    return {
+                        success: true,
+                        confidence: bestMatch.Similarity / 100,
+                        faceDetails: bestMatch.Face,
+                        boundingBox: bestMatch.Face.BoundingBox,
+                        method: 'direct_aws'
+                    };
+                } else {
+                    console.log(`[PhotoService] Direct AWS analysis found no matches`);
+                    return {
+                        success: false,
+                        message: 'No face matches found',
+                        method: 'direct_aws'
+                    };
                 }
             } catch (awsError) {
                 console.warn(`[PhotoService] Direct AWS analysis error:`, awsError);
@@ -1588,62 +1517,4 @@ export class PhotoService {
             
             // Second try: Get matches from localStorage
             try {
-                const localStorageKey = `face_matches_${userId}`;
-                const localMatchesJson = localStorage.getItem(localStorageKey);
-                
-                if (localMatchesJson) {
-                    const localMatches = JSON.parse(localMatchesJson);
-                    
-                    if (localMatches && localMatches.length > 0) {
-                        console.log(`[PhotoService] Found ${localMatches.length} matches in localStorage`);
-                        
-                        // Fetch the actual photos
-                        const photoIds = localMatches.map(match => match.photo_id).filter(Boolean);
-                        
-                        if (photoIds.length === 0) {
-                            console.warn(`[PhotoService] No valid photo IDs in localStorage matches`);
-                            return [];
-                        }
-                        
-                        const { data: photos, error: photosError } = await supabase
-                            .from('photos')
-                            .select('*')
-                            .in('id', photoIds);
-                            
-                        if (photosError || !photos) {
-                            console.warn(`[PhotoService] Error fetching localStorage matched photos:`, photosError);
-                            return localMatches.map(match => ({
-                                id: match.photo_id,
-                                match_confidence: match.similarity || match.confidence || null,
-                                match_date: match.created_at || new Date().toISOString(),
-                                match_source: 'localStorage_only'
-                            }));
-                        }
-                        
-                        // Combine photos with match data
-                        const enrichedPhotos = photos.map(photo => {
-                            const match = localMatches.find(m => m.photo_id === photo.id);
-                            return {
-                                ...photo,
-                                match_confidence: match?.similarity || match?.confidence || null,
-                                match_date: match?.created_at || null,
-                                match_source: 'localStorage'
-                            };
-                        });
-                        
-                        console.log(`[PhotoService] Returning ${enrichedPhotos.length} matched photos from localStorage`);
-                        return enrichedPhotos;
-                    }
-                }
-            } catch (localError) {
-                console.warn(`[PhotoService] Error processing localStorage matches:`, localError);
-            }
-            
-            console.log(`[PhotoService] No matches found in database or localStorage`);
-            return [];
-        } catch (err) {
-            console.error(`[PhotoService] Error getting user matched photos:`, err);
-            return [];
-        }
-    }
-}
+                const localStorageKey = `face_matches_${userId}`
