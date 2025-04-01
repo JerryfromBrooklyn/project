@@ -36,6 +36,7 @@ import { FaceRegistration } from "../components/FaceRegistration";
 import { PhotoManager } from "../components/PhotoManager";
 import AdminTools from "../components/AdminTools.jsx";
 import { supabase } from "../lib/supabaseClient";
+import { toast } from "react-hot-toast";
 
 export const Dashboard = () => {
   const { user, signOut } = useAuth();
@@ -46,59 +47,38 @@ export const Dashboard = () => {
   const [faceImageUrl, setFaceImageUrl] = useState(null);
   const [faceAttributes, setFaceAttributes] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [faceData, setFaceData] = useState(null);
+
+  const fetchFaceData = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('user_face_data') 
+        .select('face_id, created_at, updated_at')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      if (data) {
+        setFaceData({ 
+          face_id: data.face_id,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+          attributes: { message: 'Attributes not stored in this table' }
+        }); 
+      } else {
+        setFaceData(null);
+      }
+    } catch (err) {
+      console.error('Error fetching face data:', err);
+      setFaceData(null);
+    }
+  };
 
   useEffect(() => {
-    const fetchFaceData = async () => {
-      if (!user) return;
-      try {
-        const { data, error } = await supabase
-          .from("face_data")
-          .select("face_data")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(); // Use maybeSingle instead of single
-
-        if (error) {
-          // Only throw if it's not a "no rows returned" error
-          if (
-            !error.message.includes(
-              "JSON object requested, multiple (or no) rows returned",
-            )
-          ) {
-            throw error;
-          }
-          // If no rows, just set the state accordingly
-          setFaceRegistered(false);
-          setFaceImageUrl(null);
-          setFaceAttributes(null);
-          return;
-        }
-
-        if (data) {
-          setFaceRegistered(true);
-          setFaceAttributes(data.face_data.attributes || null);
-          const {
-            data: { publicUrl },
-          } = supabase.storage
-            .from("face-data")
-            .getPublicUrl(data.face_data.image_path);
-          setFaceImageUrl(publicUrl);
-        } else {
-          // No data case
-          setFaceRegistered(false);
-          setFaceImageUrl(null);
-          setFaceAttributes(null);
-        }
-      } catch (err) {
-        console.error("Error fetching face data:", err);
-        // Set default state on error
-        setFaceRegistered(false);
-        setFaceImageUrl(null);
-        setFaceAttributes(null);
-      }
-    };
-
     fetchFaceData();
   }, [user]);
 
@@ -137,30 +117,26 @@ export const Dashboard = () => {
     checkAdminStatus();
   }, [user]);
 
-  const handleRegistrationSuccess = () => {
+  const handleRegistrationSuccess = (faceId, attributes) => {
+    console.log('[Dashboard] Registration successful. Face ID:', faceId);
     setFaceRegistered(true);
-    setShowRegistrationModal(false);
-    // Refetch face data to get the new image URL and attributes
-    if (user) {
-      supabase
-        .from("face_data")
-        .select("face_data")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle() // Use maybeSingle here too
-        .then(({ data, error }) => {
-          if (!error && data) {
-            setFaceAttributes(data.face_data.attributes || null);
-            const {
-              data: { publicUrl },
-            } = supabase.storage
-              .from("face-data")
-              .getPublicUrl(data.face_data.image_path);
-            setFaceImageUrl(publicUrl);
-          }
-        });
+    if (attributes) {
+        setFaceAttributes(attributes);
     }
+    
+    fetchFaceData(); 
+    
+    setTimeout(() => {
+        setShowRegistrationModal(false);
+    }, 1500);
+    
+    toast({
+        title: 'Face Registration Complete',
+        description: 'Your face has been successfully registered.',
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+    });
   };
 
   const renderFaceAttributes = () => {
@@ -944,8 +920,8 @@ export const Dashboard = () => {
         children:
           showRegistrationModal &&
           _jsx(FaceRegistration, {
-            onSuccess: handleRegistrationSuccess,
             onClose: () => setShowRegistrationModal(false),
+            onSuccess: handleRegistrationSuccess,
           }),
       }),
     ],

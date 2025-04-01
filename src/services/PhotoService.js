@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { FaceIndexingService } from './FaceIndexingService';
 import { FACE_MATCH_THRESHOLD } from '../config/aws-config';
 import { validateForTable } from '../utils/databaseValidator';
+import FaceDetectionService from './FaceDetectionService';
 
 export class PhotoService {
     // Maximum number of retries for API calls
@@ -269,7 +270,7 @@ export class PhotoService {
             
             try {
                 console.log('[PhotoService.uploadPhoto] Calling detectFaces method...');
-                const facesResult = await this.detectFaces(photoId, publicUrl);
+                const facesResult = await this.detectFaces(publicUrl);
                 console.log('[PhotoService.uploadPhoto] Detected faces result:', facesResult.length, 'faces found');
                 
                 if (facesResult && facesResult.length > 0) {
@@ -890,157 +891,33 @@ export class PhotoService {
             return { error: error };
         }
     }
-    static async detectFaces(photoId, imageUrl) {
+    static async detectFaces(imageDataOrPath) {
         try {
-            console.log('[PhotoService.detectFaces] Starting face detection for photo:', photoId);
-            console.log('[PhotoService.detectFaces] Image URL:', imageUrl);
+            console.log('[PhotoService.detectFaces] Starting face detection...');
             
-            // First, we need to download the image as a blob since AWS can't process URLs directly
-            try {
-                console.log('[PhotoService.detectFaces] Downloading image from URL for processing');
-                const response = await fetch(imageUrl);
-                if (!response.ok) {
-                    console.error(`[PhotoService.detectFaces] ERROR: Failed to fetch image: ${response.status} ${response.statusText}`);
-                    throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
-                }
-                
-                // Get the image as an ArrayBuffer
-                const imageArrayBuffer = await response.arrayBuffer();
-                const imageBytes = new Uint8Array(imageArrayBuffer);
-                
-                console.log('[PhotoService.detectFaces] Image downloaded successfully, size:', imageBytes.length, 'bytes');
-                
-                // Now try face detection with the actual image bytes
-                for (let attempt = 1; attempt <= 3; attempt++) {
-                    try {
-                        console.log(`[PhotoService.detectFaces] Face detection attempt ${attempt}/3`);
-                        
-                        const detectFacesCommand = new DetectFacesCommand({
-                            Image: {
-                                Bytes: imageBytes
-                            },
-                            Attributes: ['ALL']
-                        });
-                        
-                        console.log('[PhotoService.detectFaces] Sending request to AWS Rekognition...');
-                        const detectFacesResponse = await rekognitionClient.send(detectFacesCommand);
-                        console.log(`[PhotoService.detectFaces] AWS face detection successful - found ${detectFacesResponse.FaceDetails?.length || 0} faces`);
-                        
-                        // If we reach here, we have successfully detected faces
-                        if (detectFacesResponse.FaceDetails && detectFacesResponse.FaceDetails.length > 0) {
-                            console.log(`[PhotoService.detectFaces] Processing ${detectFacesResponse.FaceDetails.length} detected faces`);
-                            
-                            const faces = detectFacesResponse.FaceDetails.map((face, index) => {
-                                console.log(`[PhotoService.detectFaces] Processing face ${index} details`);
-                                
-                                // Log available attributes
-                                const attributeKeys = Object.keys(face);
-                                console.log(`[PhotoService.detectFaces] Face ${index} has attributes:`, attributeKeys.join(', '));
-                                
-                                // Extract attributes
-                                const processedFace = {
-                                    id: `${photoId}-face-${index}`,
-                                    confidence: face.Confidence,
-                                    boundingBox: face.BoundingBox,
-                                    age: face.AgeRange ? {
-                                        low: face.AgeRange.Low,
-                                        high: face.AgeRange.High
-                                    } : null,
-                                    gender: face.Gender ? {
-                                        value: face.Gender.Value,
-                                        confidence: face.Gender.Confidence
-                                    } : null,
-                                    smile: face.Smile ? {
-                                        value: face.Smile.Value,
-                                        confidence: face.Smile.Confidence
-                                    } : null,
-                                    emotions: face.Emotions ? face.Emotions.map(emotion => ({
-                                        type: emotion.Type,
-                                        confidence: emotion.Confidence
-                                    })) : [],
-                                    // Add additional facial attributes
-                                    eyesOpen: face.EyesOpen ? {
-                                        value: face.EyesOpen.Value,
-                                        confidence: face.EyesOpen.Confidence
-                                    } : null,
-                                    mouthOpen: face.MouthOpen ? {
-                                        value: face.MouthOpen.Value,
-                                        confidence: face.MouthOpen.Confidence
-                                    } : null,
-                                    eyeglasses: face.Eyeglasses ? {
-                                        value: face.Eyeglasses.Value,
-                                        confidence: face.Eyeglasses.Confidence
-                                    } : null,
-                                    sunglasses: face.Sunglasses ? {
-                                        value: face.Sunglasses.Value,
-                                        confidence: face.Sunglasses.Confidence
-                                    } : null,
-                                    beard: face.Beard ? {
-                                        value: face.Beard.Value,
-                                        confidence: face.Beard.Confidence
-                                    } : null,
-                                    mustache: face.Mustache ? {
-                                        value: face.Mustache.Value,
-                                        confidence: face.Mustache.Confidence
-                                    } : null,
-                                    pose: face.Pose ? face.Pose : null,
-                                    quality: face.Quality ? face.Quality : null,
-                                    // Also preserve the original Quality with uppercase properties
-                                    Quality: face.Quality ? {
-                                        Brightness: face.Quality.Brightness,
-                                        Sharpness: face.Quality.Sharpness
-                                    } : null
-                                };
-                                
-                                // Log full details of what we received and extracted
-                                console.log(`[PhotoService.detectFaces] Face ${index} full details:`, JSON.stringify({
-                                    original: face,
-                                    processed: processedFace
-                                }, null, 2));
-                                
-                                // Check for required attributes
-                                if (!processedFace.age) console.warn(`[PhotoService.detectFaces] WARNING: Face ${index} missing age range data`);
-                                if (!processedFace.gender) console.warn(`[PhotoService.detectFaces] WARNING: Face ${index} missing gender data`);
-                                if (!processedFace.smile) console.warn(`[PhotoService.detectFaces] WARNING: Face ${index} missing smile data`);
-                                if (processedFace.emotions.length === 0) console.warn(`[PhotoService.detectFaces] WARNING: Face ${index} has no emotions data`);
-                                
-                                return processedFace;
-                            });
-                            
-                            console.log(`[PhotoService.detectFaces] Returning ${faces.length} processed faces`);
-                            return faces;
-                        }
-                        
-                        console.log('[PhotoService.detectFaces] No faces detected in the image');
-                        return [];
-                        
-                    } catch (awsError) {
-                        console.error(`[PhotoService.detectFaces] ERROR: AWS face detection error (attempt ${attempt})`, awsError);
-                        
-                        // If not the last attempt, wait and retry
-                        if (attempt < 3) {
-                            const waitTime = attempt * 1000; // Exponential backoff
-                            console.log(`[PhotoService.detectFaces] Retrying face detection in ${waitTime}ms...`);
-                            await new Promise(resolve => setTimeout(resolve, waitTime));
-                        } else {
-                            console.error('[PhotoService.detectFaces] ERROR: All face detection attempts failed');
-                            // Return empty array for no faces on final failure
-                            return [];
-                        }
-                    }
-                }
-                
-                // If we reach here, all attempts failed
-                console.warn('[PhotoService.detectFaces] WARNING: All AWS face detection attempts failed, returning empty array');
-                return [];
-                
-            } catch (fetchError) {
-                console.error('[PhotoService.detectFaces] ERROR: Failed to fetch image for face detection:', fetchError);
-                return [];
-            }
+            // Use our new safe FaceDetectionService instead of direct AWS calls
+            const faces = await FaceDetectionService.getFaces(imageDataOrPath);
+            
+            console.log(`[PhotoService.detectFaces] Successfully detected ${faces.length} faces`);
+            
+            // Map the faces to our expected format
+            return faces.map((face, index) => {
+                return {
+                    id: `face-${index}`,
+                    boundingBox: face.boundingBox || {},
+                    confidence: face.confidence || 0,
+                    landmarks: face.landmarks || [],
+                    faceId: null, // Will be set later if indexed
+                    rekognitionId: null, // Will be set later if indexed
+                    emotions: face.emotions || [],
+                    gender: face.gender || { Value: 'Unknown', Confidence: 0 },
+                    age: face.age || { Low: 0, High: 100, Confidence: 0 },
+                    quality: face.quality || { Brightness: 0, Sharpness: 0 }
+                };
+            });
         } catch (error) {
-            console.error('[PhotoService.detectFaces] ERROR: Face detection error:', error);
-            console.error('[PhotoService.detectFaces] Stack trace:', error.stack);
+            console.error('[PhotoService.detectFaces] Face detection error:', error);
+            // Always return an empty array as a safe fallback rather than throwing
             return [];
         }
     }
@@ -1082,7 +959,9 @@ export class PhotoService {
             }
             if (error)
                 throw error;
-            return (data || []).map(photo => ({
+            
+            // Apply the filter to remove inferred matches before returning
+            let mappedPhotos = (data || []).map(photo => ({
                 id: photo.id,
                 url: photo.public_url,
                 eventId: photo.event_id,
@@ -1102,6 +981,18 @@ export class PhotoService {
                 event_details: photo.event_details,
                 matched_users: photo.matched_users || []
             }));
+            
+            // Get the current user ID from the auth context or session
+            const currentUser = await this.getCurrentUser();
+            const userId = currentUser?.id;
+            
+            // Only filter if we have a user ID
+            if (userId) {
+                // Filter out inferred matches before returning
+                return this.filterOutInferredMatches(mappedPhotos, userId);
+            }
+            
+            return mappedPhotos;
         }
         catch (error) {
             console.error('Error fetching event photos:', error);
@@ -1149,7 +1040,8 @@ export class PhotoService {
             
             if (error) throw error;
             
-            return (data || []).map(photo => ({
+            // Apply the filter to remove inferred matches before returning
+            let mappedPhotos = (data || []).map(photo => ({
                 id: photo.id,
                 url: photo.public_url,
                 eventId: photo.event_id,
@@ -1169,6 +1061,9 @@ export class PhotoService {
                 event_details: photo.event_details,
                 matched_users: photo.matched_users || []
             }));
+            
+            // Filter out inferred matches before returning
+            return this.filterOutInferredMatches(mappedPhotos, userId);
         }
         catch (error) {
             console.error('Error fetching user photos:', error);
@@ -1403,105 +1298,166 @@ export class PhotoService {
             const faceIds = faceData.map(fd => fd.face_id);
             console.log('[DEBUG-MATCH] Face IDs:', faceIds);
             
+            // Use safer text-based filtering instead of JSON operators
+            // This avoids the 400 Bad Request errors with the 'cs' operator
+            const userIdPattern = `%"userId":"${userId}"%`;
+            
             // Get all photos that might match these faces but aren't already matched
-            const { data: photos, error: photoError } = await supabase
+            let { data: photos, error: photoError } = await supabase
                 .from('photos')
                 .select('*')
-                .not('matched_users', 'cs', `[{"userId":"${userId}"}]`);
+                .not('matched_users::text', 'ilike', userIdPattern);
                 
             if (photoError) {
                 console.error('[DEBUG-MATCH] Error fetching photos:', photoError);
-                throw photoError;
+                // Try alternative approach if that fails
+                try {
+                    // Get all photos and filter client-side
+                    const { data: allPhotoRecords, error: allPhotosError } = await supabase
+                        .from('photos')
+                        .select('*');
+                        
+                    // Filter manually to find photos without this user
+                    if (allPhotoRecords) {
+                        const filteredPhotos = allPhotoRecords.filter(photo => {
+                            if (!photo.matched_users) return true;
+                            const matches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
+                            return !matches.some(match => match.userId === userId);
+                        });
+                        console.log(`[DEBUG-MATCH] Using client-side filtering: found ${filteredPhotos.length} of ${allPhotoRecords.length} photos`);
+                        const matchablePhotos = filteredPhotos;
+                        photos = matchablePhotos;
+                    }
+                } catch (fallbackError) {
+                    console.error('[DEBUG-MATCH] Fallback query also failed:', fallbackError);
+                    throw photoError; // Use the original error
+                }
             }
-            
-            console.log(`[DEBUG-MATCH] Found ${photos?.length || 0} potential photos to match`);
             
             if (!photos || photos.length === 0) {
                 return { success: true, message: 'No new photos to match' };
             }
             
+            console.log(`[DEBUG-MATCH] Found ${photos.length} potential photos to match`);
+            
             // Check each photo for face matches
             let matchCount = 0;
             
-            for (const photo of photos) {
-                let hasMatch = false;
+            // Process in small batches to prevent overloading
+            const BATCH_SIZE = 5;
+            
+            for (let i = 0; i < photos.length; i += BATCH_SIZE) {
+                const batch = photos.slice(i, Math.min(i + BATCH_SIZE, photos.length));
                 
-                // Check if any of the user's face IDs match in this photo's faces array
-                if (Array.isArray(photo.faces)) {
-                    hasMatch = photo.faces.some(face => 
-                        face.faceId && faceIds.includes(face.faceId)
-                    );
-                }
+                console.log(`[DEBUG-MATCH] Processing batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(photos.length/BATCH_SIZE)}`);
                 
-                // Also check in the face_ids array
-                if (!hasMatch && Array.isArray(photo.face_ids)) {
-                    hasMatch = photo.face_ids.some(id => faceIds.includes(id));
-                }
-                
-                if (hasMatch) {
-                    console.log(`[DEBUG-MATCH] Found match in photo ${photo.id}`);
-                    
-                    // Get user data
-                    const { data: userData, error: userError } = await supabase
-                        .from('users')
-                        .select('id, full_name, avatar_url')
-                        .eq('id', userId)
-                        .single();
+                await Promise.all(batch.map(async (photo) => {
+                    try {
+                        let hasMatch = false;
                         
-                    if (userError) {
-                        console.error('[DEBUG-MATCH] Error fetching user data:', userError);
-                        continue;
-                    }
-                    
-                    console.log('[DEBUG-MATCH] User data:', userData);
-                    
-                    // Add user to matched_users if not already present
-                    const existingMatches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
-                    
-                    // Check if user is already in the matches
-                    if (existingMatches.some(match => match.userId === userId)) {
-                        console.log(`[DEBUG-MATCH] User ${userId} already in matches for photo ${photo.id}`);
-                        continue;
-                    }
-                    
-                    // Add the new match
-                    const newMatch = {
-                        userId,
-                        fullName: userData.full_name || 'Unknown User',
-                        avatarUrl: userData.avatar_url || null,
-                        confidence: 95 // Default high confidence since we're checking exact face ID matches
-                    };
-                    
-                    const updatedMatches = [...existingMatches, newMatch];
-                    console.log('[DEBUG-MATCH] Updated matches:', updatedMatches);
-                    
-                    // Update the photo
-                    const { error: updateError } = await supabase
-                        .from('photos')
-                        .update({ matched_users: updatedMatches })
-                        .eq('id', photo.id);
+                        // Check if any of the user's face IDs match in this photo's faces array
+                        if (Array.isArray(photo.faces)) {
+                            hasMatch = photo.faces.some(face => 
+                                face.faceId && faceIds.includes(face.faceId)
+                            );
+                        }
                         
-                    if (updateError) {
-                        console.error('[DEBUG-MATCH] Error updating photo:', updateError);
-                        continue;
+                        // Also check in the face_ids array
+                        if (!hasMatch && Array.isArray(photo.face_ids)) {
+                            hasMatch = photo.face_ids.some(id => faceIds.includes(id));
+                        }
+                        
+                        if (hasMatch) {
+                            console.log(`[DEBUG-MATCH] Found match in photo ${photo.id}`);
+                            
+                            // Get user data
+                            const { data: userData, error: userError } = await supabase
+                                .from('users')
+                                .select('id, full_name, avatar_url')
+                                .eq('id', userId)
+                                .single();
+                                
+                            if (userError) {
+                                console.error('[DEBUG-MATCH] Error fetching user data:', userError);
+                                return;
+                            }
+                            
+                            // Add user to matched_users if not already present
+                            const existingMatches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
+                            
+                            // Check if user is already in the matches
+                            if (existingMatches.some(match => match.userId === userId)) {
+                                console.log(`[DEBUG-MATCH] User ${userId} already in matches for photo ${photo.id}`);
+                                return;
+                            }
+                            
+                            // Add user to matched_users
+                            const newMatch = {
+                                userId: userId,
+                                fullName: userData.full_name || 'Unknown User',
+                                avatarUrl: userData.avatar_url,
+                                confidence: 95,
+                                similarity: 95
+                            };
+                            
+                            const updatedMatches = [...existingMatches, newMatch];
+                            
+                            // Update the photo with retries
+                            let updated = false;
+                            let retryCount = 0;
+                            const MAX_RETRIES = 3;
+                            
+                            while (!updated && retryCount < MAX_RETRIES) {
+                                try {
+                                    const { error: updateError } = await supabase
+                                        .from('photos')
+                                        .update({ 
+                                            matched_users: updatedMatches,
+                                            updated_at: new Date().toISOString()
+                                        })
+                                        .eq('id', photo.id);
+                                        
+                                    if (!updateError) {
+                                        updated = true;
+                                        matchCount++;
+                                        console.log(`[DEBUG-MATCH] Successfully updated photo ${photo.id}`);
+                                    } else {
+                                        console.error(`[DEBUG-MATCH] Error updating photo ${photo.id} (attempt ${retryCount + 1}):`, updateError);
+                                        retryCount++;
+                                        
+                                        // Exponential backoff
+                                        await new Promise(r => setTimeout(r, 200 * Math.pow(2, retryCount)));
+                                    }
+                                } catch (updateError) {
+                                    console.error(`[DEBUG-MATCH] Exception updating photo ${photo.id}:`, updateError);
+                                    retryCount++;
+                                    
+                                    // Exponential backoff
+                                    await new Promise(r => setTimeout(r, 200 * Math.pow(2, retryCount)));
+                                }
+                            }
+                        }
+                    } catch (photoError) {
+                        console.error(`[DEBUG-MATCH] Error processing photo ${photo.id}:`, photoError);
                     }
-                    
-                    console.log(`[DEBUG-MATCH] Successfully updated matches for photo ${photo.id}`);
-                    matchCount++;
+                }));
+                
+                // Add delay between batches to prevent overwhelming the API
+                if (i + BATCH_SIZE < photos.length) {
+                    await new Promise(r => setTimeout(r, 500));
                 }
             }
             
+            console.log(`[DEBUG-MATCH] Updated ${matchCount} photos with user ${userId}`);
+            
             return { 
                 success: true, 
-                matches: matchCount,
-                message: `Found ${matchCount} new matches` 
+                message: `Updated ${matchCount} photos with matches`,
+                matchCount
             };
         } catch (error) {
             console.error('[DEBUG-MATCH] Error processing matches:', error);
-            return { 
-                success: false, 
-                error: error.message 
-            };
+            return { success: false, message: error.message };
         }
     }
     
@@ -1543,14 +1499,40 @@ export class PhotoService {
             
             if (error) {
                 console.error('[DEBUG] Error getting current user:', error);
-                return { data: null, error };
+                return null;
             }
             
-            return { data: data.user, error: null };
+            return data.user;
         } catch (error) {
             console.error('[DEBUG] Exception getting current user:', error);
-            return { data: null, error };
+            return null;
         }
+    }
+
+    // Add this static method for filtering photos to exclude inferred matches
+    static filterOutInferredMatches(photos, userId) {
+        if (!photos || !Array.isArray(photos)) return [];
+        
+        console.log(`[PhotoService] Filtering out inferred matches for user ${userId}`);
+        
+        return photos.map(photo => {
+            // Return a new copy of the photo with matched_users filtered
+            if (photo.matched_users && Array.isArray(photo.matched_users)) {
+                // Keep only non-inferred matches for this user
+                const filteredMatches = photo.matched_users.filter(match => 
+                    !(match.inferred === true && 
+                     (match.userId === userId || match.user_id === userId))
+                );
+                
+                return {
+                    ...photo,
+                    matched_users: filteredMatches
+                };
+            }
+            
+            // No matched_users, return photo as-is
+            return photo;
+        });
     }
 }
 

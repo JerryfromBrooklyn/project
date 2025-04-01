@@ -1,9 +1,12 @@
 // Import defineConfig without specifying from 'vite'
 // This will rely on the globally available Vite during the build process
-const defineConfig = (config) => config;
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
-export default {
+export default defineConfig({
+  plugins: [react()],
+  
   // Basic build configuration
   build: {
     outDir: 'dist',
@@ -16,4 +19,11 @@ export default {
   
   // Handle environment variables properly
   envPrefix: ['VITE_', 'REACT_APP_'],
-}; 
+  
+  // Resolve aliases
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, './src'),
+    },
+  }
+});
