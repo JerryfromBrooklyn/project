@@ -1,0 +1,43 @@
+User Journey: Festival Photo Discovery
+What Happens for the User
+Pre-Registration Phase
+Person attends a festival and appears in 17 photos taken by photographers
+Photographers upload 7,500 images to Shmong
+Images are processed, faces detected and indexed (without user identity)
+Two weeks pass
+Registration Phase
+Person discovers Shmong has festival photos
+They create an account (email, password, profile info)
+During onboarding, they complete the face registration step using their webcam
+Magic Moment: System immediately finds all 17 photos containing them
+User is redirected to their dashboard showing these 17 photos
+User experiences delight seeing photos they didn't know existed
+Technical Journey Behind the Scenes
+During Upload (Photographer Side)
+Each of the 7,500 images is uploaded to storage
+AWS Rekognition processes each image:
+Detects all faces in each photo
+Extracts facial features and creates face embeddings
+Assigns a unique face ID to each unique person
+System stores these face IDs and photo metadata in database
+No user associations exist yet - just anonymous face IDs
+During User Registration
+User's webcam capture is sent to AWS Rekognition (IndexFaces API) - 1 API call
+User receives a face ID: (e.g., "ef0d8eba-2ffc-4014-9976-8e3dd07d3310")
+System immediately calls SearchFaces with this face ID - 1 API call
+Rekognition searches the entire collection and returns matches
+System retrieves the 17 photos containing matches
+Database is updated to associate these photos with the new user
+User dashboard displays these 17 photos
+Technical Limitations & Clarifications
+Will the system have issues finding 17 images out of 7,500?
+No, this is well within AWS Rekognition's capabilities. The service is designed to search millions of faces with high accuracy.
+Face Indexing Clarification
+Each person = 1 face in the collection, not each photo
+If 1,000 people appear across 7,500 photos, only ~1,000 face records count toward the 20 million limit
+AWS Rekognition is smart enough to recognize the same person across different photos
+System Optimizations
+Minimal AWS API calls: Only 2 API calls during registration (IndexFaces + SearchFaces)
+Database caching: All matches are stored in the database for future reference
+Real-time matching: New photos uploaded after registration will automatically find matches with existing users
+The system is designed to be highly scalable, making it perfect for event photography where many photos need to be processed and matched with users who register later.
