@@ -1396,14 +1396,17 @@ export class PhotoService {
                 const faceBytes = new Uint8Array(faceArrayBuffer);
                 
                 // 3. Get photo image path
-                const { data: photoData } = await supabase
+                console.log(`[PhotoService] Attempting to get storage path for photoId: ${photoId}`);
+                const { data: photoData, error: photoError } = await supabase
                     .from('photos')
-                    .select('storage_path')
+                    .select('storage_path, id')
                     .eq('id', photoId)
                     .single();
                     
+                console.log(`[PhotoService] Query result:`, { photoData, photoError, photoId });
+
                 if (!photoData?.storage_path) {
-                    throw new Error('No storage path found for photo');
+                    throw new Error(`No storage path found for photo (ID: ${photoId}, Data: ${JSON.stringify(photoData)})`);
                 }
                 
                 // 4. Download photo image
@@ -1517,64 +1520,4 @@ export class PhotoService {
             
             // Second try: Get matches from localStorage
             try {
-                const localStorageKey = `face_matches_${userId}`;
-                const localMatchesJson = localStorage.getItem(localStorageKey);
-                
-                if (localMatchesJson) {
-                    const localMatches = JSON.parse(localMatchesJson);
-                    
-                    if (localMatches && localMatches.length > 0) {
-                        console.log(`[PhotoService] Found ${localMatches.length} matches in localStorage`);
-                        
-                        // Fetch the actual photos
-                        const photoIds = localMatches.map(match => match.photo_id).filter(Boolean);
-                        
-                        if (photoIds.length === 0) {
-                            console.warn(`[PhotoService] No valid photo IDs in localStorage matches`);
-                            return [];
-                        }
-                        
-                        const { data: photos, error: photosError } = await supabase
-                            .from('photos')
-                            .select('*')
-                            .in('id', photoIds);
-                            
-                        if (photosError || !photos) {
-                            console.warn(`[PhotoService] Error fetching localStorage matched photos:`, photosError);
-                            return localMatches.map(match => ({
-                                id: match.photo_id,
-                                match_confidence: match.similarity || match.confidence || null,
-                                match_date: match.created_at || new Date().toISOString(),
-                                match_source: 'localStorage_only'
-                            }));
-                        }
-                        
-                        // Combine photos with match data
-                        const enrichedPhotos = photos.map(photo => {
-                            const match = localMatches.find(m => m.photo_id === photo.id);
-                            return {
-                                ...photo,
-                                match_confidence: match?.similarity || match?.confidence || null,
-                                match_date: match?.created_at || null,
-                                match_source: 'localStorage'
-                            };
-                        });
-                        
-                        console.log(`[PhotoService] Returning ${enrichedPhotos.length} matched photos from localStorage`);
-                        return enrichedPhotos;
-                    }
-                }
-            } catch (localError) {
-                console.warn(`[PhotoService] Error processing localStorage matches:`, localError);
-            }
-            
-            console.log(`[PhotoService] No matches found in database or localStorage`);
-            return [];
-        } catch (err) {
-            console.error(`[PhotoService] Error getting user matched photos:`, err);
-            return [];
-        }
-    }
-}
-
-
+                const localStorageKey = `face_matches_${userId}`
