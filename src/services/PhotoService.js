@@ -1489,7 +1489,7 @@ export class PhotoService {
                     const command = new CompareFacesCommand({
                         SourceImage: { Bytes: faceBytes },
                         TargetImage: { Bytes: photoBytes },
-                        SimilarityThreshold: 70
+                        SimilarityThreshold: 95
                     });
                     
                     const response = await rekognitionClient.send(command);
@@ -1498,6 +1498,34 @@ export class PhotoService {
                         const bestMatch = response.FaceMatches[0];
                         
                         console.log(`[PhotoService] Direct AWS analysis successful:`, bestMatch);
+                        
+                        // Store the match in the database for future reference
+                        try {
+                            const matchData = {
+                                photo_id: photoId,
+                                user_id: userId,
+                                confidence: bestMatch.Similarity / 100,
+                                matched_at: new Date().toISOString(),
+                                // Convert any non-serializable parts to avoid issues
+                                aws_response: JSON.stringify(response)
+                            };
+                            
+                            console.log(`[PhotoService] Storing match data in database:`, matchData);
+                            
+                            const { error: upsertError } = await supabase
+                                .from('photo_faces')
+                                .upsert(matchData, { onConflict: 'photo_id,user_id' });
+                                
+                            if (upsertError) {
+                                console.error(`[PhotoService] Error storing match data:`, upsertError);
+                            } else {
+                                console.log(`[PhotoService] Successfully stored match data`);
+                            }
+                        } catch (dbError) {
+                            console.error(`[PhotoService] Database storage error:`, dbError);
+                            // Continue even if storage fails
+                        }
+                        
                         return {
                             success: true,
                             confidence: bestMatch.Similarity / 100,
@@ -1547,6 +1575,9 @@ export class PhotoService {
             console.log(`[PhotoService] Getting matched photos for user ${userId}`);
             const { supabase } = await import('../lib/supabaseClient');
             
+            // Define minimum confidence threshold for display (97%)
+            const MIN_DISPLAY_CONFIDENCE = 0.97;
+            
             // First try: Get matches from photo_faces table
             const { data: matchData, error: matchError } = await supabase
                 .from('photo_faces')
@@ -1559,8 +1590,20 @@ export class PhotoService {
             } else if (matchData && matchData.length > 0) {
                 console.log(`[PhotoService] Found ${matchData.length} matches in database`);
                 
+                // Filter out low-confidence matches
+                const highConfidenceMatches = matchData.filter(match => 
+                    match.confidence >= MIN_DISPLAY_CONFIDENCE
+                );
+                
+                console.log(`[PhotoService] Filtered to ${highConfidenceMatches.length} high-confidence matches (>=${MIN_DISPLAY_CONFIDENCE * 100}%)`);
+                
+                if (highConfidenceMatches.length === 0) {
+                    console.log(`[PhotoService] No matches meet the confidence threshold of ${MIN_DISPLAY_CONFIDENCE * 100}%`);
+                    return [];
+                }
+                
                 // Fetch the actual photos
-                const photoIds = matchData.map(match => match.photo_id);
+                const photoIds = highConfidenceMatches.map(match => match.photo_id);
                 const { data: photos, error: photosError } = await supabase
                     .from('photos')
                     .select('*')
@@ -1572,7 +1615,7 @@ export class PhotoService {
                 } else {
                     // Combine photos with match data
                     const enrichedPhotos = photos.map(photo => {
-                        const match = matchData.find(m => m.photo_id === photo.id);
+                        const match = highConfidenceMatches.find(m => m.photo_id === photo.id);
                         return {
                             ...photo,
                             match_confidence: match?.confidence || null,
@@ -1581,12 +1624,12 @@ export class PhotoService {
                         };
                     });
                     
-                    console.log(`[PhotoService] Returning ${enrichedPhotos.length} matched photos from database`);
+                    console.log(`[PhotoService] Returning ${enrichedPhotos.length} high-confidence matched photos from database`);
                     return enrichedPhotos;
                 }
             }
             
-            // Second try: Get matches from localStorage
+            // Second try: Get matches from localStorage (also applying confidence filtering)
             try {
                 const localStorageKey = `face_matches_${userId}`;
                 const localMatchesJson = localStorage.getItem(localStorageKey);
@@ -1597,11 +1640,24 @@ export class PhotoService {
                     if (localMatches && localMatches.length > 0) {
                         console.log(`[PhotoService] Found ${localMatches.length} matches in localStorage`);
                         
+                        // Filter by confidence
+                        const highConfidenceLocalMatches = localMatches.filter(match => {
+                            const confidence = match.similarity || match.confidence || 0;
+                            return confidence >= MIN_DISPLAY_CONFIDENCE;
+                        });
+                        
+                        console.log(`[PhotoService] Filtered to ${highConfidenceLocalMatches.length} high-confidence localStorage matches`);
+                        
+                        if (highConfidenceLocalMatches.length === 0) {
+                            console.log(`[PhotoService] No localStorage matches meet the confidence threshold`);
+                            return [];
+                        }
+                        
                         // Fetch the actual photos
-                        const photoIds = localMatches.map(match => match.photo_id).filter(Boolean);
+                        const photoIds = highConfidenceLocalMatches.map(match => match.photo_id).filter(Boolean);
                         
                         if (photoIds.length === 0) {
-                            console.warn(`[PhotoService] No valid photo IDs in localStorage matches`);
+                            console.warn(`[PhotoService] No valid photo IDs in high-confidence localStorage matches`);
                             return [];
                         }
                         
@@ -1622,7 +1678,7 @@ export class PhotoService {
                         
                         // Combine photos with match data
                         const enrichedPhotos = photos.map(photo => {
-                            const match = localMatches.find(m => m.photo_id === photo.id);
+                            const match = highConfidenceLocalMatches.find(m => m.photo_id === photo.id);
                             return {
                                 ...photo,
                                 match_confidence: match?.similarity || match?.confidence || null,
@@ -1631,7 +1687,7 @@ export class PhotoService {
                             };
                         });
                         
-                        console.log(`[PhotoService] Returning ${enrichedPhotos.length} matched photos from localStorage`);
+                        console.log(`[PhotoService] Returning ${enrichedPhotos.length} high-confidence matched photos from localStorage`);
                         return enrichedPhotos;
                     }
                 }
@@ -1644,6 +1700,46 @@ export class PhotoService {
         } catch (err) {
             console.error(`[PhotoService] Error getting user matched photos:`, err);
             return [];
+        }
+    }
+
+    /**
+     * Clears old face matches when a user updates their face data
+     * Call this method whenever a user registers a new face
+     * @param {string} userId - User ID whose matches should be cleared
+     * @returns {Promise<boolean>} - Success or failure
+     */
+    static async clearOldFaceMatches(userId) {
+        try {
+            console.log(`[PhotoService] Clearing old face matches for user ${userId}`);
+            const { supabase } = await import('../lib/supabaseClient');
+            
+            // 1. Clear database matches
+            const { error: deleteError } = await supabase
+                .from('photo_faces')
+                .delete()
+                .eq('user_id', userId);
+                
+            if (deleteError) {
+                console.error(`[PhotoService] Error clearing database matches:`, deleteError);
+                // Continue to localStorage clearing
+            } else {
+                console.log(`[PhotoService] Successfully cleared database matches for user ${userId}`);
+            }
+            
+            // 2. Clear localStorage matches
+            try {
+                const localStorageKey = `face_matches_${userId}`;
+                localStorage.removeItem(localStorageKey);
+                console.log(`[PhotoService] Cleared localStorage matches for user ${userId}`);
+            } catch (localError) {
+                console.error(`[PhotoService] Error clearing localStorage matches:`, localError);
+            }
+            
+            return true;
+        } catch (err) {
+            console.error(`[PhotoService] Error clearing old face matches:`, err);
+            return false;
         }
     }
 }

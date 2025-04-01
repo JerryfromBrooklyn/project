@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
     const command = new CompareFacesCommand({
       SourceImage: { Bytes: faceBytes },
       TargetImage: { Bytes: photoBytes },
-      SimilarityThreshold: 70  // Minimum similarity threshold (0-100)
+      SimilarityThreshold: 95  // Increased from 70% to 95% for higher accuracy
     });
 
     const response = await rekognition.send(command);

@@ -56,46 +56,108 @@ export const PhotoManager = ({ mode = 'matches' }) => {
     
     try {
       console.log(`[Simple Fetch] Fetching photos for ${mode} mode`);
-      const fetchedPhotos = [];
+      let fetchedPhotos = [];
       
-      // Try fetching from 'simple_photos' table
-      const { data: simplePhotoData, error: simplePhotoError } = await supabase
-        .from('simple_photos')
-        .select('*')
-        .limit(100);
-      
-      if (!simplePhotoError && simplePhotoData?.length > 0) {
-        console.log(`[Simple Fetch] Found ${simplePhotoData.length} photos in simple_photos table`);
-        fetchedPhotos.push(...simplePhotoData);
-      } else if (simplePhotoError) {
-        console.warn(`[Simple Fetch] Error fetching from simple_photos: ${simplePhotoError.message}`);
-      }
-      
-      // Also try fetching from 'photos' table if available
-      const { data: regularPhotoData, error: regularPhotoError } = await supabase
-        .from('photos')
-        .select('*')
-        .limit(100);
-      
-      if (!regularPhotoError && regularPhotoData?.length > 0) {
-        console.log(`[Simple Fetch] Found ${regularPhotoData.length} photos in regular photos table`);
-        fetchedPhotos.push(...regularPhotoData);
-      } else if (regularPhotoError) {
-        console.warn(`[Simple Fetch] Error fetching from photos: ${regularPhotoError.message}`);
-      }
-      
-      // For 'matches' mode, check localStorage
       if (mode === 'matches') {
+        console.log('[Simple Fetch] Using PhotoService.getUserMatchedPhotos to get matched photos');
+        
+        try {
+          // Check if the method exists
+          if (typeof PhotoService.getUserMatchedPhotos !== 'function') {
+            console.error('[Simple Fetch] Error: PhotoService.getUserMatchedPhotos method does not exist');
+            throw new Error('Missing required PhotoService method');
+          }
+          
+          // Use the PhotoService method that applies proper confidence filtering (97%)
+          const matchedPhotos = await PhotoService.getUserMatchedPhotos(user.id);
+          
+          if (matchedPhotos && matchedPhotos.length > 0) {
+            console.log(`[Simple Fetch] Found ${matchedPhotos.length} matched photos with high confidence`);
+            fetchedPhotos = matchedPhotos;
+          } else {
+            console.log('[Simple Fetch] No matched photos found with high confidence');
+          }
+        } catch (matchError) {
+          console.error('[Simple Fetch] Error getting matched photos:', matchError);
+          // Fall through to normal fetching as backup
+        }
+      }
+      
+      // If we don't have photos from matches (or not in match mode), try regular fetch
+      if (fetchedPhotos.length === 0) {
+        // Try fetching from 'simple_photos' table
+        const { data: simplePhotoData, error: simplePhotoError } = await supabase
+          .from('simple_photos')
+          .select('*')
+          .limit(100);
+        
+        if (!simplePhotoError && simplePhotoData?.length > 0) {
+          console.log(`[Simple Fetch] Found ${simplePhotoData.length} photos in simple_photos table`);
+          
+          // In matches mode, we should filter these by matched_users
+          if (mode === 'matches') {
+            console.log('[Simple Fetch] Filtering simple_photos for matches');
+            const filteredPhotos = simplePhotoData.filter(photo => {
+              return Array.isArray(photo.matched_users) && 
+                photo.matched_users.some(match => match.userId === user.id && match.confidence >= 0.97);
+            });
+            console.log(`[Simple Fetch] Found ${filteredPhotos.length} matched photos after filtering`);
+            fetchedPhotos.push(...filteredPhotos);
+          } else {
+            // For non-matches mode, just add all photos
+            fetchedPhotos.push(...simplePhotoData);
+          }
+        } else if (simplePhotoError) {
+          console.warn(`[Simple Fetch] Error fetching from simple_photos: ${simplePhotoError.message}`);
+        }
+        
+        // Also try fetching from 'photos' table if available
+        const { data: regularPhotoData, error: regularPhotoError } = await supabase
+          .from('photos')
+          .select('*')
+          .limit(100);
+        
+        if (!regularPhotoError && regularPhotoData?.length > 0) {
+          console.log(`[Simple Fetch] Found ${regularPhotoData.length} photos in regular photos table`);
+          
+          // In matches mode, we should filter these by matched_users
+          if (mode === 'matches') {
+            console.log('[Simple Fetch] Filtering photos for matches');
+            const filteredPhotos = regularPhotoData.filter(photo => {
+              return Array.isArray(photo.matched_users) && 
+                photo.matched_users.some(match => match.userId === user.id && match.confidence >= 0.97);
+            });
+            console.log(`[Simple Fetch] Found ${filteredPhotos.length} matched photos after filtering`);
+            fetchedPhotos.push(...filteredPhotos);
+          } else {
+            // For non-matches mode, just add all photos
+            fetchedPhotos.push(...regularPhotoData);
+          }
+        } else if (regularPhotoError) {
+          console.warn(`[Simple Fetch] Error fetching from photos: ${regularPhotoError.message}`);
+        }
+      }
+      
+      // For 'matches' mode, check localStorage as a backup
+      if (mode === 'matches' && fetchedPhotos.length === 0) {
         const localMatches = getMatchesFromLocalStorage(user.id);
         if (localMatches && localMatches.length > 0) {
           console.log(`[Simple Fetch] Found ${localMatches.length} matches in localStorage`);
           
+          // Filter for high confidence matches (97%+)
+          const highConfidenceMatches = localMatches.filter(match => {
+            const confidence = match.similarity || match.confidence || 0;
+            return confidence >= 0.97; // 97% threshold
+          });
+          
+          console.log(`[Simple Fetch] Found ${highConfidenceMatches.length} high-confidence matches in localStorage`);
+          
           // If we have photo IDs from matches, use them as a filter
-          const matchedPhotoIds = localMatches.map(match => match.photo_id);
+          const matchedPhotoIds = highConfidenceMatches.map(match => match.photo_id);
           console.log(`[Simple Fetch] Matched photo IDs: ${matchedPhotoIds.slice(0, 5).join(', ')}...`);
           
           // If we have matches but no photos, let's create placeholder photos
-          if (fetchedPhotos.length === 0) {
+          if (matchedPhotoIds.length > 0) {
             console.log('[Simple Fetch] Creating placeholder photos from localStorage matches');
             
             // Create a placeholder photo object for each match
@@ -221,7 +283,9 @@ export const PhotoManager = ({ mode = 'matches' }) => {
       </div>
       
       <p className="text-blue-600 mb-6">
-        Photos where you have been identified through facial recognition. 
+        {mode === 'matches' 
+          ? "Photos where your face was detected with high confidence (97%+). Only matches above this threshold are shown."
+          : "All your uploaded photos."}
         {photos.length > 0 && filteredPhotos.length !== photos.length && (
           <span className="ml-2 text-gray-600">
             Showing {filteredPhotos.length} of {photos.length} photos.
