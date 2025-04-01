@@ -1,0 +1,224 @@
+Create a complete face matching system using AWS Rekognition with user registration, face enrollment, and a matched photos dashboard. The system must handle both past and future matches seamlessly.
+
+## System Architecture
+
+Build a scalable face matching system with these core components:
+1. User sign-up and authentication
+2. Face registration during onboarding (one-time indexing)
+3. Photo upload with face matching
+4. User dashboard for viewing all matched photos (past and future)
+5. Database storage for face IDs and match results
+6. Analytics for match data
+
+The system must follow this critical approach:
+- Index each user's face ONCE during registration using IndexFaces API
+- For all subsequent uploads, use SearchFacesByImage API (never reindex)
+- Store all match results, similarity scores, and face IDs in the database
+- Use a single AWS collection for all face matching
+- Provide extensive logging for debugging
+- Support viewing matches from photos uploaded BEFORE user registration
+- Automatically update user dashboard when NEW matches are found in future uploads
+
+## Technical Implementation Details
+
+### 1. User Sign-up and Face Registration Flow
+
+Implement a complete user journey:
+1. User creates account (email/password)
+2. User completes profile (name, profile photo)
+3. User registers their face through webcam capture
+4. System indexes face with AWS Rekognition
+5. System immediately searches for matches in existing photos
+6. User is redirected to dashboard showing any found matches
+
+### 2. AWS Rekognition Implementation
+
+Implement these core functions:
+- `registerUserFace(userId, imageBytes)` - Calls IndexFacesCommand once per user
+- `matchFaces(photoId, imageBytes)` - Uses SearchFacesByImageCommand for matching
+- `searchFacesByFaceId(faceId, userId)` - Finds matches in previously uploaded photos
+- `updateUserMatches(userId)` - Updates user's dashboard with new matches
+
+### 3. Database Schema
+
+Create these tables with NO ROW LEVEL SECURITY:
+- `users`: Stores user account information
+  - Fields: id, email, password_hash, full_name, avatar_url, created_at
+- `face_data`: Stores user face IDs (one per user)
+  - Fields: id, user_id, face_id, aws_data (JSON), created_at
+- `photos`: Stores uploaded photos with match data
+  - Fields: id, user_id, storage_path, public_url, matched_users (JSON array), face_matches (JSON)
+- `face_match_analytics`: Stores detailed match data for analysis
+  - Fields: id, photo_id, user_id, face_id, similarity, confidence, created_at
+- `user_matches`: Quick lookup table for user dashboard
+  - Fields: id, user_id, photo_id, similarity, matched_at
+
+### 4. User Dashboard Implementation
+
+Create a dashboard that:
+- Shows all photos the user appears in
+- Sorts by match confidence and date
+- Updates in real-time when new matches are found
+- Provides filtering options (date, event, uploader)
+- Shows match confidence score
+- Allows viewing full photo details
+
+### 5. Core Functions to Implement
+
+Create these JavaScript/TypeScript functions with extensive logging:
+
+1. User Sign-up and Face Registration:
+```javascript
+async function signUpUser(email, password, fullName) {
+  // 1. Create user account
+  // 2. Return user data for onboarding
+}
+
+async function registerUserFace(userId, imageBytes) {
+  // 1. Call AWS IndexFacesCommand
+  // 2. Store faceId in face_data table
+  // 3. Call searchFacesByFaceId to find matches in existing photos
+  // 4. Populate user_matches table for quick dashboard lookup
+  // 5. Return faceId and registration status
+}
+```
+
+2. Photo Upload with Matching:
+```javascript
+async function uploadPhotoWithMatching(userId, file, metadata) {
+  // 1. Upload photo to storage
+  // 2. Call AWS SearchFacesByImageCommand
+  // 3. Process and store matches in database
+  // 4. Update user_matches table for all matched users (including past users)
+  // 5. Store raw AWS response for analytics
+  // 6. Return photo URL and match results
+}
+```
+
+3. Finding Matches for New Users:
+```javascript
+async function findMatchesForNewUser(userId, faceId) {
+  // 1. Call AWS SearchFacesCommand with faceId
+  // 2. Find photos containing matched faces
+  // 3. Update each photo with new user match
+  // 4. Add entries to user_matches table for dashboard
+  // 5. Store analytics data
+  // 6. Return all matched photos
+}
+```
+
+4. User Dashboard Data:
+```javascript
+async function getUserMatches(userId, filters) {
+  // 1. Query user_matches and photos tables
+  // 2. Apply any filters (date, confidence, etc.)
+  // 3. Return formatted data for dashboard display
+}
+```
+
+### 6. Required API Endpoints
+
+Implement these endpoints:
+- POST /api/auth/signup - Create new user account
+- POST /api/auth/login - User login
+- POST /api/face/register - Register a user's face
+- POST /api/photos/upload - Upload photo with face matching
+- GET /api/user/dashboard - Get dashboard data for the user
+- GET /api/user/matches - Get all photos matching a user
+- GET /api/analytics/face-matches - Get face match analytics
+
+### 7. User Interface Components
+
+Implement these key UI components:
+1. Sign-up and login forms
+2. Face registration component with webcam integration
+3. Photo upload with progress indicator
+4. Dashboard with:
+   - Gallery of matched photos
+   - Filtering and sorting controls
+   - Match confidence indicators
+   - Timeline view
+5. Navigation between user profile and matches
+
+### 8. Logging Requirements
+
+Implement comprehensive logging with these prefixes:
+- [AUTH] - For authentication operations
+- [FACE-REG] - For face registration logs
+- [FACE-MATCH] - For face matching logs
+- [STORAGE] - For storage operations
+- [DB] - For database operations
+- [DASHBOARD] - For user dashboard operations
+
+Log these events:
+- All AWS API requests and responses
+- All database operations (success/failure)
+- All storage operations (success/failure)
+- All authentication events
+- All errors with full stack traces
+
+### 9. Error Handling
+
+Implement robust error handling:
+- Graceful degradation if AWS services are unavailable
+- Database transaction safety
+- Client-friendly error messages
+- Server-side detailed error logging
+- Fallback options if face detection fails
+
+### 10. Special Requirements
+
+The system MUST:
+- Allow new registrations to see matches in both past and future uploads
+- Immediately show users photos they appear in after registration
+- Update dashboard in real-time when new matches are found
+- Use only ONE face collection in AWS Rekognition
+- Minimize API calls to AWS (index once, search many)
+- Work when users register AFTER their images were uploaded by others
+- Store ALL AWS response data for analytical purposes
+- Use NO Row Level Security (RLS) in the database
+
+### 11. Notifications System
+
+Implement notifications for:
+- New match found in an uploaded photo
+- Face successfully registered
+- New photos that match user's face
+
+## Testing and Validation
+
+Include test functions for:
+1. Complete user sign-up flow
+2. Face registration with various image qualities
+3. Photo uploads with matching
+4. Registration after photos with user's face exist
+5. Dashboard updating with new matches
+6. Performance with large numbers of faces in collection
+7. Logging and error reporting validation
+
+## Dependencies
+
+Include these AWS SDK modules:
+- @aws-sdk/client-rekognition
+- @aws-sdk/client-s3
+
+Use Supabase for database operations:
+- @supabase/supabase-js
+
+For the frontend:
+- React or Next.js
+- TailwindCSS for styling
+- Zustand or Redux for state management
+- React Webcam for face registration
+
+## Implementation Best Practices
+
+- Use async/await pattern for all asynchronous operations
+- Implement retry logic for AWS API calls
+- Use transactions for critical database operations
+- Store image bytes efficiently
+- Implement proper HTTP response codes
+- Handle all edge cases (no face detected, multiple faces, etc.)
+- Implement responsive design for mobile users
+
+Create a complete implementation that is production-ready, scalable to millions of images, and fully documented with comments explaining the logic at each step. The system should provide a seamless experience for users to register their face and immediately see all photos they appear in, regardless of whether those photos were uploaded before or after they created their account.
