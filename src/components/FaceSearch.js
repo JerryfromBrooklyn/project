@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Search, AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { PhotoService } from '../services/PhotoService';
-import { FaceIndexingService } from '../services/FaceIndexingService';
+import { FaceIndexingService } from '../services/FaceIndexingService.jsx';
 import { PhotoGrid } from './PhotoGrid';
 import { supabase } from '../lib/supabaseClient';
 export const FaceSearch = () => {

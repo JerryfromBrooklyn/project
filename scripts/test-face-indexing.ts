@@ -1,6 +1,6 @@
 import 'cross-fetch';
 import { supabase } from '../src/lib/supabaseClient';
-import { FaceIndexingService } from '../src/services/FaceIndexingService';
+import { FaceIndexingService } from '../src/services/FaceIndexingService.jsx';
 import { rekognitionClient } from '../src/config/aws-config';
 import { ListFacesCommand } from '@aws-sdk/client-rekognition';
 import dotenv from 'dotenv';

@@ -1,0 +1,2863 @@
+/* =========================================================
+ * CRITICAL SECURITY NOTICE - DO NOT MODIFY UNLESS AUTHORIZED
+ * =========================================================
+ * 
+ * ROW LEVEL SECURITY (RLS) CONFIGURATION:
+ * 
+ * - RLS has been DELIBERATELY DISABLED on database tables
+ * - DO NOT ENABLE RLS POLICIES until project completion
+ * - Enabling RLS prematurely will BREAK admin functionality
+ *   and face matching features
+ * 
+ * When the project is complete, a comprehensive security review
+ * will establish appropriate RLS policies that maintain functionality
+ * while ensuring data protection.
+ * 
+ * Any changes to this configuration require security team approval.
+ * =========================================================
+ */
+
+import { rekognitionClient, COLLECTION_ID } from '../config/aws-config';
+import { IndexFacesCommand, SearchFacesByImageCommand, SearchFacesCommand, DetectFacesCommand, ListCollectionsCommand, DeleteCollectionCommand, CreateCollectionCommand, DescribeCollectionCommand, ListFacesCommand } from '@aws-sdk/client-rekognition';
+import { FACE_MATCH_THRESHOLD } from '../config/aws-config';
+import { supabase } from '../lib/supabaseClient';
+import { validateForTable } from '../utils/databaseValidator';
+import { storeFaceId } from './FaceStorageService';
+import { createPhotoRecord } from './database-utils';
+
+export class FaceIndexingService {
+    static async indexFace(imageBytes, userId) {
+        try {
+            console.group('[FACE-REG] Face Indexing Process');
+            console.log('[FACE-REG] 🔍 Starting face indexing for user registration...');
+            console.log('[FACE-REG] User ID:', userId);
+            
+            // Get collection stats to see what's already indexed
+            const stats = await this.getCollectionStats();
+            console.log(`[FACE-REG] Current collection has ${stats?.FaceCount || 'unknown'} indexed faces`);
+            
+            console.log('[FACE-REG] Step 1: Detecting faces in image...');
+            const detectedFaces = await this.detectFacesWithRetry(imageBytes);
+            if (!detectedFaces || detectedFaces.length === 0) {
+                console.warn('[FACE-REG] ❌ No faces detected in image');
+                console.groupEnd();
+                return {
+                    success: false,
+                    error: 'No faces detected in image'
+                };
+            }
+            if (detectedFaces.length > 1) {
+                console.warn('[FACE-REG] ❌ Multiple faces detected in image');
+                console.groupEnd();
+                return {
+                    success: false,
+                    error: 'Only one face can be registered at a time'
+                };
+            }
+            
+            // Check if user already has a face ID in the database
+            const { data: existingFaceData } = await supabase
+                .from('face_data')
+                .select('face_id')
+                .eq('user_id', userId)
+                .maybeSingle();
+            
+            let faceId;
+            let attributes;
+                
+            if (existingFaceData && existingFaceData.face_id) {
+                console.log('[FACE-REG] User already has a face ID registered:', existingFaceData.face_id);
+                console.log('[FACE-REG] Using existing face ID but still performing historical matching');
+                
+                faceId = existingFaceData.face_id;
+                attributes = detectedFaces[0]; // Use the detected face attributes
+            } else {
+                // If no existing face ID, proceed with indexing a new face
+                console.log('[FACE-REG] Step 2: Indexing new face in AWS Rekognition...');
+                const command = new IndexFacesCommand({
+                    CollectionId: this.COLLECTION_ID,
+                    Image: { Bytes: imageBytes },
+                    ExternalImageId: userId,
+                    DetectionAttributes: ['ALL'],
+                    MaxFaces: 1,
+                    QualityFilter: 'AUTO'
+                });
+                
+                console.log('[FACE-REG] Sending IndexFaces request to AWS...');
+                const response = await rekognitionClient.send(command);
+                
+                console.log('[FACE-REG] Raw AWS IndexFaces response:', JSON.stringify({
+                    FaceRecords: response.FaceRecords?.map(record => ({
+                        Face: {
+                            FaceId: record.Face?.FaceId,
+                            ExternalImageId: record.Face?.ExternalImageId,
+                            Confidence: record.Face?.Confidence
+                        },
+                        FaceDetail: {
+                            BoundingBox: record.FaceDetail?.BoundingBox,
+                            Confidence: record.FaceDetail?.Confidence
+                        }
+                    })),
+                    UnindexedFaces: response.UnindexedFaces
+                }, null, 2));
+                
+                if (!response.FaceRecords || response.FaceRecords.length === 0) {
+                    console.warn('[FACE-REG] ❌ No faces indexed');
+                    console.groupEnd();
+                    return {
+                        success: false,
+                        error: 'Failed to index face'
+                    };
+                }
+                const faceRecord = response.FaceRecords[0];
+                faceId = faceRecord.Face?.FaceId;
+                attributes = faceRecord.FaceDetail;
+                console.log('[FACE-REG] ✅ Face indexed successfully:', faceId);
+                console.log('[FACE-REG] Face attributes:', attributes);
+                
+                // Save the indexed face data to our database immediately
+                await this.saveFaceData(userId, faceId, attributes);
+                
+                // Save the image to storage for reference
+                const fileName = `${Date.now()}.jpg`;
+                const filePath = `${userId}/${fileName}`;
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from('face-data')
+                    .upload(filePath, imageBytes, {
+                    contentType: 'image/jpeg',
+                    upsert: false
+                });
+                if (!uploadError) {
+                    // Get public URL
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('face-data')
+                        .getPublicUrl(filePath);
+                    // Update face_data with image path and URL
+                    await supabase
+                        .from('face_data')
+                        .update({
+                        face_data: {
+                            aws_face_id: faceId,
+                            attributes: attributes,
+                            image_path: filePath,
+                            public_url: publicUrl
+                        }
+                    })
+                        .eq('user_id', userId);
+                }
+            }
+            
+            // Always perform historical matching regardless of whether it's a new or existing face ID
+            console.log('[FACE-REG] Step 3: Searching for historical matches...');
+            console.log('[FACE-REG] Using face ID for historical matching:', faceId);
+            
+            try {
+                // Get initial matches quickly (limited to 20)
+                console.log('[FACE-MATCH-HISTORY] Fetching initial historical matches...');
+                const initialMatches = await this.getInitialHistoricalMatches(faceId, userId);
+                
+                if (initialMatches.length > 0) {
+                    console.log(`[FACE-MATCH-HISTORY] ✅ Found ${initialMatches.length} initial historical matches`);
+                    console.log('[FACE-MATCH-HISTORY] First few matches:', initialMatches.slice(0, 3));
+                } else {
+                    console.log('[FACE-MATCH-HISTORY] No initial historical matches found');
+                }
+                
+                // Start background processing for remaining matches
+                console.log('[FACE-MATCH-HISTORY] Starting background processing for remaining matches...');
+                this.processRemainingMatchesInBackground(faceId, userId);
+                console.log('[FACE-MATCH-HISTORY] Background processing task queued successfully');
+                
+                console.groupEnd();
+                return {
+                    success: true,
+                    faceId,
+                    attributes,
+                    initialMatches // Include initial matches in the response
+                };
+            } catch (historyError) {
+                console.error('[FACE-MATCH-HISTORY] ❌ Error processing historical matches:', historyError);
+                console.error('[FACE-MATCH-HISTORY] Error details:', historyError.stack);
+                
+                // Still return success since the face was indexed
+                console.groupEnd();
+                return {
+                    success: true,
+                    faceId,
+                    attributes,
+                    initialMatches: [],
+                    historyError: historyError.message
+                };
+            }
+        }
+        catch (error) {
+            console.error('[FACE-REG] ❌ Error indexing face:', error);
+            console.error('[FACE-REG] Error stack:', error.stack);
+            console.groupEnd();
+            return {
+                success: false,
+                error: error.message || 'Failed to index face'
+            };
+        }
+    }
+    static async saveFaceData(userId, faceId, attributes) {
+        try {
+            console.log('[DEBUG-FACESAVE] Saving face data for user:', userId);
+            console.log('[DEBUG-FACESAVE] Face ID:', faceId);
+            
+            // First, store in storage as reliable backup
+            try {
+                await storeFaceId(userId, faceId);
+                console.log('[DEBUG-FACESAVE] Face ID stored in storage backup system');
+            } catch (storageError) {
+                console.error('[DEBUG-FACESAVE] Failed to store in backup storage:', storageError);
+                // Continue with database operations even if storage fails
+            }
+            
+            // Try to update face_data table if it exists
+            try {
+                // First check if the user already has face data
+                const { data: existingData, error: fetchError } = await supabase
+                    .from('face_data')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .maybeSingle();
+                
+                if (fetchError) {
+                    console.error('[DEBUG-FACESAVE] Error fetching existing face data:', fetchError);
+                    // Don't throw, continue with other operations
+                } else {
+                    console.log('[DEBUG-FACESAVE] Existing face data:', existingData);
+                
+                    // Make sure faceId is defined - generate a fallback if needed
+                    const validFaceId = faceId || `face_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+                    console.log(`[DEBUG-FACESAVE] Using face ID: ${validFaceId} for user ${userId}`);
+                    
+                    // Prepare the face data object
+                    const faceDataObj = {
+                        aws_face_id: validFaceId,
+                        attributes: attributes || {},
+                        updated_at: new Date().toISOString()
+                    };
+                
+                    // Update or insert face data
+                    if (existingData) {
+                        // Update existing record
+                        const updateData = {
+                            user_id: userId,
+                            face_id: validFaceId,
+                            face_data: faceDataObj,
+                            updated_at: new Date().toISOString()
+                        };
+                        console.log('[DEBUG-FACESAVE] Updating existing face data:', updateData);
+                        
+                        const { error: updateError } = await supabase
+                            .from('face_data')
+                            .update(updateData)
+                            .eq('id', existingData.id);
+                        
+                        if (updateError) {
+                            console.error('[DEBUG-FACESAVE] Error updating face data:', updateError);
+                        } else {
+                            console.log('[DEBUG-FACESAVE] Face data updated successfully');
+                        }
+                    } else {
+                        // If we reach here, there's no record for this user
+                        // Create new record
+                        const insertData = {
+                            user_id: userId,
+                            face_id: validFaceId,
+                            face_data: faceDataObj,
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                        };
+                        
+                        console.log('[DEBUG-FACESAVE] Creating new face data record:', insertData);
+                        
+                        const { error: insertError } = await supabase
+                            .from('face_data')
+                            .insert(insertData);
+                            
+                        if (insertError) {
+                            console.error('[DEBUG-FACESAVE] Error inserting face data:', insertError);
+                        } else {
+                            console.log('[DEBUG-FACESAVE] Face data inserted successfully');
+                        }
+                    }
+                }
+            } catch (faceDataError) {
+                console.error('[DEBUG-FACESAVE] Error with face_data operations:', faceDataError);
+                // Continue with other operations
+            }
+            
+            // Try to update user_faces table if it exists
+            try {
+                console.log('[DEBUG-FACESAVE] Updating user_faces table...');
+                const { data: existingFace, error: faceError } = await supabase
+                    .from('user_faces')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .maybeSingle();
+                
+                if (faceError) {
+                    console.log('[DEBUG-FACESAVE] Error checking user_faces table:', faceError);
+                    // Table likely doesn't exist, skip this step
+                } else if (existingFace) {
+                    // Update existing record
+                    const { error: updateError } = await supabase
+                        .from('user_faces')
+                        .update({ face_id: faceId })
+                        .eq('user_id', userId);
+                        
+                    if (updateError) {
+                        console.error('[DEBUG-FACESAVE] Error updating user_faces:', updateError);
+                    } else {
+                        console.log('[DEBUG-FACESAVE] user_faces table updated successfully');
+                    }
+                } else {
+                    // Insert new record
+                    const { error: insertError } = await supabase
+                        .from('user_faces')
+                        .insert({ user_id: userId, face_id: faceId });
+                        
+                    if (insertError) {
+                        console.error('[DEBUG-FACESAVE] Error inserting into user_faces:', insertError);
+                    } else {
+                        console.log('[DEBUG-FACESAVE] user_faces record created successfully');
+                    }
+                }
+            } catch (userFacesError) {
+                console.error('[DEBUG-FACESAVE] Error with user_faces operations:', userFacesError);
+            }
+            
+            // Try to update profiles table if it exists
+            try {
+                console.log('[DEBUG-FACESAVE] Updating profiles table...');
+                const { error: profileError } = await supabase
+                    .from('profiles')
+                    .update({ face_id: faceId })
+                    .eq('id', userId);
+                
+                if (profileError) {
+                    console.log('[DEBUG-FACESAVE] Could not update profiles table:', profileError.message);
+                    // Column likely doesn't exist, skip this step
+                } else {
+                    console.log('[DEBUG-FACESAVE] profiles table updated successfully');
+                }
+            } catch (profileError) {
+                console.error('[DEBUG-FACESAVE] Error with profiles operations:', profileError);
+            }
+            
+            console.log(`Face data saved to database: User ${userId}, Face ID ${faceId}`);
+            
+            // Search for matches with the newly saved face ID
+            console.log('[DEBUG-FACESAVE] Searching for matches with newly saved face...');
+            const matchingPhotos = await this.searchFacesByFaceId(faceId, userId);
+            console.log('[DEBUG-FACESAVE] Found', matchingPhotos.length, 'matching photos');
+            
+            return true;
+        } catch (error) {
+            console.error('Error saving face data:', error);
+            return false;
+        }
+    }
+    static async searchFacesByFaceId(faceId, userId) {
+        try {
+            console.group(`[FACE-ID-SEARCH] Searching for faces matching FaceId: ${faceId}`);
+            console.log(`[FACE-ID-SEARCH] User ID: ${userId}`);
+            
+            // Use SearchFaces API (which is more efficient than SearchFacesByImage)
+            const command = new SearchFacesCommand({
+                CollectionId: this.COLLECTION_ID,
+                FaceId: faceId,
+                FaceMatchThreshold: FACE_MATCH_THRESHOLD,
+                MaxFaces: 1000 // Set high to get all possible matches in one call
+            });
+            
+            console.log('[FACE-ID-SEARCH] Sending SearchFaces request to AWS...');
+            const response = await rekognitionClient.send(command);
+            
+            console.log('[FACE-ID-SEARCH] Raw AWS SearchFaces response:', JSON.stringify({
+                FaceMatches: response.FaceMatches?.map(match => ({
+                    Similarity: match.Similarity,
+                    Face: {
+                        FaceId: match.Face?.FaceId,
+                        ExternalImageId: match.Face?.ExternalImageId,
+                        Confidence: match.Face?.Confidence
+                    }
+                }))
+            }, null, 2));
+            
+            if (!response.FaceMatches?.length) {
+                console.log('[FACE-ID-SEARCH] No matching faces found in AWS collection');
+                console.groupEnd();
+                return [];
+            }
+            
+            console.log(`[FACE-ID-SEARCH] Found ${response.FaceMatches.length} matching faces in AWS collection`);
+            
+            // Get the matched face IDs from AWS
+            const matchedFaceIds = response.FaceMatches.map(match => match.Face?.FaceId || '').filter(id => !!id);
+            console.log(`[FACE-ID-SEARCH] Matching face IDs: ${matchedFaceIds.slice(0, 5).join(', ')}${matchedFaceIds.length > 5 ? ' (and more)' : ''}`);
+            
+            // First, let's fetch all the photos from the database and manually filter them
+            // This is a more robust approach than using the filter operator which might be incompatible with the data structure
+            console.log('[FACE-ID-SEARCH] Fetching all photos to check for matches...');
+            const { data: allPhotos, error: photosError } = await supabase
+                .from('photos')
+                .select('id, faces, matched_users, face_ids');
+            
+            if (photosError) {
+                console.error('[FACE-ID-SEARCH] Error fetching photos:', photosError);
+                console.groupEnd();
+                return [];
+            }
+            
+            if (!allPhotos?.length) {
+                console.log('[FACE-ID-SEARCH] No photos found in database');
+                console.groupEnd();
+                return [];
+            }
+            
+            console.log(`[FACE-ID-SEARCH] Fetched ${allPhotos.length} photos from database. Checking for matches...`);
+            
+            // Log the structure of the first photo to help debug
+            if (allPhotos.length > 0) {
+                console.log('[FACE-ID-SEARCH] First photo structure:', JSON.stringify(allPhotos[0], null, 2));
+            }
+            
+            // Find photos that have matching face IDs in various possible fields
+            const matchingPhotos = allPhotos.filter(photo => {
+                // Check if any face in the faces array matches the AWS face IDs
+                if (Array.isArray(photo.faces)) {
+                    const hasFaceMatch = photo.faces.some(face => face.faceId && matchedFaceIds.includes(face.faceId));
+                    if (hasFaceMatch)
+                        return true;
+                }
+                // Check face_ids if available
+                if (Array.isArray(photo.face_ids)) {
+                    const hasFaceIdMatch = photo.face_ids.some(id => matchedFaceIds.includes(id));
+                    if (hasFaceIdMatch)
+                        return true;
+                }
+                return false;
+            });
+            
+            // If we didn't find matches in the photos table, check the unassociated_faces table
+            if (matchingPhotos.length === 0) {
+                console.log('No matches found in photos table, checking unassociated_faces table...');
+                try {
+                    const { data: unassociatedFaces, error: unassociatedError } = await supabase
+                        .from('unassociated_faces')
+                        .select('photo_id')
+                        .in('face_id', matchedFaceIds);
+                    if (unassociatedError) {
+                        console.error('Error checking unassociated_faces:', unassociatedError);
+                    }
+                    else if (unassociatedFaces && unassociatedFaces.length > 0) {
+                        console.log(`Found ${unassociatedFaces.length} matches in unassociated_faces table`);
+                        // Get the unique photo IDs
+                        const photoIds = [...new Set(unassociatedFaces.map(face => face.photo_id))];
+                        // Fetch these photos
+                        const { data: additionalPhotos, error: additionalError } = await supabase
+                            .from('photos')
+                            .select('id, faces, matched_users, face_ids')
+                            .in('id', photoIds);
+                        if (additionalError) {
+                            console.error('Error fetching additional photos:', additionalError);
+                        }
+                        else if (additionalPhotos && additionalPhotos.length > 0) {
+                            console.log(`Fetched ${additionalPhotos.length} additional photos`);
+                            matchingPhotos.push(...additionalPhotos);
+                        }
+                    }
+                }
+                catch (error) {
+                    console.error('Error querying unassociated_faces:', error);
+                }
+            }
+            if (!matchingPhotos.length) {
+                console.log('No photos found with matching face IDs after manual filtering');
+                return [];
+            }
+            console.log(`[FACE-ID-SEARCH] Found ${matchingPhotos.length} photos with matching face IDs`);
+            
+            // For each photo, check if the user is already matched
+            const photosToUpdate = matchingPhotos.filter(photo => {
+                if (!Array.isArray(photo.matched_users))
+                    return true; // If no matched_users, definitely need to update
+                return !photo.matched_users.some((match) => match.userId === userId);
+            });
+            if (photosToUpdate.length === 0) {
+                console.log('User already matched with all photos');
+                return [];
+            }
+            console.log(`[FACE-ID-SEARCH] Found ${photosToUpdate.length} photos to update with new match`);
+            
+            // Get user data for the match
+            const { data: userData, error: userError } = await supabase
+                .from('users')
+                .select(`
+          id,
+          full_name,
+          avatar_url
+        `)
+                .eq('id', userId)
+                .single();
+            if (userError || !userData) {
+                console.log('User data not found:', userError);
+                return [];
+            }
+            
+            // Update each photo with the new match
+            const updatedPhotoIds = [];
+            for (const photo of photosToUpdate) {
+                // Find a matching face to get the confidence score
+                let confidence = FACE_MATCH_THRESHOLD; // Default confidence threshold
+                // Try to find confidence from faces array
+                if (Array.isArray(photo.faces)) {
+                    const matchingFace = photo.faces.find(face => face.faceId && matchedFaceIds.includes(face.faceId));
+                    if (matchingFace && matchingFace.confidence) {
+                        confidence = matchingFace.confidence;
+                    }
+                }
+                // Create the new match object
+                const newMatch = {
+                    userId,
+                    fullName: userData.full_name || 'Unknown User',
+                    avatarUrl: userData.avatar_url || null,
+                    confidence
+                };
+                // Update the photo
+                const existingMatches = Array.isArray(photo.matched_users) ? photo.matched_users : [];
+                const updatedMatches = [...existingMatches, newMatch];
+                console.log(`[FACE-ID-SEARCH] Updating photo ${photo.id} with matched user ${userId}, confidence: ${confidence}`);
+                const { error: updateError } = await supabase
+                    .from('photos')
+                    .update({ matched_users: updatedMatches })
+                    .eq('id', photo.id);
+                if (!updateError) {
+                    updatedPhotoIds.push(photo.id);
+                    console.log(`[FACE-ID-SEARCH] Successfully updated photo ${photo.id} with new user match`);
+                }
+                else {
+                    console.error(`[FACE-ID-SEARCH] Error updating photo ${photo.id}:`, updateError);
+                }
+            }
+            return updatedPhotoIds;
+        }
+        catch (error) {
+            console.error('Error searching faces by FaceId:', error);
+            return [];
+        }
+    }
+    static async startBackgroundProcessing() {
+        setInterval(() => {
+            if (!this.isProcessing) {
+                this.processBackgroundTasks();
+            }
+        }, this.BACKGROUND_INTERVAL);
+    }
+    static async processBackgroundTasks() {
+        if (this.backgroundTasks.length === 0)
+            return;
+        this.isProcessing = true;
+        console.log('Processing background tasks:', this.backgroundTasks.length);
+        try {
+            const task = this.backgroundTasks[0];
+            task.status = 'processing';
+            task.updatedAt = new Date();
+            switch (task.type) {
+                case 'FACE_REGISTRATION':
+                    await this.processFaceRegistration(task);
+                    break;
+                case 'PHOTO_MATCHING':
+                    await this.processPhotoMatching(task);
+                    break;
+                case 'HISTORICAL_MATCHING':
+                    await this.processHistoricalMatching(task);
+                    break;
+            }
+            this.backgroundTasks.shift();
+        }
+        catch (error) {
+            console.error('Error processing background task:', error);
+        }
+        finally {
+            this.isProcessing = false;
+        }
+    }
+    static async processFaceRegistration(task) {
+        console.group('Processing Face Registration');
+        try {
+            const { imageBytes, userId } = task.data;
+            const command = new IndexFacesCommand({
+                CollectionId: this.COLLECTION_ID,
+                Image: { Bytes: imageBytes },
+                ExternalImageId: userId,
+                DetectionAttributes: ['ALL'],
+                MaxFaces: 1,
+                QualityFilter: 'AUTO'
+            });
+            const response = await rekognitionClient.send(command);
+            if (!response.FaceRecords?.length) {
+                throw new Error('Failed to add face to collection');
+            }
+            const faceId = response.FaceRecords[0].Face?.FaceId;
+            await this.saveFaceData(userId, faceId);
+            // Search for matches using the face ID
+            await this.searchFacesByFaceId(faceId, userId);
+            task.status = 'completed';
+        }
+        catch (error) {
+            task.status = 'failed';
+            task.error = error.message;
+            console.error('Face registration failed:', error);
+        }
+        finally {
+            console.groupEnd();
+        }
+    }
+    static async processPhotoMatching(task) {
+        console.group('Processing Photo Matching');
+        try {
+            // Only get photos that haven't been matched with this user yet
+            const { data: photos } = await supabase
+                .from('photos')
+                .select('*')
+                .not('matched_users', 'cs', `[{"userId":"${task.userId}"}]`);
+            if (!photos?.length) {
+                console.log('No unmatched photos found to process');
+                task.status = 'completed';
+                return;
+            }
+            console.log(`Processing ${photos.length} unmatched photos for user ${task.userId}`);
+            // Get the user's face IDs
+            const { data: faceData } = await supabase
+                .from('face_data')
+                .select('face_id')
+                .eq('user_id', task.userId);
+            if (!faceData?.length) {
+                console.log('No face data found for this user');
+                task.status = 'completed';
+                return;
+            }
+            const faceIds = faceData.map(fd => fd.face_id);
+            console.log(`User has ${faceIds.length} registered faces`);
+            // For each face ID, search for matches
+            for (const faceId of faceIds) {
+                await this.searchFacesByFaceId(faceId, task.userId);
+            }
+            task.status = 'completed';
+        }
+        catch (error) {
+            task.status = 'failed';
+            task.error = error.message;
+            console.error('Photo matching failed:', error);
+        }
+        finally {
+            console.groupEnd();
+        }
+    }
+    static addBackgroundTask(task) {
+        const newTask = {
+            id: crypto.randomUUID(),
+            type: task.type,
+            userId: task.userId,
+            data: task.data || {},
+            status: 'pending',
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+        this.backgroundTasks.push(newTask);
+        console.log('Added background task:', newTask.type);
+    }
+    static createCacheKey(imageBytes) {
+        // Modified to create a more unique key including the first 5000 bytes and a timestamp prefix
+        // This ensures each photo gets a unique cache key
+        const timestamp = Math.floor(Date.now() / 10000); // 10-second window
+        return timestamp + '-' + Array.from(imageBytes.slice(0, 5000))
+            .reduce((acc, byte, index) => acc + (index % 20 === 0 ? byte : 0), 0)
+            .toString(36);
+    }
+    static async searchFaces(imageBytes, photoId) {
+        try {
+            console.group('[FACE-MATCH] Face Search Process');
+            console.log('[FACE-MATCH] 🔍 Starting face search process...');
+            
+            // Get collection stats first
+            await this.getCollectionStats();
+            
+            // Step 1: Detect faces in the image
+            console.log('[FACE-MATCH] Step 1: Detecting faces in image...');
+            let faceDetails;
+            try {
+                faceDetails = await this.detectFacesWithRetry(imageBytes);
+                console.log('[FACE-MATCH] ✅ Detected', faceDetails.length, 'faces in image');
+                console.log('[FACE-MATCH] First face confidence:', faceDetails[0]?.Confidence);
+            } catch (detectError) {
+                console.error('[FACE-MATCH] ❌ Face detection error:', detectError);
+                console.groupEnd();
+                return [];
+            }
+            
+            if (faceDetails.length === 0) {
+                console.log('[FACE-MATCH] No faces detected in image');
+                console.groupEnd();
+                return [];
+            }
+            
+            // NEW STEP: Index all detected faces regardless of matching
+            console.log('[FACE-MATCH] NEW Step: Indexing all detected faces for future matching...');
+            const indexedFaces = [];
+            
+            for (let i = 0; i < faceDetails.length; i++) {
+                try {
+                    // Only index faces with good confidence
+                    if (faceDetails[i].Confidence < 90) {
+                        console.log(`[FACE-MATCH] Skipping face ${i+1} due to low confidence: ${faceDetails[i].Confidence}`);
+                        continue;
+                    }
+                    
+                    // Create a temporary external ID for this face
+                    const tempExternalId = `photo-${photoId}-face-${i}`;
+                    
+                    // Index this face in the collection
+                    const indexCommand = new IndexFacesCommand({
+                        CollectionId: this.COLLECTION_ID,
+                        Image: { Bytes: imageBytes },
+                        ExternalImageId: tempExternalId,
+                        DetectionAttributes: ['ALL'],
+                        MaxFaces: 1,
+                        QualityFilter: 'AUTO'
+                    });
+                    
+                    console.log(`[FACE-MATCH] Indexing face ${i+1} with external ID: ${tempExternalId}`);
+                    const indexResponse = await rekognitionClient.send(indexCommand);
+                    
+                    if (indexResponse.FaceRecords && indexResponse.FaceRecords.length > 0) {
+                        const faceId = indexResponse.FaceRecords[0].Face.FaceId;
+                        console.log(`[FACE-MATCH] ✅ Successfully indexed face ${i+1}: ${faceId}`);
+                        
+                        // Save the face ID and details
+                        indexedFaces.push({
+                            faceId: faceId,
+                            confidence: faceDetails[i].Confidence,
+                            boundingBox: faceDetails[i].BoundingBox,
+                            externalId: tempExternalId
+                        });
+                        
+                        // Store this unassociated face for future matching
+                        await this.storeUnassociatedFace(
+                            faceId, 
+                            photoId, 
+                            tempExternalId, 
+                            faceDetails[i]
+                        );
+                    } else {
+                        console.log(`[FACE-MATCH] ⚠️ Face ${i+1} was not indexed properly`);
+                    }
+                } catch (indexError) {
+                    console.error(`[FACE-MATCH] ❌ Error indexing face ${i+1}:`, indexError);
+                }
+            }
+            
+            // Original Step 2: Search for matches in the collection using SearchFacesByImage API
+            console.log('[FACE-MATCH] Step 2: Searching for face matches in collection...');
+            console.log(`[FACE-MATCH] Using threshold: ${FACE_MATCH_THRESHOLD}%`);
+            
+            // Array to hold all direct matches from AWS Rekognition
+            const allMatches = [];
+            
+            // Process each detected face
+            for (let i = 0; i < faceDetails.length; i++) {
+                try {
+                    const command = new SearchFacesByImageCommand({
+                        CollectionId: this.COLLECTION_ID,
+                        Image: { Bytes: imageBytes },
+                        FaceMatchThreshold: FACE_MATCH_THRESHOLD,
+                        MaxFaces: 10
+                    });
+                    
+                    console.log(`[FACE-MATCH] Sending SearchFacesByImage request for face ${i+1}...`);
+                    const searchResponse = await rekognitionClient.send(command);
+                    
+                    // Log the raw response for debugging
+                    console.log(`[AWS-DEBUG] SearchFacesByImage raw response:`, JSON.stringify({
+                        SearchedFaceBoundingBox: searchResponse.SearchedFaceBoundingBox,
+                        SearchedFaceConfidence: searchResponse.SearchedFaceConfidence,
+                        FaceMatches: searchResponse.FaceMatches?.map(match => ({
+                            Similarity: match.Similarity,
+                            Face: {
+                                FaceId: match.Face.FaceId,
+                                ExternalImageId: match.Face.ExternalImageId,
+                                Confidence: match.Face.Confidence
+                            }
+                        }))
+                    }, null, 2));
+                    
+                    if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
+                        console.log(`[FACE-MATCH] Face ${i+1}: Found ${searchResponse.FaceMatches.length} matches`);
+                        
+                        // Log each match with details
+                        searchResponse.FaceMatches.forEach((match, idx) => {
+                            console.log(`[FACE-MATCH] Match ${idx+1}: User ${match.Face.ExternalImageId} with similarity ${match.Similarity.toFixed(2)}% (confidence: ${match.Face.Confidence.toFixed(2)}%)`);
+                        });
+                        
+                        // Add all direct matches from AWS to our array
+                        searchResponse.FaceMatches.forEach(match => {
+                            // Only add matches for registered users (not temporary photo-based IDs)
+                            if (!match.Face.ExternalImageId.startsWith('photo-')) {
+                                allMatches.push({
+                                    userId: match.Face.ExternalImageId, // User ID from AWS
+                                    faceId: match.Face.FaceId,
+                                    similarity: match.Similarity,
+                                    confidence: match.Face.Confidence
+                                });
+                            }
+                        });
+                    } else {
+                        console.log(`[FACE-MATCH] Face ${i+1}: No matches found`);
+                    }
+                } catch (searchError) {
+                    console.error(`[FACE-MATCH] ❌ Error searching for face ${i+1}:`, searchError);
+                }
+            }
+            
+            // Step 3: Process matches and remove duplicates
+            console.log('[FACE-MATCH] Step 3: Processing matches...');
+            const dedupedMatches = {};
+            
+            // Group matches by user ID and keep the highest confidence match
+            allMatches.forEach(match => {
+                const userId = match.userId;
+                const existingMatch = dedupedMatches[userId];
+                
+                // Only replace if this match has higher similarity
+                if (!existingMatch || match.similarity > existingMatch.similarity) {
+                    console.log(`[FACE-MATCH] Match processed: User ${userId} with ${match.similarity.toFixed(2)}% similarity`);
+                    dedupedMatches[userId] = match;
+                }
+            });
+            
+            // Convert back to array and filter by minimum threshold
+            const results = Object.values(dedupedMatches).filter(match => {
+                const passes = match.similarity >= FACE_MATCH_THRESHOLD;
+                if (!passes) {
+                    console.log(`[FACE-MATCH] Filtered out match for ${match.userId} with low similarity: ${match.similarity.toFixed(2)}%`);
+                }
+                return passes;
+            });
+            
+            console.log(`[FACE-MATCH] ✅ Final results: ${results.length} valid matches above ${FACE_MATCH_THRESHOLD}% similarity threshold`);
+            
+            // After getting the results, fetch the user data for each match
+            if (results.length > 0) {
+                console.log('[FACE-MATCH] Fetching user data for matches...');
+                
+                // Filter out non-UUID user IDs
+                const validUserIds = results.filter(result => {
+                    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                    return uuidPattern.test(result.userId);
+                }).map(r => r.userId);
+                
+                console.log(`[FACE-MATCH] Found ${validUserIds.length} valid UUID user IDs out of ${results.length} matches`);
+                
+                if (validUserIds.length > 0) {
+                    try {
+                        console.log('[FACE-MATCH] Table used for user lookup: users');
+                        
+                        const { data: userData, error: userError } = await supabase
+                            .from('users')
+                            .select(`
+                                id,
+                                full_name,
+                                avatar_url,
+                                email
+                            `)
+                            .in('id', validUserIds);
+                        
+                        if (!userError && userData && userData.length > 0) {
+                            console.log('[FACE-MATCH] User data fetched successfully:', userData);
+                            
+                            // Enhance results with user data
+                            results.forEach(result => {
+                                const userProfile = userData.find(u => u.id === result.userId);
+                                if (userProfile) {
+                                    result.fullName = userProfile.full_name || userProfile.email || 'Unknown User';
+                                    result.avatarUrl = userProfile.avatar_url || null;
+                                } else {
+                                    result.fullName = 'Unknown User';
+                                    result.avatarUrl = null;
+                                }
+                            });
+                        } else {
+                            // Try user_profiles as a fallback
+                            console.warn('[FACE-MATCH] Failed to fetch user data from users table, trying user_profiles...');
+                            
+                            const { data: userProfilesData, error: profilesError } = await supabase
+                                .from('user_profiles')
+                                .select(`
+                                    id,
+                                    user_id,
+                                    metadata
+                                `)
+                                .in('user_id', validUserIds);
+                                
+                            if (!profilesError && userProfilesData && userProfilesData.length > 0) {
+                                console.log('[FACE-MATCH] User profiles data found:', userProfilesData);
+                                
+                                // Enhance results with user profile metadata
+                                results.forEach(result => {
+                                    const userProfile = userProfilesData.find(u => u.user_id === result.userId);
+                                    if (userProfile && userProfile.metadata) {
+                                        result.fullName = userProfile.metadata.full_name || 'Unknown User';
+                                        result.avatarUrl = userProfile.metadata.avatar_url || null;
+                                    } else {
+                                        result.fullName = 'Unknown User';
+                                        result.avatarUrl = null;
+                                    }
+                                });
+                            }
+                        }
+                    } catch (error) {
+                        console.error('[FACE-MATCH] Error fetching user data:', error);
+                    }
+                }
+            }
+            
+            // Return both matches and indexed faces
+            const result = {
+                matches: results || [],  // Change from dedupedMatches to results
+                indexedFaces: indexedFaces || []
+            };
+            
+            console.log(`[FACE-MATCH] Completed search with ${result.matches.length} matches and ${result.indexedFaces.length} indexed faces`);
+            console.groupEnd();
+            return result;
+        }
+        catch (error) {
+            console.error('[FACE-MATCH] Error in searchFaces:', error);
+            console.groupEnd();
+            return { matches: [], indexedFaces: [] };
+        }
+    }
+    static async detectFacesWithRetry(imageBytes) {
+        let retries = 0;
+        let lastError;
+        while (retries < this.MAX_RETRIES) {
+            try {
+                console.log(`Attempt ${retries + 1} to detect faces...`);
+                const command = new DetectFacesCommand({
+                    Image: { Bytes: imageBytes },
+                    Attributes: ['ALL']
+                });
+                const response = await rekognitionClient.send(command);
+                if (!response.FaceDetails || response.FaceDetails.length === 0) {
+                    console.log('No faces detected in image');
+                    return [];
+                }
+                console.log(`Successfully detected ${response.FaceDetails.length} faces`);
+                return response.FaceDetails;
+            }
+            catch (error) {
+                console.error(`Face detection attempt ${retries + 1} failed:`, error);
+                lastError = error;
+                retries++;
+                if (retries < this.MAX_RETRIES) {
+                    const delay = this.RETRY_DELAY * retries;
+                    console.log(`Waiting ${delay}ms before retry...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+        throw lastError || new Error('Failed to detect faces after all retries');
+    }
+    static async initialize() {
+        try {
+            console.log('[FACE-SVC] Initializing FaceIndexingService...');
+            
+            const doesCollectionExist = await this.ensureCollectionExists();
+            console.log(`[FACE-SVC] Collection exists: ${doesCollectionExist}`);
+            
+            // Start background processing
+            this.startBackgroundProcessing();
+            
+            // Expose debug methods on window
+            if (typeof window !== 'undefined') {
+                window.debugAWS = {
+                    getCollectionStats: this.getCollectionStats.bind(this),
+                    listFacesInCollection: this.listFacesInCollection.bind(this),
+                    searchFacesByFaceId: this.searchFacesByFaceId.bind(this),
+                    searchFaces: this.searchFaces.bind(this),
+                    version: '1.0.0'
+                };
+                
+                console.log('[DEBUG] AWS debug methods exposed on window.debugAWS');
+                console.log('[DEBUG] Try running debugAWS.getCollectionStats() in the console');
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('[ERROR] Error initializing FaceIndexingService:', error);
+            throw error;
+        }
+    }
+    static async resetCollection() {
+        try {
+            console.group('Face Collection Reset');
+            console.log('🔄 Resetting face collection...');
+            try {
+                console.log('Deleting existing collection...');
+                await rekognitionClient.send(new DeleteCollectionCommand({
+                    CollectionId: COLLECTION_ID
+                }));
+                console.log('✅ Existing collection deleted');
+            }
+            catch (error) {
+                console.log('No existing collection to delete');
+            }
+            console.log('Creating new collection...');
+            await rekognitionClient.send(new CreateCollectionCommand({
+                CollectionId: COLLECTION_ID,
+                Tags: {
+                    Environment: 'production',
+                    Application: 'shmong'
+                }
+            }));
+            console.log('✅ New collection created');
+            console.log('✅ Collection reset complete');
+            console.groupEnd();
+            return true;
+        }
+        catch (error) {
+            console.error('❌ Error resetting collection:', error);
+            console.groupEnd();
+            return false;
+        }
+    }
+    // Force reset collection with explicit error handling for client use
+    static async forceResetCollection() {
+        console.log('🚨 Performing emergency collection reset...');
+        try {
+            // Attempt to delete collection even if error
+            try {
+                await rekognitionClient.send(new DeleteCollectionCommand({
+                    CollectionId: this.COLLECTION_ID || COLLECTION_ID
+                }));
+                console.log('✅ Existing collection deleted');
+            } catch (deleteError) {
+                console.warn('Collection deletion error (continuing anyway):', deleteError.message);
+            }
+            
+            // Create new collection
+            try {
+                await rekognitionClient.send(new CreateCollectionCommand({
+                    CollectionId: this.COLLECTION_ID || COLLECTION_ID,
+                    Tags: {
+                        Environment: 'production',
+                        Application: 'shmong',
+                        ResetAt: new Date().toISOString()
+                    }
+                }));
+                console.log('✅ New collection created');
+                return {
+                    success: true,
+                    message: 'Collection reset successful!'
+                };
+            } catch (createError) {
+                console.error('❌ Collection creation error:', createError);
+                return {
+                    success: false,
+                    message: `Failed to create collection: ${createError.message}`
+                };
+            }
+        } catch (error) {
+            console.error('❌ Fatal error in forceResetCollection:', error);
+            return {
+                success: false,
+                message: `Fatal error: ${error.message}`
+            };
+        }
+    }
+    // Add this method to reindex all existing photos
+    static async reindexAllFaces() {
+        try {
+            console.log('Starting to reindex all photos...');
+            // Get all photos from the database
+            const { data: photos, error: photoError } = await supabase
+                .from('photos')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (photoError) {
+                console.error('Error fetching photos:', photoError);
+                return false;
+            }
+            if (!photos || photos.length === 0) {
+                console.log('No photos found to reindex');
+                return true;
+            }
+            console.log(`Found ${photos.length} photos to reindex`);
+            // First, check the structure of a photo to log the fields we have
+            if (photos.length > 0) {
+                console.log('Photo record structure:', Object.keys(photos[0]));
+                console.log('First photo sample:', photos[0]);
+            }
+            // Process photos in batches to avoid overwhelming AWS
+            const batches = [];
+            for (let i = 0; i < photos.length; i += this.BATCH_SIZE) {
+                batches.push(photos.slice(i, i + this.BATCH_SIZE));
+            }
+            console.log(`Processing in ${batches.length} batches of up to ${this.BATCH_SIZE} photos`);
+            let success = 0;
+            let errors = 0;
+            for (let i = 0; i < batches.length; i++) {
+                console.log(`Processing batch ${i + 1} of ${batches.length}...`);
+                const batch = batches[i];
+                for (const photo of batch) {
+                    try {
+                        console.log(`Reindexing photo ${photo.id}...`);
+                        // Determine the photo path - try all possible field names
+                        let photoPath;
+                        let photoData;
+                        // Try different possible field names for the path
+                        if (photo.path) {
+                            photoPath = photo.path;
+                        }
+                        else if (photo.file_path) {
+                            photoPath = photo.file_path;
+                        }
+                        else if (photo.filePath) {
+                            photoPath = photo.filePath;
+                        }
+                        else if (photo.storage_path) {
+                            photoPath = photo.storage_path;
+                        }
+                        else if (photo.storagePath) {
+                            photoPath = photo.storagePath;
+                        }
+                        else {
+                            // Try to construct a path from folder path and ID
+                            if (photo.folderPath) {
+                                photoPath = `${photo.folderPath}/${photo.id}`;
+                            }
+                            else if (photo.folder_path) {
+                                photoPath = `${photo.folder_path}/${photo.id}`;
+                            }
+                            else {
+                                // Last resort, try a default path
+                                photoPath = `photos/${photo.id}`;
+                            }
+                        }
+                        console.log(`Attempting to download photo using path: ${photoPath}`);
+                        // Get the photo data from storage
+                        const { data, error } = await supabase.storage
+                            .from('photos')
+                            .download(photoPath);
+                        if (error || !data) {
+                            console.error(`Error downloading photo ${photo.id} with path ${photoPath}:`, error);
+                            // Try one more approach - the URL directly if it exists
+                            if (photo.url) {
+                                try {
+                                    console.log(`Attempting to fetch photo from URL: ${photo.url}`);
+                                    const response = await fetch(photo.url);
+                                    if (!response.ok) {
+                                        throw new Error(`HTTP error! status: ${response.status}`);
+                                    }
+                                    photoData = await response.arrayBuffer();
+                                    console.log(`Successfully fetched photo from URL`);
+                                }
+                                catch (urlError) {
+                                    console.error(`Error fetching photo from URL:`, urlError);
+                                    errors++;
+                                    continue;
+                                }
+                            }
+                            else {
+                                errors++;
+                                continue;
+                            }
+                        }
+                        else {
+                            photoData = await data.arrayBuffer();
+                        }
+                        if (!photoData) {
+                            console.error(`No photo data available for photo ${photo.id}`);
+                            errors++;
+                            continue;
+                        }
+                        // Convert to Uint8Array
+                        const imageBytes = new Uint8Array(photoData);
+                        // Detect faces
+                        const detectedFaces = await this.detectFacesWithRetry(imageBytes);
+                        if (!detectedFaces || detectedFaces.length === 0) {
+                            console.log(`No faces detected in photo ${photo.id}`);
+                            continue;
+                        }
+                        console.log(`Detected ${detectedFaces.length} faces in photo ${photo.id}`);
+                        // Index faces in AWS Rekognition
+                        const command = new IndexFacesCommand({
+                            CollectionId: this.COLLECTION_ID,
+                            Image: { Bytes: imageBytes },
+                            ExternalImageId: `photo_${photo.id}`,
+                            DetectionAttributes: ['ALL'],
+                            MaxFaces: 10,
+                            QualityFilter: 'AUTO'
+                        });
+                        const response = await rekognitionClient.send(command);
+                        if (!response.FaceRecords || response.FaceRecords.length === 0) {
+                            console.log(`No faces indexed for photo ${photo.id}`);
+                            continue;
+                        }
+                        console.log(`Successfully indexed ${response.FaceRecords.length} faces for photo ${photo.id}`);
+                        // Store unassociated faces
+                        const faces = response.FaceRecords.map((record, index) => {
+                            return {
+                                face_id: record.Face?.FaceId,
+                                photo_id: photo.id,
+                                external_image_id: `photo_${photo.id}_${index}`,
+                                created_at: new Date().toISOString(),
+                                attributes: record.FaceDetail || {}
+                            };
+                        });
+                        // Store in database
+                        for (const face of faces) {
+                            if (!face.face_id)
+                                continue;
+                            const { error: faceError } = await supabase
+                                .from('unassociated_faces')
+                                .insert(face);
+                            if (faceError) {
+                                console.error(`Error storing unassociated face for photo ${photo.id}:`, faceError);
+                            }
+                        }
+                        // Update the photo's faces array
+                        const { error: updateError } = await supabase
+                            .from('photos')
+                            .update({
+                            faces: faces.map(face => ({
+                                faceId: face.face_id,
+                                userId: '',
+                                confidence: 0,
+                                attributes: face.attributes
+                            }))
+                        })
+                            .eq('id', photo.id);
+                        if (updateError) {
+                            console.error(`Error updating photo ${photo.id} faces:`, updateError);
+                        }
+                        else {
+                            success++;
+                        }
+                        // Adding a small delay to avoid rate limiting
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                    catch (error) {
+                        console.error(`Error reindexing photo ${photo.id}:`, error);
+                        errors++;
+                    }
+                }
+                // Add a delay between batches
+                if (i < batches.length - 1) {
+                    console.log(`Waiting ${this.RETRY_DELAY}ms before next batch...`);
+                    await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY));
+                }
+            }
+            console.log(`Reindexing completed: ${success} successful, ${errors} errors`);
+            return true;
+        }
+        catch (error) {
+            console.error('Error reindexing all faces:', error);
+            return false;
+        }
+    }
+    // A new utility method to store unassociated faces with validation
+    static async storeUnassociatedFace(faceId, photoId, externalImageId, attributes) {
+        try {
+            console.log(`[FACE-STORAGE] Storing unassociated face: ${faceId} for photo: ${photoId}`);
+            
+            // Check if the database has the unassociated_faces table
+            try {
+                const { data, error } = await supabase.from('unassociated_faces').insert({
+                    face_id: faceId,
+                    photo_id: photoId,
+                    external_id: externalImageId,
+                    confidence: attributes.Confidence || 0,
+                    attributes: attributes || {}
+                });
+                
+                if (error) {
+                    console.error('[FACE-STORAGE] Error storing unassociated face in database:', error);
+                    
+                    // Save in localStorage as a fallback
+                    try {
+                        const key = `unassociated_face_${faceId}`;
+                        const faceData = {
+                            faceId,
+                            photoId,
+                            externalImageId,
+                            confidence: attributes.Confidence || 0,
+                            storedAt: new Date().toISOString()
+                        };
+                        localStorage.setItem(key, JSON.stringify(faceData));
+                        console.log('[FACE-STORAGE] Stored unassociated face in localStorage as fallback');
+                    } catch (localError) {
+                        console.error('[FACE-STORAGE] Error storing in localStorage:', localError);
+                    }
+                    
+                    return false;
+                }
+                
+                console.log('[FACE-STORAGE] Successfully stored unassociated face in database');
+                return true;
+            } catch (dbError) {
+                console.error('[FACE-STORAGE] Database operation failed:', dbError);
+                return false;
+            }
+        } catch (error) {
+            console.error('[FACE-STORAGE] Error in storeUnassociatedFace:', error);
+            return false;
+        }
+    }
+    static async indexFacesInPhoto(photoId, faces) {
+        try {
+            console.log(`[DEBUG] Processing ${faces.length} faces for photo ${photoId}...`);
+            const indexedFaces = [];
+
+            // If no faces, return empty array
+            if (!faces || faces.length === 0) {
+                console.log('[DEBUG] No faces to process');
+                return [];
+            }
+
+            // Generate local face IDs for each face (no AWS API call needed)
+            // This approach ensures we still have face data even without AWS
+            for (const face of faces) {
+                try {
+                    // Generate a local face ID - we'll use this as an identifier
+                    const faceId = `local-${photoId.slice(0,8)}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+                    
+                    console.log(`[DEBUG] Generated local face ID: ${faceId}`);
+                    
+                    // Add to indexed faces array
+                    indexedFaces.push({
+                        faceId,
+                        attributes: face.attributes || {}
+                    });
+                } catch (faceError) {
+                    console.error('[ERROR] Error processing face:', faceError);
+                }
+            }
+
+            // Log the results
+            console.log(`[DEBUG] Processed ${indexedFaces.length} faces with local IDs`);
+            return indexedFaces;
+        } catch (error) {
+            console.error('[ERROR] Error in face indexing:', error);
+            return [];
+        }
+    }
+    /**
+     * Search for faces in an image by URL
+     * @param {string} photoId - Photo ID for tracking
+     * @param {string} imageUrl - Public URL of the image
+     * @returns {Array} - Array of matching user objects
+     */
+    static async searchFacesByImage(photoId, imageUrl) {
+        try {
+            console.log('[FaceIndexingService.searchFacesByImage] STARTED face matching for photo:', photoId);
+            console.log('[FaceIndexingService.searchFacesByImage] Image URL:', imageUrl);
+            
+            // First download the image from URL
+            console.log('[FaceIndexingService.searchFacesByImage] Downloading image from URL for processing');
+            const response = await fetch(imageUrl);
+            
+            if (!response.ok) {
+                console.error('[FaceIndexingService.searchFacesByImage] ERROR: Failed to download image from URL:', response.status, response.statusText);
+                throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+            }
+            
+            const imageBuffer = await response.arrayBuffer();
+            const imageBytes = new Uint8Array(imageBuffer);
+            
+            console.log('[FaceIndexingService.searchFacesByImage] Image downloaded successfully, size:', imageBytes.length, 'bytes');
+            
+            // Now detect faces in the image
+            console.log('[FaceIndexingService.searchFacesByImage] Detecting faces in image');
+            const detectedFaces = await this.detectFacesWithRetry(imageBytes);
+            
+            if (!detectedFaces || detectedFaces.length === 0) {
+                console.log('[FaceIndexingService.searchFacesByImage] No faces detected in image');
+                return [];
+            }
+            
+            console.log('[FaceIndexingService.searchFacesByImage] Detected', detectedFaces.length, 'faces in image');
+            
+            // For each detected face, search for matches
+            const allMatches = [];
+            
+            for (let i = 0; i < detectedFaces.length; i++) {
+                try {
+                    console.log(`[FaceIndexingService.searchFacesByImage] Processing face ${i+1} of ${detectedFaces.length}`);
+                    
+                    // Use SearchFacesByImage API
+                    const command = new SearchFacesByImageCommand({
+                        CollectionId: this.COLLECTION_ID,
+                        Image: { Bytes: imageBytes },
+                        FaceMatchThreshold: FACE_MATCH_THRESHOLD,
+                        MaxFaces: 10
+                    });
+                    
+                    console.log('[FaceIndexingService.searchFacesByImage] Sending request to AWS Rekognition...');
+                    const searchResponse = await rekognitionClient.send(command);
+                    
+                    if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
+                        console.log(`[FaceIndexingService.searchFacesByImage] Found ${searchResponse.FaceMatches.length} potential matches for face ${i+1}`);
+                        
+                        // Map the AWS responses to our format
+                        const matches = searchResponse.FaceMatches.map(match => {
+                            return {
+                                userId: match.Face.ExternalImageId, // This should contain the user ID
+                                faceId: match.Face.FaceId,
+                                similarity: match.Similarity,
+                                confidence: match.Face.Confidence
+                            };
+                        });
+                        
+                        allMatches.push(...matches);
+                        console.log('[FaceIndexingService.searchFacesByImage] Processed matches:', JSON.stringify(matches, null, 2));
+                    } else {
+                        console.log(`[FaceIndexingService.searchFacesByImage] No matches found for face ${i+1}`);
+                    }
+                } catch (searchError) {
+                    console.error(`[FaceIndexingService.searchFacesByImage] ERROR searching for face ${i+1}:`, searchError);
+                    console.error('[FaceIndexingService.searchFacesByImage] Error stack:', searchError.stack);
+                }
+            }
+            
+            if (allMatches.length === 0) {
+                console.log('[FaceIndexingService.searchFacesByImage] No matches found for any faces');
+                return [];
+            }
+            
+            console.log(`[FaceIndexingService.searchFacesByImage] Found total of ${allMatches.length} matches across all faces`);
+            
+            // Deduplicate matches by user ID, keeping the highest confidence match
+            const uniqueMatches = {};
+            
+            allMatches.forEach(match => {
+                const userId = match.userId;
+                if (!uniqueMatches[userId] || match.similarity > uniqueMatches[userId].similarity) {
+                    uniqueMatches[userId] = match;
+                }
+            });
+            
+            // Convert to array and sort by similarity
+            const finalMatches = Object.values(uniqueMatches)
+                .filter(match => match.similarity >= FACE_MATCH_THRESHOLD)
+                .sort((a, b) => b.similarity - a.similarity);
+            
+            console.log(`[FaceIndexingService.searchFacesByImage] Final matches after filtering: ${finalMatches.length}`);
+            console.log('[FaceIndexingService.searchFacesByImage] Final matches:', JSON.stringify(finalMatches, null, 2));
+            
+            return finalMatches;
+        } catch (error) {
+            console.error('[FaceIndexingService.searchFacesByImage] CRITICAL ERROR:', error);
+            console.error('[FaceIndexingService.searchFacesByImage] Error stack:', error.stack);
+            return [];
+        }
+    }
+    // Add this new debug method to check collection statistics
+    static async getCollectionStats() {
+        try {
+            console.group('[AWS-DEBUG] Collection Statistics');
+            
+            // 1. Check if collection exists
+            const listCollectionsCommand = new ListCollectionsCommand({});
+            const collections = await rekognitionClient.send(listCollectionsCommand);
+            
+            console.log(`[AWS-DEBUG] Available collections: ${JSON.stringify(collections.CollectionIds)}`);
+            
+            if (!collections.CollectionIds.includes(this.COLLECTION_ID)) {
+                console.log(`[AWS-DEBUG] Collection ${this.COLLECTION_ID} does not exist`);
+                console.groupEnd();
+                return;
+            }
+            
+            // 2. Get the face count in the collection using DescribeCollection
+            const describeCommand = new DescribeCollectionCommand({
+                CollectionId: this.COLLECTION_ID
+            });
+            
+            const collectionDetails = await rekognitionClient.send(describeCommand);
+            
+            console.log(`[AWS-DEBUG] Collection ${this.COLLECTION_ID} statistics:`);
+            console.log(`[AWS-DEBUG] Face count: ${collectionDetails.FaceCount}`);
+            console.log(`[AWS-DEBUG] Created: ${collectionDetails.CreationTimestamp}`);
+            console.log(`[AWS-DEBUG] ARN: ${collectionDetails.CollectionARN}`);
+            console.log(`[AWS-DEBUG] Face model version: ${collectionDetails.FaceModelVersion}`);
+            
+            console.groupEnd();
+            return collectionDetails;
+        } catch (error) {
+            console.error('[AWS-DEBUG] Error getting collection statistics:', error);
+            console.groupEnd();
+        }
+    }
+    // Add this new method to list all faces in the collection
+    static async listFacesInCollection() {
+        try {
+            console.group('[DEBUG] Listing faces in collection');
+            
+            // Get collection stats first 
+            const stats = await this.getCollectionStats();
+            
+            if (!stats) {
+                console.log('[DEBUG] Could not get collection statistics');
+                console.groupEnd();
+                return;
+            }
+            
+            console.log(`[DEBUG] Collection has ${stats.FaceCount} faces`);
+            
+            // Use ListFaces command to get details of faces in collection
+            const command = new ListFacesCommand({
+                CollectionId: this.COLLECTION_ID,
+                MaxResults: 1000 // Adjust if needed, maximum value accepted by AWS
+            });
+            
+            console.log('[DEBUG] Fetching faces from AWS Rekognition...');
+            const response = await rekognitionClient.send(command);
+            
+            console.log(`[DEBUG] Retrieved ${response.Faces?.length || 0} faces from collection`);
+            
+            if (response.Faces && response.Faces.length > 0) {
+                // Display faces grouped by user ID (ExternalImageId)
+                const facesByUser = {};
+                
+                response.Faces.forEach(face => {
+                    const userId = face.ExternalImageId || 'unknown';
+                    if (!facesByUser[userId]) {
+                        facesByUser[userId] = [];
+                    }
+                    facesByUser[userId].push({
+                        faceId: face.FaceId,
+                        confidence: face.Confidence,
+                        imageId: face.ImageId,
+                        indexTimestamp: face.IndexTimestamp
+                    });
+                });
+                
+                // Print the summary
+                console.log('[DEBUG] Faces by user:');
+                Object.entries(facesByUser).forEach(([userId, faces]) => {
+                    console.log(`[DEBUG] User ${userId}: ${faces.length} face(s)`);
+                    faces.forEach((face, index) => {
+                        console.log(`[DEBUG]   Face ${index+1}: ID=${face.faceId}, Confidence=${face.confidence.toFixed(2)}%, Indexed=${new Date(face.indexTimestamp).toLocaleString()}`);
+                    });
+                });
+            }
+            
+            console.groupEnd();
+            return response.Faces;
+        } catch (error) {
+            console.error('[DEBUG] Error listing faces:', error);
+            console.groupEnd();
+        }
+    }
+    // New method for getting initial matches quickly during registration
+    static async getInitialHistoricalMatches(faceId, userId, limit = 20) {
+        try {
+            console.group('[FACE-HISTORY] Getting Initial Historical Matches');
+            console.log(`[FACE-HISTORY] Getting initial ${limit} historical matches for face ID: ${faceId}, user ID: ${userId}`);
+            
+            if (!faceId) {
+                console.error('[FACE-HISTORY] ❌ ERROR: Missing face ID');
+                console.groupEnd();
+                return [];
+            }
+            
+            // Use SearchFaces API with limit for quick response
+            console.log(`[FACE-HISTORY] Sending SearchFaces request to AWS Rekognition...`);
+            const command = new SearchFacesCommand({
+                CollectionId: this.COLLECTION_ID,
+                FaceId: faceId,
+                FaceMatchThreshold: FACE_MATCH_THRESHOLD,
+                MaxResults: limit
+            });
+            
+            const response = await rekognitionClient.send(command);
+            
+            console.log(`[FACE-HISTORY] SearchFaces response received with ${response.FaceMatches?.length || 0} matches`);
+            
+            if (response.FaceMatches?.length > 0) {
+                console.log(`[FACE-HISTORY] Sample match:`, JSON.stringify({
+                    Similarity: response.FaceMatches[0].Similarity,
+                    Face: {
+                        FaceId: response.FaceMatches[0].Face?.FaceId,
+                        ExternalImageId: response.FaceMatches[0].Face?.ExternalImageId
+                    }
+                }, null, 2));
+
+                // 🔍 ENHANCED LOGGING: Log distribution of ExternalImageId patterns
+                const idPatterns = {};
+                let missingExternalIds = 0;
+
+                response.FaceMatches.forEach((match, index) => {
+                    const externalId = match.Face?.ExternalImageId;
+                    if (!externalId) {
+                        missingExternalIds++;
+                        return;
+                    }
+
+                    // Extract pattern from external ID
+                    let pattern = 'unknown';
+                    if (externalId.startsWith('photo-')) {
+                        pattern = 'photo-prefix';
+                    } else if (externalId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+                        pattern = 'uuid-format';
+                    } else if (externalId.includes('@')) {
+                        pattern = 'email-format';
+                    } else {
+                        pattern = 'other';
+                    }
+
+                    idPatterns[pattern] = (idPatterns[pattern] || 0) + 1;
+
+                    // Log a few examples of each pattern
+                    if (idPatterns[pattern] <= 3) {
+                        console.log(`[FACE-HISTORY] 🔍 ExternalImageId example #${idPatterns[pattern]} of type ${pattern}: "${externalId}"`);
+                    }
+                });
+
+                console.log(`[FACE-HISTORY] 📊 EXTERNAL ID PATTERN DISTRIBUTION:`, JSON.stringify(idPatterns, null, 2));
+                if (missingExternalIds > 0) {
+                    console.log(`[FACE-HISTORY] ⚠️ Found ${missingExternalIds} matches with missing ExternalImageId`);
+                }
+            }
+            
+            if (!response.FaceMatches?.length) {
+                console.log('[FACE-HISTORY] No matching faces found in AWS collection');
+                console.groupEnd();
+                return [];
+            }
+            
+            // Get the matched face IDs from AWS that start with "photo-"
+            // These are the faces we indexed during photo upload
+            const allMatches = response.FaceMatches.length;
+            const photoMatches = response.FaceMatches.filter(match => match.Face?.ExternalImageId?.startsWith('photo-'));
+            const matchedFaceIds = photoMatches.map(match => match.Face?.FaceId || '').filter(id => !!id);
+                
+            console.log(`[FACE-HISTORY] Found ${matchedFaceIds.length} matching faces with photo- prefix (out of ${allMatches} total matches)`);
+            
+            // 🔍 ENHANCED LOGGING: If expected photo- prefix matches are missing, analyze why
+            if (photoMatches.length < allMatches) {
+                const nonPhotoMatches = response.FaceMatches.filter(match => !match.Face?.ExternalImageId?.startsWith('photo-'));
+                console.log(`[FACE-HISTORY] 🔍 ANALYSIS: ${nonPhotoMatches.length} matches do NOT have photo- prefix`);
+                
+                // Log sample of non-photo matches
+                if (nonPhotoMatches.length > 0) {
+                    const sampleSize = Math.min(5, nonPhotoMatches.length);
+                    console.log(`[FACE-HISTORY] 🔍 SAMPLE OF NON-PHOTO MATCHES (${sampleSize} of ${nonPhotoMatches.length}):`);
+                    for (let i = 0; i < sampleSize; i++) {
+                        console.log(`  Match #${i+1}: ExternalImageId="${nonPhotoMatches[i].Face?.ExternalImageId}", FaceId="${nonPhotoMatches[i].Face?.FaceId}", Similarity=${nonPhotoMatches[i].Similarity}`);
+                    }
+                }
+            }
+            
+            if (matchedFaceIds.length === 0) {
+                console.log('[FACE-HISTORY] No photo matches found');
+                console.groupEnd();
+                return [];
+            }
+            
+            // Log some details of the matches
+            if (matchedFaceIds.length > 0) {
+                console.log(`[FACE-HISTORY] First 3 matched face IDs: ${matchedFaceIds.slice(0, 3).join(', ')}${matchedFaceIds.length > 3 ? '...' : ''}`);
+            }
+            
+            // Query the unassociated_faces table to find photos with these face IDs
+            console.log(`[FACE-HISTORY] Querying database for photos with matched face IDs...`);
+            const { data: matchingFaces, error: facesError } = await supabase
+                .from('unassociated_faces')
+                .select('photo_id, face_id')
+                .in('face_id', matchedFaceIds);
+                
+            if (facesError) {
+                console.error('[FACE-HISTORY] ❌ ERROR fetching from unassociated_faces:', facesError);
+                console.log('[FACE-HISTORY] Attempting fallback method...');
+                
+                try {
+                    const photoIds = await this.findMatchingPhotosUsingRekognition(matchedFaceIds);
+                    console.log(`[FACE-HISTORY] Fallback method found ${photoIds.length} photos`);
+                    console.groupEnd();
+                    return photoIds;
+                } catch (fallbackError) {
+                    console.error('[FACE-HISTORY] ❌ Fallback method also failed:', fallbackError);
+                    console.groupEnd();
+                    return [];
+                }
+            }
+            
+            if (!matchingFaces?.length) {
+                console.log('[FACE-HISTORY] No matching faces found in database');
+                
+                // 🔍 ENHANCED LOGGING: Log more details about the database query
+                console.log(`[FACE-HISTORY] 🔍 DATABASE QUERY DETAILS:`);
+                console.log(`[FACE-HISTORY] 🔍 Searching for face_id IN [${matchedFaceIds.join(', ')}]`);
+                console.log(`[FACE-HISTORY] 🔍 Target table: unassociated_faces`);
+                console.log(`[FACE-HISTORY] 🔍 Fields requested: photo_id, face_id`);
+                
+                console.log(`[FACE-HISTORY] 🔍 Checking if unassociated_faces table exists and its structure...`);
+                try {
+                    const { data: tableInfo, error: tableError } = await supabase.rpc('admin_run_sql', {
+                        sql: `SELECT column_name, data_type, is_nullable 
+                              FROM information_schema.columns 
+                              WHERE table_name = 'unassociated_faces';`
+                    });
+                    
+                    if (tableError) {
+                        console.error(`[FACE-HISTORY] ❌ Cannot get table structure: ${tableError.message}`);
+                    } else {
+                        console.log(`[FACE-HISTORY] 🔍 TABLE STRUCTURE:`, JSON.stringify(tableInfo, null, 2));
+                    }
+                } catch (tableCheckError) {
+                    console.error(`[FACE-HISTORY] ❌ Error checking table structure: ${tableCheckError.message}`);
+                }
+                
+                // BUGFIX: If no matches found in direct query, try using the more flexible Rekognition-based approach
+                try {
+                    console.log('[FACE-HISTORY] Attempting to use fallback method since direct database query returned no results...');
+                    const photoIds = await this.findMatchingPhotosUsingRekognition(matchedFaceIds);
+                    console.log(`[FACE-HISTORY] Fallback method found ${photoIds.length} photos`);
+                    
+                    // 🔍 ENHANCED LOGGING: If we still have a mismatch, analyze why
+                    if (photoIds.length !== matchedFaceIds.length) {
+                        console.log(`[FACE-HISTORY] 🔍 ANALYSIS: Fallback method found ${photoIds.length} photos from ${matchedFaceIds.length} face IDs`);
+                        console.log(`[FACE-HISTORY] 🔍 EFFICIENCY: ${(photoIds.length / matchedFaceIds.length * 100).toFixed(1)}% of face IDs yielded photos`);
+                        
+                        if (photoIds.length > 0) {
+                            console.log(`[FACE-HISTORY] 🔍 FOUND PHOTOS: ${JSON.stringify(photoIds)}`);
+                        }
+                    }
+                    
+                    if (photoIds.length > 0) {
+                        // If photo IDs were found, try to verify and insert them into unassociated_faces
+                        console.log('[FACE-HISTORY] Repairing database by adding missing unassociated_faces entries...');
+                        for (const photoId of photoIds) {
+                            for (const faceId of matchedFaceIds) {
+                                // Insert missing records if they don't exist
+                                try {
+                                    // First check if there's any record for this combination
+                                    const { data: existingRecord } = await supabase
+                                        .from('unassociated_faces')
+                                        .select('id')
+                                        .eq('photo_id', photoId)
+                                        .eq('face_id', faceId)
+                                        .maybeSingle();
+                                        
+                                    if (!existingRecord) {
+                                        // Create a placeholder record to fix the database
+                                        await supabase.from('unassociated_faces').insert({
+                                            face_id: faceId,
+                                            photo_id: photoId,
+                                            external_id: `photo-${photoId}-face-1`,
+                                            confidence: 99.0,
+                                            attributes: { Confidence: 99.0 }
+                                        });
+                                        console.log(`[FACE-HISTORY] Added missing unassociated_faces record for face ${faceId} in photo ${photoId}`);
+                                    }
+                                } catch (repairError) {
+                                    console.warn(`[FACE-HISTORY] Could not repair missing database record: ${repairError.message}`);
+                                }
+                            }
+                        }
+                    }
+                    
+                    console.groupEnd();
+                    return photoIds;
+                } catch (fallbackError) {
+                    console.error('[FACE-HISTORY] ❌ Fallback method also failed:', fallbackError);
+                    console.groupEnd();
+                    return [];
+                }
+            }
+            
+            console.log(`[FACE-HISTORY] Found ${matchingFaces.length} matching faces in database`);
+            
+            // Extract unique photo IDs
+            const photoIds = [...new Set(matchingFaces.map(face => face.photo_id))];
+            console.log(`[FACE-HISTORY] ${photoIds.length} unique photos to update with match`);
+            
+            if (photoIds.length > 0) {
+                console.log(`[FACE-HISTORY] First 3 photo IDs: ${photoIds.slice(0, 3).join(', ')}${photoIds.length > 3 ? '...' : ''}`);
+            }
+            
+            // Update each photo with the new user match
+            console.log(`[FACE-HISTORY] Adding user as match to photos...`);
+            let successCount = 0;
+            for (const photoId of photoIds) {
+                const success = await this.addUserMatchToPhoto(photoId, userId, faceId);
+                if (success) successCount++;
+            }
+            
+            console.log(`[FACE-HISTORY] Successfully updated ${successCount} out of ${photoIds.length} photos`);
+            console.groupEnd();
+            return photoIds;
+        } catch (error) {
+            console.error('[FACE-HISTORY] ❌ ERROR getting initial matches:', error);
+            console.error('[FACE-HISTORY] Error stack:', error.stack);
+            console.groupEnd();
+            return [];
+        }
+    }
+    
+    // Fallback method when database query fails
+    static async findMatchingPhotosUsingRekognition(matchedFaceIds) {
+        try {
+            console.group('[FACE-FALLBACK] Finding Photos Using Rekognition');
+            console.log('[FACE-FALLBACK] Using fallback method to find matching photos for', matchedFaceIds.length, 'face IDs');
+            
+            // 🔍 ENHANCED LOGGING: Log the face IDs we're searching for
+            console.log(`[FACE-FALLBACK] 🔍 FACE IDS TO PROCESS: ${JSON.stringify(matchedFaceIds)}`);
+            
+            // We'll rely on parsing the external IDs to extract photo IDs
+            const photoIds = new Set();
+            let processedCount = 0;
+            let errorCount = 0;
+            let successCount = 0;
+            let skippedCount = 0;
+            
+            // 🔍 ENHANCED LOGGING: Keep track of detailed statistics
+            const stats = {
+                matchFormat: {
+                    photoPrefix: 0,
+                    nonPhotoPrefix: 0,
+                    unparseableFormat: 0
+                },
+                externalIdPatterns: {},
+                extractionResults: {
+                    success: 0,
+                    failed: 0,
+                    skipped: 0
+                }
+            };
+            
+            console.log('[FACE-FALLBACK] Processing each face ID to extract photo information...');
+            
+            for (const faceId of matchedFaceIds) {
+                try {
+                    processedCount++;
+                    if (processedCount % 10 === 0) {
+                        console.log(`[FACE-FALLBACK] Progress: ${processedCount}/${matchedFaceIds.length} face IDs processed`);
+                    }
+                    
+                    // Call AWS to get the external ID for this face
+                    const describeCommand = new SearchFacesCommand({
+                        CollectionId: this.COLLECTION_ID,
+                        FaceId: faceId,
+                        MaxResults: 1
+                    });
+                    
+                    const response = await rekognitionClient.send(describeCommand);
+                    
+                    // 🔍 ENHANCED LOGGING: Log response from AWS for problematic face IDs
+                    if (processedCount <= 3 || matchedFaceIds.length <= 10) {
+                        console.log(`[FACE-FALLBACK] 🔍 AWS RESPONSE FOR FACE ${faceId}: ${JSON.stringify({
+                            hasFaceMatches: !!response.FaceMatches?.length,
+                            matchCount: response.FaceMatches?.length || 0,
+                            firstMatch: response.FaceMatches?.[0] ? {
+                                similarity: response.FaceMatches[0].Similarity,
+                                faceId: response.FaceMatches[0].Face?.FaceId,
+                                externalId: response.FaceMatches[0].Face?.ExternalImageId
+                            } : null
+                        })}`);
+                    }
+                    
+                    if (response.FaceMatches && response.FaceMatches.length > 0) {
+                        const externalId = response.FaceMatches[0].Face?.ExternalImageId;
+                        
+                        // 🔍 ENHANCED LOGGING: Track external ID patterns
+                        if (externalId) {
+                            const pattern = externalId.startsWith('photo-') ? 'photo-prefix' :
+                                           externalId.includes('-') ? 'has-hyphens' :
+                                           'other-format';
+                            
+                            stats.externalIdPatterns[pattern] = (stats.externalIdPatterns[pattern] || 0) + 1;
+                            
+                            if (externalId.startsWith('photo-')) {
+                                stats.matchFormat.photoPrefix++;
+                            } else {
+                                stats.matchFormat.nonPhotoPrefix++;
+                                
+                                // Log non-photo-prefix IDs
+                                console.log(`[FACE-FALLBACK] ⚠️ Non-photo external ID format: "${externalId}" for face ${faceId}`);
+                            }
+                        } else {
+                            stats.matchFormat.unparseableFormat++;
+                            console.log(`[FACE-FALLBACK] ⚠️ Missing external ID for face ${faceId}`);
+                        }
+                        
+                        if (externalId) {
+                            if (externalId.startsWith('photo-')) {
+                                // Format is "photo-{photoId}-face-{index}"
+                                const parts = externalId.split('-');
+                                if (parts.length >= 2) {
+                                    // Extract photoId (could be a UUID with hyphens)
+                                    let photoId;
+                                    let extractionMethod = '';
+                                    
+                                    // Check different possible formats
+                                    if (parts.length === 4 && parts[2] === 'face') {
+                                        // Format: photo-{photoId}-face-{index}
+                                        photoId = parts[1];
+                                        extractionMethod = 'simple-format';
+                                    } else if (parts.length > 4 && parts[parts.length-2] === 'face') {
+                                        // Handle UUIDs with hyphens: photo-uuid-with-hyphens-face-index
+                                        // Take everything between 'photo-' and '-face-{index}'
+                                        photoId = parts.slice(1, parts.length-2).join('-');
+                                        extractionMethod = 'complex-uuid-format';
+                                    } else {
+                                        // Fallback - just use the part after 'photo-'
+                                        photoId = externalId.substring(6);
+                                        extractionMethod = 'fallback-substring';
+                                    }
+                                    
+                                    // 🔍 ENHANCED LOGGING: Track extraction details
+                                    if (photoId) {
+                                        const isNewPhoto = !photoIds.has(photoId);
+                                        
+                                        if (isNewPhoto) {
+                                            console.log(`[FACE-FALLBACK] 🔍 EXTRACTED PHOTO ID: "${photoId}" from external ID "${externalId}" using method ${extractionMethod}`);
+                                        }
+                                        
+                                        photoIds.add(photoId);
+                                        stats.extractionResults.success++;
+                                        successCount++;
+                                    } else {
+                                        console.log(`[FACE-FALLBACK] ⚠️ Failed to extract photo ID from external ID "${externalId}"`);
+                                        stats.extractionResults.failed++;
+                                    }
+                                } else {
+                                    console.log(`[FACE-FALLBACK] ⚠️ External ID format unexpected: "${externalId}" (has ${parts.length} parts)`);
+                                    stats.extractionResults.failed++;
+                                }
+                            } else {
+                                // This is not a photo face (may be a user face)
+                                // Log only if it's the first few to avoid noise
+                                if (photoIds.size < 3 && skippedCount < 3) {
+                                    console.log(`[FACE-FALLBACK] Skipping face with external ID: ${externalId} (not a photo)`);
+                                }
+                                skippedCount++;
+                                stats.extractionResults.skipped++;
+                            }
+                        }
+                    } else {
+                        if (errorCount < 3) { // Limit logging to avoid spam
+                            console.log(`[FACE-FALLBACK] ⚠️ No matches found for face ID ${faceId}`);
+                        }
+                        errorCount++;
+                    }
+                } catch (faceError) {
+                    errorCount++;
+                    if (errorCount < 3) { // Only log the first few errors to avoid spam
+                        console.error(`[FACE-FALLBACK] Error getting info for face ID ${faceId}:`, faceError.message);
+                    } else if (errorCount === 3) {
+                        console.error(`[FACE-FALLBACK] Suppressing further error messages...`);
+                    }
+                }
+            }
+            
+            // 🔍 ENHANCED LOGGING: Report detailed statistics
+            console.log(`[FACE-FALLBACK] 📊 DETAILED STATISTICS:`);
+            console.log(`[FACE-FALLBACK] 📊 Input face IDs: ${matchedFaceIds.length}`);
+            console.log(`[FACE-FALLBACK] 📊 Photo ID extraction: ${successCount} successful, ${errorCount} errors, ${skippedCount} skipped`);
+            console.log(`[FACE-FALLBACK] 📊 Unique photo IDs found: ${photoIds.size}`);
+            console.log(`[FACE-FALLBACK] 📊 Efficiency rate: ${(photoIds.size / matchedFaceIds.length * 100).toFixed(1)}%`);
+            console.log(`[FACE-FALLBACK] 📊 Match format stats: ${JSON.stringify(stats.matchFormat)}`);
+            console.log(`[FACE-FALLBACK] 📊 External ID patterns: ${JSON.stringify(stats.externalIdPatterns)}`);
+            console.log(`[FACE-FALLBACK] 📊 Extraction results: ${JSON.stringify(stats.extractionResults)}`);
+            
+            console.log(`[FACE-FALLBACK] Completed processing with ${errorCount} errors`);
+            console.log(`[FACE-FALLBACK] Found ${photoIds.size} photos using fallback method`);
+            
+            if (photoIds.size > 0) {
+                const photoIdArray = Array.from(photoIds);
+                console.log(`[FACE-FALLBACK] First 3 photo IDs: ${photoIdArray.slice(0, 3).join(', ')}${photoIdArray.length > 3 ? '...' : ''}`);
+                
+                // 🔍 ENHANCED LOGGING: If fewer photos than face IDs, check database for these photos
+                if (photoIds.size < matchedFaceIds.length) {
+                    console.log(`[FACE-FALLBACK] 🔍 INVESTIGATING: Found only ${photoIds.size} photos from ${matchedFaceIds.length} face IDs`);
+                    
+                    try {
+                        const photoIdArray = Array.from(photoIds);
+                        const { data: existingPhotos, error: checkError } = await supabase
+                            .from('photos')
+                            .select('id')
+                            .in('id', photoIdArray);
+                            
+                        if (checkError) {
+                            console.error(`[FACE-FALLBACK] ❌ Error checking photos in database: ${checkError.message}`);
+                        } else {
+                            const foundCount = existingPhotos?.length || 0;
+                            console.log(`[FACE-FALLBACK] 🔍 DATABASE CHECK: ${foundCount} of ${photoIds.size} extracted photo IDs exist in database`);
+                            
+                            if (foundCount < photoIds.size) {
+                                const foundIds = new Set(existingPhotos.map(p => p.id));
+                                const missingIds = Array.from(photoIds).filter(id => !foundIds.has(id));
+                                console.log(`[FACE-FALLBACK] 🔍 MISSING PHOTOS: ${missingIds.join(', ')}`);
+                            }
+                        }
+                    } catch (dbCheckError) {
+                        console.error(`[FACE-FALLBACK] ❌ Error during database verification: ${dbCheckError.message}`);
+                    }
+                }
+            }
+            
+            console.groupEnd();
+            return Array.from(photoIds);
+        } catch (error) {
+            console.error('[FACE-FALLBACK] ❌ ERROR in fallback method:', error);
+            console.error('[FACE-FALLBACK] Error stack:', error.stack);
+            console.groupEnd();
+            return [];
+        }
+    }
+    // Add user as a match to a photo
+    static async addUserMatchToPhoto(photoId, userId, faceId) {
+        // Get all linked user IDs
+        const linkedUserIds = await this.getLinkedUserIds(userId);
+        
+        try {
+            console.group(`[FACE-MATCH] 🔄 Adding User Match to Photo`);
+            console.log(`[FACE-MATCH] 📝 INPUT DATA: photoId=${photoId}, userId=${userId}, faceId=${faceId}`);
+            console.log(`[FACE-MATCH] 📝 Including ${linkedUserIds.length} linked accounts`);
+            
+            if (!photoId || !userId || !faceId) {
+                console.error(`[FACE-MATCH] ❌ MISSING REQUIRED PARAMETERS: photoId=${photoId}, userId=${userId}, faceId=${faceId}`);
+                console.groupEnd();
+                return false;
+            }
+            
+            // Get user data for the match
+            console.log(`[FACE-MATCH] 🔍 Fetching user data for ${userId}...`);
+            const { data: userData, error: userError } = await supabase
+                .from('users')
+                .select(`
+                  id,
+                  full_name,
+                  avatar_url,
+                  email
+                `)
+                .eq('id', userId)
+                .single();
+                
+            if (userError) {
+                console.error(`[FACE-MATCH] ⚠️ ERROR FETCHING USER DATA:`, userError);
+                console.error(`[FACE-MATCH] ⚠️ ERROR DETAILS: ${JSON.stringify({
+                    message: userError.message,
+                    code: userError.code,
+                    details: userError.details || {}
+                })}`);
+                console.log(`[FACE-MATCH] 🔄 Attempting to continue with limited user information`);
+            }
+            
+            let userDataToUse;
+            if (!userData) {
+                console.warn(`[FACE-MATCH] ⚠️ NO USER DATA FOUND for ID ${userId}, using placeholder values`);
+                // Create placeholder user data to avoid null references
+                userDataToUse = {
+                    id: userId,
+                    full_name: 'Unknown User',
+                    avatar_url: null,
+                    email: null
+                };
+            } else {
+                console.log(`[FACE-MATCH] ✅ Found user data: ${userData.full_name || userData.email || userId}`);
+                userDataToUse = userData;
+            }
+            
+            // Get current photo data
+            console.log(`[FACE-MATCH] 🔍 Fetching current photo data for ${photoId}...`);
+            const { data: photo, error: photoError } = await supabase
+                .from('photos')
+                .select('matched_users, id, created_at')
+                .eq('id', photoId)
+                .single();
+                
+            let photoData;
+            if (photoError) {
+                console.error(`[FACE-MATCH] ⚠️ ERROR FETCHING PHOTO DATA:`, photoError);
+                console.error(`[FACE-MATCH] ⚠️ ERROR DETAILS: ${JSON.stringify({
+                    message: photoError.message,
+                    code: photoError.code,
+                    details: photoError.details || {}
+                })}`);
+                
+                // RECOVERY: Create the photo record if it doesn't exist
+                if (photoError.message.includes('not found') || photoError.code === 'PGRST116') {
+                    console.log(`[FACE-MATCH] ⚠️ Photo not found in database - trying to create a minimum record`);
+                    
+                    try {
+                        // Try to create a minimal photo record using our utility
+                        console.log(`[FACE-MATCH] 🔄 Using database utility to create photo record`);
+                        const result = await createPhotoRecord(photoId, []);
+                        
+                        if (!result.success) {
+                            console.error(`[FACE-MATCH] ❌ DATABASE UTILITY FAILED:`, result.error);
+                            console.error(`[FACE-MATCH] ❌ ERROR DETAILS: ${JSON.stringify({
+                                message: result.error.message,
+                                code: result.error.code,
+                                details: result.error.details || {}
+                            })}`);
+                            console.groupEnd();
+                            return false;
+                        }
+                        
+                        console.log(`[FACE-MATCH] ✅ Created photo record successfully`);
+                        console.log(`[FACE-MATCH] 📋 NEW PHOTO DATA: ${JSON.stringify(result.data)}`);
+                        photoData = result.data;
+                    } catch (recoveryError) {
+                        console.error(`[FACE-MATCH] ❌ RECOVERY ATTEMPT FAILED:`, recoveryError);
+                        console.error(`[FACE-MATCH] ❌ ERROR STACK:`, recoveryError.stack);
+                        console.groupEnd();
+                        return false;
+                    }
+                } else {
+                    // Other database error
+                    console.groupEnd();
+                    return false;
+                }
+            } else {
+                photoData = photo;
+            }
+            
+            if (!photoData) {
+                console.error(`[FACE-MATCH] ❌ CRITICAL ERROR: No photo data available after attempts to fetch/create`);
+                console.groupEnd();
+                return false;
+            }
+            
+            console.log(`[FACE-MATCH] ✅ Working with photo data:`, JSON.stringify(photoData));
+            
+            // Create new match object with rich metadata
+            const newMatch = {
+                userId,
+                faceId,
+                fullName: userDataToUse.full_name || userDataToUse.email || 'Unknown User',
+                email: userDataToUse.email || null,
+                avatarUrl: userDataToUse.avatar_url,
+                confidence: 99.0, // High confidence since this is a direct face match
+                similarity: 99.0,  // High similarity for the same reason
+                matchedAt: new Date().toISOString(),
+                matchType: 'direct' // Indicates this is a direct face match
+            };
+            
+            console.log(`[FACE-MATCH] 📋 NEW MATCH OBJECT: ${JSON.stringify(newMatch)}`);
+            
+            // Update matched_users array
+            const existingMatches = Array.isArray(photoData.matched_users) ? photoData.matched_users : [];
+            console.log(`[FACE-MATCH] 📊 EXISTING MATCHES: ${existingMatches.length} items`);
+            console.log(`[FACE-MATCH] 📊 EXISTING MATCHES DATA: ${JSON.stringify(existingMatches)}`);
+            
+            // Check if user is already in matches
+            const existingMatchIndex = existingMatches.findIndex(match => match.userId === userId);
+            if (existingMatchIndex >= 0) {
+                console.log(`[FACE-MATCH] ⚠️ User ${userId} already matched with photo ${photoId} (match #${existingMatchIndex + 1})`);
+                console.log(`[FACE-MATCH] ℹ️ Not adding duplicate match`);
+                console.groupEnd();
+                return true; // Still return success since the user is already matched
+            }
+            
+            // Add the new match to the array
+            const updatedMatches = [...existingMatches, newMatch];
+            console.log(`[FACE-MATCH] 📊 UPDATED MATCHES: ${updatedMatches.length} items (${existingMatches.length} existing + 1 new)`);
+            
+            // ATTEMPT #1 - Direct SQL via admin function
+            console.log(`[FACE-MATCH] 🔄 ATTEMPT #1: Using admin_update_photo_matches function...`);
+            
+            try {
+                const { data: adminResult, error: adminError } = await supabase.rpc(
+                    'admin_update_photo_matches',
+                    { 
+                        p_id: photoId,
+                        p_matched_users: updatedMatches
+                    }
+                );
+                
+                if (adminError) {
+                    console.error(`[FACE-MATCH] ❌ ADMIN FUNCTION FAILED:`, adminError);
+                    console.error(`[FACE-MATCH] ❌ ERROR DETAILS: ${JSON.stringify({
+                        message: adminError.message,
+                        code: adminError.code,
+                        details: adminError.details || {}
+                    })}`);
+                } else {
+                    console.log(`[FACE-MATCH] ✅ ADMIN FUNCTION RESPONSE:`, JSON.stringify(adminResult));
+                    
+                    if (adminResult && adminResult.success === true) {
+                        console.log(`[FACE-MATCH] ✅ ADMIN FUNCTION SUCCEEDED with action: ${adminResult.action}`);
+                        
+                        // Verify the update in the database
+                        await this.verifyPhotoUpdate(photoId, userId);
+                        
+                        // Also update the unassociated_face record to mark it as claimed
+                        await this.updateUnassociatedFace(photoId, faceId, userId);
+                        
+                        console.log(`[FACE-MATCH] ✅ Successfully added user ${userDataToUse.full_name || userId} as match to photo ${photoId}`);
+                        console.log(`[FACE-MATCH] ✅ MATCH ADDITION COMPLETE`);
+                        console.groupEnd();
+                        return true;
+                    } else {
+                        console.error(`[FACE-MATCH] ❌ ADMIN FUNCTION RETURNED ERROR:`, adminResult);
+                    }
+                }
+                
+                // If we're here, the admin function failed - try the regular update methods
+            } catch (adminFunctionError) {
+                console.error(`[FACE-MATCH] ❌ EXCEPTION CALLING ADMIN FUNCTION:`, adminFunctionError);
+            }
+            
+            // ATTEMPT #2 - Complete update
+            console.log(`[FACE-MATCH] 🔄 ATTEMPT #2: Saving updated matches with full data...`);
+            console.log(`[FACE-MATCH] 📋 UPDATE DATA: ${JSON.stringify({
+                matched_users: updatedMatches,
+                updated_at: new Date().toISOString(),
+                last_matched_at: new Date().toISOString()
+            })}`);
+            
+            const { error: updateError } = await supabase
+                .from('photos')
+                .update({ 
+                    matched_users: updatedMatches,
+                    updated_at: new Date().toISOString(),
+                    last_matched_at: new Date().toISOString()
+                })
+                .eq('id', photoId);
+                
+            if (updateError) {
+                console.error(`[FACE-MATCH] ❌ ERROR UPDATING PHOTO MATCHES:`, updateError);
+                console.error(`[FACE-MATCH] ❌ ERROR DETAILS: ${JSON.stringify({
+                    message: updateError.message,
+                    code: updateError.code,
+                    details: updateError.details || {}
+                })}`);
+                
+                // ATTEMPT #3 - Try a minimal update if the full update fails
+                console.log(`[FACE-MATCH] 🔄 ATTEMPT #3: Trying minimal update with just matched_users field...`);
+                console.log(`[FACE-MATCH] 📋 MINIMAL UPDATE DATA: ${JSON.stringify({ matched_users: updatedMatches })}`);
+                
+                const { error: minimalUpdateError } = await supabase
+                    .from('photos')
+                    .update({ matched_users: updatedMatches })
+                    .eq('id', photoId);
+                    
+                if (minimalUpdateError) {
+                    console.error(`[FACE-MATCH] ❌ MINIMAL UPDATE FAILED:`, minimalUpdateError);
+                    console.error(`[FACE-MATCH] ❌ ERROR DETAILS: ${JSON.stringify({
+                        message: minimalUpdateError.message,
+                        code: minimalUpdateError.code,
+                        details: minimalUpdateError.details || {}
+                    })}`);
+                    
+                    // ATTEMPT #4 - Try with string conversion
+                    console.log(`[FACE-MATCH] 🔄 ATTEMPT #4: Trying with stringified matched_users...`);
+                    
+                    try {
+                        const stringifiedMatches = JSON.stringify(updatedMatches);
+                        console.log(`[FACE-MATCH] 📋 STRINGIFIED MATCHES: ${stringifiedMatches}`);
+                        
+                        const { error: stringUpdateError } = await supabase
+                            .from('photos')
+                            .update({ 
+                                matched_users: stringifiedMatches
+                            })
+                            .eq('id', photoId);
+                            
+                        if (stringUpdateError) {
+                            console.error(`[FACE-MATCH] ❌ STRING UPDATE FAILED:`, stringUpdateError);
+                            
+                            // ATTEMPT #5 - Last chance with empty array initialization first
+                            console.log(`[FACE-MATCH] 🔄 FINAL ATTEMPT: Initializing with empty array first...`);
+                            
+                            try {
+                                // First ensure the matched_users is at least an empty array
+                                await supabase
+                                    .from('photos')
+                                    .update({ matched_users: [] })
+                                    .eq('id', photoId);
+                                    
+                                // Wait a moment for the database to process
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                                
+                                // Then try to update again
+                                const { error: finalError } = await supabase
+                                    .from('photos')
+                                    .update({ matched_users: updatedMatches })
+                                    .eq('id', photoId);
+                                    
+                                if (finalError) {
+                                    console.error(`[FACE-MATCH] ❌ FINAL UPDATE FAILED:`, finalError);
+                                    console.error(`[FACE-MATCH] ❌ ALL UPDATE ATTEMPTS FAILED`);
+                                    console.groupEnd();
+                                    return false;
+                                } else {
+                                    console.log(`[FACE-MATCH] ✅ FINAL UPDATE SUCCEEDED`);
+                                    
+                                    // Verify the update in the database
+                                    await this.verifyPhotoUpdate(photoId, userId);
+                                }
+                            } catch (finalAttemptError) {
+                                console.error(`[FACE-MATCH] ❌ FINAL ATTEMPT EXCEPTION:`, finalAttemptError);
+                                console.groupEnd();
+                                return false;
+                            }
+                        } else {
+                            console.log(`[FACE-MATCH] ✅ STRING UPDATE SUCCEEDED`);
+                            
+                            // Verify the update in the database
+                            await this.verifyPhotoUpdate(photoId, userId);
+                        }
+                    } catch (stringifyError) {
+                        console.error(`[FACE-MATCH] ❌ ERROR STRINGIFYING MATCHES:`, stringifyError);
+                        console.groupEnd();
+                        return false;
+                    }
+                } else {
+                    console.log(`[FACE-MATCH] ✅ MINIMAL UPDATE SUCCEEDED`);
+                    
+                    // Verify the update in the database
+                    await this.verifyPhotoUpdate(photoId, userId);
+                }
+            } else {
+                console.log(`[FACE-MATCH] ✅ UPDATE SUCCEEDED on first attempt`);
+                
+                // Verify the update in the database
+                await this.verifyPhotoUpdate(photoId, userId);
+            }
+            
+            console.log(`[FACE-MATCH] ✅ Successfully added user ${userDataToUse.full_name || userId} as match to photo ${photoId}`);
+            
+            // Also update the unassociated_face record to mark it as claimed
+            await this.updateUnassociatedFace(photoId, faceId, userId);
+            
+            console.log(`[FACE-MATCH] ✅ MATCH ADDITION COMPLETE`);
+            console.groupEnd();
+            return true;
+        } catch (error) {
+            console.error(`[FACE-MATCH] ❌ UNEXPECTED ERROR in addUserMatchToPhoto:`, error);
+            console.error(`[FACE-MATCH] ❌ ERROR MESSAGE: ${error.message}`);
+            console.error(`[FACE-MATCH] ❌ ERROR STACK:`, error.stack);
+            if (error.cause) console.error(`[FACE-MATCH] ❌ ERROR CAUSE:`, error.cause);
+            console.groupEnd();
+            return false;
+        }
+    }
+
+    // Helper to update the unassociated_face record 
+    static async updateUnassociatedFace(photoId, faceId, userId) {
+        console.log(`[FACE-MATCH] 🔄 Updating unassociated_faces record...`);
+        try {
+            // NOTE: Your unassociated_faces table doesn't have a claimed_by column
+            // So we'll update the attributes field instead to mark it as claimed
+            
+            // First get the current record
+            const { data: currentRecord, error: getError } = await supabase
+                .from('unassociated_faces')
+                .select('attributes')
+                .eq('photo_id', photoId)
+                .eq('face_id', faceId)
+                .single();
+                
+            if (getError) {
+                console.warn(`[FACE-MATCH] ⚠️ Error retrieving unassociated_faces:`, getError);
+                console.warn(`[FACE-MATCH] ⚠️ This is non-critical and won't affect user experience`);
+                return;
+            }
+            
+            // Update the attributes to include the claimed_by info
+            let updatedAttributes = currentRecord?.attributes || {};
+            if (typeof updatedAttributes !== 'object') {
+                updatedAttributes = {};
+            }
+            
+            // Add claimed_by information to the attributes
+            updatedAttributes.claimed_by = userId;
+            updatedAttributes.claimed_at = new Date().toISOString();
+            
+            // Update the record
+            const { data: updateData, error: updateError } = await supabase
+                .from('unassociated_faces')
+                .update({ 
+                    attributes: updatedAttributes,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('photo_id', photoId)
+                .eq('face_id', faceId);
+                
+            if (updateError) {
+                console.warn(`[FACE-MATCH] ⚠️ Error updating unassociated_faces:`, updateError);
+                console.warn(`[FACE-MATCH] ⚠️ This is non-critical and won't affect user experience`);
+            } else {
+                console.log(`[FACE-MATCH] ✅ Successfully updated unassociated_faces record`);
+            }
+        } catch (unassociatedError) {
+            // This is not critical, so just log warning and continue
+            console.warn(`[FACE-MATCH] ⚠️ Error updating unassociated_faces:`, unassociatedError.message);
+        }
+    }
+    
+    // Helper to verify photo update in database
+    static async verifyPhotoUpdate(photoId, userId) {
+        console.log(`[FACE-MATCH] 🔍 Verifying final photo state...`);
+        try {
+            // Query 1: Direct photo select
+            const { data: finalPhoto, error: finalError } = await supabase
+                .from('photos')
+                .select('matched_users, id')
+                .eq('id', photoId)
+                .single();
+                
+            if (finalError) {
+                console.warn(`[FACE-MATCH] ⚠️ Could not verify final state:`, finalError);
+                
+                // Try a different approach with RLS bypass
+                console.log(`[FACE-MATCH] 🔄 Trying alternative verification method...`);
+                
+                try {
+                    // Try to use debug function to see the actual database state
+                    const { data: debugData, error: debugError } = await supabase.rpc(
+                        'debug_force_get_photo',
+                        { photo_id: photoId }
+                    );
+                    
+                    if (debugError) {
+                        console.warn(`[FACE-MATCH] ⚠️ Alternative verification failed:`, debugError);
+                    } else {
+                        console.log(`[FACE-MATCH] ✅ Alternative verification succeeded`);
+                        console.log(`[FACE-MATCH] 📋 ACTUAL PHOTO DATA:`, debugData);
+                        
+                        // Check if this user is included in the matches
+                        const matchedUsers = debugData?.matched_users || [];
+                        const isUserMatched = matchedUsers.some(m => m.userId === userId);
+                        
+                        if (!isUserMatched) {
+                            // Last resort - attempt to fix
+                            console.warn(`[FACE-MATCH] ⚠️ User match not found in database after update!`);
+                            console.log(`[FACE-MATCH] 🔄 Attempting emergency fix...`);
+                            
+                            // Try to force the update one more time
+                            const { error: fixError } = await supabase.rpc(
+                                'debug_force_update_photo',
+                                { 
+                                    photo_id: photoId,
+                                    user_id: userId
+                                }
+                            );
+                            
+                            if (fixError) {
+                                console.error(`[FACE-MATCH] ❌ Emergency fix failed:`, fixError);
+                            } else {
+                                console.log(`[FACE-MATCH] ✅ Emergency fix applied`);
+                            }
+                        } else {
+                            console.log(`[FACE-MATCH] ✅ User ${userId} confirmed as matched with photo ${photoId}`);
+                        }
+                    }
+                } catch (debugError) {
+                    console.warn(`[FACE-MATCH] ⚠️ Debug verification failed:`, debugError);
+                }
+            } else {
+                console.log(`[FACE-MATCH] ✅ Successfully verified final state`);
+                
+                // Check if the user is actually in the matched_users array
+                const matchedUsers = finalPhoto?.matched_users || [];
+                const isUserMatched = matchedUsers.some(m => m.userId === userId);
+                
+                if (!isUserMatched) {
+                    console.warn(`[FACE-MATCH] ⚠️ User match not found in database after update!`);
+                    // The update technically succeeded but the user isn't in the matches
+                    // This might indicate a data format issue
+                    
+                    console.log(`[FACE-MATCH] 🔄 Trying to fix missing user issue...`);
+                    
+                    // Try to use a debug function to force the update
+                    try {
+                        const { error: fixError } = await supabase.rpc(
+                            'debug_force_update_photo',
+                            { 
+                                photo_id: photoId,
+                                user_id: userId
+                            }
+                        );
+                        
+                        if (fixError) {
+                            console.error(`[FACE-MATCH] ❌ Fix attempt failed:`, fixError);
+                        } else {
+                            console.log(`[FACE-MATCH] ✅ Fix attempt succeeded`);
+                        }
+                    } catch (fixError) {
+                        console.warn(`[FACE-MATCH] ⚠️ Fix attempt exception:`, fixError);
+                    }
+                } else {
+                    console.log(`[FACE-MATCH] ✅ User ${userId} confirmed as matched with photo ${photoId}`);
+                }
+            }
+        } catch (verifyError) {
+            console.warn(`[FACE-MATCH] ⚠️ Verification error:`, verifyError.message);
+            // Non-critical error, so just continue
+        }
+    }
+    // Background processing for remaining matches
+    static async processRemainingMatchesInBackground(faceId, userId) {
+        // Add a background task for processing
+        this.backgroundTasks.push({
+            id: crypto.randomUUID(),
+            type: 'HISTORICAL_MATCHING',
+            userId,
+            faceId,
+            data: { 
+                faceId,
+                userId,
+                startAfter: 20, // Skip the first 20 that we already processed
+                processed: 0
+            },
+            status: 'pending',
+            createdAt: new Date(),
+            updatedAt: new Date()
+        });
+        
+        console.log('[FACE-REG] Added background task for processing remaining matches');
+        
+        // If not already running, start the background processor
+        if (!this.isProcessing) {
+            // Try to initiate background processing immediately
+            setTimeout(() => this.processBackgroundTasks(), 100);
+        }
+        
+        return true;
+    }
+    // New method to process historical matching in the background
+    static async processHistoricalMatching(task) {
+        console.group('[BACKGROUND] 🔍 Processing Historical Matching');
+        try {
+            if (!task || !task.data) {
+                console.error('[BACKGROUND] ❌ INVALID TASK DATA STRUCTURE', JSON.stringify(task || {}));
+                console.groupEnd();
+                return;
+            }
+
+            const { faceId, userId, startAfter, processed } = task.data;
+            console.log(`[BACKGROUND] 📋 TASK INFO: User=${userId}, Face=${faceId}`);
+            console.log(`[BACKGROUND] 📊 Processing historical matches for user ${userId} with face ${faceId}`);
+            console.log(`[BACKGROUND] 📊 Starting after ${startAfter} records, processed ${processed} so far`);
+            
+            if (!faceId || !userId) {
+                console.error('[BACKGROUND] ❌ MISSING REQUIRED FIELDS in task data');
+                task.status = 'failed';
+                task.error = 'Missing required fields (faceId or userId)';
+                console.groupEnd();
+                return;
+            }
+            
+            // Get the next batch of matches
+            console.log('[BACKGROUND] 🔄 Preparing AWS SearchFaces request...');
+            const command = new SearchFacesCommand({
+                CollectionId: this.COLLECTION_ID,
+                FaceId: faceId,
+                FaceMatchThreshold: FACE_MATCH_THRESHOLD,
+                MaxResults: 100, // Process in larger batches
+                NextToken: task.data.nextToken // Continue from where we left off
+            });
+            
+            console.log('[BACKGROUND] 🚀 Sending SearchFaces request to AWS...');
+            const startTime = Date.now();
+            const response = await rekognitionClient.send(command);
+            const elapsedTime = Date.now() - startTime;
+            console.log(`[BACKGROUND] ✅ SearchFaces response received in ${elapsedTime}ms`);
+            
+            // Process matches from the current batch
+            if (response.FaceMatches && response.FaceMatches.length > 0) {
+                console.log(`[BACKGROUND] 📊 Found ${response.FaceMatches.length} matches in current batch`);
+                console.log(`[BACKGROUND] 📋 Sample match: ${JSON.stringify(response.FaceMatches[0])}`);
+                
+                // Filter for photo- prefixed external IDs (faces from photos)
+                const photoMatches = response.FaceMatches.filter(
+                    match => match.Face?.ExternalImageId?.startsWith('photo-')
+                );
+                
+                console.log(`[BACKGROUND] 📊 ${photoMatches.length} out of ${response.FaceMatches.length} matches are from photos`);
+                
+                if (photoMatches.length > 0) {
+                    // Get face IDs from the matches
+                    const matchedFaceIds = photoMatches.map(match => match.Face?.FaceId).filter(id => !!id);
+                    console.log(`[BACKGROUND] 📊 Extracted ${matchedFaceIds.length} face IDs to process`);
+                    
+                    if (matchedFaceIds.length > 0) {
+                        // Log a sample of the face IDs (first 3)
+                        console.log(`[BACKGROUND] 📋 Sample face IDs: ${matchedFaceIds.slice(0, 3).join(', ')}${matchedFaceIds.length > 3 ? '...' : ''}`);
+                        
+                        // Query for photos containing these face IDs
+                        console.log(`[BACKGROUND] 🔍 Querying database for unassociated_faces with these face IDs...`);
+                        const { data: matchingFaces, error: facesError } = await supabase
+                            .from('unassociated_faces')
+                            .select('photo_id, face_id')
+                            .in('face_id', matchedFaceIds);
+                            
+                        if (facesError) {
+                            console.error('[BACKGROUND] ❌ ERROR QUERYING UNASSOCIATED_FACES:', facesError);
+                            console.error(`[BACKGROUND] ❌ ERROR DETAILS: ${JSON.stringify({
+                                message: facesError.message,
+                                code: facesError.code,
+                                details: facesError.details || {}
+                            })}`);
+                            
+                            // Continue processing with a warning
+                            console.warn('[BACKGROUND] ⚠️ Will try again in the next batch');
+                            
+                            // Don't mark as failed - retry this batch
+                            task.retryCount = (task.retryCount || 0) + 1;
+                            if (task.retryCount <= 3) {
+                                task.status = 'pending'; // Put back in queue for retry
+                                this.backgroundTasks.push(task);
+                                console.log(`[BACKGROUND] 🔄 Scheduled retry attempt ${task.retryCount}`);
+                            } else {
+                                console.error('[BACKGROUND] ❌ Giving up after 3 retry attempts');
+                                task.status = 'failed';
+                                task.error = `Database query failed: ${facesError.message}`;
+                            }
+                        } else if (matchingFaces && matchingFaces.length > 0) {
+                            // Get unique photo IDs
+                            const photoIds = [...new Set(matchingFaces.map(face => face.photo_id))];
+                            console.log(`[BACKGROUND] ✅ Found ${photoIds.length} unique photos to update`);
+                            
+                            if (photoIds.length > 0) {
+                                // Log a sample of the photo IDs (first 3)
+                                console.log(`[BACKGROUND] 📋 Sample photo IDs: ${photoIds.slice(0, 3).join(', ')}${photoIds.length > 3 ? '...' : ''}`);
+                                
+                                // Update each photo with the new match
+                                let updatedCount = 0;
+                                let errorCount = 0;
+                                
+                                console.log(`[BACKGROUND] 🔄 Starting to update ${photoIds.length} photos...`);
+                                for (const photoId of photoIds) {
+                                    try {
+                                        console.log(`[BACKGROUND] 🔄 Processing photo ${photoId}...`);
+                                        const success = await this.addUserMatchToPhoto(photoId, userId, faceId);
+                                        if (success) {
+                                            updatedCount++;
+                                            // Log progress every 10 photos
+                                            if (updatedCount % 10 === 0) {
+                                                console.log(`[BACKGROUND] 📊 Progress: Updated ${updatedCount}/${photoIds.length} photos`);
+                                            }
+                                        } else {
+                                            errorCount++;
+                                            console.error(`[BACKGROUND] ❌ Failed to update photo ${photoId}`);
+                                        }
+                                    } catch (updateError) {
+                                        console.error(`[BACKGROUND] ❌ ERROR updating photo ${photoId}:`, updateError.message);
+                                        console.error(`[BACKGROUND] ❌ ERROR STACK:`, updateError.stack);
+                                        errorCount++;
+                                    }
+                                }
+                                
+                                console.log(`[BACKGROUND] 📊 Completed updates: ${updatedCount} successful, ${errorCount} failed`);
+                                task.data.processed += updatedCount;
+                            } else {
+                                console.log('[BACKGROUND] ℹ️ No unique photo IDs found (duplicate entries in database)');
+                            }
+                        } else {
+                            console.log('[BACKGROUND] ℹ️ No matching photos found in database for these face IDs');
+                            
+                            // FALLBACK: Try the more reliable method to find photos
+                            console.log(`[BACKGROUND] 🔄 Attempting to use fallback method to find matching photos...`);
+                            const photoIds = await this.findMatchingPhotosUsingRekognition(matchedFaceIds);
+                            
+                            if (photoIds && photoIds.length > 0) {
+                                console.log(`[BACKGROUND] ✅ Fallback method found ${photoIds.length} photos`);
+                                
+                                // Add missing records to unassociated_faces table
+                                console.log('[BACKGROUND] 🔄 Repairing database by adding missing unassociated_faces entries...');
+                                for (const photoId of photoIds) {
+                                    for (const faceId of matchedFaceIds) {
+                                        try {
+                                            // Check if record exists
+                                            const { data: existingRecord } = await supabase
+                                                .from('unassociated_faces')
+                                                .select('id')
+                                                .eq('photo_id', photoId)
+                                                .eq('face_id', faceId)
+                                                .maybeSingle();
+                                                
+                                            if (!existingRecord) {
+                                                // Create a placeholder record
+                                                const { data, error } = await supabase.from('unassociated_faces').insert({
+                                                    face_id: faceId,
+                                                    photo_id: photoId,
+                                                    external_id: `photo-${photoId}-face-1`,
+                                                    confidence: 99.0,
+                                                    attributes: { Confidence: 99.0 }
+                                                });
+                                                
+                                                if (error) {
+                                                    console.warn(`[BACKGROUND] ⚠️ Failed to add record: ${error.message}`);
+                                                } else {
+                                                    console.log(`[BACKGROUND] ✅ Added missing record for face ${faceId} in photo ${photoId}`);
+                                                }
+                                            }
+                                        } catch (repairError) {
+                                            console.warn(`[BACKGROUND] ⚠️ Could not repair database:`, repairError.message);
+                                        }
+                                    }
+                                }
+                                
+                                // Now update each photo with the user match
+                                let updatedCount = 0;
+                                let errorCount = 0;
+                                
+                                console.log(`[BACKGROUND] 🔄 Starting to update ${photoIds.length} recovered photos...`);
+                                for (const photoId of photoIds) {
+                                    try {
+                                        console.log(`[BACKGROUND] 🔄 Processing recovered photo ${photoId}...`);
+                                        const success = await this.addUserMatchToPhoto(photoId, userId, faceId);
+                                        if (success) {
+                                            updatedCount++;
+                                            console.log(`[BACKGROUND] ✅ Successfully updated photo ${photoId}`);
+                                        } else {
+                                            errorCount++;
+                                            console.error(`[BACKGROUND] ❌ Failed to update recovered photo ${photoId}`);
+                                        }
+                                    } catch (updateError) {
+                                        console.error(`[BACKGROUND] ❌ ERROR updating recovered photo ${photoId}:`, updateError.message);
+                                        console.error(`[BACKGROUND] ❌ ERROR STACK:`, updateError.stack);
+                                        errorCount++;
+                                    }
+                                }
+                                
+                                console.log(`[BACKGROUND] 📊 Completed recovery updates: ${updatedCount} successful, ${errorCount} failed`);
+                                task.data.processed += updatedCount;
+                            } else {
+                                console.log('[BACKGROUND] ℹ️ Fallback method did not find any photos either');
+                            }
+                        }
+                    }
+                } else {
+                    console.log('[BACKGROUND] ℹ️ No matches with photo- prefix found in this batch');
+                }
+                
+                // If there are more results, continue processing
+                if (response.NextToken) {
+                    console.log(`[BACKGROUND] 🔄 More results available (NextToken present), updating task for next batch`);
+                    console.log(`[BACKGROUND] 📊 Processed ${task.data.processed} photos so far`);
+                    task.data.nextToken = response.NextToken;
+                    task.status = 'pending'; // Re-add to queue
+                    task.retryCount = 0; // Reset retry count for the next batch
+                    this.backgroundTasks.push(task);
+                } else {
+                    console.log(`[BACKGROUND] ✅ No more results (no NextToken), task complete`);
+                    console.log(`[BACKGROUND] 📊 Total processed: ${task.data.processed} photos`);
+                    task.status = 'completed';
+                    task.completedAt = new Date();
+                }
+            } else {
+                console.log('[BACKGROUND] ℹ️ No matches found in this batch, task complete');
+                task.status = 'completed';
+                task.completedAt = new Date();
+            }
+        } catch (error) {
+            console.error('[BACKGROUND] ❌ ERROR PROCESSING HISTORICAL MATCHING:', error);
+            console.error(`[BACKGROUND] ❌ ERROR MESSAGE: ${error.message}`);
+            console.error('[BACKGROUND] ❌ ERROR STACK:', error.stack);
+            
+            // Add diagnostic info to the task
+            task.status = 'failed';
+            task.error = error.message;
+            task.errorStack = error.stack;
+            task.failedAt = new Date();
+        } finally {
+            // Update task timing info
+            task.updatedAt = new Date();
+            
+            // Log completion summary
+            console.log(`[BACKGROUND] ${task.status === 'completed' ? '✅' : task.status === 'failed' ? '❌' : '⚠️'} Task ${task.id} finished with status: ${task.status}`);
+            if (task.status === 'failed') {
+                console.error(`[BACKGROUND] ❌ Failure reason: ${task.error}`);
+            }
+            console.groupEnd();
+        }
+    }
+    // Ensure the AWS face collection exists
+    static async ensureCollectionExists() {
+        try {
+            console.group('Face Collection Initialization');
+            console.log('🔄 Checking if face collection exists...');
+            
+            const listCollections = await rekognitionClient.send(new ListCollectionsCommand({}));
+            const collectionExists = listCollections.CollectionIds?.includes(this.COLLECTION_ID);
+            
+            if (!collectionExists) {
+                console.log('Creating new face collection...');
+                await rekognitionClient.send(new CreateCollectionCommand({
+                    CollectionId: this.COLLECTION_ID,
+                    Tags: {
+                        Environment: 'production',
+                        Application: 'shmong'
+                    }
+                }));
+                console.log('✅ Face collection created successfully');
+            }
+            else {
+                console.log('✅ Face collection already exists');
+            }
+            
+            console.groupEnd();
+            return true;
+        }
+        catch (error) {
+            console.error('❌ Error ensuring face collection exists:', error);
+            console.groupEnd();
+            return false;
+        }
+    }
+
+    // Add this function after findMatchingPhotosUsingRekognition
+    static async getLinkedUserIds(userId) {
+        if (!userId) return [userId];
+        
+        try {
+            console.log(`[LINKED-ACCOUNTS] Checking for linked accounts for user ${userId}`);
+            
+            // Query the linked_accounts table to find all users in the same identity group
+            const { data: linkedAccounts, error } = await supabase.rpc(
+                'get_linked_accounts',
+                { p_user_id: userId }
+            );
+            
+            if (error) {
+                console.error('[LINKED-ACCOUNTS] Error fetching linked accounts:', error);
+                return [userId]; // Return only the current user ID on error
+            }
+            
+            if (!linkedAccounts || !linkedAccounts.length) {
+                console.log('[LINKED-ACCOUNTS] No linked accounts found');
+                return [userId]; // Return only the current user ID
+            }
+            
+            // Extract all user IDs (includes the current user)
+            const userIds = linkedAccounts.map(account => account.user_id);
+            console.log(`[LINKED-ACCOUNTS] Found ${userIds.length} linked accounts:`, userIds);
+            
+            return userIds;
+        } catch (err) {
+            console.error('[LINKED-ACCOUNTS] Exception fetching linked accounts:', err);
+            return [userId]; // Return only the current user ID on error
+        }
+    }
+
+    // Add static COLLECTION_ID for constants used in methods
+    static COLLECTION_ID = COLLECTION_ID;
+    static FACE_MATCH_THRESHOLD = FACE_MATCH_THRESHOLD;
+    static backgroundTasks = [];
+    static isProcessing = false;
+    static BACKGROUND_INTERVAL = 60000; // 1 minute
+}

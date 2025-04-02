@@ -21,7 +21,7 @@ import { useState, useEffect } from 'react';
 import { supabase, supabaseAdmin } from '../supabaseClient';
 import { motion } from 'framer-motion';
 import { Check, AlertTriangle, RefreshCw, Key, UserCheck, AlertCircle, Monitor, Play, Wrench, Search, X, User } from 'lucide-react';
-import { FaceIndexingService } from '../services/FaceIndexingService';
+import { FaceIndexingService } from '../services/FaceIndexingService.jsx';
 
 // Constants for AWS
 const COLLECTION_ID = 'shmong-faces';

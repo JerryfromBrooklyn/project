@@ -11,6 +11,9 @@ import { supabase, supabaseAdmin, isSchemaValid, getCachedSchema, updateSchemaCa
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
 import { getFaceId } from '../services/FaceStorageService';
+import LinkedAccountsService from '../services/LinkedAccountsService';
+import FaceIndexingService from '../services/FaceIndexingService';
+
 export const PhotoManager = ({ eventId, mode = 'upload' }) => {
     const [photos, setPhotos] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -853,259 +856,141 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         }
     }, [user]);
 
+    // Add this function after the getUserFaceId function
+    const getLinkedUserIds = async () => {
+        if (!user) return [];
+        
+        try {
+            const ids = await FaceIndexingService.getLinkedUserIds(user.id);
+            console.log('[PhotoManager] Fetched Linked User IDs:', ids);
+            return ids;
+        } catch (error) {
+            console.error('[PhotoManager] Error fetching linked user IDs:', error);
+            return [user.id]; // Fallback to current user ID
+        }
+    };
+
     // Add this function right before the processPhotos function
     const enhancePhotoMatches = (photos, currentUserId, currentUserFaceId) => {
-        if (!currentUserFaceId || photos.length === 0) return photos;
-        
-        console.log("[DEBUG] Enhancing photo matches for user:", currentUserId);
-        console.log("[DEBUG] Using face ID:", currentUserFaceId);
-        
-        // Extract all face matches from all photos
-        const allFaceMatches = photos.flatMap(photo => 
-            photo.matched_users || []
-        ).filter(match => match.faceId || match.face_id);
-        
-        // Count occurrences of each face ID to find common faces
-        const faceIdCounts = {};
-        allFaceMatches.forEach(match => {
-            const faceId = match.faceId || match.face_id;
-            if (faceId) {
-                faceIdCounts[faceId] = (faceIdCounts[faceId] || 0) + 1;
-            }
-        });
-        
-        console.log("[DEBUG] Face ID occurrence counts:", faceIdCounts);
-        
-        // Process each photo for potential matches
-        photos.forEach(photo => {
-            if (!photo.matched_users) {
-                photo.matched_users = [];
-            }
-            
-            // Check if photo already matches current user
-            const alreadyMatched = photo.matched_users.some(match => 
-                (match.userId === currentUserId) || 
-                (match.user_id === currentUserId)
-            );
-            
-            if (!alreadyMatched) {
-                // Get face IDs in this photo
-                const photoFaceIds = photo.matched_users
-                    .map(match => match.faceId || match.face_id)
-                    .filter(Boolean);
-                
-                // Find faces that appear in multiple photos (frequentlySeenFaces)
-                const frequentlySeenFaces = photoFaceIds.filter(faceId => 
-                    faceIdCounts[faceId] > 1
-                );
-                
-                if (frequentlySeenFaces.length > 0) {
-                    console.log("[DEBUG] Adding inferred match for user", currentUserId, "to photo", photo.id);
-                    console.log("[DEBUG] Frequent faces found:", frequentlySeenFaces);
-                    
-                    // Add current user as an inferred match
-                    photo.matched_users.push({
-                        userId: currentUserId,
-                        faceId: currentUserFaceId,
-                        confidence: 90, // Lower confidence for inferred matches
-                        similarity: 90, // Also add similarity for consistency
-                        inferred: true  // Mark as inferred for UI purposes
-                    });
-                }
-            }
-        });
-        
+        // Disable inferred matching algorithm - return photos unchanged
+        console.log("[DEBUG] Enhanced photo matching disabled - using direct AWS Rekognition matches only");
         return photos;
     };
 
-    // Helper function to process photos
-    const processPhotos = async (photos) => {
-        if (photos && photos.length > 0) {
-            console.log('[DEBUG] Processing photos, first photo:', photos[0]);
-            console.log('[DEBUG] First photo matched_users:', JSON.stringify(photos[0].matched_users || photos[0].matchedUsers));
-        } else {
-            console.log('[DEBUG] No photos to process');
-            setPhotos([]);
+    // Process and normalize photos, then apply final filtering based on mode
+    const processPhotos = async (rawPhotos) => {
+        console.log(`[DEBUG] Processing ${rawPhotos.length} photos for display`);
+        if (!user) {
+            console.error('[processPhotos] User is null, cannot process photos.');
             return [];
         }
         
-        console.log(`[DEBUG] Processing ${photos.length} photos for display`);
-        
-        let transformedPhotos = (photos || []).map(photo => {
-            // Enhanced normalization for storage-only photos
-            const normalizeStoragePhoto = (storagePhoto) => {
-                console.log(`[DEBUG] Normalizing photo: ${storagePhoto.id}`);
-                
-                // If this is a storage-only photo (has no attributes), add defaults
-                if (!storagePhoto.faces || !Array.isArray(storagePhoto.faces)) {
-                    console.log(`[DEBUG] Adding default 'faces' array to photo ${storagePhoto.id}`);
-                    storagePhoto.faces = [];
-                }
-                
-                // Process matched_users with robust format handling
-                if (!storagePhoto.matched_users && storagePhoto.matchedUsers) {
-                    console.log(`[DEBUG] Using matchedUsers instead of matched_users for photo ${storagePhoto.id}`);
-                    storagePhoto.matched_users = storagePhoto.matchedUsers;
-                }
-                
-                if (!storagePhoto.matched_users) {
-                    console.log(`[DEBUG] Adding default 'matched_users' array to photo ${storagePhoto.id}`);
-                    storagePhoto.matched_users = [];
-                } else {
-                    // Make sure matched_users is an array
-                    if (!Array.isArray(storagePhoto.matched_users)) {
-                        try {
-                            console.log(`[DEBUG] matched_users is not an array, trying to parse: ${typeof storagePhoto.matched_users}`);
-                            // If it's a string, try to parse it
-                            if (typeof storagePhoto.matched_users === 'string') {
-                                storagePhoto.matched_users = JSON.parse(storagePhoto.matched_users);
-                                console.log(`[DEBUG] Parsed matched_users from string: ${JSON.stringify(storagePhoto.matched_users)}`);
-                            }
-                        } catch (e) {
-                            console.error(`[DEBUG] Failed to parse matched_users: ${e.message}`);
-                            storagePhoto.matched_users = [];
-                        }
-                    }
-                    
-                    // Additional check after potential parsing
-                    if (!Array.isArray(storagePhoto.matched_users)) {
-                        console.log(`[DEBUG] matched_users is still not an array after parsing attempt, setting to empty array`);
-                        storagePhoto.matched_users = [];
-                    }
-                    
-                    // Log matched users for debugging
-                    console.log(`[DEBUG] Photo ${storagePhoto.id} has ${storagePhoto.matched_users.length} matched users`);
-                    if (storagePhoto.matched_users.length > 0) {
-                        console.log(`[DEBUG] First matched user:`, JSON.stringify(storagePhoto.matched_users[0]));
-                        
-                        // Log which exact format is being used in matched_users
-                        const firstUser = storagePhoto.matched_users[0];
-                        if (firstUser.userId) {
-                            console.log(`[DEBUG] Match uses 'userId' format: ${firstUser.userId}`);
-                        } else if (firstUser.user_id) {
-                            console.log(`[DEBUG] Match uses 'user_id' format: ${firstUser.user_id}`);
-                        }
-                    }
-                    
-                    // Check if current user ID is in the matched_users
-                    if (user && storagePhoto.matched_users.length > 0) {
-                        const currentUserId = user.id;
-                        const isUserMatched = storagePhoto.matched_users.some(
-                            matchUser => (matchUser.userId === currentUserId || matchUser.user_id === currentUserId)
-                        );
-                        console.log(`[DEBUG] Current user ${currentUserId} is ${isUserMatched ? '' : 'NOT '}in the matches`);
-                    }
-                    
-                    // Fix for "My Images" tab: Ensure matched_users has all required properties
-                    storagePhoto.matched_users = storagePhoto.matched_users.map(user => {
-                        // If the matched user doesn't have the expected fields, normalize it
-                        if (user) {
-                            const userId = user.userId || user.user_id || null;
-                            
-                            if (userId) {
-                                return {
-                                    userId: userId,
-                                    faceId: user.faceId || user.face_id || null,
-                                    fullName: user.fullName || user.full_name || user.name || 'Unknown User',
-                                    email: user.email || null,
-                                    avatarUrl: user.avatarUrl || user.avatar_url || null,
-                                    similarity: user.similarity || user.confidence || 95, // Default high confidence for matches
-                                    confidence: user.confidence || user.similarity || 95
-                                };
-                            }
-                        }
-                        
-                        // Skip null/undefined or invalid user objects
-                        console.log(`[DEBUG] Skipping invalid matched user:`, user);
-                        return null;
-                    }).filter(Boolean); // Remove any null entries
-                }
-                
-                if (!storagePhoto.location) {
-                    console.log(`[DEBUG] Adding default 'location' object to photo ${storagePhoto.id}`);
-                    storagePhoto.location = { lat: null, lng: null, name: null };
-                }
-                
-                if (!storagePhoto.venue) {
-                    console.log(`[DEBUG] Adding default 'venue' object to photo ${storagePhoto.id}`);
-                    storagePhoto.venue = { id: null, name: null };
-                }
-                
-                if (!storagePhoto.event_details) {
-                    console.log(`[DEBUG] Adding default 'event_details' object to photo ${storagePhoto.id}`);
-                    storagePhoto.event_details = { date: null, name: null, type: null };
-                }
-                
-                if (!storagePhoto.tags) {
-                    console.log(`[DEBUG] Adding default 'tags' array to photo ${storagePhoto.id}`);
-                    storagePhoto.tags = [];
-                }
-                
-                return storagePhoto;
-            };
+        // Fetch linked user IDs for filtering in 'matches' mode
+        let linkedIds = [user.id];
+        if (mode === 'matches') {
+            linkedIds = await getLinkedUserIds();
+        }
+
+        const processed = rawPhotos.map(photo => {
+            console.log('[DEBUG] Normalizing photo:', photo.id);
             
-            // Apply normalization
-            const normalizedPhoto = normalizeStoragePhoto(photo);
+            // Ensure matched_users is an array
+            let matchedUsers = [];
+            if (photo.matched_users && typeof photo.matched_users === 'string') {
+                try {
+                    matchedUsers = JSON.parse(photo.matched_users);
+                    if (!Array.isArray(matchedUsers)) matchedUsers = [];
+                } catch (e) {
+                    console.warn(`[DEBUG] Failed to parse matched_users for photo ${photo.id}:`, photo.matched_users, e);
+                    matchedUsers = [];
+                }
+            } else if (Array.isArray(photo.matched_users)) {
+                matchedUsers = photo.matched_users;
+            } else {
+                // If it's neither string nor array, initialize as empty
+                matchedUsers = [];
+            }
             
+            console.log(`[DEBUG] Photo ${photo.id} has ${matchedUsers.length} matched users`);
+            
+            // Normalize matched user structure
+            const normalizedMatchedUsers = matchedUsers.map(match => {
+                const userId = match.userId || match.user_id;
+                if (!userId) {
+                    console.warn('[DEBUG] Malformed match found (missing userId):', match, 'in photo:', photo.id);
+                }
+                return {
+                    userId: userId,
+                    faceId: match.faceId,
+                    fullName: match.fullName || match.full_name || 'Unknown User',
+                    avatarUrl: match.avatarUrl || match.avatar_url,
+                    confidence: match.confidence || 0,
+                    similarity: match.similarity || 0,
+                    email: match.email // Preserve email if available
+                };
+            }).filter(match => match.userId); // Filter out matches without a userId
+            
+            if (normalizedMatchedUsers.length > 0) {
+                console.log('[DEBUG] First matched user:', JSON.stringify(normalizedMatchedUsers[0]));
+                console.log(`[DEBUG] Match uses 'userId' format: ${normalizedMatchedUsers[0].userId}`);
+            }
+            
+            // Check if the current user (or linked users) is in the matches
+            const isMatched = normalizedMatchedUsers.some(match => linkedIds.includes(match.userId));
+            
+            if (mode === 'matches') {
+                console.log(`[DEBUG] Current user/linked users (${linkedIds.join(', ')}) ${isMatched ? 'IS' : 'is NOT'} in the matches for photo ${photo.id}`);
+            } else {
+                 // For upload mode, just log the check without filtering based on it here
+                 const currentUserMatched = normalizedMatchedUsers.some(match => match.userId === user.id);
+                 console.log(`[DEBUG] Current user ${user.id} ${currentUserMatched ? 'IS' : 'is NOT'} in the matches for photo ${photo.id} (Upload Mode)`);
+            }
+            
+            // Return a normalized structure, potentially adding an isMatched flag
             return {
-                id: normalizedPhoto.id,
-                url: normalizedPhoto.url || normalizedPhoto.public_url,
-                eventId: normalizedPhoto.event_id || normalizedPhoto.eventId,
-                uploadedBy: normalizedPhoto.uploaded_by || normalizedPhoto.uploadedBy,
-                created_at: normalizedPhoto.created_at || normalizedPhoto.createdAt || new Date().toISOString(),
-                updated_at: normalizedPhoto.updated_at || normalizedPhoto.updatedAt,
-                folderPath: normalizedPhoto.folder_path || normalizedPhoto.folderPath,
-                folderName: normalizedPhoto.folder_name || normalizedPhoto.folderName,
-                fileSize: normalizedPhoto.file_size || normalizedPhoto.fileSize,
-                fileType: normalizedPhoto.file_type || normalizedPhoto.fileType,
-                faces: normalizedPhoto.faces || [],
-                title: normalizedPhoto.title,
-                description: normalizedPhoto.description,
-                location: normalizedPhoto.location,
-                venue: normalizedPhoto.venue,
-                tags: normalizedPhoto.tags,
-                date_taken: normalizedPhoto.date_taken || normalizedPhoto.dateTaken,
-                event_details: normalizedPhoto.event_details || normalizedPhoto.eventDetails,
-                matched_users: normalizedPhoto.matched_users || normalizedPhoto.matchedUsers
+                ...photo,
+                matched_users: normalizedMatchedUsers, // Use the normalized array
+                // Add a flag indicating if the current user/linked account is matched
+                // This flag can be used later for filtering if needed
+                isCurrentUserMatched: isMatched 
             };
         });
-        
-        console.log(`[DEBUG] Transformed ${transformedPhotos.length} photos`);
-        
-        // Client-side filtering for matches mode
-        if (mode === 'matches' && user) {
-            console.log('[DEBUG] Applying client-side filtering for matches mode');
-            const currentUserId = user.id;
-            
-            // Use the cached face ID or get it if not available
-            let userFaceId = currentUserFaceId;
-            if (!userFaceId) {
-                userFaceId = await getUserFaceId();
+
+        console.log(`[DEBUG] Transformed ${processed.length} photos`);
+
+        // Apply final filtering based on the mode
+        let finalPhotos;
+        if (mode === 'matches') {
+            console.log('[DEBUG] Applying final filtering for matches mode');
+            finalPhotos = processed.filter(photo => photo.isCurrentUserMatched);
+            console.log(`[DEBUG] Found ${finalPhotos.length} photos matching current user or linked accounts.`);
+
+             // Attempt to fix photos if no matches found initially
+             if (finalPhotos.length === 0 && processed.length > 0) { // Only fix if DB returned photos but none matched
+                console.log('[DEBUG] No matching photos found after initial processing. Attempting to fix linked account photos...');
+                try {
+                    const fixResult = await LinkedAccountsService.updatePhotosForLinkedAccounts(user.id, linkedIds);
+                    console.log('[DEBUG] Photo fix attempt result:', fixResult);
+                    if (fixResult.success && fixResult.updated > 0) {
+                        console.log('[DEBUG] Photos were updated by fix process. Refetching...');
+                        // Trigger a refetch by calling fetchPhotos again
+                        // Be careful to avoid infinite loops - maybe add a flag?
+                        // For now, just log and let the user refresh manually or rely on realtime.
+                        setError('Some photo matches might have been fixed. Please refresh.'); 
+                    } else {
+                         console.log('[DEBUG] No photos were fixed or update failed:', fixResult);
+                    }
+                } catch (fixError) {
+                    console.error('[DEBUG] Error during photo fix attempt:', fixError);
+                }
             }
-            
-            if (userFaceId) {
-                console.log('[DEBUG] Using face ID for matching:', userFaceId);
-                
-                // Apply enhanced matching logic
-                transformedPhotos = enhancePhotoMatches(transformedPhotos, currentUserId, userFaceId);
-            } else {
-                console.log('[DEBUG] No face ID available for enhanced matching');
-            }
-            
-            const matchedPhotos = transformedPhotos.filter(photo => {
-                // Only include photos where the current user appears in matched_users
-                const matchedUsers = photo.matched_users || [];
-                return matchedUsers.some(match => match.userId === currentUserId || match.user_id === currentUserId);
-            });
-            
-            console.log(`[DEBUG] Found ${matchedPhotos.length} photos matching user ID ${currentUserId} out of ${transformedPhotos.length} total`);
-            
-            setPhotos(matchedPhotos);
-            return matchedPhotos;
+        } else { // mode === 'upload'
+            console.log('[DEBUG] Filtering for photos uploaded by the current user');
+            finalPhotos = processed.filter(photo => photo.uploaded_by === user.id);
         }
-        
-        setPhotos(transformedPhotos);
-        return transformedPhotos;
+
+        setPhotos(finalPhotos);
+        return finalPhotos;
     };
 
     // Helper function to check database schema

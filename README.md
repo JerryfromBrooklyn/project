@@ -1,69 +1,87 @@
-# Shmong App
+# Face Matching App
 
-A React application with TypeScript and TailwindCSS for face recognition and management.
+This application performs face recognition using AWS Rekognition and Supabase.
 
-## 🚨 SECURITY NOTICE 🚨
+## Features
 
-For development purposes, **Row Level Security (RLS) has been deliberately disabled** on all database tables. 
-DO NOT enable RLS until explicitly instructed to do so. See [SECURITY_POLICY.md](./SECURITY_POLICY.md) for details.
+- Face registration and matching
+- Photo upload and management 
+- Multiple account linking to see all your photos across accounts
+- Debug tools for face collection management
 
-## Prerequisites
+## Setup
 
-- Node.js (v16 or higher)
-- npm or yarn
-- AWS Account with Rekognition access
-- Supabase Account
+### Prerequisites
 
-## Setup Instructions
+- Node.js and npm
+- Supabase account
+- AWS Rekognition setup
 
-1. Clone the repository:
-```bash
-git clone <your-repository-url>
-cd shmong-app
-```
+### Installation
 
+1. Clone the repository
 2. Install dependencies:
-```bash
-npm install
-# or
-yarn install
-```
-
-3. Set up environment variables:
-   - Copy `.env.example` to `.env`
-   - Fill in your actual environment variables in `.env`
-
+   ```
+   npm install
+   ```
+3. Set up environment variables (see .env.example)
 4. Start the development server:
+   ```
+   npm run dev
+   ```
+
+## Supabase Migration
+
+The project uses Supabase migrations to manage the database schema. The migrations are located in the `supabase/migrations` directory.
+
+### Running Migrations
+
+To apply migrations to your local Supabase instance:
+
 ```bash
-npm run dev
-# or
-yarn dev
+npx supabase migration up
 ```
 
-## Available Scripts
+To create a new migration:
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
-- `npm run lint` - Run ESLint
-- `npm run typecheck` - Run TypeScript type checking
+```bash
+npx supabase migration new migration_name
+```
 
-## Project Structure
+### Available Migrations
 
-- `/src` - Source code
-- `/public` - Static assets
-- `/scripts` - Utility scripts
-- `/supabase` - Supabase configuration and migrations
+- `linked_accounts` - Creates the linked_accounts table and related functions
+- `debug_force_update_photo` - Adds a debug function to force update a photo with a user match
+- `function_exists` - Helper function to check if other functions exist
 
-## Environment Variables
+## Linked Accounts Feature
 
-Make sure to set up the following environment variables in your `.env` file:
+The Linked Accounts feature allows users to link multiple accounts together. This is useful when a user has multiple accounts and wants to see all their photos in one place.
 
-- `VITE_SUPABASE_URL` - Your Supabase project URL
-- `VITE_SUPABASE_ANON_KEY` - Your Supabase anonymous key
-- `VITE_AWS_REGION` - AWS region for Rekognition
-- `VITE_AWS_ACCESS_KEY_ID` - AWS access key ID
-- `VITE_AWS_SECRET_ACCESS_KEY` - AWS secret access key
-- `VITE_AWS_COLLECTION_ID` - AWS Rekognition collection ID
-- `TEST_USER_EMAIL` - Test user email
-- `TEST_USER_PASSWORD` - Test user password 
+### How to Use
+
+1. Navigate to the Photos page
+2. Click on the "Link Accounts" button
+3. Generate a link code on your first account
+4. Log in to your second account
+5. Enter the link code to connect the accounts
+6. Photos matching your face from either account will now appear in both accounts
+
+### Database Functions
+
+The following functions are available for the Linked Accounts feature:
+
+- `link_user_accounts(primary_user_id, secondary_user_id)` - Links two user accounts
+- `get_linked_accounts(user_id)` - Gets all linked accounts for a user
+- `unlink_user_account(user_id)` - Unlinks a user account
+
+## Debugging
+
+For debugging issues with photo matching, the following tools are available:
+
+- `debug_force_update_photo(photo_id, user_id)` - Forces a photo to be matched with a user
+- `function_exists(function_name)` - Checks if a function exists in the database
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. 

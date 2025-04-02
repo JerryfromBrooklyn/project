@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabaseClient';
 import { rekognitionClient, COLLECTION_ID } from '../config/aws-config';
 import { DetectFacesCommand, IndexFacesCommand } from '@aws-sdk/client-rekognition';
 import { v4 as uuidv4 } from 'uuid';
-import { FaceIndexingService } from './FaceIndexingService';
+import { FaceIndexingService } from './FaceIndexingService.jsx';
 import { FACE_MATCH_THRESHOLD } from '../config/aws-config';
 import { 
   Face, 

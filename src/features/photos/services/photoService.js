@@ -1,4 +1,6 @@
 import { supabase } from '../../../lib/supabaseClient';
+// Import FaceIndexingService
+import FaceIndexingService from '../../../services/FaceIndexingService'; 
 // Import aiAnalysisService with a dynamic import to avoid circular dependency
 let aiAnalysisService;
 const loadAIService = async () => {
@@ -229,32 +231,68 @@ export const photoService = {
     try {
       // Get current user
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
+      if (userError || !user) {
+        console.error('FetchPhotos Error: No authenticated user found.', userError);
+        throw userError || new Error('User not authenticated');
+      }
+
+      // Get linked user IDs
+      let linkedUserIds = [user.id]; // Default to current user ID
+      try {
+        linkedUserIds = await FaceIndexingService.getLinkedUserIds(user.id);
+        console.log(`[fetchPhotos] Found ${linkedUserIds.length} linked user IDs:`, linkedUserIds);
+      } catch (linkedIdError) {
+        console.error('[fetchPhotos] Error getting linked user IDs, falling back to current user ID:', linkedIdError);
+        // Keep linkedUserIds as [user.id]
+      }
+      
+      if (!linkedUserIds || linkedUserIds.length === 0) {
+          console.warn('[fetchPhotos] No linked user IDs found, defaulting to current user ID.');
+          linkedUserIds = [user.id];
+      }
 
       // Initialize photo collections
       const dbPhotos = [];
       const storagePhotos = [];
-      const localStoragePhotos = photoService.getAllFromLocalStorage(user.id);
+      // Fetch localStorage photos for the primary user ID only - This might need review later
+      // if photos uploaded by linked accounts should also be checked in localStorage.
+      const localStoragePhotos = photoService.getAllFromLocalStorage(user.id); 
       
-      // Try to get photos from database
+      // Try to get photos from database for linked accounts
       try {
+        // Build the OR condition string for the query
+        const ownerFilter = `uploaded_by.in.(${linkedUserIds.join(',')})`;
+        // Check if matched_users contains any of the linked IDs
+        // Assuming matched_users is an array of objects like { userId: '...' }
+        const matchFilters = linkedUserIds.map(id => `matched_users.cs.{"userId":"${id}"}`); 
+        const orCondition = `${ownerFilter},${matchFilters.join(',')}`;
+
+        console.log(`[fetchPhotos] Querying simple_photos with OR condition: ${orCondition}`);
+
         const { data, error } = await supabase
           .from('simple_photos')
           .select('*')
+          .or(orCondition) // Filter by uploaded_by OR matched_users containing linked IDs
           .order('created_at', { ascending: false });
           
-        if (!error && data) {
+        if (error) {
+          console.error('[fetchPhotos] Supabase DB Error:', error);
+          // Consider only throwing if it's not a 'resource not found' type error, 
+          // maybe the table doesn't exist yet? But for now, log and continue.
+        } else if (data) {
+          console.log(`[fetchPhotos] Fetched ${data.length} photos from DB for linked accounts.`);
           dbPhotos.push(...data);
         }
       } catch (dbError) {
         console.error('Error fetching from database:', dbError);
       }
       
-      // Try to get photos from storage
+      // Try to get photos from storage - This currently only checks the primary user's folder.
+      // This might need adjustment if linked accounts upload to different folders.
       try {
         const { data: storageFiles, error: storageError } = await supabase.storage
           .from('photos')
-          .list(user.id);
+          .list(user.id); // Only lists files for the current user's path
           
         if (!storageError && storageFiles) {
           // Process storage files into photo objects

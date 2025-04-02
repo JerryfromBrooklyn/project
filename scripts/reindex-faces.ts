@@ -1,4 +1,4 @@
-import { FaceIndexingService } from '../src/services/FaceIndexingService';
+import { FaceIndexingService } from '../src/services/FaceIndexingService.jsx';
 
 async function reindexFaces() {
   try {

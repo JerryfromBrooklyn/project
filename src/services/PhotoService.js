@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabaseClient';
 import { rekognitionClient, COLLECTION_ID } from '../config/aws-config';
 import { DetectFacesCommand, IndexFacesCommand } from '@aws-sdk/client-rekognition';
 import { v4 as uuidv4 } from 'uuid';
-import { FaceIndexingService } from './FaceIndexingService';
+import { FaceIndexingService } from './FaceIndexingService.jsx';
 import { FACE_MATCH_THRESHOLD } from '../config/aws-config';
 import { validateForTable } from '../utils/databaseValidator';
 
@@ -209,19 +209,19 @@ export class PhotoService {
 
     static async uploadPhoto(file, eventId, folderPath, metadata) {
         try {
-            console.log('[PhotoService.uploadPhoto] Starting photo upload process');
-            console.log('[PhotoService.uploadPhoto] File:', file.name, 'Size:', file.size, 'Type:', file.type);
+            console.log('[STORAGE] Starting photo upload process');
+            console.log('[STORAGE] File:', file.name, 'Size:', file.size, 'Type:', file.type);
             
             // Compress the image before uploading if it's an image
             if (file.type.startsWith('image/')) {
-                console.log('[PhotoService.uploadPhoto] Compressing image before upload...');
+                console.log('[STORAGE] Compressing image before upload...');
                 file = await this.compressImage(file);
-                console.log('[PhotoService.uploadPhoto] Compression complete, new size:', file.size);
+                console.log('[STORAGE] Compression complete, new size:', file.size);
             }
             
             // Generate a unique ID for this photo
             const photoId = uuidv4();
-            console.log('[PhotoService.uploadPhoto] Created photoId:', photoId);
+            console.log('[STORAGE] Created photoId:', photoId);
             
             // Determine storage path
             const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -237,13 +237,13 @@ export class PhotoService {
             }
             
             const userId = userData.user.id;
-            console.log('[PhotoService.uploadPhoto] User ID for upload:', userId);
+            console.log('[STORAGE] User ID for upload:', userId);
             
             const storagePath = `${userId}/${photoId}-${file.name}`;
-            console.log('[PhotoService.uploadPhoto] Storage path:', storagePath);
+            console.log('[STORAGE] Storage path:', storagePath);
             
             // Upload to storage bucket
-            console.log('[PhotoService.uploadPhoto] Starting file upload to storage bucket "photos"...');
+            console.log('[STORAGE] Starting file upload to storage bucket "photos"...');
             const { data: storageData, error: storageError } = await supabase.storage
                 .from('photos')
                 .upload(storagePath, file, { upsert: true });
@@ -253,14 +253,14 @@ export class PhotoService {
                 throw new Error(`Error uploading to storage: ${storageError.message}`);
             }
             
-            console.log('[PhotoService.uploadPhoto] File uploaded successfully to storage:', storageData);
+            console.log('[STORAGE] File uploaded successfully to storage:', storageData);
             
             // Get public URL
             const { data: { publicUrl } } = supabase.storage
                 .from('photos')
                 .getPublicUrl(storagePath);
                 
-            console.log('[PhotoService.uploadPhoto] Generated public URL:', publicUrl);
+            console.log('[STORAGE] Generated public URL:', publicUrl);
             
             // Detect faces in the uploaded image
             let faces = [];
@@ -268,15 +268,15 @@ export class PhotoService {
             let matchedUsers = [];
             
             try {
-                console.log('[PhotoService.uploadPhoto] Calling detectFaces method...');
+                console.log('[STORAGE] Calling detectFaces method...');
                 const facesResult = await this.detectFaces(photoId, publicUrl);
-                console.log('[PhotoService.uploadPhoto] Detected faces result:', facesResult.length, 'faces found');
+                console.log('[STORAGE] Detected faces result:', facesResult.length, 'faces found');
                 
                 if (facesResult && facesResult.length > 0) {
                     // Process face attributes (age, gender, emotions)
-                    console.log('[PhotoService.uploadPhoto] Processing face attributes for', facesResult.length, 'faces');
+                    console.log('[STORAGE] Processing face attributes for', facesResult.length, 'faces');
                     const processedFaces = facesResult.map((face, index) => {
-                        console.log(`[PhotoService.uploadPhoto] Processing face ${index} attributes`);
+                        console.log(`[STORAGE] Processing face ${index} attributes`);
                         return {
                             faceId: `local-${photoId.substring(0, 10)}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
                             confidence: face.confidence,
@@ -300,30 +300,84 @@ export class PhotoService {
                         };
                     });
                     
-                    console.log('[PhotoService.uploadPhoto] Processed face attributes:', JSON.stringify(processedFaces, null, 2));
+                    console.log('[STORAGE] Processed face attributes:', JSON.stringify(processedFaces, null, 2));
                     
                     faces = processedFaces;
                     
                     // Assign face IDs for indexing
-                    console.log('[PhotoService.uploadPhoto] Indexing', faces.length, 'faces for future matching...');
+                    console.log('[STORAGE] Indexing', faces.length, 'faces for future matching...');
                     faceIds = faces.map(face => face.faceId);
-                    console.log('[PhotoService.uploadPhoto] Added face_ids to metadata:', faceIds);
+                    console.log('[STORAGE] Added face_ids to metadata:', faceIds);
                     
                     // Search for face matches
-                    console.log('[PhotoService.uploadPhoto] Searching for face matches in registered users...');
+                    console.log('[STORAGE] Searching for face matches in registered users...');
                     try {
-                        // Check if the function exists before calling it
-                        if (typeof FaceIndexingService.searchFacesByImage === 'function') {
-                            console.log('[PhotoService.uploadPhoto] Calling FaceIndexingService.searchFacesByImage');
-                            const faceMatches = await FaceIndexingService.searchFacesByImage(photoId, publicUrl);
-                            console.log('[PhotoService.uploadPhoto] Found', faceMatches.length, 'matching users!', faceMatches);
+                        // Prepare the image for face matching
+                        let imageBytes;
+                        try {
+                            console.log('[FACE-MATCH] Downloading image from URL for processing');
+                            const response = await fetch(publicUrl);
+                            if (!response.ok) {
+                                console.error(`[FACE-MATCH] Failed to fetch image: ${response.status} ${response.statusText}`);
+                                throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+                            }
                             
-                            // Filter matches with valid confidence
-                            const validMatches = faceMatches.filter(match => match.confidence >= 80);
-                            console.log('[PhotoService.uploadPhoto]', validMatches.length, 'valid matches to save to database');
+                            // Get the image as an ArrayBuffer
+                            const imageArrayBuffer = await response.arrayBuffer();
+                            imageBytes = new Uint8Array(imageArrayBuffer);
+                            
+                            console.log('[FACE-MATCH] Image downloaded successfully, size:', imageBytes.length, 'bytes');
+                        } catch (fetchError) {
+                            console.error('[FACE-MATCH] Error downloading image for face matching:', fetchError);
+                            imageBytes = null;
+                        }
+                        
+                        // Search for face matches using SearchFacesByImage API directly
+                        if (imageBytes && typeof FaceIndexingService.searchFaces === 'function') {
+                            console.log('[FACE-MATCH] Calling FaceIndexingService.searchFaces (using SearchFacesByImage)');
+                            const faceSearchResult = await FaceIndexingService.searchFaces(imageBytes, photoId);
+                            
+                            // Process matches from the result
+                            const faceMatches = faceSearchResult.matches || [];
+                            console.log('[FACE-MATCH] Found', faceMatches.length, 'matching users!', faceMatches);
+                            
+                            // Filter matches with valid similarity score
+                            const validMatches = faceMatches.filter(match => match && match.similarity >= FACE_MATCH_THRESHOLD);
+                            console.log('[FACE-MATCH]', validMatches.length, 'valid matches to save to database');
+                            
+                            // Process indexed faces (new)
+                            const indexedFaces = faceSearchResult.indexedFaces || [];
+                            console.log('[FACE-MATCH] Indexed', indexedFaces.length, 'faces for future matching');
+                            
+                            // Add AWS face IDs to our faces array
+                            if (indexedFaces.length > 0) {
+                                console.log('[FACE-MATCH] Updating faces with AWS face IDs');
+                                
+                                // Map existing local face IDs to AWS face IDs
+                                const awsFaceIds = indexedFaces.map(face => face.faceId);
+                                
+                                // Add AWS face IDs to our metadata
+                                faceIds = [...faceIds, ...awsFaceIds];
+                                
+                                // Update faces array with AWS face IDs where possible
+                                if (faces.length === indexedFaces.length) {
+                                    // Direct 1:1 mapping between faces and indexed faces
+                                    faces = faces.map((face, i) => ({
+                                        ...face,
+                                        awsFaceId: indexedFaces[i].faceId,
+                                        externalId: indexedFaces[i].externalId
+                                    }));
+                                } else {
+                                    // Add AWS IDs as separate property
+                                    console.log('[FACE-MATCH] Face count mismatch, storing AWS face IDs separately');
+                                }
+                                
+                                console.log('[FACE-MATCH] Updated faces array:', faces);
+                                console.log('[FACE-MATCH] AWS face IDs:', awsFaceIds);
+                            }
                             
                             if (validMatches.length > 0) {
-                                // Get user information for each match and add it to the matched_users array
+                                // Get user information for each match
                                 const enhancedMatches = [];
                                 
                                 for (const match of validMatches) {
@@ -336,7 +390,7 @@ export class PhotoService {
                                             .single();
                                         
                                         if (userError) {
-                                            console.error('[PhotoService.uploadPhoto] Error fetching user data:', userError);
+                                            console.error('[FACE-MATCH] Error fetching user data:', userError);
                                             
                                             // Try falling back to the profiles table
                                             const { data: profileData, error: profileError } = await supabase
@@ -346,7 +400,7 @@ export class PhotoService {
                                                 .single();
                                                 
                                             if (profileError) {
-                                                console.error('[PhotoService.uploadPhoto] Error fetching profile data:', profileError);
+                                                console.error('[FACE-MATCH] Error fetching profile data:', profileError);
                                                 // Add match with basic information
                                                 enhancedMatches.push({
                                                     userId: match.userId,
@@ -368,7 +422,7 @@ export class PhotoService {
                                                     similarity: match.similarity || 0,
                                                     confidence: match.confidence || match.similarity || 0
                                                 });
-                                                console.log('[PhotoService.uploadPhoto] Enhanced match with profile data:', {
+                                                console.log('[FACE-MATCH] Enhanced match with profile data:', {
                                                     userId: match.userId,
                                                     fullName: profileData.full_name || profileData.username || 'Unknown User'
                                                 });
@@ -384,13 +438,13 @@ export class PhotoService {
                                                 similarity: match.similarity || 0,
                                                 confidence: match.confidence || match.similarity || 0
                                             });
-                                            console.log('[PhotoService.uploadPhoto] Enhanced match with user data:', {
+                                            console.log('[FACE-MATCH] Enhanced match with user data:', {
                                                 userId: match.userId,
                                                 fullName: userData.full_name || userData.email || 'Unknown User'
                                             });
                                         }
                                     } catch (matchProcessingError) {
-                                        console.error('[PhotoService.uploadPhoto] Error processing match:', matchProcessingError);
+                                        console.error('[FACE-MATCH] Error processing match:', matchProcessingError);
                                         // Add basic match data in case of error
                                         enhancedMatches.push({
                                             userId: match.userId,
@@ -404,28 +458,31 @@ export class PhotoService {
                                     }
                                 }
                                 
+                                // Use only direct matches from AWS Rekognition
                                 matchedUsers = enhancedMatches;
-                                console.log('[PhotoService.uploadPhoto] Added matched_users to metadata:', matchedUsers);
+                                console.log('[FACE-MATCH] Added matched_users to metadata:', matchedUsers);
                             }
                         } else {
-                            console.warn('[PhotoService.uploadPhoto] WARNING: searchFacesByImage function not available, skipping face matching');
+                            console.warn('[FACE-MATCH] WARNING: searchFaces function not available or image not loaded, skipping face matching');
                         }
                     } catch (faceMatchError) {
-                        console.error('[PhotoService.uploadPhoto] ERROR during face matching (continuing upload):', faceMatchError);
-                        console.error('[PhotoService.uploadPhoto] Face matching error stack:', faceMatchError.stack);
+                        console.error('[FACE-MATCH] ERROR during face matching (continuing upload):', faceMatchError);
+                        console.error('[FACE-MATCH] Face matching error stack:', faceMatchError.stack);
                     }
                 } else {
-                    console.log('[PhotoService.uploadPhoto] No faces detected in the uploaded image');
+                    console.log('[STORAGE] No faces detected in the uploaded image');
                 }
             } catch (faceError) {
-                console.error('[PhotoService.uploadPhoto] ERROR during face detection (continuing upload):', faceError);
-                console.error('[PhotoService.uploadPhoto] Face detection error stack:', faceError.stack);
+                console.error('[STORAGE] ERROR during face detection (continuing upload):', faceError);
+                console.error('[STORAGE] Face detection error stack:', faceError.stack);
             }
             
             // Process any additional uploaded faces
             try {
                 if (faces.length > 0 && typeof FaceIndexingService.processFaces === 'function') {
-                    await FaceIndexingService.processFaces(photoId, faces);
+                    // Pass the uploader's user ID as a parameter to prioritize matching
+                    console.log(`[DEBUG] Calling processFaces with uploader ID: ${userId}`);
+                    await FaceIndexingService.processFaces(photoId, faces, userId);
                 } else {
                     console.log('[DEBUG] processFaces function not available or no faces to process');
                 }
@@ -476,6 +533,7 @@ export class PhotoService {
                 created_at: new Date().toISOString(),
                 faces: faces || [],
                 face_ids: faceIds || [],
+                aws_face_ids: faceIds || [],
                 matched_users: matchedUsers || [],
                 location: metadata?.location || { lat: null, lng: null, name: null, address: null },
                 ...metadata

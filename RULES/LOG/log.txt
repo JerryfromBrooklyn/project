@@ -1,0 +1,568 @@
+FaceRegistration.js:31 Getting video devices...
+FaceRegistration.js:31 Getting video devices...
+FaceRegistration.js:34 Found video devices: (8) [InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo]
+FaceRegistration.js:34 Found video devices: (8) [InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo, InputDeviceInfo]
+FaceRegistration.js:82 Detecting faces in webcam frame...
+FaceRegistration.js:89 Face detection result: No face detected
+FaceRegistration.js:82 Detecting faces in webcam frame...
+FaceRegistration.js:89 Face detection result: Face detected
+FaceRegistration.js:82 Detecting faces in webcam frame...
+FaceRegistration.js:110 Capturing image...
+FaceRegistration.js:113 Image captured successfully
+FaceRegistration.js:89 Face detection result: Face detected
+FaceRegistration.js:141 Starting face registration process...
+FaceRegistration.js:148 Detecting face attributes...
+FaceRegistration.js:158 Face attributes detected successfully
+FaceRegistration.js:160 Uploading image to storage...
+FaceRegistration.js:171 Image uploaded successfully
+FaceRegistration.js:181 Starting face indexing process with AWS Rekognition
+FaceIndexingService.jsx:31 [FACE-REG] Face Indexing Process
+FaceIndexingService.jsx:32 [FACE-REG] 🔍 Starting face indexing for user registration...
+FaceIndexingService.jsx:33 [FACE-REG] User ID: 8be0aea6-9d29-4f99-80ed-d4c79bcacec7
+FaceIndexingService.jsx:37 [FACE-REG] Current collection has unknown indexed faces
+FaceIndexingService.jsx:39 [FACE-REG] Step 1: Detecting faces in image...
+FaceIndexingService.jsx:381 Attempt 1 to detect faces...
+FaceIndexingService.jsx:395 Successfully detected 1 faces
+FaceIndexingService.jsx:76 [FACE-REG] Step 2: Indexing new face in AWS Rekognition...
+FaceIndexingService.jsx:86 [FACE-REG] Sending IndexFaces request to AWS...
+FaceIndexingService.jsx:89 [FACE-REG] Raw AWS IndexFaces response: {
+  "FaceRecords": [
+    {
+      "Face": {
+        "FaceId": "e1a43f70-5c6d-47f2-abf6-f22018b0e857",
+        "ExternalImageId": "8be0aea6-9d29-4f99-80ed-d4c79bcacec7",
+        "Confidence": 99.97962188720703
+      },
+      "FaceDetail": {
+        "BoundingBox": {
+          "Height": 0.40505343675613403,
+          "Left": 0.25882887840270996,
+          "Top": 0.4047984778881073,
+          "Width": 0.15827859938144684
+        },
+        "Confidence": 99.97962188720703
+      }
+    }
+  ],
+  "UnindexedFaces": []
+}
+FaceIndexingService.jsx:115 [FACE-REG] ✅ Face indexed successfully: e1a43f70-5c6d-47f2-abf6-f22018b0e857
+FaceIndexingService.jsx:116 [FACE-REG] Face attributes: {AgeRange: {…}, Beard: {…}, BoundingBox: {…}, Confidence: 99.97962188720703, Emotions: Array(8), …}
+FaceIndexingService.jsx:206 [FACE-DATA] Saving face data for user 8be0aea6-9d29-4f99-80ed-d4c79bcacec7 with face ID e1a43f70-5c6d-47f2-abf6-f22018b0e857
+FaceIndexingService.jsx:248 [FACE-DATA] Creating new face data record
+FaceIndexingService.jsx:265 [FACE-DATA] Face data saved successfully for user 8be0aea6-9d29-4f99-80ed-d4c79bcacec7
+FaceIndexingService.jsx:151 [FACE-REG] Step 3: Searching for historical matches...
+FaceIndexingService.jsx:152 [FACE-REG] Using face ID for historical matching: e1a43f70-5c6d-47f2-abf6-f22018b0e857
+FaceIndexingService.jsx:156 [FACE-MATCH-HISTORY] Fetching initial historical matches...
+FaceIndexingService.jsx:451 [HISTORY] Getting initial historical matches for face ID: e1a43f70-5c6d-47f2-abf6-f22018b0e857, limit: 20
+FaceIndexingService.jsx:468 [HISTORY] Found 20 initial historical matches
+FaceIndexingService.jsx:498 [HISTORY] No photos found in unassociated_faces table. Trying direct photo search...
+FaceIndexingService.jsx:515 [HISTORY] Trying to find matches in faces JSONB array...
+FaceIndexingService.jsx:547 [HISTORY] No photos found for matched faces after all searches
+FaceIndexingService.jsx:163 [FACE-MATCH-HISTORY] No initial historical matches found
+FaceIndexingService.jsx:167 [FACE-MATCH-HISTORY] Starting background processing for remaining matches...
+FaceIndexingService.jsx:169 [FACE-MATCH-HISTORY] Background processing task queued successfully
+FaceRegistration.js:186 Face indexed successfully with ID: e1a43f70-5c6d-47f2-abf6-f22018b0e857
+FaceRegistration.js:189 Storing face ID in backup storage system
+FaceStorageService.js:20 [FaceStorage] Storing face ID e1a43f70-5c6d-47f2-abf6-f22018b0e857 for user 8be0aea6-9d29-4f99-80ed-d4c79bcacec7
+FaceStorageService.js:46 [FaceStorage] Successfully stored face ID for user 8be0aea6-9d29-4f99-80ed-d4c79bcacec7
+FaceRegistration.js:252 Face indexed and registered successfully via direct insert
+FaceRegistration.js:253 Face registration complete!
+Dashboard.js:180 Face attributes data: {
+  "Pose": {
+    "Yaw": -6.870060443878174,
+    "Roll": 5.669188022613525,
+    "Pitch": 1.8728623390197754
+  },
+  "Beard": {
+    "Value": true,
+    "Confidence": 99.26908874511719
+  },
+  "Smile": {
+    "Value": false,
+    "Confidence": 99.60603332519531
+  },
+  "Gender": {
+    "Value": "Male",
+    "Confidence": 99.956298828125
+  },
+  "Quality": {
+    "Sharpness": 46.02980041503906,
+    "Brightness": 74.1264877319336
+  },
+  "AgeRange": {
+    "Low": 27,
+    "High": 35
+  },
+  "Emotions": [
+    {
+      "Type": "CALM",
+      "Confidence": 88.31298828125
+    },
+    {
+      "Type": "CONFUSED",
+      "Confidence": 3.6163330078125
+    },
+    {
+      "Type": "SAD",
+      "Confidence": 3.2318115234375
+    },
+    {
+      "Type": "DISGUSTED",
+      "Confidence": 0.566864013671875
+    },
+    {
+      "Type": "SURPRISED",
+      "Confidence": 0.09292364120483398
+    },
+    {
+      "Type": "ANGRY",
+      "Confidence": 0.056362152099609375
+    },
+    {
+      "Type": "FEAR",
+      "Confidence": 0.013780593872070312
+    },
+    {
+      "Type": "HAPPY",
+      "Confidence": 0.008432069793343544
+    }
+  ],
+  "EyesOpen": {
+    "Value": true,
+    "Confidence": 99.6423568725586
+  },
+  "Mustache": {
+    "Value": false,
+    "Confidence": 54.498626708984375
+  },
+  "Landmarks": [
+    {
+      "X": 0.29375573992729187,
+      "Y": 0.5666369199752808,
+      "Type": "eyeLeft"
+    },
+    {
+      "X": 0.3621484935283661,
+      "Y": 0.5828118324279785,
+      "Type": "eyeRight"
+    },
+    {
+      "X": 0.2903727889060974,
+      "Y": 0.701786994934082,
+      "Type": "mouthLeft"
+    },
+    {
+      "X": 0.3472437560558319,
+      "Y": 0.7153533101081848,
+      "Type": "mouthRight"
+    },
+    {
+      "X": 0.31645557284355164,
+      "Y": 0.6459547281265259,
+      "Type": "nose"
+    },
+    {
+      "X": 0.2726841866970062,
+      "Y": 0.5289579033851624,
+      "Type": "leftEyeBrowLeft"
+    },
+    {
+      "X": 0.30835506319999695,
+      "Y": 0.5300531983375549,
+      "Type": "leftEyeBrowRight"
+    },
+    {
+      "X": 0.2901759445667267,
+      "Y": 0.5183441638946533,
+      "Type": "leftEyeBrowUp"
+    },
+    {
+      "X": 0.34757548570632935,
+      "Y": 0.5389798879623413,
+      "Type": "rightEyeBrowLeft"
+    },
+    {
+      "X": 0.3918352425098419,
+      "Y": 0.5567173361778259,
+      "Type": "rightEyeBrowRight"
+    },
+    {
+      "X": 0.36922305822372437,
+      "Y": 0.5365071892738342,
+      "Type": "rightEyeBrowUp"
+    },
+    {
+      "X": 0.2824006974697113,
+      "Y": 0.5629709959030151,
+      "Type": "leftEyeLeft"
+    },
+    {
+      "X": 0.30721887946128845,
+      "Y": 0.5708149671554565,
+      "Type": "leftEyeRight"
+    },
+    {
+      "X": 0.29361364245414734,
+      "Y": 0.5597738027572632,
+      "Type": "leftEyeUp"
+    },
+    {
+      "X": 0.2936142086982727,
+      "Y": 0.5723505020141602,
+      "Type": "leftEyeDown"
+    },
+    {
+      "X": 0.3485342860221863,
+      "Y": 0.580531120300293,
+      "Type": "rightEyeLeft"
+    },
+    {
+      "X": 0.37515485286712646,
+      "Y": 0.5848373174667358,
+      "Type": "rightEyeRight"
+    },
+    {
+      "X": 0.36231300234794617,
+      "Y": 0.5759102702140808,
+      "Type": "rightEyeUp"
+    },
+    {
+      "X": 0.3613828718662262,
+      "Y": 0.5883503556251526,
+      "Type": "rightEyeDown"
+    },
+    {
+      "X": 0.3066231608390808,
+      "Y": 0.656808614730835,
+      "Type": "noseLeft"
+    },
+    {
+      "X": 0.33200910687446594,
+      "Y": 0.6627535820007324,
+      "Type": "noseRight"
+    },
+    {
+      "X": 0.3166182041168213,
+      "Y": 0.6914648413658142,
+      "Type": "mouthUp"
+    },
+    {
+      "X": 0.3149070739746094,
+      "Y": 0.7312881350517273,
+      "Type": "mouthDown"
+    },
+    {
+      "X": 0.29375573992729187,
+      "Y": 0.5666369199752808,
+      "Type": "leftPupil"
+    },
+    {
+      "X": 0.3621484935283661,
+      "Y": 0.5828118324279785,
+      "Type": "rightPupil"
+    },
+    {
+      "X": 0.26328539848327637,
+      "Y": 0.5578687191009521,
+      "Type": "upperJawlineLeft"
+    },
+    {
+      "X": 0.2663154602050781,
+      "Y": 0.704927921295166,
+      "Type": "midJawlineLeft"
+    },
+    {
+      "X": 0.3132724463939667,
+      "Y": 0.7998875975608826,
+      "Type": "chinBottom"
+    },
+    {
+      "X": 0.3880446255207062,
+      "Y": 0.7333775758743286,
+      "Type": "midJawlineRight"
+    },
+    {
+      "X": 0.41304534673690796,
+      "Y": 0.5925401449203491,
+      "Type": "upperJawlineRight"
+    }
+  ],
+  "MouthOpen": {
+    "Value": false,
+    "Confidence": 96.53213500976562
+  },
+  "Confidence": 99.97962188720703,
+  "Eyeglasses": {
+    "Value": false,
+    "Confidence": 99.89952850341797
+  },
+  "Sunglasses": {
+    "Value": false,
+    "Confidence": 99.8076171875
+  },
+  "BoundingBox": {
+    "Top": 0.4047984778881073,
+    "Left": 0.25882887840270996,
+    "Width": 0.15827859938144684,
+    "Height": 0.40505343675613403
+  },
+  "EyeDirection": {
+    "Yaw": -21.863636016845703,
+    "Pitch": -16.420000076293945,
+    "Confidence": 99.99776458740234
+  },
+  "FaceOccluded": {
+    "Value": false,
+    "Confidence": 99.87715911865234
+  }
+}
+Dashboard.js:180 Face attributes data: {
+  "Pose": {
+    "Yaw": -6.870060443878174,
+    "Roll": 5.669188022613525,
+    "Pitch": 1.8728623390197754
+  },
+  "Beard": {
+    "Value": true,
+    "Confidence": 99.26908874511719
+  },
+  "Smile": {
+    "Value": false,
+    "Confidence": 99.60603332519531
+  },
+  "Gender": {
+    "Value": "Male",
+    "Confidence": 99.956298828125
+  },
+  "Quality": {
+    "Sharpness": 46.02980041503906,
+    "Brightness": 74.1264877319336
+  },
+  "AgeRange": {
+    "Low": 27,
+    "High": 35
+  },
+  "Emotions": [
+    {
+      "Type": "CALM",
+      "Confidence": 88.31298828125
+    },
+    {
+      "Type": "CONFUSED",
+      "Confidence": 3.6163330078125
+    },
+    {
+      "Type": "SAD",
+      "Confidence": 3.2318115234375
+    },
+    {
+      "Type": "DISGUSTED",
+      "Confidence": 0.566864013671875
+    },
+    {
+      "Type": "SURPRISED",
+      "Confidence": 0.09292364120483398
+    },
+    {
+      "Type": "ANGRY",
+      "Confidence": 0.056362152099609375
+    },
+    {
+      "Type": "FEAR",
+      "Confidence": 0.013780593872070312
+    },
+    {
+      "Type": "HAPPY",
+      "Confidence": 0.008432069793343544
+    }
+  ],
+  "EyesOpen": {
+    "Value": true,
+    "Confidence": 99.6423568725586
+  },
+  "Mustache": {
+    "Value": false,
+    "Confidence": 54.498626708984375
+  },
+  "Landmarks": [
+    {
+      "X": 0.29375573992729187,
+      "Y": 0.5666369199752808,
+      "Type": "eyeLeft"
+    },
+    {
+      "X": 0.3621484935283661,
+      "Y": 0.5828118324279785,
+      "Type": "eyeRight"
+    },
+    {
+      "X": 0.2903727889060974,
+      "Y": 0.701786994934082,
+      "Type": "mouthLeft"
+    },
+    {
+      "X": 0.3472437560558319,
+      "Y": 0.7153533101081848,
+      "Type": "mouthRight"
+    },
+    {
+      "X": 0.31645557284355164,
+      "Y": 0.6459547281265259,
+      "Type": "nose"
+    },
+    {
+      "X": 0.2726841866970062,
+      "Y": 0.5289579033851624,
+      "Type": "leftEyeBrowLeft"
+    },
+    {
+      "X": 0.30835506319999695,
+      "Y": 0.5300531983375549,
+      "Type": "leftEyeBrowRight"
+    },
+    {
+      "X": 0.2901759445667267,
+      "Y": 0.5183441638946533,
+      "Type": "leftEyeBrowUp"
+    },
+    {
+      "X": 0.34757548570632935,
+      "Y": 0.5389798879623413,
+      "Type": "rightEyeBrowLeft"
+    },
+    {
+      "X": 0.3918352425098419,
+      "Y": 0.5567173361778259,
+      "Type": "rightEyeBrowRight"
+    },
+    {
+      "X": 0.36922305822372437,
+      "Y": 0.5365071892738342,
+      "Type": "rightEyeBrowUp"
+    },
+    {
+      "X": 0.2824006974697113,
+      "Y": 0.5629709959030151,
+      "Type": "leftEyeLeft"
+    },
+    {
+      "X": 0.30721887946128845,
+      "Y": 0.5708149671554565,
+      "Type": "leftEyeRight"
+    },
+    {
+      "X": 0.29361364245414734,
+      "Y": 0.5597738027572632,
+      "Type": "leftEyeUp"
+    },
+    {
+      "X": 0.2936142086982727,
+      "Y": 0.5723505020141602,
+      "Type": "leftEyeDown"
+    },
+    {
+      "X": 0.3485342860221863,
+      "Y": 0.580531120300293,
+      "Type": "rightEyeLeft"
+    },
+    {
+      "X": 0.37515485286712646,
+      "Y": 0.5848373174667358,
+      "Type": "rightEyeRight"
+    },
+    {
+      "X": 0.36231300234794617,
+      "Y": 0.5759102702140808,
+      "Type": "rightEyeUp"
+    },
+    {
+      "X": 0.3613828718662262,
+      "Y": 0.5883503556251526,
+      "Type": "rightEyeDown"
+    },
+    {
+      "X": 0.3066231608390808,
+      "Y": 0.656808614730835,
+      "Type": "noseLeft"
+    },
+    {
+      "X": 0.33200910687446594,
+      "Y": 0.6627535820007324,
+      "Type": "noseRight"
+    },
+    {
+      "X": 0.3166182041168213,
+      "Y": 0.6914648413658142,
+      "Type": "mouthUp"
+    },
+    {
+      "X": 0.3149070739746094,
+      "Y": 0.7312881350517273,
+      "Type": "mouthDown"
+    },
+    {
+      "X": 0.29375573992729187,
+      "Y": 0.5666369199752808,
+      "Type": "leftPupil"
+    },
+    {
+      "X": 0.3621484935283661,
+      "Y": 0.5828118324279785,
+      "Type": "rightPupil"
+    },
+    {
+      "X": 0.26328539848327637,
+      "Y": 0.5578687191009521,
+      "Type": "upperJawlineLeft"
+    },
+    {
+      "X": 0.2663154602050781,
+      "Y": 0.704927921295166,
+      "Type": "midJawlineLeft"
+    },
+    {
+      "X": 0.3132724463939667,
+      "Y": 0.7998875975608826,
+      "Type": "chinBottom"
+    },
+    {
+      "X": 0.3880446255207062,
+      "Y": 0.7333775758743286,
+      "Type": "midJawlineRight"
+    },
+    {
+      "X": 0.41304534673690796,
+      "Y": 0.5925401449203491,
+      "Type": "upperJawlineRight"
+    }
+  ],
+  "MouthOpen": {
+    "Value": false,
+    "Confidence": 96.53213500976562
+  },
+  "Confidence": 99.97962188720703,
+  "Eyeglasses": {
+    "Value": false,
+    "Confidence": 99.89952850341797
+  },
+  "Sunglasses": {
+    "Value": false,
+    "Confidence": 99.8076171875
+  },
+  "BoundingBox": {
+    "Top": 0.4047984778881073,
+    "Left": 0.25882887840270996,
+    "Width": 0.15827859938144684,
+    "Height": 0.40505343675613403
+  },
+  "EyeDirection": {
+    "Yaw": -21.863636016845703,
+    "Pitch": -16.420000076293945,
+    "Confidence": 99.99776458740234
+  },
+  "FaceOccluded": {
+    "Value": false,
+    "Confidence": 99.87715911865234
+  }
+}

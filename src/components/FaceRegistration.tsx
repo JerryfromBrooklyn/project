@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import { rekognitionClient } from '../config/aws-config';
 import { DetectFacesCommand } from '@aws-sdk/client-rekognition';
-import { FaceIndexingService } from '../services/FaceIndexingService';
+import { FaceIndexingService } from '../services/FaceIndexingService.jsx';
 
 interface FaceRegistrationProps {
   onSuccess: () => void;
