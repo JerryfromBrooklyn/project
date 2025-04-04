@@ -5,6 +5,8 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 // IMPORT AWS Auth Service
 import awsAuthService from '../services/awsAuthService';
 import { useNavigate } from 'react-router-dom';
+// Import the Lambda auth service
+import { signUp as lambdaSignUp } from '../services/lambdaAuthService';
 
 // REMOVE TypeScript Interface definition
 // interface AuthContextType {
@@ -96,45 +98,48 @@ export function AuthProvider({ children }) {
         return Promise.resolve(); // Return empty promise
     }, []);
 
-    // Sign up using AWS Cognito
-    const signUp = useCallback(async (email /*: string*/, password /*: string*/, fullName /*: string*/, userType /*: string*/) => { // Removed type annotations
+    // Sign up with Lambda service that uses our new API Gateway endpoint
+    const signUp = useCallback(async (email, password, fullName, userType) => {
+        console.log('[AuthContext] Starting signup with Lambda auth service');
         setLoading(true);
+        
         try {
-            console.log('[AuthContext] Starting AWS signup process...');
-            // AWS Auth Service's signUp handles both Cognito user creation
-            // and the DynamoDB user record creation (via createUserRecord)
-            const { data, error } = await awsAuthService.signUp(email, password, {
+            // Call the Lambda auth service
+            const result = await lambdaSignUp(email, password, {
                 full_name: fullName,
-                role: userType, // Pass role as custom attribute
+                role: userType || 'attendee'
             });
-
-            if (error) {
-                console.error('[AuthContext] AWS Signup error:', error);
-                return { data: { user: null }, error };
+            
+            if (result.error) {
+                console.error('[AuthContext] Lambda sign up error:', result.error);
+                return { data: null, error: result.error };
             }
-
-            // REMOVE Supabase profile creation logic - handled by awsAuthService
-            // const { error: profileError } = await supabase.from('users').insert(...);
-            // if (profileError) { ... }
-
-            console.log('[AuthContext] AWS User signed up successfully (Cognito & DB record):', data?.user?.id);
-
-            // Redirect to verification page if needed, otherwise login
-            if (data && !data.userConfirmed) {
-                navigate(`/verify-email?email=${encodeURIComponent(email)}`);
-            } else {
-                // Should ideally not happen if verification is required, but handle just in case
-                 console.warn('[AuthContext] User already confirmed after signup? Redirecting to login.');
-                 navigate('/login');
-            }
-            return { data: { user: data?.user || null }, error: null };
+            
+            console.log('[AuthContext] Lambda sign up successful:', result.data.user);
+            
+            // For development environment with simulated users,
+            // we should not automatically sign them in, but wait for them to sign in manually
+            // This simulates the production flow where signup and signin are separate steps
+            
+            // In a production environment, we might have:
+            // 1. Auto-login after signup (depending on the application flow)
+            // 2. Set the user in the context and navigate
+            // But for now, we'll keep signup and signin as separate steps
+            
+            return { 
+                data: { 
+                    user: result.data.user,
+                    userConfirmed: result.data.userConfirmed
+                }, 
+                error: null 
+            };
         } catch (error) {
-            console.error('[AuthContext] Unexpected error during AWS signup:', error);
-            return { data: { user: null }, error };
+            console.error('[AuthContext] Unexpected error during Lambda sign up:', error);
+            return { data: null, error };
         } finally {
             setLoading(false);
         }
-    }, [navigate]);
+    }, []);
 
     // Sign out using AWS Cognito
     const signOut = useCallback(async () => {

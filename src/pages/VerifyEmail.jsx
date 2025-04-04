@@ -16,14 +16,23 @@ const VerifyEmail = () => {
   const navigate = useNavigate();
   
   useEffect(() => {
-    // Extract email from query params
-    const params = new URLSearchParams(location.search);
-    const emailParam = params.get('email');
+    // Try to get email from state first (from newer redirects)
+    const stateEmail = location.state?.email;
     
-    if (emailParam) {
-      setEmail(emailParam);
+    // Then try from query params (backward compatibility)
+    const params = new URLSearchParams(location.search);
+    const urlEmail = params.get('email');
+    
+    // Use whichever is available
+    if (stateEmail) {
+      console.log('[VERIFY] Email from state:', stateEmail);
+      setEmail(stateEmail);
+    } else if (urlEmail) {
+      console.log('[VERIFY] Email from URL params:', urlEmail);
+      setEmail(urlEmail);
     } else {
       // If no email provided, redirect to login
+      console.log('[VERIFY] No email found, redirecting to login');
       navigate('/login');
     }
   }, [location, navigate]);

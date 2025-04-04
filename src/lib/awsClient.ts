@@ -30,7 +30,7 @@ export const COLLECTION_ID = getEnvVar('VITE_AWS_COLLECTION_ID', 'shmong-faces')
 export const FACE_MATCH_THRESHOLD = 80; // Minimum confidence score for face matches
 
 // Cognito configuration
-export const COGNITO_USER_POOL_ID = getEnvVar('VITE_COGNITO_USER_POOL_ID');
+export const COGNITO_USER_POOL_ID = getEnvVar('VITE_COGNITO_USER_POOL_ID', 'us-east-1_wXi7yGqKw');
 export const COGNITO_CLIENT_ID = getEnvVar('VITE_COGNITO_CLIENT_ID');
 export const COGNITO_IDENTITY_POOL_ID = getEnvVar('VITE_COGNITO_IDENTITY_POOL_ID');
 

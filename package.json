@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "start": "vite",
     "clean-start": "node scripts/kill-node.js && npm run dev",
+    "increment-build": "node scripts/increment-build.js",
+    "prebuild": "npm run increment-build",
     "build": "vite build --config vite.config.js",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -31,12 +34,14 @@
     "@radix-ui/react-slot": "^1.1.2",
     "@radix-ui/react-tooltip": "^1.1.8",
     "@react-google-maps/api": "^2.20.6",
+    "amazon-cognito-identity-js": "6.3.15",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.0",
     "cross-fetch": "^4.0.0",
     "dotenv": "16.4.7",
     "framer-motion": "^11.0.3",
     "lucide-react": "^0.323.0",
+    "node-fetch": "2.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
@@ -65,4 +70,4 @@
     "typescript": "^5.3.3",
     "vite": "5.1.4"
   }
-}
+} 

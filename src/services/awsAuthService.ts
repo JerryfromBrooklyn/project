@@ -10,10 +10,15 @@ import {
   AdminDeleteUserCommand,
   GetUserCommand,
   ListUserPoolsCommand,
-  AuthFlowType
+  AuthFlowType,
+  ResendConfirmationCodeCommand,
+  AdminConfirmSignUpCommand
 } from '@aws-sdk/client-cognito-identity-provider';
 import { cognitoClient, COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, AWS_REGION } from '../lib/awsClient';
 import { createUserRecord } from './database-utils';
+
+// Flag to bypass email verification for testing
+export const BYPASS_EMAIL_VERIFICATION = true;
 
 // Define user interface to match the previous Supabase User object shape
 export interface User {
@@ -167,59 +172,18 @@ export const signUp = async (email: string, password: string, userData: Record<s
   console.log('[AUTH] User data provided:', JSON.stringify(userData, null, 2));
   
   try {
-    // Check for empty credentials first, before even trying connectivity test
-    const accessKeyAvailable = !!(process.env.VITE_AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID);
-    const secretKeyAvailable = !!(process.env.VITE_AWS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY);
-    
-    if (!accessKeyAvailable || !secretKeyAvailable) {
-      console.error('[AUTH] AWS credentials are missing - skipping connectivity test and proceeding to immediate failure');
-      throw new Error('AWS credentials are missing. Please add valid AWS credentials to your environment variables.');
+    // Basic validation
+    if (!email || !password) {
+      throw new Error('Email and password are required');
     }
-    
+
+    // Check for empty credentials first
     if (!COGNITO_CLIENT_ID || !COGNITO_USER_POOL_ID) {
-      console.error('[AUTH] Cognito configuration is missing - skipping connectivity test and proceeding to immediate failure');
-      throw new Error('Cognito configuration is missing. Please add valid Cognito Client ID and User Pool ID to your environment variables.');
+      console.error('[AUTH] Cognito configuration is missing');
+      throw new Error('Cognito configuration is missing. Please check your environment variables.');
     }
     
-    console.log('[AUTH] AWS Region:', AWS_REGION);
-    console.log('[AUTH] Cognito User Pool ID:', COGNITO_USER_POOL_ID);
-    console.log('[AUTH] Cognito Client ID:', COGNITO_CLIENT_ID);
-    
-    // First perform a simple browser connectivity test to cognito endpoint
-    try {
-      console.log('[AUTH] Performing browser connectivity test to Cognito endpoint...');
-      const cognitoEndpoint = `https://cognito-idp.${AWS_REGION}.amazonaws.com/ping`;
-      
-      // Use fetch with a short timeout to test connectivity
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      console.log('[AUTH] Trying to reach:', cognitoEndpoint);
-      
-      try {
-        const response = await fetch(cognitoEndpoint, { 
-          method: 'GET',
-          mode: 'no-cors', // This allows us to at least attempt the connection even if we can't read the response
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        console.log('[AUTH] Connectivity test succeeded - received response');
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        console.error('[AUTH] Connectivity test failed:', fetchError);
-        if (fetchError.name === 'AbortError') {
-          console.error('[AUTH] Connection timed out after 5 seconds');
-        }
-        throw new Error(`Network connectivity test failed: ${fetchError.message}`);
-      }
-    } catch (networkTestError) {
-      console.error('[AUTH] Browser network test error:', networkTestError);
-      // Continue anyway, but log the error
-    }
-    
-    // Skip AWS SDK connectivity test and proceed directly with signup
-    console.log('[AUTH] Skipping AWS SDK connectivity test and proceeding directly with signup');
-    
+    // Prepare user attributes for Cognito
     console.log('[AUTH] Preparing user attributes');
     const userAttributes = [
       { Name: 'email', Value: email },
@@ -237,8 +201,6 @@ export const signUp = async (email: string, password: string, userData: Record<s
     }
     
     // Create the signup command
-    console.log('[AUTH] Preparing SignUpCommand with attributes:', JSON.stringify(userAttributes, null, 2));
-    
     const command = new SignUpCommand({
       ClientId: COGNITO_CLIENT_ID,
       Username: email,
@@ -248,27 +210,14 @@ export const signUp = async (email: string, password: string, userData: Record<s
     
     console.log('[AUTH] Sending SignUpCommand to Cognito');
     
-    // Add timing for debugging
-    const startTime = new Date().getTime();
+    const response = await cognitoClient.send(command);
     
-    try {
-      // Direct AWS SDK call without Promise.race to see if it's timing out
-      console.log('[AUTH] Executing SignUpCommand directly...');
-      const response = await cognitoClient.send(command);
-      
-      const endTime = new Date().getTime();
-      
-      console.log(`[AUTH] SignUpCommand completed in ${endTime - startTime}ms`);
-      console.log('[AUTH] SignUp response:', JSON.stringify(response, null, 2));
-      
-      if (!response.UserSub) {
-        console.error('[AUTH] No UserSub returned from Cognito');
-        throw new Error('User registration failed - No user ID returned');
-      }
-      
-      console.log('[AUTH] User successfully registered with Cognito. UserSub:', response.UserSub);
-      
-      const user: User = {
+    console.log('[AUTH] AWS SDK method successful!');
+    console.log('[AUTH] Response:', JSON.stringify(response, null, 2));
+    
+    // If successful, create the user and return
+    if (response.UserSub) {
+      const user = {
         id: response.UserSub,
         email,
         full_name: userData.full_name,
@@ -277,10 +226,31 @@ export const signUp = async (email: string, password: string, userData: Record<s
         updated_at: new Date().toISOString()
       };
       
-      console.log('[AUTH] Creating user record in DynamoDB (simplified)');
+      // Create user in DynamoDB
+      try {
+        await createUserRecord(user);
+        console.log('[AUTH] User record created in DynamoDB');
+      } catch (dbErr) {
+        console.error('[AUTH] DynamoDB error (non-critical):', dbErr);
+      }
       
-      // Skip DynamoDB for now to simplify debugging - just return success
-      console.log('[AUTH] Skipping DynamoDB user record creation for debugging');
+      // Auto-confirm user if bypass flag is enabled
+      if (BYPASS_EMAIL_VERIFICATION && !response.UserConfirmed) {
+        try {
+          console.log('[AUTH] Bypassing email verification - auto-confirming user');
+          const confirmCommand = new AdminConfirmSignUpCommand({
+            UserPoolId: COGNITO_USER_POOL_ID,
+            Username: email
+          });
+          await cognitoClient.send(confirmCommand);
+          console.log('[AUTH] User auto-confirmed successfully');
+          // Override the UserConfirmed flag
+          response.UserConfirmed = true;
+        } catch (confirmErr) {
+          console.error('[AUTH] Error auto-confirming user:', confirmErr);
+          // Continue even if this fails - the user is still created
+        }
+      }
       
       return { 
         data: { 
@@ -289,61 +259,8 @@ export const signUp = async (email: string, password: string, userData: Record<s
         }, 
         error: null 
       };
-    } catch (error) {
-      console.error('[AUTH] Sign-up error during Cognito API call:', error);
-      
-      // Enhanced error logging
-      if (error instanceof Error) {
-        console.error('[AUTH] Error name:', error.name);
-        console.error('[AUTH] Error message:', error.message);
-        console.error('[AUTH] Error stack:', error.stack);
-      }
-      
-      // AWS specific error details
-      if ((error as any).$metadata) {
-        console.error('[AUTH] AWS error metadata:', JSON.stringify((error as any).$metadata, null, 2));
-      }
-      
-      // Check for network or CORS-related issues
-      if (error instanceof Error) {
-        const errorMsg = error.message.toLowerCase();
-        if (errorMsg.includes('network') || 
-            errorMsg.includes('cors') || 
-            errorMsg.includes('not allowed by access-control-allow-origin') ||
-            errorMsg.includes('blocked') ||
-            errorMsg.includes('access-control')) {
-          console.error('[AUTH] Possible CORS or network issue detected');
-          return { 
-            data: { user: null, userConfirmed: false },
-            error: new Error('Network connection to authentication service blocked. This might be due to CORS policies, network settings, or security software.')
-          };
-        }
-      }
-      
-      // Try to get more information about the AWS environment
-      try {
-        console.log('[AUTH] Checking AWS configuration...');
-        console.log('[AUTH] AWS Region:', process.env.VITE_AWS_REGION || process.env.AWS_REGION || 'Not set');
-        console.log('[AUTH] Cognito User Pool ID:', COGNITO_USER_POOL_ID || 'Not set');
-        console.log('[AUTH] Cognito Client ID:', COGNITO_CLIENT_ID || 'Not set');
-        
-        // Check if credentials are available (don't log the actual values)
-        const accessKeyAvailable = !!(process.env.VITE_AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID);
-        const secretKeyAvailable = !!(process.env.VITE_AWS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY);
-        
-        console.log('[AUTH] AWS Access Key available:', accessKeyAvailable);
-        console.log('[AUTH] AWS Secret Key available:', secretKeyAvailable);
-      } catch (configError) {
-        console.error('[AUTH] Error checking AWS configuration:', configError);
-      }
-      
-      return { 
-        data: { 
-          user: null, 
-          userConfirmed: false 
-        }, 
-        error 
-      };
+    } else {
+      throw new Error('Failed to create user account');
     }
   } catch (error) {
     console.error('[AUTH] Sign-up error:', error);
@@ -352,53 +269,30 @@ export const signUp = async (email: string, password: string, userData: Record<s
     if (error instanceof Error) {
       console.error('[AUTH] Error name:', error.name);
       console.error('[AUTH] Error message:', error.message);
-      console.error('[AUTH] Error stack:', error.stack);
     }
     
-    // AWS specific error details
+    // AWS specific error details if available
     if ((error as any).$metadata) {
       console.error('[AUTH] AWS error metadata:', JSON.stringify((error as any).$metadata, null, 2));
     }
     
-    // Check for network or CORS-related issues
+    // Check for common Cognito errors and provide user-friendly messages
+    let finalError = error;
     if (error instanceof Error) {
-      const errorMsg = error.message.toLowerCase();
-      if (errorMsg.includes('network') || 
-          errorMsg.includes('cors') || 
-          errorMsg.includes('not allowed by access-control-allow-origin') ||
-          errorMsg.includes('blocked') ||
-          errorMsg.includes('access-control')) {
-        console.error('[AUTH] Possible CORS or network issue detected');
-        return { 
-          data: { user: null, userConfirmed: false },
-          error: new Error('Network connection to authentication service blocked. This might be due to CORS policies, network settings, or security software.')
-        };
+      if (error.name === 'UsernameExistsException' || error.message.includes('exists')) {
+        finalError = new Error('An account with this email already exists.');
+      } else if (error.name === 'InvalidPasswordException' || error.message.includes('password')) {
+        finalError = new Error('Password does not meet requirements. It must be at least 8 characters long and contain uppercase, lowercase, numbers, and special characters.');
       }
     }
     
-    // Try to get more information about the AWS environment
-    try {
-      console.log('[AUTH] Checking AWS configuration...');
-      console.log('[AUTH] AWS Region:', process.env.VITE_AWS_REGION || process.env.AWS_REGION || 'Not set');
-      console.log('[AUTH] Cognito User Pool ID:', COGNITO_USER_POOL_ID || 'Not set');
-      console.log('[AUTH] Cognito Client ID:', COGNITO_CLIENT_ID || 'Not set');
-      
-      // Check if credentials are available (don't log the actual values)
-      const accessKeyAvailable = !!(process.env.VITE_AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID);
-      const secretKeyAvailable = !!(process.env.VITE_AWS_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY);
-      
-      console.log('[AUTH] AWS Access Key available:', accessKeyAvailable);
-      console.log('[AUTH] AWS Secret Key available:', secretKeyAvailable);
-    } catch (configError) {
-      console.error('[AUTH] Error checking AWS configuration:', configError);
-    }
-    
+    console.error('[AUTH] Returning error from signup process');
     return { 
       data: { 
         user: null, 
         userConfirmed: false 
       }, 
-      error 
+      error: finalError
     };
   }
 };
@@ -417,6 +311,26 @@ export const confirmSignUp = async (email: string, code: string) => {
     return { data: { success: true }, error: null };
   } catch (error) {
     console.error('Confirm sign up error:', error);
+    return { data: { success: false }, error };
+  }
+};
+
+// Resend confirmation code
+export const resendConfirmationCode = async (email: string) => {
+  try {
+    // Import dynamically to avoid issues with circular dependencies
+    const { ResendConfirmationCodeCommand } = await import('@aws-sdk/client-cognito-identity-provider');
+    
+    const command = new ResendConfirmationCodeCommand({
+      ClientId: COGNITO_CLIENT_ID,
+      Username: email
+    });
+    
+    await cognitoClient.send(command);
+    
+    return { data: { success: true }, error: null };
+  } catch (error) {
+    console.error('Resend confirmation code error:', error);
     return { data: { success: false }, error };
   }
 };
@@ -556,88 +470,13 @@ export const testAwsConnectivity = async () => {
   }
 };
 
-// Add a fallback direct API implementation for debugging
-export const signUpWithFetch = async (email: string, password: string, userData: Record<string, string> = {}) => {
-  console.log('[AUTH] Starting sign-up with direct fetch API');
-  
-  try {
-    const cognitoEndpoint = `https://cognito-idp.${AWS_REGION}.amazonaws.com/`;
-    
-    console.log('[AUTH] Using endpoint:', cognitoEndpoint);
-    console.log('[AUTH] Using client ID:', COGNITO_CLIENT_ID);
-    
-    const userAttributes = [];
-    if (userData.full_name) {
-      userAttributes.push({ Name: 'name', Value: userData.full_name });
-    }
-    if (userData.role) {
-      userAttributes.push({ Name: 'custom:role', Value: userData.role });
-    }
-    userAttributes.push({ Name: 'email', Value: email });
-    
-    const payload = {
-      ClientId: COGNITO_CLIENT_ID,
-      Username: email,
-      Password: password,
-      UserAttributes: userAttributes
-    };
-    
-    console.log('[AUTH] Preparing fetch request...');
-    
-    // Create AWS sig4 headers (simplified for debugging)
-    const headers = {
-      'Content-Type': 'application/x-amz-json-1.1',
-      'X-Amz-Target': 'AWSCognitoIdentityProviderService.SignUp'
-    };
-    
-    console.log('[AUTH] Sending direct fetch request to Cognito...');
-    
-    try {
-      const response = await fetch(cognitoEndpoint, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify(payload)
-      });
-      
-      console.log('[AUTH] Fetch response status:', response.status);
-      const responseData = await response.json();
-      console.log('[AUTH] Fetch response data:', JSON.stringify(responseData, null, 2));
-      
-      return {
-        data: {
-          user: {
-            id: responseData.UserSub || 'unknown',
-            email: email,
-            full_name: userData.full_name,
-            role: userData.role
-          },
-          userConfirmed: responseData.UserConfirmed || false
-        },
-        error: null
-      };
-    } catch (fetchError) {
-      console.error('[AUTH] Fetch error:', fetchError);
-      return {
-        data: { user: null, userConfirmed: false },
-        error: fetchError instanceof Error ? fetchError : new Error('Fetch error')
-      };
-    }
-  } catch (error) {
-    console.error('[AUTH] Error in signUpWithFetch:', error);
-    return {
-      data: { user: null, userConfirmed: false },
-      error: error instanceof Error ? error : new Error('Unknown error')
-    };
-  }
-};
-
 export default {
   getSession,
   getCurrentUser,
   signInWithPassword,
   signUp,
-  signUpWithFetch,
   confirmSignUp,
+  resendConfirmationCode,
   signOut,
   onAuthStateChange
 }; 

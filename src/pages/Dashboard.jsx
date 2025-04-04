@@ -1,9 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Camera, Image, Upload, Users, Eye } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 
 export default function Gallery() {
+    console.log('[DASHBOARD] Dashboard component is rendering');
     const [activeTab, setActiveTab] = useState("home");
+    const [isTestMode, setIsTestMode] = useState(false);
+
+    useEffect(() => {
+        console.log('[DASHBOARD] Dashboard component mounted');
+        
+        // Check if we're in testing mode
+        const urlParams = new URLSearchParams(window.location.search);
+        const isInTestMode = urlParams.get('test') === 'true' || localStorage.getItem('TESTING_MODE') === 'true';
+        setIsTestMode(isInTestMode);
+        
+        if (isInTestMode) {
+            console.log('[DASHBOARD] Running in test mode - authentication bypassed');
+        }
+        
+        return () => {
+            console.log('[DASHBOARD] Dashboard component unmounted');
+        };
+    }, []);
 
     const tabs = [
         { id: "home", name: "Home", icon: <Camera className="w-4 h-4" /> },
@@ -25,15 +44,14 @@ export default function Gallery() {
                 return <div>Discover events and tagged photos.</div>;
             case "face-search":
                 return (
-                    <div className="bg-white rounded-apple-2xl shadow-apple p-8 border border-apple-gray-100">
-                        <h2 className="text-xl font-semibold text-apple-gray-900 flex items-center">
-                            <Eye className="w-5 h-5 mr-2 text-apple-blue-500" />
+                    <div className="bg-white rounded-lg shadow p-8 border border-gray-100">
+                        <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                            <Eye className="w-5 h-5 mr-2 text-blue-500" />
                             Face Search
                         </h2>
-                        <p className="text-apple-gray-600 mb-6 border-l-4 border-apple-blue-500 pl-4 py-2 bg-apple-blue-50 rounded-r-apple">
+                        <p className="text-gray-600 mb-6 border-l-4 border-blue-500 pl-4 py-2 bg-blue-50 rounded-r">
                             Search for faces in uploaded images.
                         </p>
-                        {/* Face search functionality goes here */}
                     </div>
                 );
             default:
@@ -43,14 +61,27 @@ export default function Gallery() {
 
     return (
         <div className="p-6">
+            <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+            
+            {isTestMode && (
+                <div className="bg-purple-100 p-4 mb-6 rounded-lg">
+                    <p className="text-purple-800">Running in test mode - Authentication has been bypassed</p>
+                </div>
+            )}
+            
+            <div className="bg-green-100 p-4 mb-6 rounded-lg">
+                <p className="text-green-800">You have successfully logged in!</p>
+            </div>
+            
             <div className="flex space-x-4 mb-4">
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`px-4 py-2 rounded-lg ${activeTab === tab.id ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-800"}`}
+                        className={`px-4 py-2 rounded-lg flex items-center ${activeTab === tab.id ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-800"}`}
                     >
-                        {tab.icon} {tab.name}
+                        <span className="mr-2">{tab.icon}</span> 
+                        <span>{tab.name}</span>
                     </button>
                 ))}
             </div>

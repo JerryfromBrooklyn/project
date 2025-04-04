@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/hooks/useAuth';
+import { fullVersion } from '../../utils/version';
 
 /**
  * Header component with navigation and user actions
@@ -11,9 +12,12 @@ const Header = () => {
   return (
     <header className="bg-white border-b border-gray-200">
       <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-        <Link to="/" className="text-xl font-bold text-blue-600">
-          Photo App
-        </Link>
+        <div className="flex flex-col">
+          <Link to="/" className="text-xl font-bold text-blue-600">
+            Photo App
+          </Link>
+          <span className="text-xs text-gray-500 mt-1">v{fullVersion}</span>
+        </div>
         
         <nav className="hidden md:flex space-x-4">
           <Link to="/" className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md">

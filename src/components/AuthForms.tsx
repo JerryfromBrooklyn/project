@@ -164,6 +164,15 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
     }
   };
 
+  // Add a function to forcibly enable mock mode
+  const enableMockAuthMode = () => {
+    localStorage.setItem('MOCK_AUTH_MODE', 'true');
+    console.log('MOCK AUTH MODE ENABLED via button click');
+    alert('Offline mode enabled. Your data will be stored locally in the browser.');
+    // Force a page reload to apply the change
+    window.location.reload();
+  };
+
   return (
     <div className={cn(
       "w-full max-w-md mx-auto", 
@@ -495,6 +504,22 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                 >
                   Back to options
                 </button>
+
+                {/* Offline mode option even if there's no error */}
+                {view === 'signup' && (
+                  <div className="text-center mt-4 text-sm text-apple-gray-500">
+                    Having connectivity issues? 
+                    <button 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        enableMockAuthMode();
+                      }}
+                      className="ml-1 text-apple-blue-500 hover:text-apple-blue-700"
+                    >
+                      Use Offline Mode
+                    </button>
+                  </div>
+                )}
               </div>
             </motion.form>
           )}

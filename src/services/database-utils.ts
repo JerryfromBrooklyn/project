@@ -22,17 +22,28 @@ interface UserRecord {
  * Create a user record in DynamoDB with extensive error logging
  */
 export const createUserRecord = async (user: UserRecord) => {
-  console.log('[DATABASE] Creating user record with data:', JSON.stringify(user, null, 2));
+  console.log('[DATABASE] 📝 Creating user record with data:', JSON.stringify(user, null, 2));
   
   try {
+    // Perform connectivity test to DynamoDB first
+    console.log('[DATABASE] Testing DynamoDB connectivity before writing...');
+    try {
+      const tableCheck = await dynamoDBClient.send(new ListTablesCommand({}));
+      console.log(`[DATABASE] Successfully connected to DynamoDB! Available tables:`, 
+        JSON.stringify(tableCheck.TableNames || [], null, 2));
+    } catch (connError) {
+      console.error('[DATABASE] ❌ Failed to connect to DynamoDB:', connError);
+      return { success: false, error: 'DynamoDB connection failed', details: connError };
+    }
+    
     // Check if the aws configuration is valid
     if (!dynamoDBClient) {
-      console.error('[DATABASE] DynamoDB client is not initialized');
+      console.error('[DATABASE] ❌ DynamoDB client is not initialized');
       return { success: false, error: 'DynamoDB client is not initialized' };
     }
     
     if (!USERS_TABLE) {
-      console.error('[DATABASE] USERS_TABLE name is not defined');
+      console.error('[DATABASE] ❌ USERS_TABLE name is not defined');
       return { success: false, error: 'USERS_TABLE name is not defined' };
     }
     
@@ -52,11 +63,11 @@ export const createUserRecord = async (user: UserRecord) => {
       const existingUser = await dynamoDBClient.send(new GetItemCommand(checkParams));
       
       if (existingUser.Item) {
-        console.log('[DATABASE] User already exists:', JSON.stringify(existingUser.Item, null, 2));
+        console.log('[DATABASE] ℹ️ User already exists:', JSON.stringify(existingUser.Item, null, 2));
         return { success: true, data: unmarshallItem(existingUser.Item) };
       }
     } catch (checkError) {
-      console.error('[DATABASE] Error checking for existing user:', checkError);
+      console.error('[DATABASE] ⚠️ Error checking for existing user:', checkError);
       // Continue to create user anyway
     }
     
@@ -73,15 +84,20 @@ export const createUserRecord = async (user: UserRecord) => {
 
     console.log('[DATABASE] Executing PutItemCommand with params:', JSON.stringify(params, null, 2));
     
+    // Add timing for database operation
+    const startTime = new Date().getTime();
+    
     // Send the command to DynamoDB
     const result = await dynamoDBClient.send(new PutItemCommand(params));
     
-    console.log('[DATABASE] User record created successfully:', JSON.stringify(result, null, 2));
+    const endTime = new Date().getTime();
+    console.log(`[DATABASE] ✅ User record created successfully in ${endTime - startTime}ms`);
+    console.log('[DATABASE] DynamoDB response:', JSON.stringify(result, null, 2));
     
     return { success: true, data: user };
   } catch (error) {
     // Detailed error logging
-    console.error('[DATABASE] Failed to create user record:', error);
+    console.error('[DATABASE] ❌ Failed to create user record:', error);
     
     if (error instanceof Error) {
       console.error('[DATABASE] Error name:', error.name);
@@ -92,16 +108,47 @@ export const createUserRecord = async (user: UserRecord) => {
     // Check for specific AWS errors
     if ((error as any).$metadata) {
       console.error('[DATABASE] AWS Metadata:', JSON.stringify((error as any).$metadata, null, 2));
+      console.error('[DATABASE] HTTP Status Code:', (error as any).$metadata.httpStatusCode);
+      
+      if ((error as any).$metadata.httpStatusCode === 403) {
+        console.error('[DATABASE] ⚠️ PERMISSION DENIED! Your AWS credentials lack permission to write to DynamoDB.');
+      }
     }
+    
+    // Classification of error types for easier diagnosis
+    let errorCategory = 'Unknown';
+    let errorDetails = '';
+    
+    if (error instanceof Error) {
+      if (error.message.includes('network')) {
+        errorCategory = 'Network';
+        errorDetails = 'Network connectivity issue - check internet connection';
+      } else if (error.message.includes('credentials')) {
+        errorCategory = 'Authentication';
+        errorDetails = 'Invalid AWS credentials or missing permissions';
+      } else if (error.message.includes('validation')) {
+        errorCategory = 'Validation';
+        errorDetails = 'Invalid data format for DynamoDB';
+      } else if (error.message.includes('ResourceNotFoundException')) {
+        errorCategory = 'Resource';
+        errorDetails = `Table ${USERS_TABLE} doesn't exist`;
+      }
+    }
+    
+    console.error(`[DATABASE] Error category: ${errorCategory}`);
+    if (errorDetails) console.error(`[DATABASE] Error details: ${errorDetails}`);
     
     // Additional troubleshooting info
     try {
       console.log('[DATABASE] Checking DynamoDB connection...');
-      const tables = await dynamoDBClient.send({
-        // @ts-ignore - this is a valid command but TypeScript may not recognize it
-        TableNames: []
-      });
+      const tables = await dynamoDBClient.send(new ListTablesCommand({}));
       console.log('[DATABASE] DynamoDB connection check result:', JSON.stringify(tables, null, 2));
+      
+      if (tables.TableNames?.includes(USERS_TABLE)) {
+        console.log(`[DATABASE] ✅ Table ${USERS_TABLE} exists!`);
+      } else {
+        console.error(`[DATABASE] ❌ Table ${USERS_TABLE} NOT FOUND in available tables`);
+      }
     } catch (connectionError) {
       console.error('[DATABASE] Failed to check DynamoDB connection:', connectionError);
     }
@@ -109,6 +156,8 @@ export const createUserRecord = async (user: UserRecord) => {
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown database error',
+      errorCategory,
+      errorDetails,
       details: error 
     };
   }

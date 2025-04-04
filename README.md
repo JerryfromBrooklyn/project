@@ -1,87 +1,56 @@
-# Face Matching App
+# Auth Signup Lambda Function
 
-This application performs face recognition using AWS Rekognition and Supabase.
+This Lambda function handles user signup and automatic confirmation for AWS Cognito.
 
 ## Features
 
-- Face registration and matching
-- Photo upload and management 
-- Multiple account linking to see all your photos across accounts
-- Debug tools for face collection management
+- Creates new Cognito users
+- Automatically confirms users (no verification email required)
+- Sets custom attributes (name, role)
+- Handles errors and returns proper responses
 
-## Setup
+## Deployment Instructions
 
-### Prerequisites
-
-- Node.js and npm
-- Supabase account
-- AWS Rekognition setup
-
-### Installation
-
-1. Clone the repository
-2. Install dependencies:
-   ```
-   npm install
-   ```
-3. Set up environment variables (see .env.example)
-4. Start the development server:
-   ```
-   npm run dev
-   ```
-
-## Supabase Migration
-
-The project uses Supabase migrations to manage the database schema. The migrations are located in the `supabase/migrations` directory.
-
-### Running Migrations
-
-To apply migrations to your local Supabase instance:
-
+1. Install dependencies:
 ```bash
-npx supabase migration up
+npm install
 ```
 
-To create a new migration:
-
+2. Create a deployment package:
 ```bash
-npx supabase migration new migration_name
+zip -r function.zip index.mjs package.json node_modules
 ```
 
-### Available Migrations
+3. Upload to AWS Lambda:
+- Go to AWS Lambda console
+- Create or update your function
+- Upload the `function.zip` file
 
-- `linked_accounts` - Creates the linked_accounts table and related functions
-- `debug_force_update_photo` - Adds a debug function to force update a photo with a user match
-- `function_exists` - Helper function to check if other functions exist
+4. Set environment variables in AWS Lambda:
+- `USER_POOL_ID`: Your Cognito User Pool ID
+- `CLIENT_ID`: Your Cognito App Client ID
 
-## Linked Accounts Feature
+5. Configure API Gateway:
+- Create a REST API
+- Create a POST method that triggers this Lambda
+- Enable CORS
+- Deploy the API
 
-The Linked Accounts feature allows users to link multiple accounts together. This is useful when a user has multiple accounts and wants to see all their photos in one place.
+## Testing
 
-### How to Use
+You can test this function directly in the AWS Lambda Console:
 
-1. Navigate to the Photos page
-2. Click on the "Link Accounts" button
-3. Generate a link code on your first account
-4. Log in to your second account
-5. Enter the link code to connect the accounts
-6. Photos matching your face from either account will now appear in both accounts
+1. Create a test event with the following JSON:
+```json
+{
+  "body": "{\"email\":\"test@example.com\",\"password\":\"Test1234!\",\"fullName\":\"Test User\",\"role\":\"attendee\"}"
+}
+```
 
-### Database Functions
+2. Run the test and check the output
 
-The following functions are available for the Linked Accounts feature:
+## Troubleshooting
 
-- `link_user_accounts(primary_user_id, secondary_user_id)` - Links two user accounts
-- `get_linked_accounts(user_id)` - Gets all linked accounts for a user
-- `unlink_user_account(user_id)` - Unlinks a user account
-
-## Debugging
-
-For debugging issues with photo matching, the following tools are available:
-
-- `debug_force_update_photo(photo_id, user_id)` - Forces a photo to be matched with a user
-- `function_exists(function_name)` - Checks if a function exists in the database
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. 
+- Make sure the Lambda role has permissions to call Cognito services
+- Check CloudWatch logs for detailed errors
+- Verify your Cognito Pool ID and Client ID are correct 

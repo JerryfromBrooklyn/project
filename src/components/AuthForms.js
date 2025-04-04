@@ -66,7 +66,6 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }) 
     };
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError(null);
         if (!validateForm()) {
             return;
         }
@@ -76,11 +75,24 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }) 
                 const { error } = await signIn(email, password);
                 if (error)
                     throw error;
+                // Sign in handles navigation automatically in AuthContext
             }
             else {
                 const { error } = await signUp(email, password, fullName, userType);
                 if (error)
                     throw error;
+                    
+                // Navigate to dashboard after successful signup
+                // First show a success message
+                setError(null);
+                alert('Account created successfully! You can now sign in.');
+                
+                // Switch to signin view
+                setView('signin');
+                setShowEmailForm(true);
+                
+                // Pre-fill the email field for convenience
+                // Password will need to be entered again for security
             }
         }
         catch (err) {
