@@ -17,7 +17,7 @@ const CLIENT_ID = '6dj7z4am73up31kt5qgdg22c68';
 
 // CORS headers to include in all responses
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': '*', // Allow all origins (or specify your S3 website URL)
   'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Requested-With,Accept',
   'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
   'Access-Control-Max-Age': '86400',

@@ -4,7 +4,7 @@
 const API_URL = 'https://1utzocuwp7.execute-api.us-east-1.amazonaws.com/default/signup';
 console.log('[LAMBDA-AUTH] Initialized with API URL:', API_URL);
 
-// Check if we're in a development environment
+// Check if we're in a development environment (localhost) or production (S3 website)
 const isDevelopment = window.location.hostname === 'localhost';
 
 // Sign up with email and password
