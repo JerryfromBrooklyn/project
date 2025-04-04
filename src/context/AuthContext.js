@@ -1,127 +1,175 @@
 import { jsx as _jsx } from "react/jsx-runtime";
-// src/context/AuthContext.tsx
-import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+// REMOVE Supabase import
+// import { supabase } from '../lib/supabaseClient';
+// IMPORT AWS Auth Service
+import awsAuthService from '../services/awsAuthService';
 import { useNavigate } from 'react-router-dom';
-const AuthContext = createContext(undefined);
+
+// REMOVE TypeScript Interface definition
+// interface AuthContextType {
+//   user: User | null;
+//   loading: boolean;
+//   signIn: (email: string, password: string) => Promise<{ data: { user: User | null }, error: any }>;
+//   signInWithGoogle: () => Promise<void>;
+//   signUp: (email: string, password: string, fullName: string, userType: string) => Promise<{ data: { user: User | null }, error: any }>;
+//   signOut: () => Promise<{ error: any }>;
+// }
+
+const AuthContext = createContext(undefined); // REMOVED <AuthContextType | undefined>
+
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState(null); // REMOVED <User | null>
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
+
     useEffect(() => {
-        // Check for active session on mount
-        const checkUser = async () => {
+        let unsubscribe /*: { unsubscribe: () => void } | null */ = null; // Removed type annotation
+
+        // Check for active session on mount using AWS Auth Service
+        const checkUserSession = async () => {
+            setLoading(true);
             try {
-                const { data } = await supabase.auth.getSession();
-                const currentUser = data.session?.user || null;
+                const { data, error } = await awsAuthService.getSession();
+                const currentUser = data?.session?.user || null;
                 setUser(currentUser);
-                setLoading(false);
-                if (currentUser) {
-                    navigate('/dashboard');
-                }
-                // Set up listener for auth changes
-                const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-                    const currentUser = session?.user || null;
-                    setUser(currentUser);
-                    if (currentUser) {
-                        navigate('/dashboard');
-                    }
+
+                // Set up listener for auth changes using AWS Auth Service
+                unsubscribe = awsAuthService.onAuthStateChange((currentUserUpdate) => {
+                    console.log('[AuthContext] AWS Auth state changed:', currentUserUpdate ? currentUserUpdate.id : 'null');
+                    setUser(currentUserUpdate);
+                    // Navigation based on auth state can be handled here or in ProtectedRoute/PublicRoute
+                    // if (!currentUserUpdate) {
+                    //    navigate('/');
+                    // }
                 });
-                return () => {
-                    authListener.subscription.unsubscribe();
-                };
-            }
-            catch (error) {
-                console.error('Error checking auth state:', error);
+
+            } catch (error) {
+                console.error('[AuthContext] Error checking AWS auth state:', error);
+                setUser(null); // Ensure user is null on error
+            } finally {
                 setLoading(false);
             }
         };
-        checkUser();
-    }, [navigate]);
-    const signIn = async (email, password) => {
-        try {
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
-            });
-            if (!error && data.user) {
-                navigate('/dashboard');
+
+        checkUserSession();
+
+        // Cleanup listener on unmount
+        return () => {
+            if (unsubscribe) {
+                console.log('[AuthContext] Unsubscribing from AWS auth changes.');
+                unsubscribe.unsubscribe();
             }
-            return { data: data.user, error };
-        }
-        catch (error) {
-            return { data: null, error: error };
-        }
-    };
-    const signInWithGoogle = async () => {
-        // Get the current domain from window.location
-        const domain = window.location.origin;
-        // Check if we're on localhost
-        const redirectTo = domain.includes('localhost')
-            ? 'https://eclectic-pasca-5d5fbb.netlify.app/dashboard' // Use Netlify URL for localhost
-            : `${domain}/dashboard`; // Use current domain for production
-        await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-                redirectTo,
-                queryParams: {
-                    access_type: 'offline',
-                    prompt: 'consent',
-                }
-            }
-        });
-    };
-    const signUp = async (email, password, fullName, userType) => {
+        };
+    }, []); // Run only once on mount
+
+    // Sign in using AWS Cognito
+    const signIn = useCallback(async (email /*: string*/, password /*: string*/) => { // Removed type annotations
+        setLoading(true);
         try {
-            console.log('Starting signup process...');
-            const { data, error } = await supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: {
-                        full_name: fullName,
-                        user_type: userType,
-                    },
-                },
-            });
+            const { data, error } = await awsAuthService.signInWithPassword(email, password);
             if (error) {
-                console.error('Signup error:', error);
-                return { data: null, error };
-            }
-            if (!data.user) {
-                console.error('No user data returned from signup');
-                return { data: null, error: new Error('No user data returned') };
-            }
-            console.log('User created successfully:', data.user.id);
-            // Create profile entry
-            const { error: profileError } = await supabase.from('users').insert({
-                id: data.user.id,
-                email: email,
+                 console.error('[AuthContext] AWS Sign in error:', error);
+                setUser(null);
+                // Return error for UI handling
+                 return { data: { user: null }, error };
+             }
+            // User state will be updated by the onAuthStateChange listener
+            console.log('[AuthContext] AWS Sign in successful, user state updated by listener.');
+            navigate('/dashboard'); // Navigate after successful sign-in
+             return { data: { user: data?.user || null }, error: null };
+        } catch (error) {
+            console.error('[AuthContext] Unexpected error during AWS sign in:', error);
+            setUser(null);
+            return { data: { user: null }, error };
+        } finally {
+            setLoading(false);
+        }
+    }, [navigate]);
+
+    // Google Sign in - Placeholder for Cognito Hosted UI / Amplify
+    const signInWithGoogle = useCallback(async () => {
+        console.warn('[AuthContext] signInWithGoogle is not implemented for standard AWS Cognito SDK.');
+        alert('Google Sign-In requires configuration with Cognito Hosted UI or AWS Amplify Auth.');
+        // Implementation would involve redirecting to Cognito Hosted UI
+        // Or using Amplify Auth.federatedSignIn({ provider: 'Google' })
+        return Promise.resolve(); // Return empty promise
+    }, []);
+
+    // Sign up using AWS Cognito
+    const signUp = useCallback(async (email /*: string*/, password /*: string*/, fullName /*: string*/, userType /*: string*/) => { // Removed type annotations
+        setLoading(true);
+        try {
+            console.log('[AuthContext] Starting AWS signup process...');
+            // AWS Auth Service's signUp handles both Cognito user creation
+            // and the DynamoDB user record creation (via createUserRecord)
+            const { data, error } = await awsAuthService.signUp(email, password, {
                 full_name: fullName,
-                role: userType,
+                role: userType, // Pass role as custom attribute
             });
-            if (profileError) {
-                console.error('Error creating user profile:', profileError);
-                // Delete the auth user if profile creation fails
-                await supabase.auth.admin.deleteUser(data.user.id);
-                return { data: null, error: profileError };
+
+            if (error) {
+                console.error('[AuthContext] AWS Signup error:', error);
+                return { data: { user: null }, error };
             }
-            console.log('User profile created successfully');
-            navigate('/dashboard');
-            return { data: data.user, error: null };
+
+            // REMOVE Supabase profile creation logic - handled by awsAuthService
+            // const { error: profileError } = await supabase.from('users').insert(...);
+            // if (profileError) { ... }
+
+            console.log('[AuthContext] AWS User signed up successfully (Cognito & DB record):', data?.user?.id);
+
+            // Redirect to verification page if needed, otherwise login
+            if (data && !data.userConfirmed) {
+                navigate(`/verify-email?email=${encodeURIComponent(email)}`);
+            } else {
+                // Should ideally not happen if verification is required, but handle just in case
+                 console.warn('[AuthContext] User already confirmed after signup? Redirecting to login.');
+                 navigate('/login');
+            }
+            return { data: { user: data?.user || null }, error: null };
+        } catch (error) {
+            console.error('[AuthContext] Unexpected error during AWS signup:', error);
+            return { data: { user: null }, error };
+        } finally {
+            setLoading(false);
         }
-        catch (error) {
-            console.error('Unexpected error during signup:', error);
-            return { data: null, error: error };
+    }, [navigate]);
+
+    // Sign out using AWS Cognito
+    const signOut = useCallback(async () => {
+        setLoading(true);
+        try {
+            await awsAuthService.signOut();
+            // User state update is handled by the listener
+            console.log('[AuthContext] AWS Sign out successful, user state updated by listener.');
+            navigate('/'); // Navigate to landing page after sign out
+            return { error: null };
+        } catch(error) {
+            console.error('[AuthContext] AWS Sign out error:', error);
+            // Still navigate, but return the error
+            navigate('/');
+            return { error };
+        } finally {
+            setLoading(false);
         }
+    }, [navigate]);
+
+    // Provide context value
+    const value = { // REMOVED : AuthContextType
+        user,
+        loading,
+        signIn,
+        signInWithGoogle,
+        signUp,
+        signOut
     };
-    const signOut = async () => {
-        await supabase.auth.signOut();
-        navigate('/');
-    };
-    return (_jsx(AuthContext.Provider, { value: { user, loading, signIn, signInWithGoogle, signUp, signOut }, children: children }));
+
+    return (_jsx(AuthContext.Provider, { value: value, children: children }));
 }
-export const useAuth = () => {
+
+// Custom hook to use the Auth context
+export const useAuth = () => { // REMOVED : AuthContextType
     const context = useContext(AuthContext);
     if (context === undefined) {
         throw new Error('useAuth must be used within an AuthProvider');

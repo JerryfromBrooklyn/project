@@ -169,8 +169,22 @@ window.debugFaceMatching = {
         .eq('id', photoId);
         
       if (updateError) {
-        console.error('❌ Error updating photo:', updateError.message);
-        return false;
+        console.error('❌ Error updating photos table:', updateError.message);
+        console.log('🔄 Trying simple_photos table instead...');
+        
+        // Try simple_photos table as a fallback
+        const { error: simpleUpdateError } = await window.supabase
+          .from('simple_photos')
+          .update({ matched_users: updatedMatches })
+          .eq('id', photoId);
+          
+        if (simpleUpdateError) {
+          console.error('❌ Error updating simple_photos table:', simpleUpdateError.message);
+          return false;
+        }
+        
+        console.log('✅ Successfully added user match to simple_photos table');
+        return true;
       }
       
       console.log('✅ Successfully added user match to photo');

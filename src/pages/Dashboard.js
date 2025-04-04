@@ -33,9 +33,11 @@ import {
 } from "lucide-react";
 import { cn } from "../utils/cn";
 import { FaceRegistration } from "../components/FaceRegistration";
-import { PhotoManager } from "../components/PhotoManager";
-import AdminTools from "../components/AdminTools.jsx";
-import { supabase } from "../lib/supabaseClient";
+import { PhotoManager } from "../components/PhotoManager.tsx";
+import {
+  getFaceData,
+  getUserById,
+} from "../services/database-utils.js";
 
 export const Dashboard = () => {
   const { user, signOut } = useAuth();
@@ -48,119 +50,60 @@ export const Dashboard = () => {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const fetchFaceData = async () => {
-      if (!user) return;
-      try {
-        const { data, error } = await supabase
-          .from("face_data")
-          .select("face_data")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(); // Use maybeSingle instead of single
+    const fetchUserData = async () => {
+      if (!user || !user.id) return;
 
-        if (error) {
-          // Only throw if it's not a "no rows returned" error
-          if (
-            !error.message.includes(
-              "JSON object requested, multiple (or no) rows returned",
-            )
-          ) {
-            throw error;
-          }
-          // If no rows, just set the state accordingly
-          setFaceRegistered(false);
-          setFaceImageUrl(null);
-          setFaceAttributes(null);
-          return;
+      try {
+        console.log('[Dashboard] Fetching user data for:', user.id);
+        const userResult = await getUserById(user.id);
+        if (userResult.success && userResult.data) {
+          setIsAdmin(userResult.data.role === 'admin');
+        } else {
+          console.warn('[Dashboard] Could not fetch user profile data:', userResult.error);
+          setIsAdmin(false);
         }
 
-        if (data) {
-          setFaceRegistered(true);
-          setFaceAttributes(data.face_data.attributes || null);
-          const {
-            data: { publicUrl },
-          } = supabase.storage
-            .from("face-data")
-            .getPublicUrl(data.face_data.image_path);
-          setFaceImageUrl(publicUrl);
+        console.log('[Dashboard] Fetching face data for:', user.id);
+        const faceResult = await getFaceData(user.id);
+        if (faceResult.success && faceResult.data) {
+            setFaceRegistered(true);
+            setFaceAttributes(faceResult.data.face_detail || null);
+            setFaceImageUrl(faceResult.data.public_url || null);
+            console.log('[Dashboard] Face data found:', faceResult.data);
         } else {
-          // No data case
+          console.log('[Dashboard] No face data found for user or error:', faceResult.error);
           setFaceRegistered(false);
           setFaceImageUrl(null);
           setFaceAttributes(null);
         }
       } catch (err) {
-        console.error("Error fetching face data:", err);
-        // Set default state on error
+        console.error("[Dashboard] Error fetching user/face data:", err);
         setFaceRegistered(false);
         setFaceImageUrl(null);
         setFaceAttributes(null);
+        setIsAdmin(false);
       }
     };
 
-    fetchFaceData();
-  }, [user]);
-
-  // Check if user is admin
-  useEffect(() => {
-    if (!user) return;
-
-    const checkAdminStatus = async () => {
-      try {
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .single();
-
-        if (!profileError && profile && profile.role === "admin") {
-          setIsAdmin(true);
-          return;
-        }
-
-        // Check in admins table as fallback
-        const { data: adminData, error: adminError } = await supabase
-          .from("admins")
-          .select("id")
-          .eq("id", user.id)
-          .single();
-
-        if (!adminError && adminData) {
-          setIsAdmin(true);
-        }
-      } catch (err) {
-        console.error("Error checking admin status:", err);
-      }
-    };
-
-    checkAdminStatus();
+    fetchUserData();
   }, [user]);
 
   const handleRegistrationSuccess = () => {
     setFaceRegistered(true);
     setShowRegistrationModal(false);
-    // Refetch face data to get the new image URL and attributes
-    if (user) {
-      supabase
-        .from("face_data")
-        .select("face_data")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle() // Use maybeSingle here too
-        .then(({ data, error }) => {
-          if (!error && data) {
-            setFaceAttributes(data.face_data.attributes || null);
-            const {
-              data: { publicUrl },
-            } = supabase.storage
-              .from("face-data")
-              .getPublicUrl(data.face_data.image_path);
-            setFaceImageUrl(publicUrl);
+    console.log('[Dashboard] Face registered, attempting to refetch user data...');
+    setTimeout(() => {
+        const fetchUserDataAgain = async () => {
+          if (!user || !user.id) return;
+          const faceResult = await getFaceData(user.id);
+          if (faceResult.success && faceResult.data) {
+             setFaceRegistered(true);
+             setFaceAttributes(faceResult.data.face_detail || null);
+             setFaceImageUrl(faceResult.data.public_url || null);
           }
-        });
-    }
+        }
+        fetchUserDataAgain();
+    }, 1000);
   };
 
   const renderFaceAttributes = () => {
@@ -171,123 +114,82 @@ export const Dashboard = () => {
         children: _jsx("p", {
           className: "text-apple-gray-600",
           children:
-            "Face analysis data is not available for this image. Try re-registering your face to get detailed insights.",
+            "Face analysis data is not available. This might be loading or registration didn't capture details.",
         }),
       });
     }
 
-    // Log the face attributes to help debug
     console.log(
-      "Face attributes data:",
+      "[Dashboard] Rendering Face attributes data:",
       JSON.stringify(faceAttributes, null, 2),
     );
 
-    // Determine the primary emotion (with the highest confidence)
-    // Handle both PascalCase (Emotions) and camelCase (emotions) formats
-    const emotions = faceAttributes.Emotions || faceAttributes.emotions || [];
+    const emotions = faceAttributes.Emotions || [];
     const primaryEmotion =
       emotions.length > 0
         ? emotions.reduce(
             (prev, curr) => {
-              const prevConf = prev.Confidence || prev.confidence || 0;
-              const currConf = curr.Confidence || curr.confidence || 0;
-              return prevConf > currConf ? prev : curr;
+              return (prev.Confidence || 0) > (curr.Confidence || 0) ? prev : curr;
             },
             { Confidence: 0, Type: "Unknown" },
           )
         : null;
 
-    // Get attribute values, handling both PascalCase and camelCase formats
-    const getAttrValue = (pascalCase, camelCase) => {
-      if (faceAttributes[pascalCase] !== undefined) {
-        return faceAttributes[pascalCase].Value !== undefined
-          ? faceAttributes[pascalCase].Value
-          : faceAttributes[pascalCase];
-      }
-      if (faceAttributes[camelCase] !== undefined) {
-        return faceAttributes[camelCase].value !== undefined
-          ? faceAttributes[camelCase].value
-          : faceAttributes[camelCase];
-      }
-      return undefined;
-    };
+    const getRecoValue = (attrName) => {
+        return faceAttributes[attrName]?.Value;
+    }
+    const getRecoConfidence = (attrName) => {
+        return faceAttributes[attrName]?.Confidence || 0;
+    }
 
-    const getAttrConfidence = (pascalCase, camelCase) => {
-      if (
-        faceAttributes[pascalCase] !== undefined &&
-        faceAttributes[pascalCase].Confidence !== undefined
-      ) {
-        return faceAttributes[pascalCase].Confidence;
-      }
-      if (
-        faceAttributes[camelCase] !== undefined &&
-        faceAttributes[camelCase].confidence !== undefined
-      ) {
-        return faceAttributes[camelCase].confidence;
-      }
-      return 0;
-    };
-
-    // Get age values
-    const ageRange = faceAttributes.AgeRange || faceAttributes.age || {};
-    const lowAge = ageRange.Low || ageRange.low || 0;
-    const highAge = ageRange.High || ageRange.high || 0;
-
-    // Create attribute cards for each facial feature
     const attributeCards = [];
 
-    // Gender info
-    const gender = getAttrValue("Gender", "gender");
-    if (gender) {
+    const gender = faceAttributes.Gender;
+    if (gender?.Value) {
       attributeCards.push({
         icon: _jsx(User, { className: "w-5 h-5 text-blue-500" }),
-        title: "Identity",
-        value: gender.toLowerCase(),
+        title: "Gender",
+        value: gender.Value.toLowerCase(),
         color: "text-blue-600",
       });
     }
 
-    // Age range info
-    if (lowAge > 0 || highAge > 0) {
+    const ageRange = faceAttributes.AgeRange;
+    if (ageRange?.Low && ageRange?.High) {
       attributeCards.push({
         icon: _jsx(Calendar, { className: "w-5 h-5 text-purple-500" }),
         title: "Age Range",
-        value: `${lowAge}-${highAge} years`,
+        value: `${ageRange.Low}-${ageRange.High} years`,
         color: "text-purple-600",
       });
     }
 
-    // Smile detection
-    const hasSmile = getAttrValue("Smile", "smile");
-    if (hasSmile !== undefined) {
+    const smile = faceAttributes.Smile;
+    if (smile !== undefined) {
       attributeCards.push({
         icon: _jsx(Smile, { className: "w-5 h-5 text-pink-500" }),
         title: "Smile",
-        value: hasSmile ? "Yes" : "No",
-        color: hasSmile ? "text-pink-600" : "text-gray-600",
+        value: smile.Value ? "Yes" : "No",
+        color: smile.Value ? "text-pink-600" : "text-gray-600",
       });
     }
 
-    // Eyes info
-    const eyesOpen = getAttrValue("EyesOpen", "eyesOpen");
+    const eyesOpen = faceAttributes.EyesOpen;
     if (eyesOpen !== undefined) {
       attributeCards.push({
         icon: _jsx(Eye, { className: "w-5 h-5 text-teal-500" }),
-        title: "Eyes",
-        value: eyesOpen ? "Open" : "Closed",
-        color: eyesOpen ? "text-teal-600" : "text-gray-600",
+        title: "Eyes Open",
+        value: eyesOpen.Value ? "Yes" : "No",
+        color: eyesOpen.Value ? "text-teal-600" : "text-gray-600",
       });
     }
 
-    // Facial hair info
-    const hasBeard = getAttrValue("Beard", "beard");
-    const hasMustache = getAttrValue("Mustache", "mustache");
-
-    if (hasBeard || hasMustache) {
+    const beard = faceAttributes.Beard;
+    const mustache = faceAttributes.Mustache;
+    if (beard?.Value || mustache?.Value) {
       let facialHair = [];
-      if (hasBeard) facialHair.push("Beard");
-      if (hasMustache) facialHair.push("Mustache");
-
+      if (beard?.Value) facialHair.push("Beard");
+      if (mustache?.Value) facialHair.push("Mustache");
       attributeCards.push({
         icon: _jsx(Scissors, { className: "w-5 h-5 text-amber-500" }),
         title: "Facial Hair",
@@ -296,60 +198,47 @@ export const Dashboard = () => {
       });
     }
 
-    // Eyewear info
-    const hasEyeglasses = getAttrValue("Eyeglasses", "eyeglasses");
-    const hasSunglasses = getAttrValue("Sunglasses", "sunglasses");
-
-    if (hasEyeglasses || hasSunglasses) {
+    const eyeglasses = faceAttributes.Eyeglasses;
+    const sunglasses = faceAttributes.Sunglasses;
+    if (eyeglasses?.Value || sunglasses?.Value) {
       attributeCards.push({
         icon: _jsx(Glasses, { className: "w-5 h-5 text-indigo-500" }),
         title: "Eyewear",
-        value: hasSunglasses ? "Sunglasses" : "Glasses",
+        value: sunglasses?.Value ? "Sunglasses" : "Eyeglasses",
         color: "text-indigo-600",
       });
     }
 
-    // Emotion
-    if (primaryEmotion) {
-      const emotionType = primaryEmotion.Type || primaryEmotion.type;
-      if (emotionType && emotionType !== "Unknown") {
-        const emotionColor =
-          {
-            HAPPY: "text-yellow-600",
-            CALM: "text-teal-600",
-            SAD: "text-blue-600",
-            CONFUSED: "text-purple-600",
-            DISGUSTED: "text-green-600",
-            SURPRISED: "text-pink-600",
-            ANGRY: "text-red-600",
-            FEAR: "text-indigo-600",
-          }[emotionType] || "text-gray-600";
-
-        attributeCards.push({
-          icon: _jsx(Heart, { className: "w-5 h-5 text-red-500" }),
-          title: "Emotion",
-          value: emotionType.toLowerCase(),
-          color: emotionColor,
-        });
-      }
+    if (primaryEmotion && primaryEmotion.Type && primaryEmotion.Type !== "Unknown") {
+      const emotionType = primaryEmotion.Type;
+      const emotionColor =
+        {
+          HAPPY: "text-yellow-600",
+          CALM: "text-teal-600",
+          SAD: "text-blue-600",
+          CONFUSED: "text-purple-600",
+          DISGUSTED: "text-green-600",
+          SURPRISED: "text-pink-600",
+          ANGRY: "text-red-600",
+          FEAR: "text-indigo-600",
+        }[emotionType] || "text-gray-600";
+      attributeCards.push({
+        icon: _jsx(Heart, { className: "w-5 h-5 text-red-500" }),
+        title: "Emotion",
+        value: emotionType.toLowerCase(),
+        color: emotionColor,
+      });
     }
 
-    // Image quality info
     const quality = faceAttributes.Quality;
-    if (quality) {
-      const brightness = quality.Brightness || 0;
-      const sharpness = quality.Sharpness || 0;
+    if (quality?.Brightness && quality?.Sharpness) {
+      const brightness = quality.Brightness;
+      const sharpness = quality.Sharpness;
       const clarity = Math.round((brightness + sharpness) / 2);
-
       const qualityLabel =
         clarity > 70 ? "Excellent" : clarity > 50 ? "Good" : "Fair";
       const qualityColor =
-        clarity > 70
-          ? "text-green-600"
-          : clarity > 50
-            ? "text-amber-600"
-            : "text-orange-600";
-
+        clarity > 70 ? "text-green-600" : clarity > 50 ? "text-amber-600" : "text-orange-600";
       attributeCards.push({
         icon: _jsx(Zap, { className: "w-5 h-5 text-yellow-500" }),
         title: "Image Quality",
@@ -358,30 +247,15 @@ export const Dashboard = () => {
       });
     }
 
-    // If we have no attributes, show a fallback
     if (attributeCards.length === 0) {
       return _jsxs("div", {
         className:
           "mt-4 bg-white p-5 rounded-apple-xl border border-apple-gray-200 shadow-sm",
         children: [
-          _jsx("h4", {
-            className:
-              "text-lg font-medium text-apple-gray-900 mb-3 flex items-center",
-            children: _jsxs("span", {
-              className: "flex items-center",
-              children: [
-                _jsx(User, { className: "w-5 h-5 mr-2 text-blue-500" }),
-                "Face Analysis",
-              ],
-            }),
-          }),
-          _jsx("p", {
-            className: "text-apple-gray-600",
-            children:
-              "Your face has been registered successfully, but no detailed attributes were detected. Try re-registering in good lighting with a clear view of your face.",
-          }),
-        ],
-      });
+           _jsx("h4", { className: "text-lg font-medium text-apple-gray-900 mb-3 flex items-center", children: "Face Analysis" }),
+           _jsx("p", { className: "text-apple-gray-600", children: "Detailed face analysis is not available." }),
+         ],
+       });
     }
 
     return _jsxs("div", {
@@ -521,17 +395,16 @@ export const Dashboard = () => {
                   _jsx(Settings, {
                     className: "w-5 h-5 mr-2 text-apple-blue-500",
                   }),
-                  "Admin Tools",
+                  "Admin Area",
                 ],
               }),
             }),
             _jsx("p", {
               className:
-                "text-apple-gray-600 mb-6 border-l-4 border-apple-blue-500 pl-4 py-2 bg-apple-blue-50 rounded-r-apple",
+                "text-apple-gray-600 mb-6 border-l-4 border-apple-gray-500 pl-4 py-2 bg-apple-gray-50 rounded-r-apple",
               children:
-                "Advanced tools for administrators to manage system settings and repair functionality.",
+                "Admin tools are currently unavailable. Management is performed via the AWS Console.",
             }),
-            _jsx(AdminTools, {}),
           ],
         });
       default:
@@ -551,7 +424,7 @@ export const Dashboard = () => {
                       className:
                         "w-12 h-12 rounded-full bg-apple-blue-100 text-apple-blue-700 flex items-center justify-center mr-4 text-xl font-semibold",
                       children: (
-                        user?.user_metadata?.full_name?.charAt(0) ||
+                        user?.full_name?.charAt(0) ||
                         user?.email?.charAt(0) ||
                         "U"
                       ).toUpperCase(),
@@ -563,8 +436,8 @@ export const Dashboard = () => {
                             "text-2xl font-semibold text-apple-gray-900",
                           children: [
                             "Welcome back",
-                            user?.user_metadata?.full_name
-                              ? `, ${user.user_metadata.full_name}`
+                            user?.full_name
+                              ? `, ${user.full_name}`
                               : "",
                           ],
                         }),
@@ -692,7 +565,6 @@ export const Dashboard = () => {
     }
   };
 
-  // Define the navigation tabs array outside the JSX
   const navigationTabs = [
     { id: "home", name: "Home", icon: _jsx(Camera, { className: "w-4 h-4" }) },
     {
@@ -715,20 +587,11 @@ export const Dashboard = () => {
       name: "Admin",
       icon: _jsx(Shield, { className: "w-4 h-4" }),
     },
-    {
-      id: "emergency",
-      name: "Emergency Tools",
-      icon: _jsx(AlertTriangle, { className: "w-4 h-4 text-amber-500" }),
-      onClick: () => {
-        window.location.href = "/emergency-tools";
-      },
-    },
   ];
 
-  // Create the navigation buttons
   const renderNavigationButtons = () => {
     const visibleTabs = navigationTabs.filter((tab) => {
-      if (tab.id === "admin" || tab.id === "emergency") {
+      if (tab.id === "admin") {
         return isAdmin;
       }
       return true;
@@ -804,8 +667,7 @@ export const Dashboard = () => {
                             _jsx("p", {
                               className:
                                 "text-sm font-medium text-apple-gray-900",
-                              children:
-                                user?.user_metadata?.full_name || "User",
+                              children: user?.full_name || "User",
                             }),
                             _jsx("p", {
                               className: "text-xs text-apple-gray-500 truncate",
@@ -848,43 +710,21 @@ export const Dashboard = () => {
                                   ],
                                 }),
                               }),
-                              isAdmin
-                                ? _jsx("button", {
-                                    onClick: () => setActiveTab("admin"),
-                                    className:
-                                      "flex w-full items-center px-2 py-2 text-sm text-apple-gray-700 rounded-apple hover:bg-apple-gray-100",
-                                    children: _jsxs("div", {
-                                      className: "flex items-center",
-                                      children: [
-                                        _jsx(Shield, {
-                                          className:
-                                            "mr-2 h-4 w-4 text-apple-gray-500",
-                                        }),
-                                        "Admin Tools",
-                                      ],
+                              _jsx("button", {
+                                onClick: () => setActiveTab("admin"),
+                                className:
+                                  "flex w-full items-center px-2 py-2 text-sm text-apple-gray-700 rounded-apple hover:bg-apple-gray-100",
+                                children: _jsxs("div", {
+                                  className: "flex items-center",
+                                  children: [
+                                    _jsx(Shield, {
+                                      className:
+                                        "mr-2 h-4 w-4 text-apple-gray-500",
                                     }),
-                                  })
-                                : null,
-                              isAdmin
-                                ? _jsx("button", {
-                                    onClick: () => {
-                                      window.location.href = "/emergency-tools";
-                                      setIsMenuOpen(false);
-                                    },
-                                    className:
-                                      "flex w-full items-center px-2 py-2 text-sm text-amber-600 rounded-apple hover:bg-amber-50",
-                                    children: _jsxs("div", {
-                                      className: "flex items-center",
-                                      children: [
-                                        _jsx(AlertTriangle, {
-                                          className:
-                                            "mr-2 h-4 w-4 text-amber-500",
-                                        }),
-                                        "Emergency Tools",
-                                      ],
-                                    }),
-                                  })
-                                : null,
+                                    "Admin Tools",
+                                  ],
+                                }),
+                              }),
                               _jsx("div", {
                                 className:
                                   "border-t border-apple-gray-100 my-2",

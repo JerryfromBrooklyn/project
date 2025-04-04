@@ -1,140 +1,166 @@
-// FaceStorageService.js - Utility to store and retrieve face IDs using Supabase Storage
-import { supabase, supabaseAdmin, getFaceIdFromCache, cacheFaceId } from '../lib/supabaseClient'; // Using the correct path
+// FaceStorageService.js - Utility to store and retrieve face IDs using AWS S3
+import { s3Client } from '../lib/awsClient';
+import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-const STORAGE_BUCKET = 'user-data';
-const FACE_ID_FILE = 'face-id.json';
+// S3 Bucket name for face data
+const FACE_BUCKET_NAME = 'shmong-face-data';
 
 /**
- * Stores a user's face ID in a dedicated storage file
- * @param {string} userId - The user's ID
- * @param {string} faceId - The face ID from AWS Rekognition
+ * Store a face ID for a user in both the database and localStorage backup
+ * @param {string} userId - The user ID
+ * @param {string} faceId - The AWS Rekognition face ID
  * @returns {Promise<boolean>} - Success status
  */
 export const storeFaceId = async (userId, faceId) => {
   try {
-    if (!userId || !faceId) {
-      console.error('[FaceStorage] Missing userId or faceId');
-      return false;
-    }
-
-    console.log(`[FaceStorage] Storing face ID ${faceId} for user ${userId}`);
+    console.log('[FaceStorage] Storing face ID mapping for user:', userId);
     
-    // Store the face ID in a user-specific file using supabaseAdmin for permissions
-    const filePath = `${userId}/${FACE_ID_FILE}`;
-    const content = JSON.stringify({ faceId, updatedAt: new Date().toISOString() });
+    // Create mapping object
+    const mappingData = {
+      user_id: userId,
+      face_id: faceId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
     
-    try {
-      // Use supabaseAdmin for guaranteed permissions
-      const { error } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(filePath, content, {
-          upsert: true,
-          contentType: 'application/json'
-        });
-        
-      if (error) {
-        console.error('[FaceStorage] Error storing face ID:', error);
-        return false;
-      }
-      
-      // Cache the face ID for future use
-      cacheFaceId(userId, faceId);
-      
-      // Also store in localStorage as a fallback
-      localStorage.setItem(`faceId_${userId}`, JSON.stringify({ faceId, updatedAt: new Date().toISOString() }));
-      
-      console.log(`[FaceStorage] Successfully stored face ID for user ${userId}`);
-      return true;
-    } catch (uploadError) {
-      console.error('[FaceStorage] Upload error:', uploadError);
-      // We'll still return true because the face ID may be saved in the database
-      // This is just a backup storage mechanism
-      return true;
-    }
-  } catch (err) {
-    console.error('[FaceStorage] Unexpected error storing face ID:', err);
-    return false;
+    // Store mapping in S3
+    const command = new PutObjectCommand({
+      Bucket: FACE_BUCKET_NAME,
+      Key: `face-mappings/${userId}.json`,
+      Body: JSON.stringify(mappingData),
+      ContentType: 'application/json'
+    });
+    
+    await s3Client.send(command);
+    console.log('[FaceStorage] Face ID mapping stored successfully');
+    
+    return { success: true };
+  } catch (error) {
+    console.error('[FaceStorage] Error storing face ID mapping:', error);
+    return { success: false, error: error.message };
   }
 };
 
 /**
- * Retrieves a user's face ID from storage
- * @param {string} userId - The user's ID
+ * Retrieve a face ID for a user from database or localStorage backup
+ * @param {string} userId - The user ID
  * @returns {Promise<string|null>} - The face ID or null if not found
  */
 export const getFaceId = async (userId) => {
   try {
-    if (!userId) {
-      console.error('[FaceStorage] Missing userId');
-      return null;
-    }
+    console.log('[FaceStorage] Getting face ID for user:', userId);
     
-    // Check cache first
-    const cachedFaceId = getFaceIdFromCache(userId);
-    if (cachedFaceId) {
-      console.log(`[FaceStorage] Retrieved face ID ${cachedFaceId} for user ${userId} (from cache)`);
-      return cachedFaceId;
-    }
+    const command = new GetObjectCommand({
+      Bucket: FACE_BUCKET_NAME,
+      Key: `face-mappings/${userId}.json`
+    });
     
-    console.log(`[FaceStorage] Retrieving face ID for user ${userId}`);
+    const response = await s3Client.send(command);
     
-    // Get the face ID file for this user
-    const filePath = `${userId}/${FACE_ID_FILE}`;
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .download(filePath);
-      
-    if (error) {
-      // Check if error is due to network issues
-      if (error.statusCode === 0 || error.message?.includes('network')) {
-        console.warn(`[FaceStorage] Network error when retrieving face ID for ${userId}. Using fallback.`);
-        // Try to get from localStorage as fallback
-        const fallbackData = localStorage.getItem(`faceId_${userId}`);
-        if (fallbackData) {
-          try {
-            const { faceId } = JSON.parse(fallbackData);
-            if (faceId) {
-              cacheFaceId(userId, faceId);
-              return faceId;
-            }
-          } catch (e) {
-            console.error('[FaceStorage] Error parsing fallback data:', e);
-          }
-        }
-      }
-      
-      console.log(`[FaceStorage] Face ID file not found for user ${userId}:`, error);
-      return null;
-    }
+    // Convert stream to text
+    const bodyContents = await streamToString(response.Body);
     
-    // Parse the JSON content
-    const text = await data.text();
-    const { faceId } = JSON.parse(text);
+    // Parse JSON
+    const data = JSON.parse(bodyContents);
+    console.log('[FaceStorage] Face ID retrieved successfully');
     
-    // Cache the result
-    cacheFaceId(userId, faceId);
-    
-    // Also store in localStorage for offline fallback
-    localStorage.setItem(`faceId_${userId}`, JSON.stringify({ faceId, updatedAt: new Date().toISOString() }));
-    
-    console.log(`[FaceStorage] Retrieved face ID ${faceId} for user ${userId}`);
-    return faceId;
-  } catch (err) {
-    console.error('[FaceStorage] Error retrieving face ID:', err);
-    return null;
+    return { success: true, faceId: data.face_id };
+  } catch (error) {
+    console.error('[FaceStorage] Error getting face ID:', error);
+    return { success: false, error: error.message };
   }
 };
 
 /**
- * Checks if a face ID exists for a user
- * @param {string} userId - The user's ID 
- * @returns {Promise<boolean>} - Whether a face ID exists
+ * Upload face image
+ * @param {string} userId - The user ID
+ * @param {string} imageData - The base64 encoded image data
+ * @returns {Promise<object>} - Success status and image path
  */
-export const hasFaceId = async (userId) => {
+export const uploadFaceImage = async (userId, imageData) => {
   try {
-    const faceId = await getFaceId(userId);
-    return !!faceId;
-  } catch (err) {
-    return false;
+    console.log('[FaceStorage] Uploading face image for user:', userId);
+    
+    // Generate a unique filename
+    const filename = `${userId}/${Date.now()}.jpg`;
+    
+    // Extract base64 data if needed
+    let imageBuffer;
+    if (imageData.startsWith('data:image')) {
+      const base64Data = imageData.split(',')[1];
+      imageBuffer = Buffer.from(base64Data, 'base64');
+    } else {
+      imageBuffer = Buffer.from(imageData);
+    }
+    
+    // Upload to S3
+    const command = new PutObjectCommand({
+      Bucket: FACE_BUCKET_NAME,
+      Key: `face-images/${filename}`,
+      Body: imageBuffer,
+      ContentType: 'image/jpeg'
+    });
+    
+    await s3Client.send(command);
+    console.log('[FaceStorage] Face image uploaded successfully');
+    
+    // Generate a URL to access the image
+    const getCommand = new GetObjectCommand({
+      Bucket: FACE_BUCKET_NAME,
+      Key: `face-images/${filename}`
+    });
+    
+    const url = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
+    
+    return { 
+      success: true, 
+      path: filename,
+      url: url
+    };
+  } catch (error) {
+    console.error('[FaceStorage] Error uploading face image:', error);
+    return { success: false, error: error.message };
   }
+};
+
+/**
+ * Delete face image
+ * @param {string} path - The image path
+ * @returns {Promise<boolean>} - Success status
+ */
+export const deleteFaceImage = async (path) => {
+  try {
+    console.log('[FaceStorage] Deleting face image:', path);
+    
+    const command = new DeleteObjectCommand({
+      Bucket: FACE_BUCKET_NAME,
+      Key: `face-images/${path}`
+    });
+    
+    await s3Client.send(command);
+    console.log('[FaceStorage] Face image deleted successfully');
+    
+    return { success: true };
+  } catch (error) {
+    console.error('[FaceStorage] Error deleting face image:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Helper function to convert stream to string
+const streamToString = (stream) => {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    stream.on('data', (chunk) => chunks.push(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+  });
+};
+
+export default {
+  storeFaceId,
+  getFaceId,
+  uploadFaceImage,
+  deleteFaceImage
 }; 

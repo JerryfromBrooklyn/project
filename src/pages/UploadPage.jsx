@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/layout/Layout';
 import SimplePhotoUploader from '../components/SimplePhotoUploader';
-import { useAuth } from '../auth/hooks/useAuth';
+import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient';
+import { getPhotosByUserId } from '../services/database-utils.js';
 import { Image, Upload, AlertCircle } from 'lucide-react';
 
 /**
@@ -15,31 +15,30 @@ const UploadPage = () => {
   const [recentUploads, setRecentUploads] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch recent uploads by the current user
+  // Fetch recent uploads by the current user from DynamoDB
   useEffect(() => {
     const fetchRecentUploads = async () => {
       if (!user) return;
-      
+
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('photos')
-          .select('*')
-          .eq('uploaded_by', user.id)
-          .order('created_at', { ascending: false })
-          .limit(4); // Reduced to just show a few recent items
-          
-        if (error) throw error;
-        setRecentUploads(data || []);
+        // Replace Supabase query with DynamoDB query
+        const result = await getPhotosByUserId(user.id, 4); // Fetch 4 most recent
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to fetch photos');
+        }
+        setRecentUploads(result.data || []);
       } catch (err) {
-        console.error('Error fetching recent uploads:', err);
+        console.error('Error fetching recent uploads from DynamoDB:', err);
+        setRecentUploads([]); // Clear uploads on error
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchRecentUploads();
-  }, [user]);
+  }, [user]); // Depend on user object
 
   return (
     <Layout>
@@ -60,7 +59,7 @@ const UploadPage = () => {
             <div>
               <h2 className="text-xl font-semibold">Enhanced Face Recognition Upload</h2>
               <p className="mt-1 text-blue-100">
-                This uploader features real-time face detection, AWS Rekognition integration, 
+                This uploader features real-time face detection, AWS Rekognition integration,
                 and detailed logging of the entire process
               </p>
             </div>
@@ -79,14 +78,14 @@ const UploadPage = () => {
               <Image className="w-5 h-5 text-gray-500 mr-2" />
               <h2 className="text-lg font-medium text-gray-900">Recent Uploads</h2>
             </div>
-            <Link 
-              to="/photos" 
+            <Link
+              to="/photos"
               className="text-sm text-blue-600 hover:text-blue-800"
             >
               View all photos →
             </Link>
           </div>
-          
+
           {loading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin h-6 w-6 border-3 border-blue-500 border-t-transparent rounded-full"></div>
@@ -102,9 +101,10 @@ const UploadPage = () => {
               {recentUploads.map(photo => (
                 <div key={photo.id} className="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                   <div className="aspect-square bg-gray-100 relative">
+                    {/* Use photo.public_url or photo.url which should now be the S3 URL */}
                     {photo.public_url ? (
-                      <img 
-                        src={photo.public_url} 
+                      <img
+                        src={photo.public_url}
                         alt={`Photo ${photo.id}`}
                         className="w-full h-full object-cover"
                         onError={(e) => {

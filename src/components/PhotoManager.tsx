@@ -3,14 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoGrid } from './PhotoGrid';
-import { PhotoService } from '../services/PhotoService';
 import { PhotoMetadata } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, RefreshCw, Filter, ChevronDown, Calendar, MapPin, Tag, Clock, Search } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
+import { awsPhotoService } from '../services/awsPhotoService';
 
 interface PhotoManagerProps {
   eventId?: string;
@@ -61,30 +60,16 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
   useEffect(() => {
     if (!user) return;
 
-    console.log('Setting up realtime subscription for photo matches...');
+    console.log('Setting up photo data fetching...');
     
-    const subscription = supabase
-      .channel('photo-matches')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'photos',
-          filter: mode === 'matches' ? 
-            `matched_users::jsonb @> '[{"userId": "${user.id}"}]'` :
-            `uploaded_by=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('Received realtime update:', payload);
-          fetchPhotos();
-        }
-      )
-      .subscribe();
-
+    // Set up polling for AWS instead of realtime subscriptions
+    const pollingInterval = setInterval(() => {
+      fetchPhotos();
+    }, 30000); // Poll every 30 seconds
+    
     return () => {
-      console.log('Cleaning up realtime subscription');
-      subscription.unsubscribe();
+      console.log('Cleaning up photo subscription');
+      clearInterval(pollingInterval);
     };
   }, [user, mode]);
 
@@ -95,77 +80,61 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
       
       if (!user) return;
 
-      console.log('Fetching photos...');
+      console.log('Fetching photos from AWS...');
       
-      let query = supabase
-        .from('photos')
-        .select('*');
-
+      // Get photos from DynamoDB via awsPhotoService
+      const fetchedPhotos = await awsPhotoService.fetchPhotos(user.id);
+      
+      // Apply filters if needed
+      let filteredPhotos = [...fetchedPhotos];
+      
+      // Apply date range filter
       if (filters.dateRange.start) {
-        query = query.gte('date_taken', filters.dateRange.start);
+        filteredPhotos = filteredPhotos.filter(
+          photo => photo.date_taken && new Date(photo.date_taken) >= new Date(filters.dateRange.start)
+        );
       }
+      
       if (filters.dateRange.end) {
-        query = query.lte('date_taken', filters.dateRange.end);
+        filteredPhotos = filteredPhotos.filter(
+          photo => photo.date_taken && new Date(photo.date_taken) <= new Date(filters.dateRange.end)
+        );
       }
+      
+      // Apply location filter
       if (filters.location.name) {
-        query = query.textSearch('location->>name', filters.location.name);
+        filteredPhotos = filteredPhotos.filter(
+          photo => photo.location?.name?.toLowerCase().includes(filters.location.name.toLowerCase())
+        );
       }
+      
+      // Apply tags filter
       if (filters.tags.length > 0) {
-        query = query.contains('tags', filters.tags);
+        filteredPhotos = filteredPhotos.filter(photo => {
+          if (!photo.tags || !Array.isArray(photo.tags)) return false;
+          return filters.tags.every(tag => photo.tags.includes(tag));
+        });
       }
+      
+      // Apply search query
       if (searchQuery) {
-        query = query.textSearch('search_vector', searchQuery);
+        const query = searchQuery.toLowerCase();
+        filteredPhotos = filteredPhotos.filter(photo => {
+          const searchableFields = [
+            photo.title,
+            photo.description,
+            photo.location?.name,
+            photo.venue?.name,
+            ...(photo.tags || [])
+          ].filter(Boolean);
+          
+          return searchableFields.some(field => 
+            field && field.toLowerCase().includes(query)
+          );
+        });
       }
-
-      if (mode === 'upload') {
-        console.log('Fetching uploaded photos');
-        query = query.eq('uploaded_by', user.id);
-      } else {
-        console.log('Fetching matched photos');
-        console.log(`Looking for photos matching user ID: ${user.id}`);
-        
-        const jsonPayload = JSON.stringify([{ userId: user.id }]);
-        console.log('Using filter payload:', jsonPayload);
-        query = query.filter('matched_users', 'cs', jsonPayload);
-      }
-
-      query = query.order('created_at', { ascending: false });
-
-      const { data: fetchedPhotos, error } = await query;
       
-      if (error) throw error;
-
-      console.log(`Fetched ${fetchedPhotos?.length || 0} photos`);
-      
-      if (fetchedPhotos && fetchedPhotos.length > 0) {
-        console.log('First photo structure:', fetchedPhotos[0]);
-      }
-
-      const transformedPhotos: PhotoMetadata[] = (fetchedPhotos || []).map(photo => {
-        return {
-          id: photo.id,
-          url: photo.url || photo.public_url,
-          eventId: photo.event_id || photo.eventId,
-          uploadedBy: photo.uploaded_by || photo.uploadedBy,
-          created_at: photo.created_at || photo.createdAt || new Date().toISOString(),
-          updated_at: photo.updated_at || photo.updatedAt,
-          folderPath: photo.folder_path || photo.folderPath,
-          folderName: photo.folder_name || photo.folderName,
-          fileSize: photo.file_size || photo.fileSize,
-          fileType: photo.file_type || photo.fileType,
-          faces: photo.faces || [],
-          title: photo.title,
-          description: photo.description,
-          location: photo.location,
-          venue: photo.venue,
-          tags: photo.tags,
-          date_taken: photo.date_taken || photo.dateTaken,
-          event_details: photo.event_details || photo.eventDetails,
-          matched_users: photo.matched_users || photo.matchedUsers
-        };
-      });
-
-      setPhotos(transformedPhotos);
+      setPhotos(filteredPhotos);
     } catch (err) {
       console.error('Error fetching photos:', err);
       setError('Failed to load photos. Please try again.');
@@ -174,20 +143,20 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
     }
   };
 
-  useEffect(() => {
-    if (user) {
-      fetchPhotos();
-    }
-  }, [user, eventId, mode, filters, searchQuery]);
-
   const handlePhotoUpload = async (photoId: string) => {
     await fetchPhotos();
   };
 
   const handlePhotoDelete = async (photoId: string) => {
     try {
-      await PhotoService.deletePhoto(photoId);
-      setPhotos(photos.filter(p => p.id !== photoId));
+      // Use AWS S3/DynamoDB to delete the photo
+      const success = await awsPhotoService.deletePhoto(photoId);
+      
+      if (success) {
+        setPhotos(photos.filter(p => p.id !== photoId));
+      } else {
+        throw new Error('Failed to delete photo');
+      }
     } catch (err) {
       console.error('Error deleting photo:', err);
       setError('Failed to delete photo. Please try again.');

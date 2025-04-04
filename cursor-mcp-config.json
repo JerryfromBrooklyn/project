@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "aws-cli": {
+      "command": "C:\\Users\\Geral\\aws-mcp-server\\venv\\Scripts\\python.exe",
+      "args": ["-m", "aws_mcp_server"],
+      "cwd": "C:\\Users\\Geral\\aws-mcp-server",
+      "permissions": ["fs:read", "shell:execute"]
+    }
+  }
+} 

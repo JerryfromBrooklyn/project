@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, User, Calendar, MapPin, Building, Tag, Download, Image, FileType,
          Smile, Eye, Glasses, Sliders, Ruler, Laugh, AlertCircle, Clock, Globe } from 'lucide-react';
-import { PhotoService } from '../services/PhotoService';
 import { cn } from '../utils/cn';
 
 /**

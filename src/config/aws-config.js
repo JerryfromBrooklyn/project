@@ -1,6 +1,7 @@
 import { S3Client } from '@aws-sdk/client-s3';
 import { RekognitionClient, CreateCollectionCommand, ListCollectionsCommand, DeleteCollectionCommand } from '@aws-sdk/client-rekognition';
 import dotenv from 'dotenv';
+import { AwsMonitoringService } from '../services/AwsMonitoringService';
 // Load environment variables if running in Node.js directly
 if (typeof import.meta === 'undefined') {
     dotenv.config();
@@ -92,6 +93,18 @@ export const testRekognitionConnectivity = async () => {
     return true;
   } catch (error) {
     console.error('[ERROR] Failed to connect to AWS Rekognition:', error);
+    
+    // Log to monitoring service
+    AwsMonitoringService.logApiError(
+      'Rekognition',
+      'ListCollections',
+      error, 
+      {
+        source: 'aws-config.testRekognitionConnectivity',
+        isCritical: true
+      }
+    );
+    
     return false;
   }
 };
@@ -102,5 +115,18 @@ testRekognitionConnectivity().then(result => {
     console.log('[INFO] AWS Rekognition is properly configured and working');
   } else {
     console.error('[ERROR] AWS Rekognition is not working. Face detection will be disabled.');
+    
+    // Add a system alert for this critical issue
+    AwsMonitoringService.logSystemAlert({
+      type: 'aws_connectivity',
+      severity: 'critical',
+      title: 'AWS Rekognition Connectivity Failure',
+      message: 'Failed to establish connection to AWS Rekognition. Face matching functionality is disabled.',
+      details: {
+        service: 'Rekognition',
+        timestamp: new Date().toISOString(),
+        affectedFeatures: ['face-detection', 'face-matching', 'face-registration']
+      }
+    });
   }
 });

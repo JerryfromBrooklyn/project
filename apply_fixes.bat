@@ -1,19 +1,28 @@
 @echo off
-echo Running SQL fixes for photo upload issues...
+setlocal enabledelayedexpansion
 
-REM Apply the main photo upload fix
-echo Applying main photo upload fix...
-supabase db query --file supabase/migrations/20250330_fix_photo_upload.sql
+echo Starting database fix process...
 
-REM Apply the photo verification fix
-echo Applying photo verification fix...
-supabase db query --file supabase/migrations/20250330_photo_verification_fix.sql
+REM Change to the script directory
+cd /d "%~dp0"
 
-REM Apply the photo search function
-echo Applying photo search function...
-supabase db query --file supabase/migrations/20250330_photo_search_function.sql
+echo Applying latest migration...
+call npx supabase migration up
 
-echo All database fixes applied successfully!
+echo Running fix_all_face_registrations...
+call npx supabase db exec "SELECT admin_fix_all_face_registrations()"
+
+echo Running fix_photo_face_matches...
+call npx supabase db exec "SELECT fix_photo_face_matches()"
+
 echo.
-echo Please restart your application to see the changes.
+echo Database fixes applied successfully.
+echo The following features should now work correctly:
+echo - User sign in and sign up
+echo - Face registration
+echo - Historical/future face matching
+echo - Photo display in the photos tab
+echo.
+echo Complete!
+
 pause 

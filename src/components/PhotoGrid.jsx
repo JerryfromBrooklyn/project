@@ -2,12 +2,13 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Share2, Trash2, Users, AlertCircle, Info } from 'lucide-react';
-import { PhotoService } from '../services/PhotoService';
 import SimplePhotoInfoModal from './SimplePhotoInfoModal';
 import { cn } from '../utils/cn';
+
 export const PhotoGrid = ({ photos, onDelete, onShare, onDownload }) => {
     const [selectedPhoto, setSelectedPhoto] = useState(null);
     const [loading, setLoading] = useState({});
+
     const handleDownload = async (photo) => {
         if (onDownload) {
             try {
@@ -15,31 +16,16 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload }) => {
                 await onDownload(photo.id);
             }
             catch (error) {
-                console.error('Error downloading photo:', error);
+                console.error('Error downloading photo via prop function:', error);
             }
             finally {
                 setLoading({ ...loading, [photo.id]: false });
             }
-            return;
-        }
-        try {
-            setLoading({ ...loading, [photo.id]: true });
-            const url = await PhotoService.downloadPhoto(photo.id);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `photo-${photo.id}.jpg`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-        }
-        catch (error) {
-            console.error('Error downloading photo:', error);
-        }
-        finally {
-            setLoading({ ...loading, [photo.id]: false });
+        } else {
+             console.warn('No onDownload prop provided to PhotoGrid');
         }
     };
+
     if (photos.length === 0) {
         return (_jsxs("div", { className: "text-center py-12 bg-apple-gray-50 rounded-apple-xl border-2 border-dashed border-apple-gray-200", children: [_jsx(AlertCircle, { className: "w-12 h-12 text-apple-gray-400 mx-auto mb-4" }), _jsx("p", { className: "text-apple-gray-500 font-medium", children: "No photos found" }), _jsx("p", { className: "text-apple-gray-400 text-sm mt-1", children: photos.length === 0 ? "No photos have been uploaded yet" : "No matches found in any photos" })] }));
     }

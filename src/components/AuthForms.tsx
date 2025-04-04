@@ -104,11 +104,53 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
         const { error } = await signIn(email, password);
         if (error) throw error;
       } else {
+        console.log('Starting signup submission...');
         const { error } = await signUp(email, password, fullName, userType);
-        if (error) throw error;
+        
+        if (error) {
+          console.error('Signup returned error:', error);
+          
+          // Handle specific error types with user-friendly messages
+          const errorMessage = (error as Error).message || '';
+          
+          if (errorMessage.includes('connectivity') || 
+              errorMessage.includes('timed out') ||
+              errorMessage.includes('Network error') ||
+              errorMessage.includes('SSL')) {
+            throw new Error(
+              'Unable to connect to authentication service. Please check your internet connection and try again.'
+            );
+          } else if (errorMessage.includes('credentials')) {
+            throw new Error(
+              'Authentication service configuration error. Please contact support.'
+            );
+          } else if (errorMessage.includes('Cognito configuration')) {
+            throw new Error(
+              'Authentication service configuration error. Please contact support.'
+            );
+          }
+          
+          throw error;
+        }
       }
     } catch (err) {
-      setError((err as Error).message || 'An error occurred');
+      console.error('Auth form error:', err);
+      
+      // Format error message for display
+      let errorMessage = (err as Error).message || 'An error occurred';
+      
+      // Handle specific AWS error codes with more user-friendly messages
+      if (errorMessage.includes('UsernameExistsException')) {
+        errorMessage = 'This email address is already registered. Please sign in instead.';
+      } else if (errorMessage.includes('InvalidPasswordException')) {
+        errorMessage = 'Password must be at least 8 characters and include uppercase, lowercase, numbers, and special characters.';
+      } else if (errorMessage.includes('LimitExceededException')) {
+        errorMessage = 'Too many attempts. Please try again later.';
+      } else if (errorMessage.includes('InternalErrorException')) {
+        errorMessage = 'The authentication service is currently experiencing issues. Please try again later.';
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -131,6 +173,8 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
         <button 
           onClick={onClose}
           className="absolute right-4 top-4 p-2 rounded-full bg-apple-gray-100 text-apple-gray-600 hover:bg-apple-gray-200 z-10"
+          aria-label="Close"
+          title="Close"
         >
           <X className="w-5 h-5" />
         </button>

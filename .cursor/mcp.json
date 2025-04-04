@@ -1,56 +1,29 @@
 {
   "mcpServers": {
-    "supabase": {
+    "sequential-thinking": {
       "command": "cmd",
-    "args": [
-      "/c",
-      "npx",
-      "-y",
-      "@smithery/cli@latest",
-      "run",
-      "@alexander-zuev/supabase-mcp-server",
-      "--config",
-      "{\"supabaseProjectRef\":\"gmupwzjxirpkskolsuix\",\"supabaseDbPassword\":\"55xz472otM3aoIuf\",\"supabaseRegion\":\"us-east-1\",\"supabaseAccessToken\":\"sbp_b770ec46a0342723af4acd39a75795a289890a44\",\"supabaseServiceRoleKey\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdtdXB3emp4aXJwa3Nrb2xzdWl4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MTI0NTk5MCwiZXhwIjoyMDU2ODIxOTkwfQ.vT7Io2aolTOQr3xQVFeSMDzg8NiMMNKdDwOyDObc6HE\"}"
-    ]
-  },
-"sequential-thinking": {
-
-"command": "cmd",
-
-"args": [
-  "/c",
-  "npx",
-
-"-y",
-
-"@modelcontextprotocol/server-sequential-thinking"
-
-]
-
-},
-"memory": {
-
-"command": "cmd",
-
-"args": [
-  "/c",
-  "npx",
-
-"-y",
-
-"@modelcontextprotocol/server-memory"
-
-]
-
-},
-"Supabase Read Only": {
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "memory": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "@modelcontextprotocol/server-postgres", "postgresql://postgres.gmupwzjxirpkskolsuix:55xz472otM3aoIuf@aws-0-us-east-1.pooler.supabase.com:5432/postgres"]
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    "aws-cli": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "C:\\Users\\Geral\\project-1\\start-aws-mcp.bat"
+      ]
     }
-
+  }
 }
-  
-
-}
-
-

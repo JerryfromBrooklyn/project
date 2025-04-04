@@ -5,12 +5,12 @@ import {
   Upload, X, Check, Image as ImageIcon, AlertTriangle, Folder, List, Grid, 
   Filter, Search, Edit2, Calendar, MapPin, User, Building, Users, Info 
 } from 'lucide-react';
-import { PhotoService } from '../services/PhotoService';
 import { PhotoMetadata, UploadItem } from '../types';
 import { cn } from '../utils/cn';
 import { useAuth } from '../context/AuthContext';
 import { GoogleMaps } from './GoogleMaps';
 import { v4 as uuidv4 } from 'uuid';
+import { awsPhotoService } from '../services/awsPhotoService';
 
 interface PhotoUploaderProps {
   eventId?: string;
@@ -82,7 +82,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
       if (!user) return;
       
       try {
-        const { data, error } = await PhotoService.getUserStorageUsage(user.id);
+        // Get storage usage from AWS S3
+        const { data, error } = await awsPhotoService.getUserStorageUsage(user.id);
         if (!error && data) {
           setTotalStorage(data.total_size);
         }
@@ -190,17 +191,17 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
           )
         );
 
-        // Simulate upload progress
-        const progressInterval = setInterval(() => {
+        // Create a custom progress handler for this upload
+        const handleProgress = (progress: number) => {
           setUploads(prev => 
             prev.map(u => {
-              if (u.id === upload.id && u.status === 'uploading' && u.progress < 90) {
-                return { ...u, progress: u.progress + 10 };
+              if (u.id === upload.id && u.status === 'uploading') {
+                return { ...u, progress };
               }
               return u;
             })
           );
-        }, 200);
+        };
 
         // Prepare photo metadata
         const photoMetadata: Partial<PhotoMetadata> = {
@@ -226,15 +227,14 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
           date_taken: metadata.date
         };
 
-        // Upload photo
-        const result = await PhotoService.uploadPhoto(
+        // Upload photo using AWS S3 service
+        const result = await awsPhotoService.uploadPhoto(
           upload.file,
           eventId,
           upload.folderPath,
-          photoMetadata
+          photoMetadata,
+          handleProgress
         );
-
-        clearInterval(progressInterval);
 
         if (result.success) {
           const updatedUpload = {
@@ -253,7 +253,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
             )
           );
 
-          onUploadComplete?.(result.photoId!);
+          onUploadComplete?.(result.photoId);
           
           // Update storage usage
           setTotalStorage(prev => prev + upload.file.size);
@@ -297,8 +297,12 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
 
   const handleFolderRename = async (oldPath: string, newName: string) => {
     try {
-      // Update folder name in database
-      await PhotoService.renameFolder(oldPath, newName);
+      // Use AWS service to rename folder
+      const success = await awsPhotoService.renameFolder(oldPath, newName);
+      
+      if (!success) {
+        throw new Error('Failed to rename folder');
+      }
       
       // Update local state
       setUploads(prev => 

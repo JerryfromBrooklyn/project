@@ -6,14 +6,9 @@ import Webcam from 'react-webcam';
 import { X, Camera, RotateCcw, Check, Video, AlertTriangle } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabaseClient';
-import { rekognitionClient } from '../config/aws-config';
+import { rekognitionClient } from '../lib/awsClient';
 import { DetectFacesCommand } from '@aws-sdk/client-rekognition';
 import { FaceIndexingService } from '../services/FaceIndexingService.jsx';
-import { storeFaceId } from '../services/FaceStorageService';
-
-// Define face registration method - use default 'direct' method
-const FACE_REGISTER_METHOD = 'direct'; // Options: 'RPC', 'direct'
 
 export const FaceRegistration = ({ onSuccess, onClose }) => {
     const webcamRef = useRef(null);
@@ -133,128 +128,46 @@ export const FaceRegistration = ({ onSuccess, onClose }) => {
         setFaceDetected(false);
     };
     const handleRegistration = async () => {
-        if (!capturedImage || !user)
-            return;
+        if (!capturedImage || !user) return;
         setLoading(true);
         setError(null);
+
         try {
-            console.log('Starting face registration process...');
-            // Convert base64 to blob
+            console.log('[FaceReg] Starting AWS face registration process...');
+
+            // 1. Convert base64 captured image to bytes
             const response = await fetch(capturedImage);
             const blob = await response.blob();
             const arrayBuffer = await blob.arrayBuffer();
             const imageBytes = new Uint8Array(arrayBuffer);
-            // Detect face attributes with AWS Rekognition
-            console.log('Detecting face attributes...');
-            const detectCommand = new DetectFacesCommand({
-                Image: { Bytes: imageBytes },
-                Attributes: ['ALL']
-            });
-            const detectResponse = await rekognitionClient.send(detectCommand);
-            if (!detectResponse.FaceDetails?.length) {
-                throw new Error('No face detected in the image');
-            }
-            const faceAttributes = detectResponse.FaceDetails[0];
-            console.log('Face attributes detected successfully');
-            // Upload to Supabase storage
-            console.log('Uploading image to storage...');
-            const filePath = `${user.id}/${Date.now()}.jpg`;
-            const { error: uploadError } = await supabase.storage
-                .from('face-data')
-                .upload(filePath, blob, {
-                cacheControl: '3600',
-                upsert: true,
-                contentType: 'image/jpeg'
-            });
-            if (uploadError)
-                throw uploadError;
-            console.log('Image uploaded successfully');
-            // Get public URL
-            const { data: { publicUrl } } = supabase.storage
-                .from('face-data')
-                .getPublicUrl(filePath);
-            if (!publicUrl) {
-                throw new Error('Failed to retrieve public URL');
-            }
-            
-            // Index the face
-            console.log('Starting face indexing process with AWS Rekognition');
-            const { faceId, faceAttributes: indexedFaceAttributes } = await FaceIndexingService.indexFace(
-                imageBytes,
+
+            // 2. Optional: Detect face details first (can be skipped if indexFace handles it)
+            // const detectCommand = new DetectFacesCommand(...);
+            // const detectResponse = await rekognitionClient.send(detectCommand);
+            // if (!detectResponse.FaceDetails?.length) throw new Error('No face detected');
+
+            // 3. Index the face using FaceIndexingService (which handles Rekognition and DynamoDB)
+            console.log('[FaceReg] Indexing face with AWS Rekognition & saving to DB...');
+            // Note: FaceIndexingService.indexUserFace expects base64 or buffer
+            const indexResult = await FaceIndexingService.indexUserFace(
+                imageBytes, // Pass bytes directly
                 user.id
             );
-            console.log('Face indexed successfully with ID:', faceId);
-            
-            // Additional logging for storage-based approach
-            console.log('Storing face ID in backup storage system');
-            
-            // If using direct RPC
-            if (FACE_REGISTER_METHOD === 'RPC') {
-                console.log('Using RPC method to register face');
-                
-                // Register through RPC (existing code)
-                const { data: registerResult, error: rpcError } = await supabase.rpc('register_face', {
-                    user_id: user.id,
-                    face_id: faceId,
-                    attributes: {
-                        gender: {
-                            value: indexedFaceAttributes.Gender?.Value || '',
-                            confidence: indexedFaceAttributes.Gender?.Confidence || 0
-                        },
-                        age: {
-                            low: indexedFaceAttributes.AgeRange?.Low || 0,
-                            high: indexedFaceAttributes.AgeRange?.High || 0
-                        },
-                        emotions: (indexedFaceAttributes.Emotions?.map(emotion => ({
-                            type: emotion.Type,
-                            confidence: emotion.Confidence
-                        })) || []),
-                        landmarks: indexedFaceAttributes.Landmarks,
-                        pose: indexedFaceAttributes.Pose,
-                        beard: {
-                            value: indexedFaceAttributes.Beard?.Value || false,
-                            confidence: indexedFaceAttributes.Beard?.Confidence || 0
-                        },
-                        mustache: {
-                            value: indexedFaceAttributes.Mustache?.Value || false,
-                            confidence: indexedFaceAttributes.Mustache?.Confidence || 0
-                        },
-                        overallConfidence: indexedFaceAttributes.Confidence
-                    },
-                    metadata: {
-                        registeredFrom: 'webcam',
-                        registeredAt: new Date().toISOString(),
-                        deviceType: selectedDeviceId
-                    }
-                });
-                
-                if (rpcError) {
-                    throw rpcError;
-                }
-                
-                if (registerResult && !registerResult.success) {
-                    throw new Error(registerResult.message || 'Failed to register face');
-                }
-                
-                // Directly call our storage method as a backup
-                await storeFaceId(user.id, faceId);
-                
-                console.log('Face indexed and registered successfully');
-                console.log('Face registration complete!');
-                onSuccess();
-            } else {
-                // Using direct insert (existing code)
-                
-                // Directly call our storage method as a backup
-                await storeFaceId(user.id, faceId);
-                
-                // Add success callback for direct insert
-                console.log('Face indexed and registered successfully via direct insert');
-                console.log('Face registration complete!');
-                onSuccess();
+
+            if (!indexResult || !indexResult.success || !indexResult.faceId) {
+                throw new Error(indexResult.error || 'Failed to index face with AWS Rekognition');
             }
-        }
-        finally {
+            const { faceId } = indexResult;
+            console.log('[FaceReg] Face indexed successfully with Face ID:', faceId);
+            // FaceIndexingService now also handles storing face data and initial matching
+
+            console.log('[FaceReg] AWS Face registration complete!');
+            onSuccess(); // Call success callback
+
+        } catch (err) {
+            console.error('[FaceReg] AWS Face registration failed:', err);
+            setError(err.message || 'An error occurred during face registration.');
+        } finally {
             setLoading(false);
         }
     };
