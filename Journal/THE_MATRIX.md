@@ -1,6 +1,6 @@
 # THE MATRIX: Shmong Face Recognition System Documentation
 
-**Last Updated:** 2025-04-05 16:45 PM
+**Last Updated:** 2025-04-05 17:25 PM
 
 ---
 
@@ -246,19 +246,34 @@ This section details the AWS services utilized by the application and their role
     *   Uses emojis to categorize console messages (✅ success, 🧩 extraction, 🎭 rendering)
     *   Keeps console output clean while maintaining detailed debugging information
 
-**Area 3: Face Matching (Conceptual)**
+**Area 3: Face Matching System (Planned Implementation)**
 
-*   **Purpose:** Compares a given face (either newly indexed or from an image search) against the existing faces in the Rekognition collection. *(Implementation details might vary)*.
+*   **Purpose:** Provides bidirectional matching between registered users and faces in uploaded photos.
 *   **Primary Files:**
-    *   `src/services/FaceIndexingService.js`: Likely contains functions like `matchFace` (using `SearchFacesByImage` or `SearchFaces` Rekognition commands).
-*   **Interactions:**
-    *   A component (e.g., `Dashboard.js` or a dedicated search component) might trigger `matchFace` or `searchFaceByImage`.
-    *   `FaceIndexingService.js` uses the Rekognition client (from `aws-config.js`) to call `SearchFaces` or `SearchFacesByImage`.
-    *   The function receives a list of matching faces (`FaceMatches`) from Rekognition, each containing `Similarity` and `Face` (with `ExternalImageId`/`userId`).
-    *   The results are returned to the calling component for display.
-*   **Data Structures:**
-    *   Uses: Rekognition `SearchFaces` / `SearchFacesByImage` response (`FaceMatches` array).
-    *   Reads (Indirectly): Rekognition Collection (`shmong-faces`).
+    *   `src/services/FaceMatchingService.js`: Core service containing the matching logic, making calls to Rekognition and storing match results.
+    *   `src/services/PhotoUploadService.js`: Handles bulk photo uploads, preprocessing, and extraction of metadata.
+    *   `src/components/BulkPhotoUploader.jsx`: UI component for uploading multiple photos/directories using Uppy.js.
+    *   `src/components/MatchNotification.jsx`: Component for displaying match notifications to users.
+    *   `src/pages/Matches.jsx`: Page displaying all matches for a user with filtering and sorting options.
+*   **Database Tables:**
+    *   `shmong-face-matches`: New DynamoDB table that stores match information between registered users and detected faces in photos.
+*   **Matching Flow:**
+    *   **Historical Matching:** When a user registers, their face is indexed in Rekognition collection and then searched against all previously indexed faces.
+    *   **Future Matching:** When new photos are uploaded, each detected face is indexed and searched against registered user faces.
+    *   All matches with >98% confidence are stored in the `shmong-face-matches` table with metadata.
+*   **Key Implementation Decisions:**
+    *   All faces in uploaded photos will be indexed in the Rekognition collection (more cost-effective than search-only approach).
+    *   Match confidence threshold set at 98% to minimize false positives.
+    *   DynamoDB table uses composite keys to enable efficient querying of matches per user.
+*   **Scaling Strategy:**
+    *   Collection rotation when approaching 20M faces limit.
+    *   Quality filtering to exclude low-quality face detections.
+    *   Metadata tracking to manage multiple collections if needed.
+*   **Cost Considerations:**
+    *   AWS Rekognition: $0.001 per face indexed, $0.001 per face searched.
+    *   Estimated monthly cost: ~$30.58 for scenario with 250 users and 10,000 photos/month.
+*   **Detailed Documentation:**
+    *   For complete details including data flow, implementation plans, and cost analysis, refer to `Journal/AWS_NEW_MATCHING_SYSTEM.md`.
 
 **Area 4: Utilities & Debugging**
 
@@ -351,3 +366,21 @@ This section details the AWS services utilized by the application and their role
 - All binary conversion operations use environment-specific code paths
 
 This fix ensures the complete face registration flow works in browser environments, storing both the face attributes from Rekognition and the actual face image in S3 with proper public URLs.
+
+### 2025-04-05 17:25 PM - Planning Face Matching System
+
+**System Design:** Completed comprehensive design and documentation for the new face matching system.
+
+**Key Decisions:**
+- Will implement collection-based indexing for all detected faces
+- Created cost analysis showing ~$10/month savings using this approach
+- Documented scaling strategy for handling collection size limits
+- Selected Uppy.js as the recommended library for bulk photo uploads
+- Planned phased implementation approach with 3 distinct phases
+
+**Next Steps:**
+- Create the new `shmong-face-matches` DynamoDB table
+- Enhance existing face registration to support historical matching
+- Begin development of photo upload and processing pipeline
+
+Full implementation details and technical specifications are available in `Journal/AWS_NEW_MATCHING_SYSTEM.md`.
