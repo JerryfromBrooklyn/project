@@ -1,0 +1,36 @@
+﻿{
+    "AttributeDefinitions":  [
+                                 {
+                                     "AttributeType":  "S",
+                                     "AttributeName":  "id"
+                                 },
+                                 {
+                                     "AttributeType":  "S",
+                                     "AttributeName":  "user_id"
+                                 },
+                                 {
+                                     "AttributeType":  "S",
+                                     "AttributeName":  "created_at"
+                                 }
+                             ],
+    "GlobalSecondaryIndexUpdates":  [
+                                        {
+                                            "Create":  {
+                                                           "Projection":  {
+                                                                              "ProjectionType":  "ALL"
+                                                                          },
+                                                           "KeySchema":  [
+                                                                             {
+                                                                                 "KeyType":  "HASH",
+                                                                                 "AttributeName":  "user_id"
+                                                                             },
+                                                                             {
+                                                                                 "KeyType":  "RANGE",
+                                                                                 "AttributeName":  "created_at"
+                                                                             }
+                                                                         ],
+                                                           "IndexName":  "UserIdCreatedAtIndex"
+                                                       }
+                                        }
+                                    ]
+}

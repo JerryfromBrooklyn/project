@@ -1,0 +1,215 @@
+{
+  "DistributionConfig": {
+    "CallerReference": "439935ae-7f54-4762-b7bb-6ee46cbea32b",
+    "Aliases": {
+      "Quantity": 0
+    },
+    "DefaultRootObject": "index.html",
+    "Origins": {
+      "Quantity": 2,
+      "Items": [
+        {
+          "Id": "shmong.s3-website-us-east-1.amazonaws.com",
+          "DomainName": "shmong.s3-website-us-east-1.amazonaws.com",
+          "OriginPath": "",
+          "CustomHeaders": {
+            "Quantity": 0
+          },
+          "CustomOriginConfig": {
+            "HTTPPort": 80,
+            "HTTPSPort": 443,
+            "OriginProtocolPolicy": "http-only",
+            "OriginSslProtocols": {
+              "Quantity": 4,
+              "Items": [
+                "SSLv3",
+                "TLSv1",
+                "TLSv1.1",
+                "TLSv1.2"
+              ]
+            },
+            "OriginReadTimeout": 30,
+            "OriginKeepaliveTimeout": 5
+          },
+          "ConnectionAttempts": 3,
+          "ConnectionTimeout": 10,
+          "OriginShield": {
+            "Enabled": false
+          },
+          "OriginAccessControlId": ""
+        },
+        {
+          "Id": "g5lcn763ibjq4wqsn3lvrswb6y0jztnz.lambda-url.us-east-1.on.aws",
+          "DomainName": "g5lcn763ibjq4wqsn3lvrswb6y0jztnz.lambda-url.us-east-1.on.aws",
+          "OriginPath": "",
+          "CustomHeaders": {
+            "Quantity": 0
+          },
+          "CustomOriginConfig": {
+            "HTTPPort": 80,
+            "HTTPSPort": 443,
+            "OriginProtocolPolicy": "https-only",
+            "OriginSslProtocols": {
+              "Quantity": 1,
+              "Items": [
+                "TLSv1.2"
+              ]
+            },
+            "OriginReadTimeout": 30,
+            "OriginKeepaliveTimeout": 5
+          },
+          "ConnectionAttempts": 3,
+          "ConnectionTimeout": 10,
+          "OriginShield": {
+            "Enabled": false
+          },
+          "OriginAccessControlId": ""
+        }
+      ]
+    },
+    "OriginGroups": {
+      "Quantity": 0
+    },
+    "DefaultCacheBehavior": {
+      "TargetOriginId": "shmong.s3-website-us-east-1.amazonaws.com",
+      "TrustedSigners": {
+        "Enabled": false,
+        "Quantity": 0
+      },
+      "TrustedKeyGroups": {
+        "Enabled": false,
+        "Quantity": 0
+      },
+      "ViewerProtocolPolicy": "redirect-to-https",
+      "AllowedMethods": {
+        "Quantity": 7,
+        "Items": [
+          "HEAD",
+          "DELETE",
+          "POST",
+          "GET",
+          "OPTIONS",
+          "PUT",
+          "PATCH"
+        ],
+        "CachedMethods": {
+          "Quantity": 2,
+          "Items": [
+            "HEAD",
+            "GET"
+          ]
+        }
+      },
+      "SmoothStreaming": false,
+      "Compress": true,
+      "LambdaFunctionAssociations": {
+        "Quantity": 0
+      },
+      "FunctionAssociations": {
+        "Quantity": 0
+      },
+      "FieldLevelEncryptionId": "",
+      "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+      "OriginRequestPolicyId": "acba4595-bd28-49b8-b9fe-13317c0390fa",
+      "ResponseHeadersPolicyId": "60669652-455b-4ae9-85a4-c4c02393f86c",
+      "GrpcConfig": {
+        "Enabled": false
+      }
+    },
+    "CacheBehaviors": {
+      "Quantity": 1,
+      "Items": [
+        {
+          "PathPattern": "/api/*",
+          "TargetOriginId": "g5lcn763ibjq4wqsn3lvrswb6y0jztnz.lambda-url.us-east-1.on.aws",
+          "TrustedSigners": {
+            "Enabled": false,
+            "Quantity": 0
+          },
+          "TrustedKeyGroups": {
+            "Enabled": false,
+            "Quantity": 0
+          },
+          "ViewerProtocolPolicy": "allow-all",
+          "AllowedMethods": {
+            "Quantity": 7,
+            "Items": [
+              "HEAD",
+              "DELETE",
+              "POST",
+              "GET",
+              "OPTIONS",
+              "PUT",
+              "PATCH"
+            ],
+            "CachedMethods": {
+              "Quantity": 2,
+              "Items": [
+                "HEAD",
+                "GET"
+              ]
+            }
+          },
+          "SmoothStreaming": false,
+          "Compress": true,
+          "LambdaFunctionAssociations": {
+            "Quantity": 0
+          },
+          "FunctionAssociations": {
+            "Quantity": 0
+          },
+          "FieldLevelEncryptionId": "",
+          "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+          "OriginRequestPolicyId": "b689b0a8-53d0-40ab-baf2-68738e2966ac",
+          "ResponseHeadersPolicyId": "c51de52a-4b90-4d22-8584-465be21ec7aa",
+          "GrpcConfig": {
+            "Enabled": false
+          }
+        }
+      ]
+    },
+    "CustomErrorResponses": {
+      "Quantity": 2,
+      "Items": [
+        {
+          "ErrorCode": 403,
+          "ResponsePagePath": "/index.html",
+          "ResponseCode": "200",
+          "ErrorCachingMinTTL": 10
+        },
+        {
+          "ErrorCode": 404,
+          "ResponsePagePath": "/index.html",
+          "ResponseCode": "200",
+          "ErrorCachingMinTTL": 10
+        }
+      ]
+    },
+    "Comment": "React App CloudFront Distribution",
+    "Logging": {
+      "Enabled": false,
+      "IncludeCookies": false,
+      "Bucket": "",
+      "Prefix": ""
+    },
+    "PriceClass": "PriceClass_100",
+    "Enabled": true,
+    "ViewerCertificate": {
+      "CloudFrontDefaultCertificate": true,
+      "SSLSupportMethod": "vip",
+      "MinimumProtocolVersion": "TLSv1",
+      "CertificateSource": "cloudfront"
+    },
+    "Restrictions": {
+      "GeoRestriction": {
+        "RestrictionType": "none",
+        "Quantity": 0
+      }
+    },
+    "WebACLId": "",
+    "HttpVersion": "http2",
+    "IsIPV6Enabled": true,
+    "ContinuousDeploymentPolicyId": "",
+    "Staging": false
+  }
+} 

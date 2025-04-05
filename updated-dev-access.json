@@ -1,0 +1,1 @@
+{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["dynamodb:*","rekognition:*","lambda:*","s3:*","cloudfront:*","apigateway:*","cognito-idp:*","iam:PassRole","logs:*","cloudwatch:*"],"Resource":"*"}]}

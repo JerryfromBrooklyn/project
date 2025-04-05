@@ -236,7 +236,237 @@ export const getFaceData = async (userId) => {
   try {
     console.log(`[DB] Getting face data for user ${userId} from DynamoDB`);
     
-    // First try to use DynamoDB Query which is more efficient than scanning
+    // First try to use DynamoDB Query with the new GSI which is more efficient than scanning
+    try {
+      // Using QueryCommand with the UserIdCreatedAtIndex GSI for efficient timestamp-sorted retrieval
+      const queryCommand = new QueryCommand({
+        TableName: TABLES.FACE_DATA,
+        IndexName: 'UserIdCreatedAtIndex', // Using the new GSI
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: {
+          ':userId': { S: userId }
+        },
+        ScanIndexForward: false // Sort by most recent first (descending)
+      });
+      
+      console.log(`[DB] Executing direct query for userId: ${userId} using UserIdCreatedAtIndex GSI`);
+      const queryResponse = await client.send(queryCommand);
+      
+      if (queryResponse.Items && queryResponse.Items.length > 0) {
+        // The items are already sorted by created_at descending due to the GSI
+        // Find active records first, then fall back to others
+        let activeRecords = queryResponse.Items.filter(item => 
+          item.status && item.status.S === 'active'
+        );
+        
+        // Get the most recent active record or the most recent record if no active records
+        const record = activeRecords.length > 0 ? activeRecords[0] : queryResponse.Items[0];
+        
+        console.log(`[DB] Found face data using GSI query, status: ${record.status?.S || 'unknown'}`);
+        console.log(`[DB] Selected face record with ID: ${record.faceId?.S}, created at: ${record.created_at?.S}`);
+        console.log(`[DB] Record keys: ${Object.keys(record).join(', ')}`);
+        console.log(`[DB] Has face_attributes: ${!!record.face_attributes}`);
+        
+        // Directly inspect the raw face_attributes field to understand its format
+        if (record.face_attributes) {
+          console.log(`[DB] 🔍 face_attributes format: ${typeof record.face_attributes}`);
+          
+          // Check if it's a DynamoDB 'S' type (String)
+          if (record.face_attributes.S) {
+            console.log(`[DB] 🔍 face_attributes is a DynamoDB String (S type)`);
+            console.log(`[DB] 🔍 face_attributes length: ${record.face_attributes.S.length}`);
+            console.log(`[DB] 🔍 face_attributes preview: ${record.face_attributes.S.substring(0, 50)}...`);
+          }
+          // Check if it's a DynamoDB 'M' type (Map)
+          else if (record.face_attributes.M) {
+            console.log(`[DB] 🔍 face_attributes is a DynamoDB Map (M type)`);
+            console.log(`[DB] 🔍 face_attributes keys: ${Object.keys(record.face_attributes.M).join(', ')}`);
+          }
+          else {
+            console.log(`[DB] 🔍 face_attributes has unknown format:`, record.face_attributes);
+          }
+        }
+        
+        // Extract face attributes if they exist and parse them
+        let faceAttributes = null;
+        
+        // IMPROVED EXTRACTION LOGIC:
+        // Try multiple paths to find face attributes in different formats
+        
+        // 1. First try the direct face_attributes field (string format)
+        if (record.face_attributes && record.face_attributes.S) {
+          try {
+            faceAttributes = JSON.parse(record.face_attributes.S);
+            console.log(`[DB] ✅ Successfully parsed face attributes from face_attributes.S field`);
+            console.log(`[DB] 📊 Parsed attributes keys: ${Object.keys(faceAttributes).join(', ')}`);
+          } catch (parseError) {
+            console.error(`[DB] ❌ Error parsing face_attributes.S:`, parseError);
+            console.error(`[DB] ❌ Raw value that failed parsing: ${typeof record.face_attributes.S === 'string' ? record.face_attributes.S.substring(0, 100) : 'Not a string'}`);
+          }
+        } 
+        // 2. Try face_attributes as Map format
+        else if (record.face_attributes && record.face_attributes.M) {
+          console.log(`[DB] 🔄 Found face_attributes as Map, using directly`);
+          
+          // Convert DynamoDB M type to regular object
+          faceAttributes = {};
+          
+          // Extract each field from the map
+          Object.entries(record.face_attributes.M).forEach(([key, value]) => {
+            if (value.S) faceAttributes[key] = value.S;
+            else if (value.N) faceAttributes[key] = parseFloat(value.N);
+            else if (value.BOOL !== undefined) faceAttributes[key] = value.BOOL;
+            else if (value.M) {
+              // Recursively process nested maps
+              faceAttributes[key] = {};
+              Object.entries(value.M).forEach(([nestedKey, nestedValue]) => {
+                if (nestedValue.S) faceAttributes[key][nestedKey] = nestedValue.S;
+                else if (nestedValue.N) faceAttributes[key][nestedKey] = parseFloat(nestedValue.N);
+                else if (nestedValue.BOOL !== undefined) faceAttributes[key][nestedKey] = nestedValue.BOOL;
+              });
+            }
+          });
+          
+          console.log(`[DB] 📊 Extracted Map attributes:`, Object.keys(faceAttributes));
+        }
+        // 3. Try extracting from face_data.face_detail as fallback
+        else if (record.face_data && record.face_data.M && record.face_data.M.face_detail) {
+          console.log(`[DB] 🔄 Fallback: Extracting attributes from face_data.face_detail`);
+          try {
+            const faceDetail = record.face_data.M.face_detail.M;
+            
+            // Build a new attributes object from the nested structure
+            faceAttributes = {
+              AgeRange: faceDetail.AgeRange?.M ? {
+                Low: parseInt(faceDetail.AgeRange.M.Low?.N || 0, 10),
+                High: parseInt(faceDetail.AgeRange.M.High?.N || 0, 10)
+              } : null,
+              Gender: faceDetail.Gender?.M ? {
+                Value: faceDetail.Gender.M.Value?.S || "Unknown",
+                Confidence: parseFloat(faceDetail.Gender.M.Confidence?.N || 0)
+              } : null,
+              Emotions: faceDetail.Emotions?.L ? 
+                faceDetail.Emotions.L.map(emotion => ({
+                  Type: emotion.M.Type?.S || "Unknown",
+                  Confidence: parseFloat(emotion.M.Confidence?.N || 0)
+                })) : [],
+              Smile: faceDetail.Smile?.M ? {
+                Value: faceDetail.Smile.M.Value?.BOOL || false,
+                Confidence: parseFloat(faceDetail.Smile.M.Confidence?.N || 0)
+              } : null,
+              // Add other important attributes
+              Confidence: record.face_data.M.confidence?.N ? 
+                parseFloat(record.face_data.M.confidence.N) : 0,
+              BoundingBox: record.face_data.M.bounding_box?.M ? {
+                Width: parseFloat(record.face_data.M.bounding_box.M.Width?.N || 0),
+                Height: parseFloat(record.face_data.M.bounding_box.M.Height?.N || 0),
+                Left: parseFloat(record.face_data.M.bounding_box.M.Left?.N || 0),
+                Top: parseFloat(record.face_data.M.bounding_box.M.Top?.N || 0)
+              } : null
+            };
+            
+            console.log(`[DB] 📊 Extracted fallback attributes from face_detail:`, 
+              Object.keys(faceAttributes));
+            
+            // Add the extracted attributes back to the record for future use
+            // This ensures we won't need to extract again next time
+            try {
+              const attributesJson = JSON.stringify(faceAttributes);
+              const updateCommand = new UpdateItemCommand({
+                TableName: TABLES.FACE_DATA,
+                Key: {
+                  userId: { S: userId },
+                  faceId: { S: record.faceId.S }
+                },
+                UpdateExpression: "SET face_attributes = :attrs",
+                ExpressionAttributeValues: {
+                  ":attrs": { S: attributesJson }
+                }
+              });
+              
+              await client.send(updateCommand);
+              console.log(`[DB] ✅ Successfully added extracted face_attributes to record`);
+            } catch (updateError) {
+              console.error(`[DB] ⚠️ Failed to update record with extracted attributes:`, updateError);
+            }
+          } catch (extractError) {
+            console.error(`[DB] ❌ Error extracting attributes from face_data:`, extractError);
+          }
+        }
+        // 4. Try building from individual flattened attributes
+        else if (record.age_range_low || record.gender || record.primary_emotion) {
+          console.log(`[DB] 🔄 Building attributes from flattened fields`);
+          
+          try {
+            faceAttributes = {
+              AgeRange: record.age_range_low?.N ? {
+                Low: parseInt(record.age_range_low.N, 10),
+                High: parseInt(record.age_range_high?.N || record.age_range_low.N, 10)
+              } : null,
+              Gender: record.gender?.S ? {
+                Value: record.gender.S,
+                Confidence: parseFloat(record.gender_confidence?.N || "0")
+              } : null,
+              Emotions: record.primary_emotion?.S ? [
+                {
+                  Type: record.primary_emotion.S,
+                  Confidence: parseFloat(record.primary_emotion_confidence?.N || "0")
+                }
+              ] : []
+            };
+            
+            console.log(`[DB] 📊 Built attributes from flattened fields:`, 
+              Object.keys(faceAttributes));
+              
+            // Add these as face_attributes for future use
+            try {
+              const attributesJson = JSON.stringify(faceAttributes);
+              const updateCommand = new UpdateItemCommand({
+                TableName: TABLES.FACE_DATA,
+                Key: {
+                  userId: { S: userId },
+                  faceId: { S: record.faceId.S }
+                },
+                UpdateExpression: "SET face_attributes = :attrs",
+                ExpressionAttributeValues: {
+                  ":attrs": { S: attributesJson }
+                }
+              });
+              
+              await client.send(updateCommand);
+              console.log(`[DB] ✅ Successfully added built face_attributes to record`);
+            } catch (updateError) {
+              console.error(`[DB] ⚠️ Failed to update record with built attributes:`, updateError);
+            }
+          } catch (buildError) {
+            console.error(`[DB] ❌ Error building attributes from flattened fields:`, buildError);
+          }
+        }
+        else {
+          console.warn(`[DB] ⚠️ No face_attributes found or not in expected format`);
+        }
+        
+        // Construct response with all available data - consistently use snake_case for keys
+        return { 
+          success: true, 
+          data: {
+            user_id: record.userId?.S, // Convert camelCase to snake_case
+            face_id: record.faceId?.S, // Convert camelCase to snake_case
+            status: record.status?.S || 'unknown',
+            public_url: record.public_url?.S,
+            created_at: record.created_at?.S,
+            updated_at: record.updated_at?.S,
+            face_attributes: faceAttributes
+          }
+        };
+      }
+      
+      console.log(`[DB] No records found with GSI query, trying alternative methods`);
+    } catch (queryError) {
+      console.log(`[DB] GSI Query failed:`, queryError.message);
+    }
+    
+    // If GSI query doesn't work, try regular query with client-side sorting (our existing fix as fallback)
     try {
       // Using QueryCommand with userId as the primary key for efficiency
       const queryCommand = new QueryCommand({
@@ -248,7 +478,7 @@ export const getFaceData = async (userId) => {
         ScanIndexForward: false // Sort by most recent first (descending)
       });
       
-      console.log(`[DB] Executing direct query for userId: ${userId}`);
+      console.log(`[DB] Executing fallback query for userId: ${userId}`);
       const queryResponse = await client.send(queryCommand);
       
       if (queryResponse.Items && queryResponse.Items.length > 0) {
@@ -268,7 +498,7 @@ export const getFaceData = async (userId) => {
         // Get the most recent active record or the most recent record if no active records
         const record = activeRecords.length > 0 ? activeRecords[0] : sortedItems[0];
         
-        console.log(`[DB] Found face data using efficient query, status: ${record.status?.S || 'unknown'}`);
+        console.log(`[DB] Found face data using fallback query, status: ${record.status?.S || 'unknown'}`);
         console.log(`[DB] Selected face record with ID: ${record.faceId?.S}, created at: ${record.created_at?.S}`);
         
         // Extract face attributes if they exist and parse them
@@ -282,12 +512,12 @@ export const getFaceData = async (userId) => {
           }
         }
         
-        // Construct response with all available data
+        // Construct response with all available data - consistently use snake_case
         return { 
           success: true, 
           data: {
-            userId: record.userId?.S,
-            faceId: record.faceId?.S,
+            user_id: record.userId?.S, // Convert camelCase to snake_case
+            face_id: record.faceId?.S, // Convert camelCase to snake_case
             status: record.status?.S || 'unknown',
             public_url: record.public_url?.S,
             created_at: record.created_at?.S,
@@ -297,44 +527,9 @@ export const getFaceData = async (userId) => {
         };
       }
       
-      console.log(`[DB] No records found with direct query, trying alternative methods`);
+      console.log(`[DB] No records found with fallback query, trying alternative methods`);
     } catch (queryError) {
-      console.log(`[DB] Query failed:`, queryError.message);
-    }
-    
-    // If direct query doesn't work, try with document client
-    try {
-      console.log(`[DB] Trying document client query`);
-      const docQueryCommand = new DocQueryCommand({
-        TableName: TABLES.FACE_DATA,
-        KeyConditionExpression: 'userId = :userId',
-        ExpressionAttributeValues: {
-          ':userId': userId
-        }
-      });
-      
-      const docResponse = await docClient.send(docQueryCommand);
-      
-      if (docResponse.Items && docResponse.Items.length > 0) {
-        const item = docResponse.Items[0];
-        console.log(`[DB] Found face data with document client query`);
-        
-        // Parse face attributes if needed
-        if (typeof item.face_attributes === 'string') {
-          try {
-            item.face_attributes = JSON.parse(item.face_attributes);
-          } catch (parseError) {
-            console.error(`[DB] Error parsing face attributes in doc client:`, parseError);
-          }
-        }
-        
-        return { 
-          success: true, 
-          data: item 
-        };
-      }
-    } catch (docError) {
-      console.log(`[DB] Document client query failed:`, docError.message);
+      console.log(`[DB] Fallback Query failed:`, queryError.message);
     }
     
     // If direct queries fail, try the API Gateway endpoint as fallback
@@ -571,6 +766,77 @@ export const storeFaceMatch = async (matchData) => {
   }
 };
 
+/**
+ * Utility function to directly inspect a DynamoDB item - for debugging
+ * @param {string} tableName - The table name
+ * @param {object} key - The primary key of the item
+ * @returns {Promise<object>} The item from DynamoDB
+ */
+export const inspectDynamoDBItem = async (tableName, key) => {
+  try {
+    console.log(`[DB-DEBUG] 🔍 Inspecting item in ${tableName} with key:`, key);
+    
+    const command = new GetCommand({
+      TableName: tableName,
+      Key: key
+    });
+    
+    const response = await docClient.send(command);
+    
+    if (!response.Item) {
+      console.log(`[DB-DEBUG] ⚠️ No item found with the provided key`);
+      return { success: false, error: 'Item not found' };
+    }
+    
+    console.log(`[DB-DEBUG] ✅ Item found:`, response.Item);
+    
+    // Deep attribute inspection
+    let attributesInfo = {};
+    for (const [key, value] of Object.entries(response.Item)) {
+      let valueInfo = {
+        type: typeof value,
+        isNull: value === null,
+        isUndefined: value === undefined,
+        length: typeof value === 'string' ? value.length : null
+      };
+      
+      // Handle special DynamoDB attribute inspections
+      if (key === 'face_attributes' || key === 'attributes' || key.includes('attribute')) {
+        try {
+          if (typeof value === 'string') {
+            // Try to parse it if it's a JSON string
+            const parsed = JSON.parse(value);
+            valueInfo.parsed = {
+              type: typeof parsed,
+              isObject: typeof parsed === 'object',
+              keys: parsed ? Object.keys(parsed) : null,
+              preview: JSON.stringify(parsed).substring(0, 100) + '...'
+            };
+          }
+        } catch (e) {
+          valueInfo.parseError = e.message;
+        }
+      }
+      
+      attributesInfo[key] = valueInfo;
+    }
+    
+    console.log(`[DB-DEBUG] 📊 Attributes analysis:`, attributesInfo);
+    
+    return { 
+      success: true, 
+      data: response.Item,
+      attributesInfo
+    };
+  } catch (error) {
+    console.error('[DB-DEBUG] ❌ Error inspecting DynamoDB item:', error);
+    return { 
+      success: false, 
+      error: error.message 
+    };
+  }
+};
+
 export default {
   createPhotoRecord,
   getPhotoById,
@@ -580,5 +846,6 @@ export default {
   getFaceData,
   createUserRecord,
   getUserById,
-  storeFaceMatch
+  storeFaceMatch,
+  inspectDynamoDBItem
 }; 

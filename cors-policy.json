@@ -1,0 +1,27 @@
+{
+  "ResponseHeadersPolicyConfig": {
+    "Name": "ShmongFullCors",
+    "Comment": "CORS policy with complete headers for Shmong application",
+    "CorsConfig": {
+      "AccessControlAllowOrigins": {
+        "Quantity": 1,
+        "Items": ["*"]
+      },
+      "AccessControlAllowHeaders": {
+        "Quantity": 3,
+        "Items": ["Content-Type", "Authorization", "Accept"]
+      },
+      "AccessControlAllowMethods": {
+        "Quantity": 5,
+        "Items": ["GET", "POST", "OPTIONS", "PUT", "DELETE"]
+      },
+      "AccessControlAllowCredentials": false,
+      "AccessControlExposeHeaders": {
+        "Quantity": 0,
+        "Items": []
+      },
+      "OriginOverride": true,
+      "AccessControlMaxAgeSec": 600
+    }
+  }
+} 

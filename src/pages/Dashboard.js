@@ -38,6 +38,7 @@ import {
   getFaceData,
   getUserById,
 } from "../services/database-utils.js";
+import DebugToolbar from "../components/DebugToolbar";
 
 export const Dashboard = () => {
   const { user, signOut } = useAuth();
@@ -68,8 +69,10 @@ export const Dashboard = () => {
         if (faceResult.success && faceResult.data) {
             setFaceRegistered(true);
             
-            // Log full face data for debugging
-            console.log('[Dashboard] Raw face data:', JSON.stringify(faceResult.data, null, 2));
+            // Log full face data for debugging in a collapsible group
+            console.groupCollapsed('📊 [Dashboard] Raw face data:');
+            console.log(JSON.stringify(faceResult.data, null, 2));
+            console.groupEnd();
             
             // Extract face details - we need to handle multiple possible formats
             let faceDetail = null;
@@ -105,12 +108,14 @@ export const Dashboard = () => {
               }
             }
             
-            console.log('[Dashboard] Extracted face details:', JSON.stringify(faceDetail, null, 2));
+            console.groupCollapsed('🧩 [Dashboard] Extracted face details:');
+            console.log(JSON.stringify(faceDetail, null, 2));
+            console.groupEnd();
             
             setFaceAttributes(faceDetail);
             setFaceImageUrl(imageUrl);
             
-            console.log('[Dashboard] Face data processed:', {
+            console.log('✅ [Dashboard] Face data processed:', {
               hasAttributes: !!faceDetail,
               hasImageUrl: !!imageUrl
             });
@@ -139,9 +144,29 @@ export const Dashboard = () => {
     
     // Log received face attributes in detail to diagnose any issues
     if (directFaceAttributes) {
-      console.log('[Dashboard] Direct face attributes received:', JSON.stringify(directFaceAttributes, null, 2));
+      console.groupCollapsed('📊 [Dashboard] Direct face attributes received:');
+      console.log(JSON.stringify(directFaceAttributes, null, 2));
+      console.groupEnd();
+      
+      // Make sure directFaceAttributes are in the proper format for our rendering logic
+      let formattedAttributes = directFaceAttributes;
+      
+      // Check if we need to convert or parse
+      if (typeof directFaceAttributes === 'string') {
+        try {
+          console.log('🔄 [Dashboard] Attempting to parse string face attributes from registration');
+          formattedAttributes = JSON.parse(directFaceAttributes);
+        } catch (e) {
+          console.error('❌ [Dashboard] Error parsing face_attributes string from registration:', e);
+        }
+      }
+      
       // Store the face attributes directly since they're available
-      setFaceAttributes(directFaceAttributes);
+      setFaceAttributes(formattedAttributes);
+      
+      // Log the stored attributes for verification
+      console.log('[Dashboard] Stored face attributes from registration:', 
+        Object.keys(formattedAttributes).join(', '));
     } else {
       console.log('[Dashboard] No direct face attributes received');
     }
@@ -158,7 +183,9 @@ export const Dashboard = () => {
            setFaceRegistered(true);
            
            // Log full face data for debugging
-           console.log('[Dashboard] Raw face data after registration:', JSON.stringify(faceResult.data, null, 2));
+           console.groupCollapsed('📊 [Dashboard] Raw face data after registration:');
+           console.log(JSON.stringify(faceResult.data, null, 2));
+           console.groupEnd();
            
            // Set image URL if available
            if (faceResult.data.public_url) {
@@ -169,7 +196,26 @@ export const Dashboard = () => {
            // This preserves the richer attribute set we may have received directly
            if (!directFaceAttributes && faceResult.data.face_attributes) {
              console.log('[Dashboard] Setting face attributes from DynamoDB');
-             setFaceAttributes(faceResult.data.face_attributes);
+             
+             // Handle the case where face_attributes might be a string that needs parsing
+             let dbFaceAttributes = faceResult.data.face_attributes;
+             if (typeof dbFaceAttributes === 'string') {
+               try {
+                 dbFaceAttributes = JSON.parse(dbFaceAttributes);
+                 console.log('[Dashboard] Successfully parsed face_attributes from DynamoDB');
+               } catch (e) {
+                 console.error('[Dashboard] Error parsing face_attributes from DynamoDB:', e);
+               }
+             }
+             
+             setFaceAttributes(dbFaceAttributes);
+           }
+           
+           // If we still don't have face attributes but have face_data with nested face_detail
+           // This handles the 400 error case response format
+           if (!faceAttributes && faceResult.data.face_data && faceResult.data.face_data.face_detail) {
+             console.log('[Dashboard] Using face_data.face_detail as fallback');
+             setFaceAttributes(faceResult.data.face_data.face_detail);
            }
            
            console.log('[Dashboard] Updated face data processed');
@@ -194,10 +240,9 @@ export const Dashboard = () => {
       });
     }
 
-    console.log(
-      "[Dashboard] Rendering Face attributes data:",
-      JSON.stringify(faceAttributes, null, 2),
-    );
+    console.groupCollapsed('🎭 [Dashboard] Rendering Face attributes data:');
+    console.log(JSON.stringify(faceAttributes, null, 2));
+    console.groupEnd();
 
     // Extract data from DynamoDB S-format if needed
     const extractS = (obj) => {
@@ -209,8 +254,27 @@ export const Dashboard = () => {
     // Parse FaceAttributes from different possible response formats
     let faceDetail = null;
     
-    // Determine which format we're dealing with
-    if (faceAttributes.FaceAttributes) {
+    // First check for string format in face_attributes that needs parsing
+    if (typeof faceAttributes === 'string') {
+      console.log('[Dashboard] Found face_attributes as direct string, attempting to parse');
+      try {
+        faceDetail = JSON.parse(faceAttributes);
+      } catch (e) {
+        console.error('[Dashboard] Error parsing direct string face_attributes:', e);
+      }
+    } 
+    // Special case: if we have raw face_attributes field as null, try to build from other fields
+    else if (faceAttributes.face_attributes === null) {
+      console.log('[Dashboard] face_attributes field is null, checking for other formats');
+      
+      // Try to find attributes in face_data nested structure that sometimes comes with the 400 error
+      if (faceAttributes.face_data && faceAttributes.face_data.face_detail) {
+        console.log('[Dashboard] Found face_data.face_detail structure');
+        faceDetail = faceAttributes.face_data.face_detail;
+      }
+    }
+    // Now proceed with normal format determination
+    else if (faceAttributes.FaceAttributes) {
       // Direct Rekognition response format
       faceDetail = faceAttributes.FaceAttributes;
     } else if (faceAttributes.FaceDetail) {
@@ -221,21 +285,37 @@ export const Dashboard = () => {
       // This might be a string (needs parsing) or an object
       if (typeof faceAttributes.face_attributes === 'string') {
         try {
+          console.log('[Dashboard] Parsing string face_attributes');
           faceDetail = JSON.parse(faceAttributes.face_attributes);
+          console.log('[Dashboard] Successfully parsed face_attributes string');
         } catch (e) {
           console.error('[Dashboard] Error parsing face_attributes string:', e);
           faceDetail = { error: 'Unable to parse face attributes' };
         }
       } else {
+        console.log('[Dashboard] Using face_attributes as object directly');
         faceDetail = faceAttributes.face_attributes;
       }
     } else if (faceAttributes.AgeRange || faceAttributes.Gender || faceAttributes.Emotions) {
       // Direct attribute format - already contains the attributes at the top level
+      console.log('[Dashboard] Found direct top-level attributes');
       faceDetail = faceAttributes;
     } else {
       // Unknown format, just use what we have
+      console.log('[Dashboard] Using unknown format face attributes directly');
       faceDetail = faceAttributes;
     }
+    
+    // Additional logging for debugging
+    console.groupCollapsed('🔍 [Dashboard] Extracted face detail structure:');
+    console.log({
+      hasAgeRange: !!faceDetail?.AgeRange,
+      hasGender: !!faceDetail?.Gender,
+      hasEmotions: !!(faceDetail?.Emotions && Array.isArray(faceDetail.Emotions)),
+      hasBeard: !!faceDetail?.Beard,
+      structure: Object.keys(faceDetail || {})
+    });
+    console.groupEnd();
 
     // Parse Emotions from different possible attribute structures
     let emotions = [];
@@ -978,6 +1058,7 @@ export const Dashboard = () => {
             onClose: () => setShowRegistrationModal(false),
           }),
       }),
+      _jsx(DebugToolbar, {}),
     ],
   });
 };
