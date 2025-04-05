@@ -4,7 +4,8 @@ import {
   GetItemCommand, 
   QueryCommand, 
   UpdateItemCommand,
-  DeleteItemCommand 
+  DeleteItemCommand,
+  ScanCommand
 } from '@aws-sdk/client-dynamodb';
 import { 
   DynamoDBDocumentClient, 
@@ -233,34 +234,119 @@ export const storeFaceData = async (userId, faceData) => {
  */
 export const getFaceData = async (userId) => {
   try {
-    const command = new DocQueryCommand({
+    console.log(`[DB] Getting face data for user ${userId} from DynamoDB`);
+    
+    // First try to scan the table to find records matching the userId
+    // This works regardless of what the key schema is
+    const scanCommand = new ScanCommand({
       TableName: TABLES.FACE_DATA,
-      KeyConditionExpression: 'user_id = :userId',
+      FilterExpression: 'contains(#userId, :userId)',
+      ExpressionAttributeNames: {
+        '#userId': 'userId'
+      },
       ExpressionAttributeValues: {
         ':userId': userId
-      },
-      Limit: 1,
-      ScanIndexForward: false // Get most recent
+      }
     });
     
-    const response = await docClient.send(command);
-    
-    if (!response.Items || response.Items.length === 0) {
-      return { 
-        success: false, 
-        error: 'Face data not found' 
-      };
+    try {
+      const scanResponse = await docClient.send(scanCommand);
+      console.log(`[DB] Scan found ${scanResponse.Items?.length || 0} items`);
+      
+      if (scanResponse.Items && scanResponse.Items.length > 0) {
+        // Find the most recent active record first
+        let activeRecord = scanResponse.Items.find(item => item.status && item.status.S === 'active');
+        
+        // If no active record, return the first record (likely pending)
+        const item = activeRecord || scanResponse.Items[0];
+        console.log(`[DB] Found face data using scan, status: ${item.status?.S || 'unknown'}`);
+        return { 
+          success: true, 
+          data: item 
+        };
+      }
+    } catch (scanError) {
+      console.log('[DB] Scan didn\'t work, trying alternative queries:', scanError.message);
     }
     
-    return { 
-      success: true, 
-      data: response.Items[0].face_data 
+    // If scan doesn't work, try with "user_id" key
+    try {
+      const queryCommand = new QueryCommand({
+        TableName: TABLES.FACE_DATA,
+        KeyConditionExpression: 'user_id = :userId',
+        ExpressionAttributeValues: {
+          ':userId': userId
+        },
+        Limit: 1
+      });
+      
+      const queryResponse = await docClient.send(queryCommand);
+      
+      if (queryResponse.Items && queryResponse.Items.length > 0) {
+        console.log(`[DB] Found face data with user_id query`);
+        return { 
+          success: true, 
+          data: queryResponse.Items[0] 
+        };
+      }
+    } catch (queryError) {
+      console.log('[DB] Query with user_id key didn\'t work:', queryError.message);
+    }
+    
+    // If all else fails, do a full scan (expensive but will work)
+    try {
+      const fullScanCommand = new ScanCommand({
+        TableName: TABLES.FACE_DATA
+      });
+      
+      const fullScanResponse = await docClient.send(fullScanCommand);
+      console.log(`[DB] Full scan retrieved ${fullScanResponse.Items?.length || 0} items`);
+      
+      // Log one item to see the structure
+      if (fullScanResponse.Items && fullScanResponse.Items.length > 0) {
+        const sampleItem = fullScanResponse.Items[0];
+        const keys = Object.keys(sampleItem);
+        console.log(`[DB] Sample item structure: ${JSON.stringify(keys)}`);
+      }
+      
+      // Look for matching items
+      if (fullScanResponse.Items && fullScanResponse.Items.length > 0) {
+        console.log(`[DB] Examining scan results for matches`);
+        
+        // First try to find active record for this user
+        const matchingActiveItems = fullScanResponse.Items.filter(item => 
+          item.userId && item.userId.S === userId &&
+          item.status && item.status.S === 'active'
+        );
+        
+        // If no active record, look for any record for this user
+        const matchingItems = matchingActiveItems.length > 0 ? 
+          matchingActiveItems : 
+          fullScanResponse.Items.filter(item => 
+            item.userId && item.userId.S === userId
+          );
+        
+        if (matchingItems.length > 0) {
+          console.log(`[DB] Found matching face data through full scan`);
+          return {
+            success: true,
+            data: matchingItems[0]
+          };
+        }
+      }
+    } catch (fullScanError) {
+      console.error('[DB] Full scan failed:', fullScanError);
+    }
+    
+    return {
+      success: false,
+      error: 'No face data found for user'
     };
   } catch (error) {
     console.error('[DB] Error getting face data:', error);
-    return { 
-      success: false, 
-      error: error.message 
+    return {
+      success: false,
+      error: error.message
     };
   }
 };

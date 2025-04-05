@@ -21,17 +21,57 @@ import { signUp as lambdaSignUp } from '../services/lambdaAuthService';
 const AuthContext = createContext(undefined); // REMOVED <AuthContextType | undefined>
 
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState(null); // REMOVED <User | null>
+    const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
 
+    // Initialize auth state from localStorage on mount (run only once)
     useEffect(() => {
-        let unsubscribe /*: { unsubscribe: () => void } | null */ = null; // Removed type annotation
+        console.log('[AuthContext] Initializing - checking for stored user');
+        
+        try {
+            // First check localStorage for previously stored user
+            const storedUserJSON = localStorage.getItem('currentUser');
+            
+            if (storedUserJSON) {
+                try {
+                    const storedUser = JSON.parse(storedUserJSON);
+                    console.log('[AuthContext] Found user in localStorage:', storedUser.id);
+                    // Set user state directly from localStorage
+                    setUser(storedUser);
+                    setLoading(false);
+                } catch (parseError) {
+                    console.error('[AuthContext] Error parsing stored user:', parseError);
+                    localStorage.removeItem('currentUser'); // Remove invalid data
+                }
+            } else {
+                console.log('[AuthContext] No stored user found in localStorage');
+                setLoading(false);
+            }
+        } catch (error) {
+            console.error('[AuthContext] Error initializing auth:', error);
+            setLoading(false);
+        }
+    }, []); // Empty dependency array ensures this runs once on mount
+
+    useEffect(() => {
+        let unsubscribe = null;
 
         // Check for active session on mount using AWS Auth Service
         const checkUserSession = async () => {
             setLoading(true);
             try {
+                // First check if we have a user in localStorage
+                const storedUser = localStorage.getItem('currentUser');
+                if (storedUser) {
+                    const parsedUser = JSON.parse(storedUser);
+                    console.log('[AuthContext] Found user in localStorage:', parsedUser.id);
+                    setUser(parsedUser);
+                    setLoading(false);
+                    return;
+                }
+                
+                // If no stored user, check AWS auth service
                 const { data, error } = await awsAuthService.getSession();
                 const currentUser = data?.session?.user || null;
                 setUser(currentUser);
@@ -40,10 +80,13 @@ export function AuthProvider({ children }) {
                 unsubscribe = awsAuthService.onAuthStateChange((currentUserUpdate) => {
                     console.log('[AuthContext] AWS Auth state changed:', currentUserUpdate ? currentUserUpdate.id : 'null');
                     setUser(currentUserUpdate);
-                    // Navigation based on auth state can be handled here or in ProtectedRoute/PublicRoute
-                    // if (!currentUserUpdate) {
-                    //    navigate('/');
-                    // }
+                    
+                    // If user logged in, store in localStorage for persistence
+                    if (currentUserUpdate) {
+                        localStorage.setItem('currentUser', JSON.stringify(currentUserUpdate));
+                    } else {
+                        localStorage.removeItem('currentUser');
+                    }
                 });
 
             } catch (error) {
@@ -63,7 +106,7 @@ export function AuthProvider({ children }) {
                 unsubscribe.unsubscribe();
             }
         };
-    }, []); // Run only once on mount
+    }, []);
 
     // Sign in using AWS Cognito
     const signIn = useCallback(async (email /*: string*/, password /*: string*/) => { // Removed type annotations
@@ -117,14 +160,14 @@ export function AuthProvider({ children }) {
             
             console.log('[AuthContext] Lambda sign up successful:', result.data.user);
             
-            // For development environment with simulated users,
-            // we should not automatically sign them in, but wait for them to sign in manually
-            // This simulates the production flow where signup and signin are separate steps
+            // Set the user in context immediately after successful signup
+            setUser(result.data.user);
             
-            // In a production environment, we might have:
-            // 1. Auto-login after signup (depending on the application flow)
-            // 2. Set the user in the context and navigate
-            // But for now, we'll keep signup and signin as separate steps
+            // Also store in localStorage for persistence
+            localStorage.setItem('currentUser', JSON.stringify(result.data.user));
+            
+            // Navigate to dashboard
+            navigate('/dashboard');
             
             return { 
                 data: { 
@@ -139,22 +182,19 @@ export function AuthProvider({ children }) {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [navigate]);
 
     // Sign out using AWS Cognito
     const signOut = useCallback(async () => {
         setLoading(true);
         try {
             await awsAuthService.signOut();
-            // User state update is handled by the listener
-            console.log('[AuthContext] AWS Sign out successful, user state updated by listener.');
-            navigate('/'); // Navigate to landing page after sign out
-            return { error: null };
-        } catch(error) {
-            console.error('[AuthContext] AWS Sign out error:', error);
-            // Still navigate, but return the error
+            setUser(null);
+            // Clear from localStorage
+            localStorage.removeItem('currentUser');
             navigate('/');
-            return { error };
+        } catch (error) {
+            console.error('[AuthContext] Error signing out:', error);
         } finally {
             setLoading(false);
         }

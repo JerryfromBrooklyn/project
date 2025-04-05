@@ -25,10 +25,11 @@
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "3.782.0",
-    "@aws-sdk/client-dynamodb": "^3.511.0",
+    "@aws-sdk/client-dynamodb": "3.782.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.511.0",
     "@aws-sdk/client-rekognition": "^3.511.0",
     "@aws-sdk/client-s3": "^3.511.0",
-    "@aws-sdk/lib-dynamodb": "^3.511.0",
+    "@aws-sdk/lib-dynamodb": "3.782.0",
     "@aws-sdk/s3-request-presigner": "^3.511.0",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-slot": "^1.1.2",
@@ -70,4 +71,4 @@
     "typescript": "^5.3.3",
     "vite": "5.1.4"
   }
-} 
+}

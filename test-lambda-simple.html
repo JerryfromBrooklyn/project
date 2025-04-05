@@ -91,8 +91,8 @@
       resultContent.textContent = 'Sending request...';
       
       try {
-        // API Gateway URL
-        const API_URL = 'https://1utzocuwp7.execute-api.us-east-1.amazonaws.com/default/signup';
+        // CloudFront distribution URL with API path
+        const API_URL = 'https://d3hl8q20rgtlyy.cloudfront.net/api/';
         
         const response = await fetch(API_URL, {
           method: 'POST',

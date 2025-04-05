@@ -1,11 +1,13 @@
-import { 
+// index.js - Lambda function for user signup with DynamoDB integration
+const { 
   CognitoIdentityProviderClient, 
   AdminCreateUserCommand,
   AdminSetUserPasswordCommand,
   DescribeUserPoolCommand 
-} from "@aws-sdk/client-cognito-identity-provider";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { PutCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+} = require("@aws-sdk/client-cognito-identity-provider");
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { PutCommand, DynamoDBDocumentClient } = require("@aws-sdk/lib-dynamodb");
+const { CloudWatchLogsClient, PutLogEventsCommand, CreateLogStreamCommand, CreateLogGroupCommand } = require("@aws-sdk/client-cloudwatch-logs");
 
 // Initialize clients
 const region = process.env.AWS_REGION || 'us-east-1';
@@ -14,6 +16,60 @@ const userPoolId = process.env.USER_POOL_ID || 'us-east-1_wXi7yGqKw';
 const cognitoClient = new CognitoIdentityProviderClient({ region });
 const dynamoClient = new DynamoDBClient({ region });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
+const cloudwatchClient = new CloudWatchLogsClient({ region });
+
+// Function to log to CloudWatch
+async function logToCloudWatch(logGroupName, logStreamName, message) {
+  try {
+    // First try to create log group if it doesn't exist
+    try {
+      await cloudwatchClient.send(
+        new CreateLogGroupCommand({
+          logGroupName,
+        })
+      );
+      console.log(`[CloudWatch] Created log group: ${logGroupName}`);
+    } catch (error) {
+      // Ignore if group already exists
+      if (error.name !== 'ResourceAlreadyExistsException') {
+        console.error(`[CloudWatch] Error creating log group: ${error.message}`);
+      }
+    }
+    
+    // Try to create log stream if it doesn't exist
+    try {
+      await cloudwatchClient.send(
+        new CreateLogStreamCommand({
+          logGroupName,
+          logStreamName,
+        })
+      );
+      console.log(`[CloudWatch] Created log stream: ${logStreamName} in group ${logGroupName}`);
+    } catch (error) {
+      // Ignore if stream already exists
+      if (error.name !== 'ResourceAlreadyExistsException') {
+        console.error(`[CloudWatch] Error creating log stream: ${error.message}`);
+      }
+    }
+
+    // Log the message
+    const params = {
+      logGroupName,
+      logStreamName,
+      logEvents: [
+        {
+          message: typeof message === 'string' ? message : JSON.stringify(message, null, 2),
+          timestamp: Date.now(),
+        },
+      ],
+    };
+
+    await cloudwatchClient.send(new PutLogEventsCommand(params));
+    console.log(`[CloudWatch] Successfully logged event to ${logGroupName}/${logStreamName}`);
+  } catch (error) {
+    console.error(`[CloudWatch] Failed to log to CloudWatch: ${error.message}`);
+  }
+}
 
 // Function to write user to DynamoDB
 async function saveUserToDynamoDB(userId, email, fullName, role) {
@@ -27,15 +83,48 @@ async function saveUserToDynamoDB(userId, email, fullName, role) {
       updated_at: new Date().toISOString()
     };
     
+    // Log the user data we're about to save
+    console.log(`[DB] Saving user data to DynamoDB:`, JSON.stringify(userItem, null, 2));
+    
     await docClient.send(new PutCommand({
       TableName: "shmong-users",
       Item: userItem
     }));
     
     console.log(`User ${userId} saved to DynamoDB successfully`);
+    
+    // Log to CloudWatch
+    await logToCloudWatch(
+      "/shmong/user-operations",
+      `user-creation-${userId}-${Date.now()}`,
+      {
+        operation: "CREATE_USER",
+        userId,
+        email,
+        role,
+        timestamp: new Date().toISOString(),
+        success: true
+      }
+    );
+    
     return true;
   } catch (error) {
     console.error("Error saving user to DynamoDB:", error);
+    
+    // Log failure to CloudWatch
+    await logToCloudWatch(
+      "/shmong/user-operations",
+      `user-creation-errors-${Date.now()}`,
+      {
+        operation: "CREATE_USER",
+        userId,
+        email,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+        success: false
+      }
+    );
+    
     return false;
   }
 }
@@ -51,22 +140,68 @@ async function createInitialFaceMapping(userId) {
       updated_at: new Date().toISOString()
     };
     
+    // Log the face data we're about to save
+    console.log(`[DB] Creating initial face mapping:`, JSON.stringify(faceItem, null, 2));
+    
     await docClient.send(new PutCommand({
       TableName: "shmong-face-data",
       Item: faceItem
     }));
     
     console.log(`Initial face mapping created for user ${userId}`);
+    
+    // Log to CloudWatch
+    await logToCloudWatch(
+      "/shmong/face-operations",
+      `face-creation-${userId}-${Date.now()}`,
+      {
+        operation: "CREATE_INITIAL_FACE",
+        userId,
+        faceId: 'default',
+        status: 'pending',
+        timestamp: new Date().toISOString(),
+        success: true
+      }
+    );
+    
     return true;
   } catch (error) {
     console.error("Error creating face mapping:", error);
+    
+    // Log failure to CloudWatch
+    await logToCloudWatch(
+      "/shmong/face-operations",
+      `face-creation-errors-${Date.now()}`,
+      {
+        operation: "CREATE_INITIAL_FACE",
+        userId,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+        success: false
+      }
+    );
+    
     return false;
   }
 }
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
   // Log the incoming event for debugging
   console.log('Received event:', JSON.stringify(event, null, 4));
+  
+  // Create request ID for tracking in logs
+  const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+  
+  // Log to CloudWatch
+  await logToCloudWatch(
+    "/shmong/lambda-events",
+    `auth-signup-invocations-${Date.now()}`,
+    {
+      requestId,
+      event,
+      timestamp: new Date().toISOString()
+    }
+  );
   
   // Parse the body from the Lambda URL event
   let body;
@@ -77,7 +212,7 @@ export const handler = async (event) => {
     body = event;
   } else {
     // Handle malformed request
-    return {
+    const errorResponse = {
       statusCode: 400,
       headers: {
         'Access-Control-Allow-Origin': '*',
@@ -89,13 +224,27 @@ export const handler = async (event) => {
         message: 'Missing required parameters'
       })
     };
+    
+    // Log error to CloudWatch
+    await logToCloudWatch(
+      "/shmong/lambda-errors",
+      `auth-signup-errors-${Date.now()}`,
+      {
+        requestId,
+        error: "Missing required parameters",
+        event,
+        timestamp: new Date().toISOString()
+      }
+    );
+    
+    return errorResponse;
   }
   
   // Extract parameters
   const { email, password, fullName, role } = body;
   
   if (!email || !password) {
-    return {
+    const errorResponse = {
       statusCode: 400,
       headers: {
         'Access-Control-Allow-Origin': '*',
@@ -107,6 +256,19 @@ export const handler = async (event) => {
         message: 'Email and password are required'
       })
     };
+    
+    // Log error to CloudWatch
+    await logToCloudWatch(
+      "/shmong/lambda-errors",
+      `auth-signup-errors-${Date.now()}`,
+      {
+        requestId,
+        error: "Email and password are required",
+        timestamp: new Date().toISOString()
+      }
+    );
+    
+    return errorResponse;
   }
   
   // Log that we're beginning the signup process
@@ -185,6 +347,20 @@ export const handler = async (event) => {
       // Create initial face mapping
       await createInitialFaceMapping(userId);
       
+      // Log success to CloudWatch
+      await logToCloudWatch(
+        "/shmong/user-operations",
+        `user-signup-success-${Date.now()}`,
+        {
+          requestId,
+          userId,
+          email,
+          role,
+          timestamp: new Date().toISOString(),
+          success: true
+        }
+      );
+      
       // Return success response
       return {
         statusCode: 200,
@@ -201,6 +377,18 @@ export const handler = async (event) => {
       };
     } catch (userCreationError) {
       console.error('Detailed user creation error:', userCreationError);
+      
+      // Log error to CloudWatch
+      await logToCloudWatch(
+        "/shmong/lambda-errors",
+        `user-creation-errors-${Date.now()}`,
+        {
+          requestId,
+          error: userCreationError.message,
+          errorName: userCreationError.name,
+          timestamp: new Date().toISOString()
+        }
+      );
       
       if (userCreationError.name === 'UsernameExistsException') {
         return {
@@ -221,6 +409,19 @@ export const handler = async (event) => {
     }
   } catch (error) {
     console.error('Error:', error);
+    
+    // Log error to CloudWatch
+    await logToCloudWatch(
+      "/shmong/lambda-errors",
+      `auth-signup-errors-${Date.now()}`,
+      {
+        requestId,
+        error: error.message,
+        errorStack: error.stack,
+        timestamp: new Date().toISOString()
+      }
+    );
+    
     return {
       statusCode: 500,
       headers: {

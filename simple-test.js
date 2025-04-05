@@ -1,8 +1,8 @@
 // Simple test using native Node.js http module
 const https = require('https');
 
-// API Gateway URL
-const API_URL = 'https://1utzocuwp7.execute-api.us-east-1.amazonaws.com/default/signup';
+// CloudFront distribution URL with API path
+const API_URL = 'https://d3hl8q20rgtlyy.cloudfront.net/api/';
 
 // Generate a unique test email
 const testEmail = `test${Date.now()}@example.com`;
@@ -74,4 +74,4 @@ req.on('error', (error) => {
 
 // Send the request data
 req.write(data);
-req.end(); 
+req.end();

@@ -67,9 +67,53 @@ export const Dashboard = () => {
         const faceResult = await getFaceData(user.id);
         if (faceResult.success && faceResult.data) {
             setFaceRegistered(true);
-            setFaceAttributes(faceResult.data.face_detail || null);
-            setFaceImageUrl(faceResult.data.public_url || null);
-            console.log('[Dashboard] Face data found:', faceResult.data);
+            
+            // Log full face data for debugging
+            console.log('[Dashboard] Raw face data:', JSON.stringify(faceResult.data, null, 2));
+            
+            // Extract face details - we need to handle multiple possible formats
+            let faceDetail = null;
+            let imageUrl = null;
+            
+            // Check all possible attribute locations based on response structure
+            if (faceResult.data.faceId) {
+              // Simple structure with direct faceId
+              faceDetail = { faceId: faceResult.data.faceId };
+              imageUrl = faceResult.data.public_url || null;
+            } else if (faceResult.data.face_detail) {
+              // Nested face_detail structure
+              faceDetail = faceResult.data.face_detail;
+              imageUrl = faceResult.data.public_url || null;
+            } else if (faceResult.data.face_data?.attributes) {
+              // Nested face_data.attributes structure
+              faceDetail = faceResult.data.face_data.attributes;
+              imageUrl = faceResult.data.face_data.public_url || null;
+            } else if (faceResult.data.Attributes) {
+              // Direct Attributes structure
+              faceDetail = faceResult.data.Attributes;
+              imageUrl = faceResult.data.ImageUrl || null;
+            } else if (typeof faceResult.data === 'object') {
+              // Last resort, use entire data object
+              faceDetail = faceResult.data;
+              // Look for any property that might contain an image URL
+              const possibleUrlProps = ['public_url', 'url', 'image_url', 'img_url', 'imageUrl'];
+              for (const prop of possibleUrlProps) {
+                if (faceResult.data[prop]) {
+                  imageUrl = faceResult.data[prop];
+                  break;
+                }
+              }
+            }
+            
+            console.log('[Dashboard] Extracted face details:', JSON.stringify(faceDetail, null, 2));
+            
+            setFaceAttributes(faceDetail);
+            setFaceImageUrl(imageUrl);
+            
+            console.log('[Dashboard] Face data processed:', {
+              hasAttributes: !!faceDetail,
+              hasImageUrl: !!imageUrl
+            });
         } else {
           console.log('[Dashboard] No face data found for user or error:', faceResult.error);
           setFaceRegistered(false);
@@ -88,21 +132,51 @@ export const Dashboard = () => {
     fetchUserData();
   }, [user]);
 
-  const handleRegistrationSuccess = () => {
+  const handleRegistrationSuccess = (faceId, directFaceAttributes) => {
     setFaceRegistered(true);
     setShowRegistrationModal(false);
     console.log('[Dashboard] Face registered, attempting to refetch user data...');
+    console.log('[Dashboard] Direct face attributes received:', JSON.stringify(directFaceAttributes, null, 2));
+    
+    // If we received face attributes directly, use them immediately
+    if (directFaceAttributes) {
+      setFaceAttributes(directFaceAttributes);
+    }
+    
+    // Still try to refetch from DynamoDB to get the image URL
     setTimeout(() => {
-        const fetchUserDataAgain = async () => {
-          if (!user || !user.id) return;
-          const faceResult = await getFaceData(user.id);
-          if (faceResult.success && faceResult.data) {
-             setFaceRegistered(true);
-             setFaceAttributes(faceResult.data.face_detail || null);
-             setFaceImageUrl(faceResult.data.public_url || null);
-          }
+      const fetchUserDataAgain = async () => {
+        if (!user || !user.id) return;
+        
+        console.log('[Dashboard] Refetching face data after registration');
+        const faceResult = await getFaceData(user.id);
+        
+        if (faceResult.success && faceResult.data) {
+           setFaceRegistered(true);
+           
+           // Log full face data for debugging
+           console.log('[Dashboard] Raw face data after registration:', JSON.stringify(faceResult.data, null, 2));
+           
+           // Set image URL if available
+           if (faceResult.data.public_url) {
+             setFaceImageUrl(faceResult.data.public_url);
+           }
+           
+           // Extract face details if we don't have them already
+           if (!directFaceAttributes) {
+             const faceDetail = faceResult.data.faceId 
+               ? { faceId: faceResult.data.faceId } 
+               : faceResult.data.face_detail || null;
+               
+             setFaceAttributes(faceDetail);
+           }
+           
+           console.log('[Dashboard] Updated face data processed');
+        } else {
+           console.log('[Dashboard] Failed to refetch face data:', faceResult.error);
         }
-        fetchUserDataAgain();
+      }
+      fetchUserDataAgain();
     }, 1000);
   };
 
@@ -124,72 +198,140 @@ export const Dashboard = () => {
       JSON.stringify(faceAttributes, null, 2),
     );
 
-    const emotions = faceAttributes.Emotions || [];
+    // Extract data from DynamoDB S-format if needed
+    const extractS = (obj) => {
+      if (obj && obj.S !== undefined) return obj.S;
+      return obj;
+    };
+
+    // Parse FaceAttributes from direct response or nested structure 
+    const faceDetail = faceAttributes.FaceAttributes || 
+                       faceAttributes.face_attributes?.FaceAttributes || 
+                       faceAttributes.face_attributes || 
+                       faceAttributes;
+
+    // Parse Emotions from different possible attribute structures
+    let emotions = [];
+    if (faceDetail.Emotions) {
+      emotions = faceDetail.Emotions;
+    } else if (faceDetail.emotions) {
+      emotions = faceDetail.emotions;
+    } else if (typeof faceDetail === 'object') {
+      // Try to find any array property that might contain emotions
+      Object.keys(faceDetail).forEach(key => {
+        if (Array.isArray(faceDetail[key]) && 
+            faceDetail[key].length > 0 && 
+            faceDetail[key][0].Type && 
+            faceDetail[key][0].Confidence) {
+          emotions = faceDetail[key];
+        }
+      });
+    }
+
     const primaryEmotion =
       emotions.length > 0
         ? emotions.reduce(
             (prev, curr) => {
-              return (prev.Confidence || 0) > (curr.Confidence || 0) ? prev : curr;
+              // Handle different attribute naming formats
+              const prevConfidence = extractS(prev.Confidence) || extractS(prev.confidence) || 0;
+              const currConfidence = extractS(curr.Confidence) || extractS(curr.confidence) || 0;
+              return prevConfidence > currConfidence ? prev : curr;
             },
             { Confidence: 0, Type: "Unknown" },
           )
         : null;
 
-    const getRecoValue = (attrName) => {
-        return faceAttributes[attrName]?.Value;
-    }
-    const getRecoConfidence = (attrName) => {
-        return faceAttributes[attrName]?.Confidence || 0;
-    }
+    // Helper function to get attribute values with multiple structure support
+    const getAttributeValue = (attrName) => {
+      // Format 1: direct properties
+      if (faceDetail[attrName]?.Value !== undefined) {
+        return extractS(faceDetail[attrName].Value);
+      }
+      
+      // Format 2: lowercase properties
+      if (faceDetail[attrName]?.value !== undefined) {
+        return extractS(faceDetail[attrName].value);
+      }
+      
+      // Format 3: direct on face detail
+      if (faceDetail[attrName] !== undefined && 
+          !faceDetail[attrName].Confidence && 
+          !faceDetail[attrName].Value) {
+        return extractS(faceDetail[attrName]);
+      }
+      
+      // Format 4: lowercase variation
+      const lowerName = attrName.toLowerCase();
+      if (faceDetail[lowerName]?.Value !== undefined) {
+        return extractS(faceDetail[lowerName].Value);
+      }
+      
+      // Format 5: nested lowercase in attributes
+      if (faceDetail[lowerName]?.value !== undefined) {
+        return extractS(faceDetail[lowerName].value);
+      }
+      
+      return undefined;
+    };
 
+    // Create attribute cards for the dashboard
     const attributeCards = [];
 
-    const gender = faceAttributes.Gender;
-    if (gender?.Value) {
+    // Add Gender card if available
+    const gender = getAttributeValue('Gender') || getAttributeValue('gender');
+    if (gender) {
       attributeCards.push({
         icon: _jsx(User, { className: "w-5 h-5 text-blue-500" }),
         title: "Gender",
-        value: gender.Value.toLowerCase(),
+        value: gender.toLowerCase(),
         color: "text-blue-600",
       });
     }
 
-    const ageRange = faceAttributes.AgeRange;
-    if (ageRange?.Low && ageRange?.High) {
-      attributeCards.push({
-        icon: _jsx(Calendar, { className: "w-5 h-5 text-purple-500" }),
-        title: "Age Range",
-        value: `${ageRange.Low}-${ageRange.High} years`,
-        color: "text-purple-600",
-      });
+    // Add Age Range card if available
+    const ageRange = faceDetail.AgeRange || faceDetail.ageRange;
+    if (ageRange) {
+      const low = extractS(ageRange.Low || ageRange.low);
+      const high = extractS(ageRange.High || ageRange.high);
+      if (low && high) {
+        attributeCards.push({
+          icon: _jsx(Calendar, { className: "w-5 h-5 text-purple-500" }),
+          title: "Age Range",
+          value: `${low}-${high} years`,
+          color: "text-purple-600",
+        });
+      }
     }
 
-    const smile = faceAttributes.Smile;
+    // Add Smile card if available
+    const smile = getAttributeValue('Smile');
     if (smile !== undefined) {
       attributeCards.push({
         icon: _jsx(Smile, { className: "w-5 h-5 text-pink-500" }),
         title: "Smile",
-        value: smile.Value ? "Yes" : "No",
-        color: smile.Value ? "text-pink-600" : "text-gray-600",
+        value: smile ? "Yes" : "No",
+        color: smile ? "text-pink-600" : "text-gray-600",
       });
     }
 
-    const eyesOpen = faceAttributes.EyesOpen;
+    // Add Eyes Open card if available
+    const eyesOpen = getAttributeValue('EyesOpen');
     if (eyesOpen !== undefined) {
       attributeCards.push({
         icon: _jsx(Eye, { className: "w-5 h-5 text-teal-500" }),
         title: "Eyes Open",
-        value: eyesOpen.Value ? "Yes" : "No",
-        color: eyesOpen.Value ? "text-teal-600" : "text-gray-600",
+        value: eyesOpen ? "Yes" : "No",
+        color: eyesOpen ? "text-teal-600" : "text-gray-600",
       });
     }
 
-    const beard = faceAttributes.Beard;
-    const mustache = faceAttributes.Mustache;
-    if (beard?.Value || mustache?.Value) {
+    // Add Beard and Mustache card if available
+    const beard = getAttributeValue('Beard');
+    const mustache = getAttributeValue('Mustache');
+    if (beard || mustache) {
       let facialHair = [];
-      if (beard?.Value) facialHair.push("Beard");
-      if (mustache?.Value) facialHair.push("Mustache");
+      if (beard) facialHair.push("Beard");
+      if (mustache) facialHair.push("Mustache");
       attributeCards.push({
         icon: _jsx(Scissors, { className: "w-5 h-5 text-amber-500" }),
         title: "Facial Hair",
@@ -198,52 +340,26 @@ export const Dashboard = () => {
       });
     }
 
-    const eyeglasses = faceAttributes.Eyeglasses;
-    const sunglasses = faceAttributes.Sunglasses;
-    if (eyeglasses?.Value || sunglasses?.Value) {
-      attributeCards.push({
-        icon: _jsx(Glasses, { className: "w-5 h-5 text-indigo-500" }),
-        title: "Eyewear",
-        value: sunglasses?.Value ? "Sunglasses" : "Eyeglasses",
-        color: "text-indigo-600",
-      });
-    }
-
-    if (primaryEmotion && primaryEmotion.Type && primaryEmotion.Type !== "Unknown") {
-      const emotionType = primaryEmotion.Type;
-      const emotionColor =
-        {
-          HAPPY: "text-yellow-600",
-          CALM: "text-teal-600",
-          SAD: "text-blue-600",
-          CONFUSED: "text-purple-600",
-          DISGUSTED: "text-green-600",
-          SURPRISED: "text-pink-600",
-          ANGRY: "text-red-600",
-          FEAR: "text-indigo-600",
-        }[emotionType] || "text-gray-600";
+    // Add Emotion card if available
+    if (primaryEmotion && primaryEmotion.Type) {
+      const emotionType = extractS(primaryEmotion.Type) || extractS(primaryEmotion.type) || "Unknown";
       attributeCards.push({
         icon: _jsx(Heart, { className: "w-5 h-5 text-red-500" }),
         title: "Emotion",
-        value: emotionType.toLowerCase(),
-        color: emotionColor,
+        value: emotionType,
+        color: "text-red-600",
       });
     }
 
-    const quality = faceAttributes.Quality;
-    if (quality?.Brightness && quality?.Sharpness) {
-      const brightness = quality.Brightness;
-      const sharpness = quality.Sharpness;
-      const clarity = Math.round((brightness + sharpness) / 2);
-      const qualityLabel =
-        clarity > 70 ? "Excellent" : clarity > 50 ? "Good" : "Fair";
-      const qualityColor =
-        clarity > 70 ? "text-green-600" : clarity > 50 ? "text-amber-600" : "text-orange-600";
+    // Add Eyewear card if available
+    const eyeglasses = getAttributeValue('Eyeglasses');
+    const sunglasses = getAttributeValue('Sunglasses');
+    if (eyeglasses || sunglasses) {
       attributeCards.push({
-        icon: _jsx(Zap, { className: "w-5 h-5 text-yellow-500" }),
-        title: "Image Quality",
-        value: `${qualityLabel} (${clarity}%)`,
-        color: qualityColor,
+        icon: _jsx(Glasses, { className: "w-5 h-5 text-indigo-500" }),
+        title: "Eyewear",
+        value: sunglasses ? "Sunglasses" : "Eyeglasses",
+        color: "text-indigo-600",
       });
     }
 
@@ -253,7 +369,7 @@ export const Dashboard = () => {
           "mt-4 bg-white p-5 rounded-apple-xl border border-apple-gray-200 shadow-sm",
         children: [
            _jsx("h4", { className: "text-lg font-medium text-apple-gray-900 mb-3 flex items-center", children: "Face Analysis" }),
-           _jsx("p", { className: "text-apple-gray-600", children: "Detailed face analysis is not available." }),
+           _jsx("p", { className: "text-apple-gray-600", children: "Detailed face analysis is not available yet. Complete face registration to see attributes." }),
          ],
        });
     }
@@ -458,32 +574,70 @@ export const Dashboard = () => {
                     ? "Your face has been registered. You can now use the facial recognition feature for quick authentication."
                     : "Get started by registering your face to enable quick authentication and find your photos at events.",
                 }),
-                faceImageUrl &&
-                  _jsxs("div", {
-                    className: "mb-6",
-                    children: [
-                      _jsx("h3", {
-                        className:
-                          "text-sm font-medium text-apple-gray-700 mb-2",
-                        children: "Your Registered Face",
-                      }),
-                      _jsxs("div", {
-                        className: "flex flex-col md:flex-row gap-6",
+                _jsxs("div", {
+                  className: "mb-6",
+                  children: [
+                    _jsx("h3", {
+                      className:
+                        "text-xl font-semibold text-apple-gray-900 mb-3 flex items-center",
+                      children: _jsxs("span", {
+                        className: "flex items-center",
                         children: [
-                          _jsx("div", {
-                            className:
-                              "relative w-full max-w-xs aspect-square rounded-apple-xl overflow-hidden border border-apple-gray-200",
-                            children: _jsx("img", {
-                              src: faceImageUrl,
-                              alt: "Registered face",
-                              className: "w-full h-full object-contain",
-                            }),
-                          }),
-                          renderFaceAttributes(),
+                          _jsx(Camera, { className: "w-5 h-5 mr-2 text-purple-500" }),
+                          "Your Identity",
                         ],
                       }),
-                    ],
-                  }),
+                    }),
+                    faceImageUrl ? (
+                      _jsxs("div", {
+                        className: "flex flex-col md:flex-row gap-6 bg-white p-6 rounded-apple-xl border border-apple-gray-200 shadow-sm",
+                        children: [
+                          _jsxs("div", {
+                            className: "flex flex-col items-center",
+                            children: [
+                              _jsx("div", {
+                                className:
+                                  "relative w-full max-w-xs aspect-square rounded-apple-xl overflow-hidden border border-apple-gray-200 shadow-md",
+                                children: _jsx("img", {
+                                  src: faceImageUrl,
+                                  alt: "Registered face",
+                                  className: "w-full h-full object-cover",
+                                }),
+                              }),
+                              _jsx("p", {
+                                className: "mt-3 text-apple-gray-600 text-sm",
+                                children: "This is your registered face image used for recognition"
+                              })
+                            ],
+                          }),
+                          _jsx("div", {
+                            className: "flex-1 md:ml-6",
+                            children: renderFaceAttributes(),
+                          }),
+                        ],
+                      })
+                    ) : (
+                      _jsx("div", {
+                        className: "bg-white p-6 rounded-apple-xl border border-apple-gray-200 shadow-sm text-center",
+                        children: _jsxs("div", {
+                          className: "flex flex-col items-center gap-4",
+                          children: [
+                            _jsx(Camera, { className: "w-12 h-12 text-apple-gray-400" }),
+                            _jsx("p", {
+                              className: "text-apple-gray-600",
+                              children: "No face image has been registered yet. Complete the face registration process to see your identity."
+                            }),
+                            _jsx("button", {
+                              onClick: () => setShowRegistrationModal(true),
+                              className: "px-4 py-2 bg-apple-blue-500 text-white rounded-apple font-medium hover:bg-apple-blue-600 transition-colors",
+                              children: "Register Face"
+                            })
+                          ]
+                        })
+                      })
+                    )
+                  ],
+                }),
                 _jsxs("button", {
                   onClick: () => setShowRegistrationModal(true),
                   className: "ios-button-primary flex items-center",

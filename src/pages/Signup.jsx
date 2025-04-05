@@ -58,36 +58,14 @@ const Signup = () => {
     try {
       console.log('[SIGNUP] Validated input, calling signUp with email:', email);
       
-      // Set up a longer timeout to detect stuck calls
-      const timeoutId = setTimeout(() => {
-        console.error('[SIGNUP] Signup call appears to be stuck for 30s, try navigating manually');
-        setError('The registration process is taking longer than expected. You may need to refresh the page.');
-      }, 30000);
-      
-      // Call the signup function
-      const result = await signUp(email, password, fullName, 'user');
-      
-      // Clear the timeout since we got a response
-      clearTimeout(timeoutId);
+      // Call the signup function - navigation is now handled in AuthContext
+      const result = await signUp(email, password, fullName, 'attendee');
       
       console.log('[SIGNUP] Sign-up result:', JSON.stringify({
         success: !result.error,
         hasData: !!result.data,
         error: result.error ? result.error.message : null
       }, null, 2));
-      
-      // Check if this is a mock user (created as fallback)
-      const isMockUser = result.data?.user?.id.startsWith('mock-') || 
-                        result.data?.user?.id.startsWith('direct-') || 
-                        result.data?.user?.id.startsWith('temp-');
-      
-      if (isMockUser) {
-        console.log('[SIGNUP] Created mock user due to AWS connectivity issues');
-        localStorage.setItem('MOCK_AUTH_MODE', 'true');
-        
-        // Update error state with a warning instead of an error
-        setError('⚠️ AWS connection issue detected. Created a local account instead. Your data will be stored locally.');
-      }
       
       if (result.error) {
         console.error('[SIGNUP] ❌ Signup returned error:', result.error);
@@ -100,15 +78,7 @@ const Signup = () => {
       }
 
       console.log('[SIGNUP] ✅ Signup successful!', result.data);
-      
-      // Wait slightly longer before redirect if using mock mode to ensure the user sees the warning
-      const redirectDelay = isMockUser ? 2000 : 500;
-      
-      setTimeout(() => {
-        // Immediate navigation after successful signup
-        console.log('[SIGNUP] Redirecting to dashboard');
-        window.location.href = '/dashboard?test=true';
-      }, redirectDelay);
+      // No need for redirection here - it's handled in AuthContext
       
     } catch (err) {
       console.error('[SIGNUP] ❌ Signup error:', err);
@@ -128,17 +98,6 @@ const Signup = () => {
         errorMessage = err.message || 'Password does not meet requirements.';
       } else if (err.name === 'TooManyRequestsException') {
         errorMessage = 'Too many requests. Please try again later.';
-      } else if (err.message && err.message.includes('timed out')) {
-        // Special handling for timeout errors
-        errorMessage = 'Connection to AWS timed out. The system will create a local account instead.';
-        
-        // Enable mock mode for timeout errors
-        localStorage.setItem('MOCK_AUTH_MODE', 'true');
-        
-        // Try to redirect to dashboard after a delay
-        setTimeout(() => {
-          window.location.href = '/dashboard?test=true&error=timeout';
-        }, 2000);
       } else if (err.message) {
         errorMessage = err.message;
       }

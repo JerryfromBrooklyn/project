@@ -1,3 +1,4 @@
+// index-dynamo.mjs - Lambda function for user signup with DynamoDB integration
 import { 
   CognitoIdentityProviderClient, 
   AdminCreateUserCommand,
