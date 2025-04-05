@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import { 
   getSession, 
   getCurrentUser, 
@@ -74,6 +74,24 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // --- ADD Function to update face data in user state ---
+  const updateUserFaceData = useCallback((faceId, attributes) => {
+    console.log('[AuthContext] Updating user state with new face data:', { faceId, attributes });
+    setUser(currentUser => {
+      if (!currentUser) return null; // Should not happen if called after login
+      const updatedUser = {
+        ...currentUser,
+        faceId: faceId, // Add/Update faceId
+        faceAttributes: attributes // Add/Update attributes
+      };
+      // Log the attributes specifically after setting them in context
+      console.log('[AuthContext] User faceAttributes after update:', JSON.stringify(updatedUser.faceAttributes, null, 2));
+      return updatedUser;
+    });
+    // Optional: Consider triggering a background refetch from DB here if needed
+    // for absolute consistency, but updating context state directly is faster for UI.
+  }, []); // No dependencies needed if only using setUser
+
   // Auth context value
   const value = {
     user,
@@ -81,6 +99,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     error,
     signOut,
+    updateUserFaceData, // <-- Add function to context value
     isAuthenticated: !!user
   };
 

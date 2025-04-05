@@ -136,14 +136,17 @@ export const Dashboard = () => {
     setFaceRegistered(true);
     setShowRegistrationModal(false);
     console.log('[Dashboard] Face registered, attempting to refetch user data...');
-    console.log('[Dashboard] Direct face attributes received:', JSON.stringify(directFaceAttributes, null, 2));
     
-    // If we received face attributes directly, use them immediately
+    // Log received face attributes in detail to diagnose any issues
     if (directFaceAttributes) {
+      console.log('[Dashboard] Direct face attributes received:', JSON.stringify(directFaceAttributes, null, 2));
+      // Store the face attributes directly since they're available
       setFaceAttributes(directFaceAttributes);
+    } else {
+      console.log('[Dashboard] No direct face attributes received');
     }
     
-    // Still try to refetch from DynamoDB to get the image URL
+    // Still try to refetch from DynamoDB to get the image URL and ensure data consistency
     setTimeout(() => {
       const fetchUserDataAgain = async () => {
         if (!user || !user.id) return;
@@ -162,13 +165,11 @@ export const Dashboard = () => {
              setFaceImageUrl(faceResult.data.public_url);
            }
            
-           // Extract face details if we don't have them already
-           if (!directFaceAttributes) {
-             const faceDetail = faceResult.data.faceId 
-               ? { faceId: faceResult.data.faceId } 
-               : faceResult.data.face_detail || null;
-               
-             setFaceAttributes(faceDetail);
+           // Only update face attributes from DynamoDB if we don't have them directly
+           // This preserves the richer attribute set we may have received directly
+           if (!directFaceAttributes && faceResult.data.face_attributes) {
+             console.log('[Dashboard] Setting face attributes from DynamoDB');
+             setFaceAttributes(faceResult.data.face_attributes);
            }
            
            console.log('[Dashboard] Updated face data processed');
@@ -200,29 +201,56 @@ export const Dashboard = () => {
 
     // Extract data from DynamoDB S-format if needed
     const extractS = (obj) => {
+      if (!obj) return obj;
       if (obj && obj.S !== undefined) return obj.S;
       return obj;
     };
 
-    // Parse FaceAttributes from direct response or nested structure 
-    const faceDetail = faceAttributes.FaceAttributes || 
-                       faceAttributes.face_attributes?.FaceAttributes || 
-                       faceAttributes.face_attributes || 
-                       faceAttributes;
+    // Parse FaceAttributes from different possible response formats
+    let faceDetail = null;
+    
+    // Determine which format we're dealing with
+    if (faceAttributes.FaceAttributes) {
+      // Direct Rekognition response format
+      faceDetail = faceAttributes.FaceAttributes;
+    } else if (faceAttributes.FaceDetail) {
+      // Nested FaceDetail format
+      faceDetail = faceAttributes.FaceDetail;
+    } else if (faceAttributes.face_attributes) {
+      // DynamoDB format with face_attributes property
+      // This might be a string (needs parsing) or an object
+      if (typeof faceAttributes.face_attributes === 'string') {
+        try {
+          faceDetail = JSON.parse(faceAttributes.face_attributes);
+        } catch (e) {
+          console.error('[Dashboard] Error parsing face_attributes string:', e);
+          faceDetail = { error: 'Unable to parse face attributes' };
+        }
+      } else {
+        faceDetail = faceAttributes.face_attributes;
+      }
+    } else if (faceAttributes.AgeRange || faceAttributes.Gender || faceAttributes.Emotions) {
+      // Direct attribute format - already contains the attributes at the top level
+      faceDetail = faceAttributes;
+    } else {
+      // Unknown format, just use what we have
+      faceDetail = faceAttributes;
+    }
 
     // Parse Emotions from different possible attribute structures
     let emotions = [];
-    if (faceDetail.Emotions) {
+    if (faceDetail.Emotions && Array.isArray(faceDetail.Emotions)) {
       emotions = faceDetail.Emotions;
-    } else if (faceDetail.emotions) {
+    } else if (faceDetail.emotions && Array.isArray(faceDetail.emotions)) {
       emotions = faceDetail.emotions;
-    } else if (typeof faceDetail === 'object') {
+    } else {
       // Try to find any array property that might contain emotions
       Object.keys(faceDetail).forEach(key => {
         if (Array.isArray(faceDetail[key]) && 
             faceDetail[key].length > 0 && 
-            faceDetail[key][0].Type && 
-            faceDetail[key][0].Confidence) {
+            faceDetail[key][0] && 
+            (faceDetail[key][0].Type || faceDetail[key][0].type) && 
+            (faceDetail[key][0].Confidence || faceDetail[key][0].confidence)) {
           emotions = faceDetail[key];
         }
       });
@@ -243,32 +271,36 @@ export const Dashboard = () => {
 
     // Helper function to get attribute values with multiple structure support
     const getAttributeValue = (attrName) => {
-      // Format 1: direct properties
+      const lowerName = attrName.toLowerCase();
+      
+      // Format 1: direct properties with Value
       if (faceDetail[attrName]?.Value !== undefined) {
         return extractS(faceDetail[attrName].Value);
       }
       
-      // Format 2: lowercase properties
+      // Format 2: lowercase properties with value
       if (faceDetail[attrName]?.value !== undefined) {
         return extractS(faceDetail[attrName].value);
       }
       
-      // Format 3: direct on face detail
-      if (faceDetail[attrName] !== undefined && 
-          !faceDetail[attrName].Confidence && 
-          !faceDetail[attrName].Value) {
-        return extractS(faceDetail[attrName]);
-      }
-      
-      // Format 4: lowercase variation
-      const lowerName = attrName.toLowerCase();
+      // Format 3: lowercase name with Value
       if (faceDetail[lowerName]?.Value !== undefined) {
         return extractS(faceDetail[lowerName].Value);
       }
       
-      // Format 5: nested lowercase in attributes
+      // Format 4: lowercase name with value
       if (faceDetail[lowerName]?.value !== undefined) {
         return extractS(faceDetail[lowerName].value);
+      }
+      
+      // Format 5: direct boolean on the object
+      if (typeof faceDetail[attrName] === 'boolean') {
+        return faceDetail[attrName];
+      }
+      
+      // Format 6: direct boolean on lowercase name
+      if (typeof faceDetail[lowerName] === 'boolean') {
+        return faceDetail[lowerName];
       }
       
       return undefined;
@@ -278,12 +310,16 @@ export const Dashboard = () => {
     const attributeCards = [];
 
     // Add Gender card if available
-    const gender = getAttributeValue('Gender') || getAttributeValue('gender');
+    const gender = getAttributeValue('Gender') || 
+                  faceDetail.gender?.Value || 
+                  faceDetail.gender?.value ||
+                  (faceDetail.Gender && typeof faceDetail.Gender === 'string' ? faceDetail.Gender : null);
+                  
     if (gender) {
       attributeCards.push({
         icon: _jsx(User, { className: "w-5 h-5 text-blue-500" }),
         title: "Gender",
-        value: gender.toLowerCase(),
+        value: typeof gender === 'string' ? gender.toLowerCase() : 'Unknown',
         color: "text-blue-600",
       });
     }
@@ -335,13 +371,13 @@ export const Dashboard = () => {
       attributeCards.push({
         icon: _jsx(Scissors, { className: "w-5 h-5 text-amber-500" }),
         title: "Facial Hair",
-        value: facialHair.join(" & "),
+        value: facialHair.join(" & ") || "None",
         color: "text-amber-600",
       });
     }
 
     // Add Emotion card if available
-    if (primaryEmotion && primaryEmotion.Type) {
+    if (primaryEmotion && (primaryEmotion.Type || primaryEmotion.type)) {
       const emotionType = extractS(primaryEmotion.Type) || extractS(primaryEmotion.type) || "Unknown";
       attributeCards.push({
         icon: _jsx(Heart, { className: "w-5 h-5 text-red-500" }),

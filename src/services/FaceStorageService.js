@@ -2,7 +2,7 @@
 import { s3Client } from '../lib/awsClient';
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, PutItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } from '../lib/awsClient';
 
 // S3 Bucket name for face data
@@ -21,11 +21,20 @@ const dynamoDBClient = new DynamoDBClient({
  * Store a face ID for a user in both the database and localStorage backup
  * @param {string} userId - The user ID
  * @param {string} faceId - The AWS Rekognition face ID
+ * @param {object} faceAttributes - Optional face attributes from Rekognition
+ * @param {string} imageUrl - Optional URL for the face image
  * @returns {Promise<boolean>} - Success status
  */
-export const storeFaceId = async (userId, faceId) => {
+export const storeFaceId = async (userId, faceId, faceAttributes = null, imageUrl = null) => {
   try {
     console.log(`[FaceStorage] 🔶 Storing face ID mapping for user: ${userId} with faceId: ${faceId}`);
+    
+    if (faceAttributes) {
+      console.log(`[FaceStorage] 🔶 Including face attributes in storage:`, 
+        Object.keys(faceAttributes).length > 0 ? 
+        Object.keys(faceAttributes) : 
+        'No attributes provided');
+    }
     
     // Create mapping object for potential S3 fallback
     const mappingData = {
@@ -34,6 +43,14 @@ export const storeFaceId = async (userId, faceId) => {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
+    
+    if (faceAttributes) {
+      mappingData.face_attributes = faceAttributes;
+    }
+    
+    if (imageUrl) {
+      mappingData.image_url = imageUrl;
+    }
     
     // PRIMARY METHOD: Update DynamoDB directly
     console.log(`[FaceStorage] 🔶 Updating DynamoDB record for user: ${userId}`);
@@ -46,6 +63,18 @@ export const storeFaceId = async (userId, faceId) => {
         updated_at: { S: new Date().toISOString() },
         created_at: { S: new Date().toISOString() }
       };
+      
+      // Add face attributes if provided
+      if (faceAttributes) {
+        console.log(`[FaceStorage] 🔶 Adding face attributes to DynamoDB item`);
+        // Convert complex object to JSON string for DynamoDB
+        item.face_attributes = { S: JSON.stringify(faceAttributes) };
+      }
+      
+      // Add image URL if provided
+      if (imageUrl) {
+        item.public_url = { S: imageUrl };
+      }
       
       console.log(`[FaceStorage] 🔶 DynamoDB put operation preparing:`, {
         table: "shmong-face-data", 
@@ -109,50 +138,98 @@ export const getFaceId = async (userId) => {
     console.log(`[FaceStorage] 🔍 Checking DynamoDB for user: ${userId}`);
     
     try {
-      // Using scan with filter as a simple approach
-      // In a production app, you'd use a more efficient query
-      const scanCommand = {
+      // Use proper query instead of scan for better performance
+      const queryCommand = new QueryCommand({
         TableName: "shmong-face-data",
-        FilterExpression: "userId = :userId",
+        KeyConditionExpression: "userId = :userId",
         ExpressionAttributeValues: {
           ":userId": { S: userId }
         }
-      };
+      });
       
-      console.log(`[FaceStorage] 🔍 Preparing DynamoDB scan`);
+      console.log(`[FaceStorage] 🔍 Executing DynamoDB query for userId: ${userId}`);
       
-      // Use fetch API to call API Gateway for scanning DynamoDB
-      // This avoids the SDK limitations in browser
-      const response = await fetch(
-        "https://60x98imf4a.execute-api.us-east-1.amazonaws.com/prod/scan-dynamodb", 
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ 
-            tableName: "shmong-face-data",
-            filterExpression: "userId = :userId",
-            expressionValues: {
-              ":userId": userId
-            }
-          })
+      const queryResult = await dynamoDBClient.send(queryCommand);
+      
+      if (queryResult.Items && queryResult.Items.length > 0) {
+        const item = queryResult.Items[0];
+        console.log(`[FaceStorage] ✅ Face ID retrieved from DynamoDB query: ${item.faceId.S}`);
+        
+        // Parse face attributes if available
+        let faceAttributes = null;
+        if (item.face_attributes && item.face_attributes.S) {
+          try {
+            faceAttributes = JSON.parse(item.face_attributes.S);
+            console.log(`[FaceStorage] ✅ Face attributes retrieved from DynamoDB`);
+          } catch (parseError) {
+            console.error(`[FaceStorage] ❌ Error parsing face attributes:`, parseError);
+          }
         }
-      );
-      
-      if (!response.ok) {
-        throw new Error(`API Gateway error: ${response.status} ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      
-      if (result.success && result.items && result.items.length > 0) {
-        const item = result.items[0];
-        console.log(`[FaceStorage] ✅ Face ID retrieved from DynamoDB: ${item.faceId}`);
-        return { success: true, faceId: item.faceId };
+        
+        return { 
+          success: true, 
+          faceId: item.faceId.S,
+          faceAttributes: faceAttributes,
+          status: item.status?.S || 'unknown',
+          imageUrl: item.public_url?.S || null
+        };
       } else {
-        console.log(`[FaceStorage] ⚠️ No face ID found in DynamoDB for user: ${userId}`);
-        throw new Error("No data found in DynamoDB");
+        console.log(`[FaceStorage] ⚠️ No face ID found in DynamoDB query for user: ${userId}`);
+        
+        // Fall back to API Gateway scan approach if query doesn't find results
+        // This is a temporary fallback until all records have consistent keys
+        console.log(`[FaceStorage] 🔍 Falling back to API Gateway scan`);
+        
+        const response = await fetch(
+          "https://60x98imf4a.execute-api.us-east-1.amazonaws.com/prod/scan-dynamodb", 
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ 
+              tableName: "shmong-face-data",
+              filterExpression: "userId = :userId",
+              expressionValues: {
+                ":userId": userId
+              }
+            })
+          }
+        );
+        
+        if (!response.ok) {
+          throw new Error(`API Gateway error: ${response.status} ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success && result.items && result.items.length > 0) {
+          const item = result.items[0];
+          console.log(`[FaceStorage] ✅ Face ID retrieved from API Gateway scan: ${item.faceId}`);
+          
+          // Parse face attributes if available
+          let faceAttributes = null;
+          if (item.face_attributes) {
+            try {
+              faceAttributes = typeof item.face_attributes === 'string' ? 
+                JSON.parse(item.face_attributes) : item.face_attributes;
+              console.log(`[FaceStorage] ✅ Face attributes retrieved from API Gateway`);
+            } catch (parseError) {
+              console.error(`[FaceStorage] ❌ Error parsing face attributes:`, parseError);
+            }
+          }
+          
+          return { 
+            success: true, 
+            faceId: item.faceId,
+            faceAttributes: faceAttributes,
+            status: item.status || 'unknown',
+            imageUrl: item.public_url || null
+          };
+        } else {
+          console.log(`[FaceStorage] ⚠️ No face ID found in API Gateway scan for user: ${userId}`);
+          throw new Error("No data found in DynamoDB");
+        }
       }
     } catch (dbError) {
       console.error(`[FaceStorage] ⚠️ DynamoDB retrieval failed:`, dbError);
@@ -175,7 +252,12 @@ export const getFaceId = async (userId) => {
         const data = JSON.parse(bodyContents);
         console.log(`[FaceStorage] ✅ Face ID retrieved from S3: ${data.face_id}`);
         
-        return { success: true, faceId: data.face_id };
+        return { 
+          success: true, 
+          faceId: data.face_id,
+          faceAttributes: data.face_attributes || null,
+          imageUrl: data.image_url || null
+        };
       } catch (s3Error) {
         console.error(`[FaceStorage] ❌ S3 fallback retrieval failed:`, s3Error);
         throw new Error(`Both DynamoDB and S3 retrieval failed: ${dbError.message} | ${s3Error.message}`);

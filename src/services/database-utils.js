@@ -236,70 +236,166 @@ export const getFaceData = async (userId) => {
   try {
     console.log(`[DB] Getting face data for user ${userId} from DynamoDB`);
     
-    // First try to scan the table to find records matching the userId
-    // This works regardless of what the key schema is
-    const scanCommand = new ScanCommand({
-      TableName: TABLES.FACE_DATA,
-      FilterExpression: 'contains(#userId, :userId)',
-      ExpressionAttributeNames: {
-        '#userId': 'userId'
-      },
-      ExpressionAttributeValues: {
-        ':userId': userId
-      }
-    });
-    
+    // First try to use DynamoDB Query which is more efficient than scanning
     try {
-      const scanResponse = await docClient.send(scanCommand);
-      console.log(`[DB] Scan found ${scanResponse.Items?.length || 0} items`);
+      // Using QueryCommand with userId as the primary key for efficiency
+      const queryCommand = new QueryCommand({
+        TableName: TABLES.FACE_DATA,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: {
+          ':userId': { S: userId }
+        },
+        ScanIndexForward: false // Sort by most recent first (descending)
+      });
       
-      if (scanResponse.Items && scanResponse.Items.length > 0) {
-        // Find the most recent active record first
-        let activeRecord = scanResponse.Items.find(item => item.status && item.status.S === 'active');
+      console.log(`[DB] Executing direct query for userId: ${userId}`);
+      const queryResponse = await client.send(queryCommand);
+      
+      if (queryResponse.Items && queryResponse.Items.length > 0) {
+        // Sort the items explicitly by timestamp to guarantee we get the most recent
+        const sortedItems = [...queryResponse.Items].sort((a, b) => {
+          const aTime = a.updated_at?.S || a.created_at?.S || '';
+          const bTime = b.updated_at?.S || b.created_at?.S || '';
+          // Sort in descending order (most recent first)
+          return bTime.localeCompare(aTime);
+        });
         
-        // If no active record, return the first record (likely pending)
-        const item = activeRecord || scanResponse.Items[0];
-        console.log(`[DB] Found face data using scan, status: ${item.status?.S || 'unknown'}`);
+        // Find active records first, then fall back to others
+        let activeRecords = sortedItems.filter(item => 
+          item.status && item.status.S === 'active'
+        );
+        
+        // Get the most recent active record or the most recent record if no active records
+        const record = activeRecords.length > 0 ? activeRecords[0] : sortedItems[0];
+        
+        console.log(`[DB] Found face data using efficient query, status: ${record.status?.S || 'unknown'}`);
+        console.log(`[DB] Selected face record with ID: ${record.faceId?.S}, created at: ${record.created_at?.S}`);
+        
+        // Extract face attributes if they exist and parse them
+        let faceAttributes = null;
+        if (record.face_attributes && record.face_attributes.S) {
+          try {
+            faceAttributes = JSON.parse(record.face_attributes.S);
+            console.log(`[DB] Successfully parsed face attributes for user ${userId}`);
+          } catch (parseError) {
+            console.error(`[DB] Error parsing face attributes:`, parseError);
+          }
+        }
+        
+        // Construct response with all available data
+        return { 
+          success: true, 
+          data: {
+            userId: record.userId?.S,
+            faceId: record.faceId?.S,
+            status: record.status?.S || 'unknown',
+            public_url: record.public_url?.S,
+            created_at: record.created_at?.S,
+            updated_at: record.updated_at?.S,
+            face_attributes: faceAttributes
+          }
+        };
+      }
+      
+      console.log(`[DB] No records found with direct query, trying alternative methods`);
+    } catch (queryError) {
+      console.log(`[DB] Query failed:`, queryError.message);
+    }
+    
+    // If direct query doesn't work, try with document client
+    try {
+      console.log(`[DB] Trying document client query`);
+      const docQueryCommand = new DocQueryCommand({
+        TableName: TABLES.FACE_DATA,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: {
+          ':userId': userId
+        }
+      });
+      
+      const docResponse = await docClient.send(docQueryCommand);
+      
+      if (docResponse.Items && docResponse.Items.length > 0) {
+        const item = docResponse.Items[0];
+        console.log(`[DB] Found face data with document client query`);
+        
+        // Parse face attributes if needed
+        if (typeof item.face_attributes === 'string') {
+          try {
+            item.face_attributes = JSON.parse(item.face_attributes);
+          } catch (parseError) {
+            console.error(`[DB] Error parsing face attributes in doc client:`, parseError);
+          }
+        }
+        
         return { 
           success: true, 
           data: item 
         };
       }
-    } catch (scanError) {
-      console.log('[DB] Scan didn\'t work, trying alternative queries:', scanError.message);
+    } catch (docError) {
+      console.log(`[DB] Document client query failed:`, docError.message);
     }
     
-    // If scan doesn't work, try with "user_id" key
+    // If direct queries fail, try the API Gateway endpoint as fallback
     try {
-      const queryCommand = new QueryCommand({
-        TableName: TABLES.FACE_DATA,
-        KeyConditionExpression: 'user_id = :userId',
-        ExpressionAttributeValues: {
-          ':userId': userId
-        },
-        Limit: 1
-      });
+      console.log(`[DB] Trying API Gateway for face data lookup`);
       
-      const queryResponse = await docClient.send(queryCommand);
+      const response = await fetch(
+        "https://60x98imf4a.execute-api.us-east-1.amazonaws.com/prod/scan-dynamodb", 
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ 
+            tableName: TABLES.FACE_DATA,
+            filterExpression: "userId = :userId",
+            expressionValues: {
+              ":userId": userId
+            }
+          })
+        }
+      );
       
-      if (queryResponse.Items && queryResponse.Items.length > 0) {
-        console.log(`[DB] Found face data with user_id query`);
+      if (!response.ok) {
+        throw new Error(`API Gateway error: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success && result.items && result.items.length > 0) {
+        const item = result.items[0];
+        console.log(`[DB] Found face data via API Gateway`);
+        
+        // Parse face attributes if they're available as a string
+        if (typeof item.face_attributes === 'string') {
+          try {
+            item.face_attributes = JSON.parse(item.face_attributes);
+          } catch (parseError) {
+            console.error(`[DB] Error parsing face attributes from API Gateway:`, parseError);
+          }
+        }
+        
         return { 
           success: true, 
-          data: queryResponse.Items[0] 
+          data: item 
         };
       }
-    } catch (queryError) {
-      console.log('[DB] Query with user_id key didn\'t work:', queryError.message);
+    } catch (apiError) {
+      console.error(`[DB] API Gateway request failed:`, apiError);
     }
     
-    // If all else fails, do a full scan (expensive but will work)
+    // Last resort: full scan with client-side filtering
+    // This is inefficient and should only be used as a fallback
+    console.log(`[DB] All optimized queries failed, doing full scan as last resort`);
+    
     try {
       const fullScanCommand = new ScanCommand({
         TableName: TABLES.FACE_DATA
       });
       
-      const fullScanResponse = await docClient.send(fullScanCommand);
+      const fullScanResponse = await client.send(fullScanCommand);
       console.log(`[DB] Full scan retrieved ${fullScanResponse.Items?.length || 0} items`);
       
       // Log one item to see the structure
@@ -315,22 +411,42 @@ export const getFaceData = async (userId) => {
         
         // First try to find active record for this user
         const matchingActiveItems = fullScanResponse.Items.filter(item => 
-          item.userId && item.userId.S === userId &&
-          item.status && item.status.S === 'active'
+          (item.userId?.S === userId || item.user_id?.S === userId) &&
+          item.status?.S === 'active'
         );
         
         // If no active record, look for any record for this user
         const matchingItems = matchingActiveItems.length > 0 ? 
           matchingActiveItems : 
           fullScanResponse.Items.filter(item => 
-            item.userId && item.userId.S === userId
+            item.userId?.S === userId || item.user_id?.S === userId
           );
         
         if (matchingItems.length > 0) {
+          const item = matchingItems[0];
           console.log(`[DB] Found matching face data through full scan`);
+          
+          // Parse face attributes if they exist
+          let faceAttributes = null;
+          if (item.face_attributes?.S) {
+            try {
+              faceAttributes = JSON.parse(item.face_attributes.S);
+            } catch (parseError) {
+              console.error(`[DB] Error parsing face attributes from scan:`, parseError);
+            }
+          }
+          
           return {
             success: true,
-            data: matchingItems[0]
+            data: {
+              userId: item.userId?.S || item.user_id?.S,
+              faceId: item.faceId?.S,
+              status: item.status?.S || 'unknown',
+              public_url: item.public_url?.S,
+              created_at: item.created_at?.S,
+              updated_at: item.updated_at?.S,
+              face_attributes: faceAttributes
+            }
           };
         }
       }
