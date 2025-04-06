@@ -1,0 +1,5 @@
+[33m6b1d31a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mAWS-Fix[m[33m, [m[1;31morigin/AWS-Fix[m[33m)[m FINAL COMMIT BEFORE STARTING MATCHING SYSTEM . SHEESH
+[33m0db3c05[m Sign up, Face Registration, Photo in Dashboard WORKS. Need to work on Photo upload and historical matching next!!
+[33m2d3ad3b[m WE ARE NOW PULLING ATTRIBUTES IN THE BROWSER LOGS AND CONSOLE LOGS
+[33m38662f7[m Writing to Dynamo and getting FaceID after Face Registration is working
+[33mc58d355[m Update CORS headers, enhance environment checks, and increment build number

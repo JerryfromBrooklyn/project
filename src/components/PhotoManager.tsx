@@ -58,20 +58,10 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!user) return;
-
-    console.log('Setting up photo data fetching...');
-    
-    // Set up polling for AWS instead of realtime subscriptions
-    const pollingInterval = setInterval(() => {
+    if (user) {
       fetchPhotos();
-    }, 30000); // Poll every 30 seconds
-    
-    return () => {
-      console.log('Cleaning up photo subscription');
-      clearInterval(pollingInterval);
-    };
-  }, [user, mode]);
+    }
+  }, [user, filters, searchQuery]);
 
   const fetchPhotos = async () => {
     try {
@@ -79,8 +69,6 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
       setError(null);
       
       if (!user) return;
-
-      console.log('Fetching photos from AWS...');
       
       // Get photos from DynamoDB via awsPhotoService
       const fetchedPhotos = await awsPhotoService.fetchPhotos(user.id);
@@ -225,9 +213,16 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
             />
           </div>
           <button
+            onClick={fetchPhotos}
+            className="ios-button-secondary mr-2 flex items-center"
+            aria-label="Refresh photos"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          <button
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
-              "ios-button-secondary ml-4 flex items-center",
+              "ios-button-secondary flex items-center",
               showFilters && "bg-apple-blue-500 text-white hover:bg-apple-blue-600"
             )}
           >
