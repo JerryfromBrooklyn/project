@@ -68,6 +68,7 @@ export const LandingPage: React.FC = () => {
   const [activeSection, setActiveSection] = useState<string>('');
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [authType, setAuthType] = useState<'signin' | 'signup'>('signin');
   
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -237,10 +238,17 @@ export const LandingPage: React.FC = () => {
   const handleDashboardClick = (e: React.MouseEvent<HTMLButtonElement>): void => {
     if (!user) {
       e.preventDefault();
+      setAuthType('signup');
       setShowAuthModal(true);
     } else {
       navigate('/dashboard');
     }
+  };
+
+  const handleLoginClick = (e: React.MouseEvent<HTMLButtonElement>): void => {
+    e.preventDefault();
+    setAuthType('signin');
+    setShowAuthModal(true);
   };
 
   // iPhone mockup slides
@@ -346,10 +354,10 @@ export const LandingPage: React.FC = () => {
 
             <div className="flex items-center space-x-2">
               <button
-                onClick={handleDashboardClick}
+                onClick={user ? handleDashboardClick : handleLoginClick}
                 className="ios-button-primary"
               >
-                {user ? 'Go to Dashboard' : 'Get Started'}
+                {user ? 'Go to Dashboard' : 'Sign up / Log In'}
               </button>
             </div>
           </div>
@@ -637,6 +645,7 @@ export const LandingPage: React.FC = () => {
             >
               <AuthForms
                 isModal
+                defaultView={authType}
                 onClose={() => setShowAuthModal(false)}
               />
             </motion.div>

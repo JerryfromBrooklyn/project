@@ -158,15 +158,15 @@ export const LandingPage = () => {
     const handleDashboardClick = (e) => {
         if (!user) {
             e.preventDefault();
-            setAuthType('signin');
+            setAuthType('signup');
             setShowAuthModal(true);
         } else {
             navigate('/dashboard');
         }
     };
-    const handleSignupClick = (e) => {
+    const handleLoginClick = (e) => {
         e.preventDefault();
-        setAuthType('signup');
+        setAuthType('signin');
         setShowAuthModal(true);
     };
     // iPhone mockup slides
@@ -185,9 +185,9 @@ export const LandingPage = () => {
         }
     ];
     return (_jsxs("div", { className: "min-h-screen bg-gradient-to-b from-white to-apple-gray-50 text-apple-gray-900 font-sans overflow-x-hidden", children: [_jsx("header", { className: "fixed inset-x-0 top-0 z-50 backdrop-blur-md bg-white/90 border-b border-apple-gray-100", children: _jsx("div", { className: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8", children: _jsxs("div", { className: "flex justify-between items-center h-20", children: [_jsx("div", { className: "flex items-center", children: _jsx("img", { src: "https://www.shmong.tv/wp-content/uploads/2023/05/main-logo.png", alt: "SHMONG", className: "h-8" }) }), _jsx("nav", { className: "hidden md:flex space-x-6", children: navItems.map((item) => (_jsx("button", { onClick: () => handleNavClick(item.href), className: "text-apple-gray-600 hover:text-apple-gray-900 text-sm font-medium", children: item.label }, item.href))) }), _jsx("div", { className: "flex items-center space-x-2", children: _jsx("button", { 
-        onClick: user ? handleDashboardClick : handleSignupClick, 
+        onClick: user ? handleDashboardClick : handleLoginClick, 
         className: "rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-2 text-sm text-white font-medium shadow-sm hover:from-purple-700 hover:to-indigo-700 transition-all duration-300", 
-        children: user ? 'Go to Dashboard' : 'Sign Up' 
+        children: user ? 'Go to Dashboard' : 'Sign up / Log In' 
     }) })] }) }) }), _jsx("section", { className: "pt-32 pb-24", children: _jsx("div", { className: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8", children: _jsxs("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-12 items-center", children: [
         _jsxs(motion.div, { initial: { opacity: 0, y: 30 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.8, ease: "easeOut" }, className: "text-center lg:text-left", children: [
             _jsxs("h1", { className: "text-4xl md:text-6xl font-bold tracking-tight mb-6", children: ["Find Your Event Photos", " ", _jsx("span", { className: "bg-gradient-to-b from-apple-blue-500 to-apple-blue-600 text-transparent bg-clip-text", children: "Instantly" })] }),
