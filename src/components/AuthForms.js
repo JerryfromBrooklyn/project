@@ -83,9 +83,7 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }) 
                     throw error;
                     
                 // Navigate to dashboard after successful signup
-                // First show a success message
                 setError(null);
-                alert('Account created successfully! You can now sign in.');
                 
                 // Switch to signin view
                 setView('signin');

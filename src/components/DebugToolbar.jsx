@@ -5,6 +5,7 @@ import {
   testFaceAttributesStorage, 
   fixAllFaceAttributes 
 } from '../debug-utils';
+import { verifyAndFixUrls } from '../utils/s3UrlFixer';
 
 /**
  * Hidden debug toolbar that can be activated with Ctrl+Shift+D
@@ -13,6 +14,7 @@ import {
 const DebugToolbar = () => {
   const [visible, setVisible] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
+  const [isFixingUrls, setIsFixingUrls] = useState(false);
   const [result, setResult] = useState(null);
   const { user } = useAuth();
   
@@ -69,6 +71,51 @@ const DebugToolbar = () => {
       setIsRepairing(false);
     }
   };
+
+  // Fix S3 URLs for the current user
+  const handleFixS3Urls = async () => {
+    if (!user?.id) {
+      setResult({
+        success: false,
+        error: 'No user logged in'
+      });
+      return;
+    }
+    
+    setIsFixingUrls(true);
+    setResult(null);
+    
+    try {
+      console.log(`[DEBUG-TOOLBAR] 🔧 Starting S3 URL fix for user ${user.id}`);
+      
+      // Always use the current user ID - never fix all users' photos
+      const fixResult = await verifyAndFixUrls(user.id);
+      
+      setResult({
+        success: true,
+        type: 'url-fix',
+        ...fixResult
+      });
+      
+      console.log(`[DEBUG-TOOLBAR] ✅ S3 URL fix completed:`, fixResult);
+      
+      if (fixResult.fixed > 0) {
+        // Force reload to show the changes
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
+    } catch (error) {
+      console.error(`[DEBUG-TOOLBAR] ❌ S3 URL fix error:`, error);
+      setResult({
+        success: false,
+        type: 'url-fix',
+        error: error.message
+      });
+    } finally {
+      setIsFixingUrls(false);
+    }
+  };
   
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-gray-800 text-white p-4 z-50 shadow-lg">
@@ -90,17 +137,31 @@ const DebugToolbar = () => {
             <p className="text-sm text-gray-300">User ID: {user?.id || 'Not logged in'}</p>
           </div>
           
-          <button
-            onClick={handleRepairFaces}
-            disabled={isRepairing || !user?.id}
-            className={`px-4 py-2 rounded-md ${
-              isRepairing 
-                ? 'bg-gray-500 cursor-not-allowed' 
-                : 'bg-green-600 hover:bg-green-700'
-            } text-white font-medium`}
-          >
-            {isRepairing ? 'Repairing...' : 'Repair All Face Attributes'}
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              onClick={handleRepairFaces}
+              disabled={isRepairing || !user?.id}
+              className={`px-4 py-2 rounded-md ${
+                isRepairing 
+                  ? 'bg-gray-500 cursor-not-allowed' 
+                  : 'bg-green-600 hover:bg-green-700'
+              } text-white font-medium`}
+            >
+              {isRepairing ? 'Repairing...' : 'Repair Face Attributes'}
+            </button>
+            
+            <button
+              onClick={handleFixS3Urls}
+              disabled={isFixingUrls || !user?.id}
+              className={`px-4 py-2 rounded-md ${
+                isFixingUrls || !user?.id
+                  ? 'bg-gray-500 cursor-not-allowed' 
+                  : 'bg-blue-600 hover:bg-blue-700'
+              } text-white font-medium`}
+            >
+              {isFixingUrls ? 'Fixing...' : 'Fix My Face Image'}
+            </button>
+          </div>
         </div>
         
         <div className="bg-gray-700 p-3 rounded-lg">
@@ -112,6 +173,16 @@ const DebugToolbar = () => {
                   ? 'Operation successful!' 
                   : `Error: ${result.error || 'Unknown error'}`}
               </p>
+              
+              {result.success && result.type === 'url-fix' && (
+                <div className="mt-2">
+                  <p>Total Records: {result.total}</p>
+                  <p>Checked: {result.checked}</p>
+                  <p>Fixed: {result.fixed}</p>
+                  <p>Already Correct: {result.alreadyCorrect}</p>
+                  <p>Errors: {result.errors}</p>
+                </div>
+              )}
               
               {result.success && result.results && (
                 <div className="mt-2">

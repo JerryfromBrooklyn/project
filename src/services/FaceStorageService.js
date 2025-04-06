@@ -186,9 +186,13 @@ export const storeFaceId = async (userId, faceId, faceAttributes = null, imageDa
           const uploadResult = await s3Client.send(uploadCommand);
           console.log('✅ [FaceStorage] S3 upload successful:', JSON.stringify(uploadResult));
           
-          // Construct the S3 URL - ensure it's properly formatted for regional S3 buckets
-          imageUrl = `https://${FACE_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+          // Construct the S3 URL using the simpler format for better public access
+          imageUrl = `https://${FACE_BUCKET_NAME}.s3.amazonaws.com/${s3Key}`;
           console.log('🖼️ [FaceStorage] Generated S3 Image URL:', imageUrl);
+          
+          // Ensure the URL is properly normalized
+          imageUrl = normalizeToS3Url(imageUrl);
+          console.log('🖼️ [FaceStorage] Normalized S3 URL:', imageUrl);
           
           // Verify URL is accessible with a HEAD request
           try {

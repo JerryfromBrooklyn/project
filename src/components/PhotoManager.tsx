@@ -60,18 +60,21 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
   useEffect(() => {
     if (!user) return;
 
-    console.log('Setting up photo data fetching...');
+    console.log('🔄 [PhotoManager] Setting up AWS photo polling...');
     
-    // Set up polling for AWS instead of realtime subscriptions
+    // Fetch photos immediately on mount
+    fetchPhotos();
+    
+    // Set up polling for AWS DynamoDB/S3 data
     const pollingInterval = setInterval(() => {
       fetchPhotos();
     }, 30000); // Poll every 30 seconds
     
     return () => {
-      console.log('Cleaning up photo subscription');
+      console.log('🔄 [PhotoManager] Cleaning up AWS photo polling');
       clearInterval(pollingInterval);
     };
-  }, [user, mode]);
+  }, [user?.id]); // Only depend on user ID, not the entire user object or mode
 
   const fetchPhotos = async () => {
     try {
@@ -80,7 +83,7 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
       
       if (!user) return;
 
-      console.log('Fetching photos from AWS...');
+      console.log('📥 [PhotoManager] Fetching photos from AWS DynamoDB...');
       
       // Get photos from DynamoDB via awsPhotoService
       const fetchedPhotos = await awsPhotoService.fetchPhotos(user.id);
@@ -222,6 +225,8 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 ios-input"
+              aria-label="Search photos"
+              title="Search photos by title, description, location or tags"
             />
           </div>
           <button
@@ -265,6 +270,8 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
                           dateRange: { ...filters.dateRange, start: e.target.value }
                         })}
                         className="ios-input"
+                        aria-label="Start date"
+                        title="Filter start date"
                       />
                       <input
                         type="date"
@@ -274,6 +281,8 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
                           dateRange: { ...filters.dateRange, end: e.target.value }
                         })}
                         className="ios-input"
+                        aria-label="End date"
+                        title="Filter end date"
                       />
                     </div>
                   </div>
@@ -312,6 +321,8 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
                         }
                       }}
                       className="ios-input"
+                      aria-label="Add tags"
+                      title="Type a tag and press Enter to add it"
                     />
                     {filters.tags.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
@@ -350,6 +361,8 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
                           timeRange: { ...filters.timeRange, start: e.target.value }
                         })}
                         className="ios-input"
+                        aria-label="Start time"
+                        title="Filter start time"
                       />
                       <input
                         type="time"
@@ -359,6 +372,8 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
                           timeRange: { ...filters.timeRange, end: e.target.value }
                         })}
                         className="ios-input"
+                        aria-label="End time"
+                        title="Filter end time"
                       />
                     </div>
                   </div>

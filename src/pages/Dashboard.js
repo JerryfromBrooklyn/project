@@ -39,7 +39,7 @@ import {
   getUserById,
 } from "../services/database-utils.js";
 import DebugToolbar from "../components/DebugToolbar";
-import { normalizeToS3Url } from '../utils/s3Utils';
+import { normalizeToS3Url, extractKeyFromS3Url, findWorkingS3Url, generateS3UrlVariants } from '../utils/s3Utils';
 
 export const Dashboard = () => {
   const { user, signOut } = useAuth();
@@ -50,6 +50,8 @@ export const Dashboard = () => {
   const [faceImageUrl, setFaceImageUrl] = useState(null);
   const [faceAttributes, setFaceAttributes] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [faceImageError, setFaceImageError] = useState(false);
+  const [isFixingImage, setIsFixingImage] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -107,11 +109,29 @@ export const Dashboard = () => {
             if (imageUrl) {
               console.log('🖼️ [Dashboard] Found image URL in data:', imageUrl);
               
-              // Normalize to S3 URL format
-              imageUrl = normalizeToS3Url(imageUrl);
-              console.log('�� [Dashboard] Normalized S3 URL:', imageUrl);
-              
-              setFaceImageUrl(imageUrl);
+              // Instead of just normalizing, actually check if the URL works
+              (async () => {
+                // Extract the key from the URL
+                const key = extractKeyFromS3Url(imageUrl);
+                if (key) {
+                  // Find a working URL variant
+                  const workingUrl = await findWorkingS3Url(key);
+                  if (workingUrl && workingUrl !== imageUrl) {
+                    console.log('🖼️ [Dashboard] Found working S3 URL:', workingUrl);
+                    imageUrl = workingUrl;
+                  } else {
+                    // Fallback to normalized URL if no working variant found
+                    imageUrl = normalizeToS3Url(imageUrl);
+                    console.log('🖼️ [Dashboard] Using normalized S3 URL:', imageUrl);
+                  }
+                } else {
+                  // Fallback to simple normalization if key extraction fails
+                  imageUrl = normalizeToS3Url(imageUrl);
+                  console.log('🖼️ [Dashboard] Using normalized S3 URL:', imageUrl);
+                }
+                
+                setFaceImageUrl(imageUrl);
+              })();
             } else {
               console.log('⚠️ [Dashboard] No image URL found in face data');
             }
@@ -139,6 +159,57 @@ export const Dashboard = () => {
 
     fetchUserData();
   }, [user]);
+
+  // Auto-fix for face image
+  useEffect(() => {
+    // Auto-fix face image URL if it fails to load
+    const autoFixFaceImage = async () => {
+      if (faceImageError && user?.id && faceImageUrl) {
+        console.log('[Dashboard] Auto-fixing face image URL for user:', user.id);
+        setIsFixingImage(true);
+        
+        try {
+          // Extract the key from the URL
+          const key = extractKeyFromS3Url(faceImageUrl);
+          if (key) {
+            // Try all URL variants directly
+            const variants = generateS3UrlVariants(key);
+            console.log('[Dashboard] Trying URL variants:', variants);
+            
+            for (const url of variants) {
+              if (url === faceImageUrl) continue; // Skip the current URL
+              
+              try {
+                console.log('[Dashboard] Trying URL:', url);
+                const response = await fetch(url, { method: 'HEAD' });
+                if (response.ok) {
+                  console.log('[Dashboard] ✅ Found working URL:', url);
+                  setFaceImageUrl(url);
+                  setFaceImageError(false);
+                  break;
+                }
+              } catch (err) {
+                console.log('[Dashboard] Failed with URL:', url);
+              }
+            }
+          } else {
+            console.error('[Dashboard] Could not extract key from image URL');
+          }
+          
+          // No more retake prompt - just log the error
+          if (faceImageError) {
+            console.error('[Dashboard] Could not fix image URL automatically');
+          }
+        } catch (error) {
+          console.error('[Dashboard] Error during auto-fix of face image:', error);
+        } finally {
+          setIsFixingImage(false);
+        }
+      }
+    };
+    
+    autoFixFaceImage();
+  }, [faceImageError, user?.id, faceImageUrl]);
 
   const handleRegistrationSuccess = (faceId, directFaceAttributes) => {
     setFaceRegistered(true);
@@ -717,11 +788,27 @@ export const Dashboard = () => {
                               _jsx("div", {
                                 className:
                                   "relative w-full max-w-xs aspect-square rounded-apple-xl overflow-hidden border border-apple-gray-200 shadow-md",
-                                children: _jsx("img", {
-                                  src: faceImageUrl,
-                                  alt: "Registered face",
-                                  className: "w-full h-full object-cover",
-                                }),
+                                children: faceImageError ? (
+                                  _jsxs("div", {
+                                    className: "w-full h-full flex flex-col items-center justify-center bg-gray-100 p-4 text-center",
+                                    children: [
+                                      _jsx(AlertTriangle, { className: "w-12 h-12 text-amber-500 mb-2" }),
+                                      _jsx("p", { className: "text-gray-600 font-medium", children: "Image not available" }),
+                                      _jsx("p", { className: "text-gray-500 text-sm mt-1", children: "Your face is registered, but the image can't be displayed" })
+                                    ]
+                                  })
+                                ) : (
+                                  _jsx("img", {
+                                    src: isFixingImage ? "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIGZpbGw9IiM5OTk5OTkiPkxvYWRpbmcgaW1hZ2UuLi48L3RleHQ+PC9zdmc+" : faceImageUrl,
+                                    alt: "Registered face",
+                                    className: "w-full h-full object-cover",
+                                    onError: () => {
+                                      if (!faceImageError) {
+                                        setFaceImageError(true);
+                                      }
+                                    }
+                                  })
+                                ),
                               }),
                               _jsx("p", {
                                 className: "mt-3 text-apple-gray-600 text-sm",
