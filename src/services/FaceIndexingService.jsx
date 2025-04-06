@@ -18,6 +18,7 @@ import {
 import { FACE_MATCH_THRESHOLD } from '../lib/awsClient';
 import { storeFaceData, storeFaceMatch } from './database-utils';
 import { storeFaceId } from './FaceStorageService';
+import { normalizeToS3Url } from '../utils/s3Utils';
 
 // Add environment detection for browser-safe code
 const isBrowser = typeof window !== 'undefined';
@@ -240,6 +241,12 @@ export const indexUserFace = async (imageData, userId) => {
       storageResult.success ? '✅ Success' : '❌ Failed', 
       storageResult.imageUrl ? `(Image URL: ${storageResult.imageUrl})` : '(No image URL)'
     );
+    console.log('💾 [FaceIndexing] S3 upload successful:', !!storageResult.success);
+    console.log('🖼️ [FaceIndexing] Image URL received:', storageResult.imageUrl || 'None');
+    
+    // Get the image URL from the storage result and normalize it to S3 format
+    let imageUrl = normalizeToS3Url(storageResult.imageUrl);
+    console.log('🔄 [FaceIndexing] Normalized S3 URL:', imageUrl || 'None');
     
     // Store face data in DynamoDB
     await storeFaceData(userId, {
@@ -257,7 +264,7 @@ export const indexUserFace = async (imageData, userId) => {
     return {
       success: true,
       faceId: faceId,
-      imageUrl: storageResult.imageUrl || null
+      imageUrl: imageUrl || null
     };
   } catch (error) {
     console.error('❌ [FaceIndexing] Error indexing face:', error);

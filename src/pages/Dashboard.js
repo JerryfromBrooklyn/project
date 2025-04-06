@@ -39,6 +39,7 @@ import {
   getUserById,
 } from "../services/database-utils.js";
 import DebugToolbar from "../components/DebugToolbar";
+import { normalizeToS3Url } from '../utils/s3Utils';
 
 export const Dashboard = () => {
   const { user, signOut } = useAuth();
@@ -76,44 +77,46 @@ export const Dashboard = () => {
             
             // Extract face details - we need to handle multiple possible formats
             let faceDetail = null;
-            let imageUrl = null;
             
             // Check all possible attribute locations based on response structure
             if (faceResult.data.faceId) {
               // Simple structure with direct faceId
               faceDetail = { faceId: faceResult.data.faceId };
-              imageUrl = faceResult.data.public_url || null;
             } else if (faceResult.data.face_detail) {
               // Nested face_detail structure
               faceDetail = faceResult.data.face_detail;
-              imageUrl = faceResult.data.public_url || null;
             } else if (faceResult.data.face_data?.attributes) {
               // Nested face_data.attributes structure
               faceDetail = faceResult.data.face_data.attributes;
-              imageUrl = faceResult.data.face_data.public_url || null;
             } else if (faceResult.data.Attributes) {
               // Direct Attributes structure
               faceDetail = faceResult.data.Attributes;
-              imageUrl = faceResult.data.ImageUrl || null;
             } else if (typeof faceResult.data === 'object') {
               // Last resort, use entire data object
               faceDetail = faceResult.data;
-              // Look for any property that might contain an image URL
-              const possibleUrlProps = ['public_url', 'url', 'image_url', 'img_url', 'imageUrl'];
-              for (const prop of possibleUrlProps) {
-                if (faceResult.data[prop]) {
-                  imageUrl = faceResult.data[prop];
-                  break;
-                }
-              }
             }
             
             console.groupCollapsed('🧩 [Dashboard] Extracted face details:');
             console.log(JSON.stringify(faceDetail, null, 2));
             console.groupEnd();
             
+            // Try to get the image URL directly or from the nested structure
+            let imageUrl = faceResult.data.public_url || 
+                          (faceResult.data.face_data?.M?.public_url?.S);
+            
+            if (imageUrl) {
+              console.log('🖼️ [Dashboard] Found image URL in data:', imageUrl);
+              
+              // Normalize to S3 URL format
+              imageUrl = normalizeToS3Url(imageUrl);
+              console.log('�� [Dashboard] Normalized S3 URL:', imageUrl);
+              
+              setFaceImageUrl(imageUrl);
+            } else {
+              console.log('⚠️ [Dashboard] No image URL found in face data');
+            }
+            
             setFaceAttributes(faceDetail);
-            setFaceImageUrl(imageUrl);
             
             console.log('✅ [Dashboard] Face data processed:', {
               hasAttributes: !!faceDetail,

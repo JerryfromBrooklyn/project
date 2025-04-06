@@ -4,6 +4,7 @@ import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sd
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { DynamoDBClient, PutItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } from '../lib/awsClient';
+import { normalizeToS3Url, convertCloudFrontToS3Url } from '../utils/s3Utils';
 
 // S3 Bucket name for face data
 const FACE_BUCKET_NAME = 'shmong';
@@ -160,24 +161,86 @@ export const storeFaceId = async (userId, faceId, faceAttributes = null, imageDa
         
         console.log(`📦 [FaceStorage] Prepared upload buffer of size: ${uploadBuffer.length || uploadBuffer.byteLength || 'unknown'} bytes, type: ${uploadBuffer.constructor.name}`);
         
-        // Upload to S3
+        // Perform the actual S3 upload
         const uploadCommand = new PutObjectCommand({
           Bucket: FACE_BUCKET_NAME,
           Key: s3Key,
           Body: uploadBuffer,
-          ContentType: 'image/jpeg'
+          ContentType: 'image/jpeg',
+          // Note: In AWS SDK v3, ACL parameter might not work directly
+          // Public access should be configured through:
+          // 1. Bucket policy that allows public read access
+          // 2. Setting "Block public access" to off in the bucket settings
+          // 3. If needed, use putObjectAcl in a separate call after upload
         });
         
-        console.log(`🚀 [FaceStorage] Sending S3 PutObject request for key: ${s3Key}`);
-        const uploadResult = await s3Client.send(uploadCommand);
-        console.groupCollapsed(`📝 [FaceStorage] S3 upload response details:`);
-        console.log('Status:', uploadResult.$metadata?.httpStatusCode);
-        console.log('Request ID:', uploadResult.$metadata?.requestId);
-        console.log('Full response:', uploadResult);
-        console.groupEnd();
+        console.log('📤 [FaceStorage] Executing S3 upload command with params:', JSON.stringify({
+          Bucket: FACE_BUCKET_NAME,
+          Key: s3Key,
+          ContentType: 'image/jpeg',
+          BodySize: uploadBuffer.length
+        }));
         
-        imageUrl = `https://${FACE_BUCKET_NAME}.s3.amazonaws.com/${s3Key}`;
-        console.log(`✅ [FaceStorage] Image uploaded successfully to S3: ${imageUrl}`);
+        // Use try/catch specifically for the S3 send operation
+        try {
+          const uploadResult = await s3Client.send(uploadCommand);
+          console.log('✅ [FaceStorage] S3 upload successful:', JSON.stringify(uploadResult));
+          
+          // Construct the S3 URL - ensure it's properly formatted for regional S3 buckets
+          imageUrl = `https://${FACE_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
+          console.log('🖼️ [FaceStorage] Generated S3 Image URL:', imageUrl);
+          
+          // Verify URL is accessible with a HEAD request
+          try {
+            const checkUrl = async (url) => {
+              if (typeof fetch === 'undefined') {
+                console.log('⚠️ [FaceStorage] Fetch API not available, skipping URL verification');
+                return true;
+              }
+              
+              const response = await fetch(url, { method: 'HEAD' });
+              return response.ok;
+            };
+            
+            const isAccessible = await checkUrl(imageUrl);
+            if (!isAccessible) {
+              console.warn('⚠️ [FaceStorage] URL verification failed, image may not be publicly accessible');
+              console.warn('⚠️ [FaceStorage] Please check your S3 bucket settings:');
+              console.warn('⚠️ [FaceStorage] 1. Disable "Block public access" settings for the bucket');
+              console.warn('⚠️ [FaceStorage] 2. Add a bucket policy allowing public read access:');
+              console.warn(`⚠️ [FaceStorage] {
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PublicReadGetObject",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::${FACE_BUCKET_NAME}/*"
+    }
+  ]
+}`);
+              console.warn('⚠️ [FaceStorage] 3. Configure CORS settings for the bucket:');
+              console.warn(`⚠️ [FaceStorage] [
+  {
+    "AllowedHeaders": ["*"],
+    "AllowedMethods": ["GET", "PUT", "POST", "HEAD"],
+    "AllowedOrigins": ["*"],
+    "ExposeHeaders": ["ETag"]
+  }
+]`);
+            } else {
+              console.log('✅ [FaceStorage] URL verification passed, image is publicly accessible');
+            }
+          } catch (verifyError) {
+            console.warn('⚠️ [FaceStorage] Error verifying URL accessibility:', verifyError.message);
+          }
+        } catch (s3Error) {
+          console.error('❌ [FaceStorage] S3 send error:', s3Error);
+          console.error('📋 [FaceStorage] S3 error code:', s3Error.name);
+          console.error('📋 [FaceStorage] S3 error message:', s3Error.message);
+          imageUrl = null;
+        }
       } catch (s3Error) {
         console.error(`❌ [FaceStorage] S3 image upload failed:`, s3Error);
         console.groupCollapsed(`❓ [FaceStorage] Error details:`);
@@ -288,12 +351,33 @@ export const getFaceId = async (userId) => {
           }
         }
         
+        // Extract image URL - may be stored in different places in the record
+        let imageUrl = null;
+        
+        // First check direct public_url field
+        if (item.public_url && item.public_url.S) {
+          imageUrl = item.public_url.S;
+          console.log(`✅ [FaceStorage] Found image URL in public_url field: ${imageUrl}`);
+        } 
+        // Then check nested face_data structure
+        else if (item.face_data && item.face_data.M && item.face_data.M.public_url && item.face_data.M.public_url.S) {
+          imageUrl = item.face_data.M.public_url.S;
+          console.log(`✅ [FaceStorage] Found image URL in face_data.public_url field: ${imageUrl}`);
+        }
+        
+        // If we found a CloudFront URL, convert to S3 URL
+        if (imageUrl && imageUrl.includes('cloudfront.net')) {
+          console.log(`🔄 [FaceStorage] Converting CloudFront URL to S3 URL`);
+          imageUrl = convertCloudFrontToS3Url(imageUrl);
+          console.log(`🔄 [FaceStorage] Converted S3 URL: ${imageUrl}`);
+        }
+        
         return { 
           success: true, 
           faceId: item.faceId.S,
           faceAttributes: faceAttributes,
           status: item.status?.S || 'unknown',
-          imageUrl: item.public_url?.S || null
+          imageUrl: imageUrl
         };
       }
       
