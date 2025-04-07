@@ -142,7 +142,7 @@ const SimplePhotoUploader = () => {
       // 4. Search for Faces using Rekognition
       setMessage('Analyzing photo for faces...');
       setUploadProgress(85);
-      const searchResult = await FaceIndexingService.searchFaceByImage(fileBytes, user.id); // Pass user ID to exclude self-matches
+      const searchResult = await FaceIndexingService.searchFaceByImage(fileBytes, user.id);
 
       let matchCount = 0;
       if (searchResult.success && searchResult.matches.length > 0) {
