@@ -1,10 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePhotos } from '../hooks/usePhotos';
 
 /**
  * Photo uploader component with event details form
  */
 const PhotoUploader = ({ onSuccess }) => {
+  // Original mount log was here
+  useEffect(() => {
+    console.log('[PhotoUploader.jsx] Mounted'); // Add log with extension
+  }, []);
+
   const { uploadPhoto } = usePhotos();
   
   const [selectedFile, setSelectedFile] = useState(null);

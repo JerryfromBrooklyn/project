@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 
 // Path to version file
 const versionFilePath = path.join(__dirname, '..', 'src', 'utils', 'version.ts');
+const packageJsonPath = path.join(__dirname, '..', 'package.json');
 
 try {
   // Read the current version file
@@ -23,7 +24,7 @@ try {
   if (match && match[1]) {
     // Increment build number
     const currentBuildNumber = parseInt(match[1], 10);
-    const newBuildNumber = (currentBuildNumber + 1).toString().padStart(3, '0');
+    const newBuildNumber = (currentBuildNumber + 1).toString();
     
     console.log(`Incrementing build number from ${match[1]} to ${newBuildNumber}`);
     
@@ -37,8 +38,27 @@ try {
     fs.writeFileSync(versionFilePath, versionFileContent, 'utf8');
     
     console.log('Build number incremented successfully!');
+    
+    // Make a copy of the current build info for reference
+    const buildInfoPath = path.join(__dirname, '..', 'build-info.json');
+    
+    // Read package.json for version
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    
+    const buildInfo = {
+      version: packageJson.version,
+      buildNumber: newBuildNumber,
+      buildDate: new Date().toISOString(),
+      timestamp: Date.now()
+    };
+    
+    fs.writeFileSync(buildInfoPath, JSON.stringify(buildInfo, null, 2), 'utf8');
+    console.log('Build info saved to build-info.json');
+    
   } else {
     console.error('Could not find build number in version file.');
+    // For debugging
+    console.log('Version file content:', versionFileContent);
     process.exit(1);
   }
 } catch (error) {

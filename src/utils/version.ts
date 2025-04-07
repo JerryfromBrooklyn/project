@@ -6,7 +6,7 @@
 export const VERSION = '1.0.0';
 
 // Build number increments automatically with each build
-const BUILD_NUMBER = '116';
+const BUILD_NUMBER = '125';
 
 // Get current date and time
 const now = new Date();
@@ -42,6 +42,11 @@ export const logVersion = () => {
   `;
   
   console.log(versionInfo);
+  
+  // Expose version to window for other components to use
+  if (typeof window !== 'undefined') {
+    window.__APP_VERSION__ = fullVersion;
+  }
   
   return fullVersion;
 };

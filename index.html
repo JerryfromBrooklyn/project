@@ -21,9 +21,55 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      #hard-coded-banner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9999999;
+        background-color: #1a1a1a;
+        color: white;
+        text-align: center;
+        font-size: 12px;
+        height: 22px;
+        line-height: 22px;
+        font-weight: 600;
+        font-family: 'Inter', sans-serif;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      }
+      body {
+        padding-top: 22px;
+      }
+    </style>
   </head>
   <body>
+    <div id="hard-coded-banner"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Update the hard-coded banner with build info
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          var banner = document.getElementById('hard-coded-banner');
+          if (banner) {
+            // Try to get version from React app's state, or use a fallback
+            var buildInfoText = 'Version: ';
+            
+            // Check if version data is available in window
+            if (window.__APP_VERSION__) {
+              buildInfoText += window.__APP_VERSION__;
+            } else {
+              const now = new Date();
+              const dateStr = now.toLocaleDateString();
+              const timeStr = now.toLocaleTimeString();
+              buildInfoText += `1.0.0 (${dateStr} ${timeStr})`;
+            }
+            
+            banner.textContent = buildInfoText;
+          }
+        }, 500);
+      });
+    </script>
   </body>
 </html>

@@ -3,6 +3,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 
 const VerifyEmail = () => {
+  // Add useEffect for mount logging
+  useEffect(() => {
+    console.log('[VerifyEmail.jsx] Mounted');
+  }, []);
+
   const [code, setCode] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);

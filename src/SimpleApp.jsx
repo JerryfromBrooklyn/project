@@ -8,6 +8,11 @@ import awsAuth from './services/awsAuthService';
 import { getUserPhotos } from './services/PhotoService';
 
 const SimpleApp = () => {
+  // Add useEffect for mount logging
+  useEffect(() => {
+    console.log('[SimpleApp.jsx] Mounted');
+  }, []);
+
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);

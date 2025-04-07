@@ -60,6 +60,11 @@ try {
 // ... existing code ... 
 
 const FaceRegistration = ({ onClose }) => {
+  // Add useEffect for mount logging
+  useEffect(() => {
+    console.log('[FaceRegistration.jsx] Mounted');
+  }, []);
+
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState(null);
   const [imageBlob, setImageBlob] = useState(null);

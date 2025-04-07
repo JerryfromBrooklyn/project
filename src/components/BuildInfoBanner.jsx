@@ -1,51 +1,42 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { fullVersion } from '../utils/version';
 
 const BuildInfoBanner = () => {
-  // Log right at the start
-  console.log('[BuildInfoBanner] EXECUTION TEST - Component function started');
+  console.log('[BuildInfoBanner] Rendering with version:', fullVersion);
+  const [isVisible, setIsVisible] = useState(true);
 
-  // Original logic restored
-  const buildTime = import.meta.env.VITE_BUILD_TIME;
-  const buildVersion = import.meta.env.VITE_BUILD_NUMBER;
-  const isDevelopment = import.meta.env.MODE === 'development';
-
-  let bannerText = '';
-
-  if (isDevelopment) {
-    bannerText = `Development Mode - Last Refresh: ${new Date().toLocaleTimeString()}`;
-  } else {
-    const formattedBuildTime = buildTime
-      ? new Date(buildTime).toLocaleString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          timeZoneName: 'short'
-        })
-      : 'N/A';
-    bannerText = `Build v${buildVersion || 'N/A'} - Deployed: ${formattedBuildTime}`;
-  }
-
-  // Log before return
-  console.log('[BuildInfoBanner] Rendering with text:', bannerText);
-
-  // useEffect to log after mount
   useEffect(() => {
-    console.log('[BuildInfoBanner] EFFECT TEST - Component mounted');
-  }, []); // Empty dependency array means it runs only once after mount
+    console.log('[BuildInfoBanner] Component mounted');
+    // Force visibility by logging to DOM
+    document.title = `Version: ${fullVersion}`;
+  }, []);
+
+  if (!isVisible) return null;
 
   return (
     <div
-      className={isDevelopment
-        ? "bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-100 text-xs text-center py-1 px-2 fixed top-0 left-0 right-0 z-[9999] shadow"
-        : "bg-yellow-200 dark:bg-yellow-800 text-yellow-900 dark:text-yellow-100 text-xs text-center py-1 px-2 fixed top-0 left-0 right-0 z-[9999] shadow"
-      }
-      role="status"
-      aria-live={isDevelopment ? 'off' : 'polite'}
+      className="bg-red-600 text-white text-xs text-center py-1 px-2 fixed top-0 left-0 right-0 shadow-md"
+      style={{ 
+        height: '22px',
+        fontSize: '12px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        zIndex: 999999,
+        fontWeight: 'bold'
+      }}
     >
-      {bannerText}
+      <span style={{ flexGrow: 1 }}>
+        Version: {fullVersion || 'Loading...'}
+      </span>
+      <button 
+        onClick={() => setIsVisible(false)} 
+        className="text-white hover:text-gray-300 flex-shrink-0"
+        aria-label="Close banner"
+        style={{ marginLeft: '8px', fontSize: '14px' }}
+      >
+        ×
+      </button>
     </div>
   );
 };

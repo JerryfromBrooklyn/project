@@ -4,6 +4,11 @@ import { useAuth } from './AuthContext';
 
 const Login = () => {
   console.log('[LOGIN] Rendering Login component');
+  // Add useEffect for mount logging
+  useEffect(() => {
+    console.log('[Login.jsx] Mounted');
+  }, []);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);

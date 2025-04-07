@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '../auth';
 import { useNavigate } from 'react-router-dom';
 
@@ -6,6 +6,10 @@ const Dashboard = () => {
   console.log('[DASHBOARD] Rendering Dashboard component');
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    console.log('[Dashboard.jsx] Mounted');
+  }, []);
 
   console.log('[DASHBOARD] User data:', user);
 

@@ -5,6 +5,11 @@ import PhotoDetailsModal from './PhotoDetailsModal';
 import { Trash2, RefreshCw, Search, Filter, User } from 'lucide-react';
 
 const MyPhotos = () => {
+  // Add useEffect for mount logging
+  useEffect(() => {
+    console.log('[MyPhotos.jsx] Mounted');
+  }, []);
+
   const { user } = useAuth();
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
