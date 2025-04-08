@@ -45,6 +45,14 @@ const Dashboard = () => {
             setLoading(true);
             console.log('[DASHBOARD] Fetching user data...');
             
+            if (!user || !user.id) {
+                console.error('[DASHBOARD] Cannot fetch data: User ID is missing.');
+                setLoading(false);
+                return; 
+            }
+            
+            console.log('[DASHBOARD] Querying shmong-face-data with user ID:', user.id);
+            
             // 1. Get user's face data
             const { Items: faceItems } = await docClient.send(new QueryCommand({
                 TableName: 'shmong-face-data',
@@ -61,6 +69,7 @@ const Dashboard = () => {
             }
             
             // 2. Get user's matched photos
+            console.log('[DASHBOARD] Querying shmong-face-matches GSI with user ID:', user.id);
             const { Items: matchItems } = await docClient.send(new QueryCommand({
                 TableName: 'shmong-face-matches',
                 IndexName: 'UserIdCreatedAtIndex',
@@ -78,6 +87,7 @@ const Dashboard = () => {
             }
             
             // 3. Get user's notifications
+            console.log('[DASHBOARD] Querying shmong-notifications GSI with user ID:', user.id);
             const { Items: notifItems } = await docClient.send(new QueryCommand({
                 TableName: 'shmong-notifications',
                 IndexName: 'UserIdIndex',
@@ -95,6 +105,9 @@ const Dashboard = () => {
             }
         } catch (error) {
             console.error('[DASHBOARD] Error fetching user data:', error);
+            if (error.name === 'ValidationException') {
+                console.error('[DASHBOARD] Validation Error Details - Code:', error.code, 'Message:', error.message, 'Metadata:', error.$metadata);
+            }
         } finally {
             setLoading(false);
         }

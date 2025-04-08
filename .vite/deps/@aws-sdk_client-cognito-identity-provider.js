@@ -31,7 +31,7 @@ import {
   resolveRegionConfig,
   resolveRetryConfig,
   resolveUserAgentConfig
-} from "./chunk-H46S4P7L.js";
+} from "./chunk-7HCX43OA.js";
 import "./chunk-3MNGUTHY.js";
 import {
   AwsSdkSigV4Signer,
@@ -80,7 +80,7 @@ import {
   toBase64,
   toUtf8,
   withBaseException
-} from "./chunk-PSK2T4HK.js";
+} from "./chunk-N6DQ7J7M.js";
 import {
   __publicField,
   __toESM,
