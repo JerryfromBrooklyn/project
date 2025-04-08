@@ -122,159 +122,127 @@ const toBinary = (data) => {
 };
 
 /**
- * Index a user's face in the AWS Rekognition collection
- * @param {string} imageData - Base64 encoded image data
- * @param {string} userId - User ID
- * @returns {Promise<object>} Result with success status
+ * Index a user's face in AWS Rekognition collection directly
+ * @param {string|Blob|ArrayBuffer} imageData - The image data containing a face
+ * @param {string} userId - The user ID to associate with the face
+ * @returns {Promise<Object>} Result object with success status
  */
 export const indexUserFace = async (imageData, userId) => {
   try {
     console.log('🔍 [FaceIndexing] Indexing face for user:', userId);
-    console.groupCollapsed('📋 [FaceIndexing] Image data details:');
-    console.log('Type:', typeof imageData);
-    if (imageData instanceof Blob) {
-      console.log('Format: Blob, Size:', imageData.size);
-    } else if (imageData instanceof ArrayBuffer) {
-      console.log('Format: ArrayBuffer, Size:', imageData.byteLength);
-    } else if (imageData instanceof Uint8Array) {
-      console.log('Format: Uint8Array, Size:', imageData.length);
-    } else if (typeof imageData === 'string') {
-      console.log('Format: String, Length:', imageData.length);
-      console.log('Prefix:', imageData.substring(0, 30) + '...');
-    }
-    console.groupEnd();
     
-    // Convert to binary format (Uint8Array or Buffer, depending on environment)
+    // Convert to binary format
     let imageBytes;
     
-    // Handle async conversions (like Blob)
-    if (imageData instanceof Blob) {
-      console.log('🔄 [FaceIndexing] Converting Blob to binary buffer');
-      const arrayBuffer = await imageData.arrayBuffer();
-      imageBytes = hasBuffer ? Buffer.from(arrayBuffer) : new Uint8Array(arrayBuffer);
-    } else if (typeof imageData === 'string' && imageData.startsWith('data:image')) {
-      console.log('🔄 [FaceIndexing] Converting base64 string to binary buffer');
+    if (typeof imageData === 'string' && imageData.startsWith('data:image')) {
+      // Base64 data
       const base64Data = imageData.split(',')[1];
-      if (hasBuffer) {
-        imageBytes = Buffer.from(base64Data, 'base64');
-      } else {
-        // Browser-compatible base64 decode
-        const binaryString = atob(base64Data);
-        imageBytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          imageBytes[i] = binaryString.charCodeAt(i);
-        }
+      const binaryString = atob(base64Data);
+      imageBytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        imageBytes[i] = binaryString.charCodeAt(i);
       }
-    } else if (imageData instanceof Uint8Array) {
-      console.log('🔄 [FaceIndexing] Using Uint8Array directly');
-      imageBytes = imageData;
+    } else if (imageData instanceof Blob) {
+      // Blob data
+      const arrayBuffer = await imageData.arrayBuffer();
+      imageBytes = new Uint8Array(arrayBuffer);
     } else if (imageData instanceof ArrayBuffer) {
-      console.log('🔄 [FaceIndexing] Converting ArrayBuffer to binary');
-      imageBytes = hasBuffer ? Buffer.from(imageData) : new Uint8Array(imageData);
+      // ArrayBuffer data
+      imageBytes = new Uint8Array(imageData);
+    } else if (imageData instanceof Uint8Array) {
+      // Already Uint8Array
+      imageBytes = imageData;
     } else {
-      console.log('🔄 [FaceIndexing] Converting to binary using generic approach');
-      try {
-        imageBytes = hasBuffer ? Buffer.from(imageData) : new Uint8Array(imageData.buffer || imageData);
-      } catch (e) {
-        console.warn('❌ [FaceIndexing] Error during generic conversion, creating empty buffer');
-        imageBytes = hasBuffer ? Buffer.alloc(1) : new Uint8Array(1);
-      }
+      throw new Error('Unsupported image data format');
     }
     
-    console.log('📦 [FaceIndexing] Prepared image buffer of size:', imageBytes.length, 'bytes, type:', imageBytes.constructor.name);
-    
-    // Index face with AWS Rekognition
+    // Call AWS Rekognition to index the face
     const command = new IndexFacesCommand({
       CollectionId: COLLECTION_ID,
-      Image: { Bytes: imageBytes },
+      Image: {
+        Bytes: imageBytes
+      },
       ExternalImageId: userId,
-      DetectionAttributes: ['ALL'],
       MaxFaces: 1,
-      QualityFilter: 'AUTO'
+      DetectionAttributes: ['ALL']
     });
     
-    console.log('🚀 [FaceIndexing] Sending IndexFaces command to Rekognition');
     const response = await rekognitionClient.send(command);
-    console.log('✅ [FaceIndexing] Received response from Rekognition');
     
     if (!response.FaceRecords || response.FaceRecords.length === 0) {
-      console.error('❌ [FaceIndexing] No face detected in the image');
+      console.error('[FaceIndexing] No face detected in the image');
       return {
         success: false,
-        error: 'No face detected in the image' 
+        error: 'No face detected in the image'
       };
     }
     
     const faceId = response.FaceRecords[0].Face.FaceId;
-    console.log('🆔 [FaceIndexing] Face ID retrieved:', faceId);
-    
-    // Extract face attributes
     const faceAttributes = response.FaceRecords[0].FaceDetail;
-    console.groupCollapsed('📊 [FaceIndexing] Extracted face attributes:');
-    console.log('Attributes:', Object.keys(faceAttributes));
-    console.log('Full data:', faceAttributes);
-    console.groupEnd();
     
-    // Make a browser-compatible copy of the image bytes for storage
-    console.log('📷 [FaceIndexing] Creating copy of image buffer for storage');
+    console.log('[FaceIndexing] Face indexed with ID:', faceId);
     
-    // Create a copy in a browser-safe way
-    let imageBytesCopy;
-    if (imageBytes instanceof Uint8Array) {
-      console.log('📷 [FaceIndexing] Creating Uint8Array copy');
-      imageBytesCopy = new Uint8Array(imageBytes);
-    } else if (hasBuffer && Buffer.isBuffer(imageBytes)) {
-      console.log('📷 [FaceIndexing] Creating Buffer copy');
-      imageBytesCopy = Buffer.from(imageBytes);
-    } else {
-      console.log('📷 [FaceIndexing] Creating generic copy');
-      imageBytesCopy = copyBinaryData(imageBytes);
-    }
-    
-    console.log('📷 [FaceIndexing] Created copy of image buffer, size:', imageBytesCopy.length, 'bytes, type:', imageBytesCopy.constructor.name);
-    
-    // Store face ID for future reference with image and attributes
-    console.log('💾 [FaceIndexing] Calling storeFaceId with image data of size:', imageBytesCopy.length);
+    // Store the face data in your database/storage
+    const imageBytesCopy = copyBinaryData(imageBytes);
     const storageResult = await storeFaceId(userId, faceId, faceAttributes, imageBytesCopy);
     
-    console.log('📝 [FaceIndexing] storeFaceId result:', 
-      storageResult.success ? '✅ Success' : '❌ Failed', 
-      storageResult.imageUrl ? `(Image URL: ${storageResult.imageUrl})` : '(No image URL)'
-    );
-    console.log('💾 [FaceIndexing] S3 upload successful:', !!storageResult.success);
-    console.log('🖼️ [FaceIndexing] Image URL received:', storageResult.imageUrl || 'None');
-    
-    // Get the image URL from the storage result and normalize it to S3 format
-    let imageUrl = normalizeToS3Url(storageResult.imageUrl);
-    console.log('🔄 [FaceIndexing] Normalized S3 URL:', imageUrl || 'None');
-    
-    // Store face data in DynamoDB
-    await storeFaceData(userId, {
-      face_id: faceId,
-      bounding_box: response.FaceRecords[0].Face.BoundingBox,
-      confidence: response.FaceRecords[0].Face.Confidence,
-      image_id: response.FaceRecords[0].Face.ImageId,
-      face_detail: response.FaceRecords[0].FaceDetail,
-      indexed_at: new Date().toISOString()
-    });
-    
-    // Perform historical matching
-    await matchAgainstExistingFaces(userId, faceId);
-    
+    // Return the results
     return {
       success: true,
       faceId: faceId,
-      imageUrl: imageUrl || null
+      faceAttributes: faceAttributes,
+      imageUrl: storageResult.imageUrl || null
     };
   } catch (error) {
-    console.error('❌ [FaceIndexing] Error indexing face:', error);
-    // Log the stack trace for better debugging
-    console.error('📚 [FaceIndexing] Stack trace:', error.stack);
+    console.error('[FaceIndexing] Error indexing face:', error);
     return {
       success: false,
-      error: error.message 
+      error: error.message || 'An unexpected error occurred'
     };
   }
+};
+
+/**
+ * Indexes a user's face with AWS Rekognition - Simplified wrapper for components
+ * @param {string} userId - User ID
+ * @param {Blob|string} imageData - Image data (Blob or base64 string)
+ * @returns {Promise<Object>} Result with success status, faceId, and faceAttributes
+ */
+export const indexFace = async (userId, imageData) => {
+    console.log('[FaceIndexingService] Indexing face for user:', userId);
+    
+    try {
+        // Call the direct implementation
+        const result = await indexUserFace(imageData, userId);
+        
+        if (!result.success) {
+            console.error('[FaceIndexingService] Face indexing failed:', result.error);
+            return {
+                success: false,
+                error: result.error || 'Failed to index face',
+                faceId: null,
+                faceAttributes: null
+            };
+        }
+        
+        console.log('[FaceIndexingService] Face indexed successfully:', result.faceId);
+        
+        // Return all the relevant data
+        return {
+            success: true,
+            faceId: result.faceId,
+            faceAttributes: result.faceAttributes || {},
+            imageUrl: result.imageUrl
+        };
+    } catch (error) {
+        console.error('[FaceIndexingService] Error in indexFace:', error);
+        return {
+            success: false,
+            error: error.message || 'An unexpected error occurred',
+            faceId: null,
+            faceAttributes: null
+        };
+    }
 };
 
 /**

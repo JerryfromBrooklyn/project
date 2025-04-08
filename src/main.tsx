@@ -1,3 +1,16 @@
+// Import polyfills first
+import './polyfills.js';
+
+// Import Buffer from the 'buffer' package (ES module way)
+import { Buffer as BufferPolyfill } from 'buffer';
+
+// Polyfill for Node.js global variable in browser
+if (typeof window !== 'undefined') {
+  window.global = window;
+  window.process = { env: {} };
+  window.Buffer = window.Buffer || BufferPolyfill;
+}
+
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'

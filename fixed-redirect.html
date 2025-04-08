@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shmong App - Port Finder</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f7;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 80px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        .message {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 25px;
+        }
+        .info-box {
+            padding: 12px;
+            background: #e7f3ff;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border-left: 4px solid #0071e3;
+            text-align: left;
+        }
+        .buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-width: 300px;
+            margin: 0 auto;
+        }
+        .port-button {
+            display: block;
+            padding: 12px 24px;
+            background: #0071e3;
+            color: white;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .port-button:hover {
+            background: #0058aa;
+        }
+        .test-mode {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff9c4;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #999;
+        }
+        .checking {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ddd;
+            border-top: 2px solid #0071e3;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to Shmong Festival Photo App</h1>
+        <p class="message">We're detecting which port your app is running on...</p>
+
+        <div class="info-box">
+            <p><strong>Dashboard Update:</strong> The app now uses the Dashboard.jsx component from the components folder.</p>
+            <p>This ensures proper functionality for face recognition and photo matching.</p>
+        </div>
+        
+        <div id="status"><span class="checking"></span> Checking available ports...</div>
+        
+        <div class="buttons" id="port-buttons" style="display: none;">
+            <a href="http://localhost:5173/" class="port-button" id="port-5173">Connect to port 5173</a>
+            <a href="http://localhost:5174/" class="port-button" id="port-5174">Connect to port 5174</a>
+            <a href="http://localhost:5175/" class="port-button" id="port-5175">Connect to port 5175</a>
+            <a href="http://localhost:5176/" class="port-button" id="port-5176">Connect to port 5176</a>
+        </div>
+        
+        <div class="test-mode">
+            <p><strong>Having trouble?</strong> Try enabling test mode:</p>
+            <button id="test-mode-btn" onclick="enableTestMode()" style="padding: 8px 16px; background: #ffeb3b; border: none; border-radius: 4px; cursor: pointer;">
+                Enable Test Mode
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Array of ports to check
+        const ports = [5173, 5174, 5175, 5176, 5177];
+        let availablePorts = [];
+        
+        // Function to check if a port is available
+        async function checkPort(port) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 1000);
+                
+                const response = await fetch(`http://localhost:${port}/`, {
+                    mode: 'no-cors',
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
+        
+        // Check all ports and update UI
+        async function checkAllPorts() {
+            const statusElement = document.getElementById('status');
+            const buttonsContainer = document.getElementById('port-buttons');
+            
+            for (const port of ports) {
+                const isAvailable = await checkPort(port);
+                if (isAvailable) {
+                    availablePorts.push(port);
+                    const buttonElement = document.getElementById(`port-${port}`);
+                    if (buttonElement) {
+                        buttonElement.style.display = 'block';
+                    }
+                } else {
+                    const buttonElement = document.getElementById(`port-${port}`);
+                    if (buttonElement) {
+                        buttonElement.style.display = 'none';
+                    }
+                }
+            }
+            
+            if (availablePorts.length > 0) {
+                statusElement.innerHTML = "✅ Available port(s) detected! Click a button below:";
+                buttonsContainer.style.display = 'flex';
+                
+                // If only one port is available, automatically redirect after 2 seconds
+                if (availablePorts.length === 1) {
+                    const port = availablePorts[0];
+                    statusElement.innerHTML = `✅ Port ${port} detected! Redirecting in 2 seconds...`;
+                    setTimeout(() => {
+                        window.location.href = `http://localhost:${port}/?auto=true`;
+                    }, 2000);
+                }
+            } else {
+                statusElement.innerHTML = "❌ No app ports detected. Is your app running?";
+                buttonsContainer.style.display = 'flex';
+            }
+        }
+        
+        // Enable test mode function
+        function enableTestMode() {
+            localStorage.setItem('TESTING_MODE', 'true');
+            const statusElement = document.getElementById('status');
+            statusElement.innerHTML = "🧪 Test mode enabled! Trying all ports...";
+            
+            // Try redirecting to different ports
+            let portIndex = 0;
+            function tryNextPort() {
+                if (portIndex < ports.length) {
+                    const port = ports[portIndex];
+                    statusElement.innerHTML = `🧪 Test mode enabled! Trying port ${port}...`;
+                    window.location.href = `http://localhost:${port}/?test=true`;
+                    portIndex++;
+                    // If redirect doesn't work, try next port after a delay
+                    setTimeout(tryNextPort, 2000);
+                } else {
+                    statusElement.innerHTML = "❌ Couldn't connect to any port!";
+                }
+            }
+            
+            // Start trying ports
+            tryNextPort();
+        }
+        
+        // Run the port check when the page loads
+        window.onload = checkAllPorts;
+    </script>
+</body>
+</html> 

@@ -180,4 +180,102 @@ To test the historical matching functionality:
 4. **Additional Features:**
    - Group photos by events or time periods
    - Add face recognition confidence thresholds settings
-   - Implement photo filtering and sorting options 
+   - Implement photo filtering and sorting options
+
+## 7. Potential Issues & Technical Considerations
+
+### 7.1 Device and Browser Compatibility
+
+- **Camera Requirements:**
+  - Front-facing camera is required for face registration
+  - Minimum camera recording capability: 15 frames per second
+  - Color camera that can record in at least 320x240px resolution
+  - Virtual cameras or camera software are not supported
+
+- **Display Requirements:**
+  - Minimum refresh rate: 60 Hz
+  - Minimum screen size: 4 inches
+  - Device should not be jailbroken or rooted
+
+- **Browser Support:**
+  - Only the latest three versions of major browsers are supported (Chrome, Firefox, Safari, Edge)
+  - Mobile browsers may have inconsistent camera access implementations
+
+### 7.2 Performance Considerations
+
+- **AWS Service Quotas:**
+  - AWS Rekognition has service quotas that could be exceeded during high traffic
+  - Consider implementing request rate limiting and queue mechanisms for large events
+
+- **Network Requirements:**
+  - Minimum bandwidth of 100kbps required for face registration
+  - Users with poor connections may experience timeouts or failures
+  - Large photo uploads might fail on unstable connections
+
+- **Storage Scaling:**
+  - S3 storage costs will scale with photo volume
+  - Consider implementing photo compression strategies while maintaining recognition quality
+
+### 7.3 Recognition Accuracy Challenges
+
+- **Lighting Conditions:**
+  - Poor lighting significantly reduces face detection accuracy
+  - Consider adding lighting recommendations in the UI
+
+- **Face Occlusion:**
+  - Masks, sunglasses, hats may prevent successful registration or matching
+  - Implement clear guidance for users about proper face positioning
+
+- **Image Format Considerations:**
+  - JPEG with EXIF metadata and PNG are handled differently by Rekognition
+  - JPEG orientation is automatically corrected while PNG orientation is not
+  - Implement proper handling for both formats
+
+### 7.4 User Experience Challenges
+
+- **Face Positioning:**
+  - Users may struggle with proper face positioning during registration
+  - Implement clear visual guides in the UI for optimal face registration
+
+- **Match Expectations:**
+  - Users may have unrealistic expectations for match accuracy
+  - Clearly communicate confidence thresholds and potential limitations
+
+- **Notification Overload:**
+  - Highly photographed users could receive excessive notifications
+  - Implement notification batching and preference settings
+
+### 7.5 Security and Privacy Considerations
+
+- **Biometric Data Handling:**
+  - Facial biometric data requires proper user consent and secure handling
+  - Implement clear privacy policies and consent mechanisms
+  - Consider data retention policies for face vectors and registration data
+
+- **False Positives/Negatives:**
+  - Large collections increase the risk of false matches
+  - Implement confidence threshold settings and manual verification options
+
+- **Access Control:**
+  - DynamoDB and S3 permissions need careful configuration
+  - Implement proper IAM roles and policies for all lambda functions
+
+### 7.6 AWS Rekognition Specific Considerations
+
+- **Face Liveness Detection:**
+  - If implementing liveness detection, note the additional requirements:
+    - Proper webcam mounting for desktop users
+    - Minimum refresh rate and display size requirements
+    - FaceLivenessDetector component from AWS Amplify SDKs required
+
+- **Error Handling:**
+  - Implement proper handling for common Rekognition errors:
+    - ProvisionedThroughputExceededException
+    - ServiceQuotaExceededException
+    - InvalidParameterException
+    - ResourceNotFoundException
+
+- **Versioning:**
+  - AWS regularly updates Face Recognition SDKs
+  - Maintain compatibility with AWS SDK versions
+  - Plan for regular updates to maintain security 

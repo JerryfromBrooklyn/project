@@ -190,39 +190,47 @@ export const updatePhotoRecord = async (photoId, updates) => {
 };
 
 /**
- * Store face data for a user
- * @param {string} userId - The user ID
- * @param {object} faceData - The face data object
- * @returns {Promise<object>} Result with success status
+ * Store face data in DynamoDB
+ * @param {Object} faceData - Face data object to store
+ * @returns {Promise<Object>} Result with success status
  */
-export const storeFaceData = async (userId, faceData) => {
+export const storeFaceData = async (faceData) => {
   try {
-    const timestamp = new Date().toISOString();
+    console.log('[Database] Storing face data in DynamoDB');
     
-    const item = {
-      user_id: userId,
-      face_data: faceData,
-      created_at: timestamp,
-      updated_at: timestamp,
-      id: `face_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-    };
+    if (!faceData.user_id || !faceData.face_id) {
+      console.error('[Database] Missing required fields (user_id, face_id)');
+      return {
+        success: false,
+        error: 'Missing required fields'
+      };
+    }
     
-    const command = new PutCommand({
+    // Ensure timestamps are set
+    if (!faceData.created_at) {
+      faceData.created_at = new Date().toISOString();
+    }
+    if (!faceData.updated_at) {
+      faceData.updated_at = new Date().toISOString();
+    }
+    
+    // Store in DynamoDB
+    await docClient.send(new PutCommand({
       TableName: TABLES.FACE_DATA,
-      Item: item
-    });
+      Item: faceData
+    }));
     
-    await docClient.send(command);
+    console.log('[Database] Face data stored successfully');
     
-    return { 
-      success: true, 
-      data: item 
+    return {
+      success: true,
+      data: faceData
     };
   } catch (error) {
-    console.error('[DB] Error storing face data:', error);
-    return { 
-      success: false, 
-      error: error.message 
+    console.error('[Database] Error storing face data:', error);
+    return {
+      success: false,
+      error: error.message
     };
   }
 };
@@ -732,36 +740,49 @@ export const getUserById = async (userId) => {
 };
 
 /**
- * Store a face match record
- * @param {object} matchData - The match data object
- * @returns {Promise<object>} Result with success status
+ * Store a face match in DynamoDB
+ * @param {Object} matchData - Match data object to store
+ * @returns {Promise<Object>} Result with success status
  */
 export const storeFaceMatch = async (matchData) => {
   try {
-    const timestamp = new Date().toISOString();
+    console.log('[Database] Storing face match in DynamoDB');
     
-    const item = {
-      ...matchData,
-      created_at: timestamp,
-      id: `match_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-    };
+    if (!matchData.user_id || !matchData.face_id) {
+      console.error('[Database] Missing required fields for match');
+      return {
+        success: false,
+        error: 'Missing required fields'
+      };
+    }
     
-    const command = new PutCommand({
+    // Generate a match ID if not provided
+    if (!matchData.id) {
+      matchData.id = `match-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    }
+    
+    // Ensure timestamps are set
+    if (!matchData.created_at) {
+      matchData.created_at = new Date().toISOString();
+    }
+    
+    // Store in DynamoDB
+    await docClient.send(new PutCommand({
       TableName: TABLES.FACE_MATCHES,
-      Item: item
-    });
+      Item: matchData
+    }));
     
-    await docClient.send(command);
+    console.log('[Database] Face match stored successfully');
     
-    return { 
-      success: true, 
-      data: item 
+    return {
+      success: true,
+      data: matchData
     };
   } catch (error) {
-    console.error('[DB] Error storing face match:', error);
-    return { 
-      success: false, 
-      error: error.message 
+    console.error('[Database] Error storing face match:', error);
+    return {
+      success: false,
+      error: error.message
     };
   }
 };

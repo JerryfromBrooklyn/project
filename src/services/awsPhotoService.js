@@ -1,7 +1,7 @@
 import { PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { PutItemCommand, GetItemCommand, DeleteItemCommand, QueryCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
-import { s3Client, dynamoDBClient, PHOTO_BUCKET, PHOTOS_TABLE } from '../lib/awsClient';
+import { s3Client, dynamoClient, PHOTO_BUCKET, PHOTOS_TABLE } from '../lib/awsClient';
 import { marshallItem, unmarshallItems, unmarshallItem } from '../utils/dynamoUtils';
 /**
  * Service for handling photo operations with AWS S3 and DynamoDB
@@ -69,7 +69,7 @@ export const awsPhotoService = {
                 TableName: PHOTOS_TABLE,
                 Item: marshallItem(photoMetadata)
             };
-            await dynamoDBClient.send(new PutItemCommand(putParams));
+            await dynamoClient.send(new PutItemCommand(putParams));
             progressCallback(100);
             return {
                 success: true,
@@ -132,7 +132,7 @@ export const awsPhotoService = {
                     ':userId': { S: userId }
                 }
             };
-            const response = await dynamoDBClient.send(new QueryCommand(queryParams));
+            const response = await dynamoClient.send(new QueryCommand(queryParams));
             if (!response.Items || response.Items.length === 0) {
                 return [];
             }
@@ -157,7 +157,7 @@ export const awsPhotoService = {
                     id: { S: photoId }
                 }
             };
-            const response = await dynamoDBClient.send(new GetItemCommand(getParams));
+            const response = await dynamoClient.send(new GetItemCommand(getParams));
             if (!response.Item) {
                 return null;
             }
@@ -193,7 +193,7 @@ export const awsPhotoService = {
                     id: { S: photoId }
                 }
             };
-            await dynamoDBClient.send(new DeleteItemCommand(deleteDBParams));
+            await dynamoClient.send(new DeleteItemCommand(deleteDBParams));
             return true;
         }
         catch (error) {
@@ -219,7 +219,7 @@ export const awsPhotoService = {
                     ':oldPath': { S: oldPath }
                 }
             };
-            const response = await dynamoDBClient.send(new ScanCommand(scanParams));
+            const response = await dynamoClient.send(new ScanCommand(scanParams));
             if (!response.Items || response.Items.length === 0) {
                 return true; // No photos to update
             }
@@ -238,7 +238,7 @@ export const awsPhotoService = {
                         ':newPath': { S: newPath || '' }
                     }
                 };
-                await dynamoDBClient.send(new PutItemCommand({
+                await dynamoClient.send(new PutItemCommand({
                     TableName: PHOTOS_TABLE,
                     Item: marshallItem({
                         ...photo,

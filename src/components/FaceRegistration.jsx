@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Webcam from 'react-webcam';
-import { Camera, AlertCircle, CheckCircle, Loader } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { Camera, AlertCircle, CheckCircle, Loader, Video, User, Info } from 'lucide-react';
+import { useAuth } from '../auth/AuthContext';
 import { indexFace } from '../services/FaceIndexingService';
 import { detectFacesInImage } from '../services/FaceDetectionService';
 
@@ -59,8 +59,8 @@ try {
 // Continue with existing code for completion message
 // ... existing code ... 
 
-const FaceRegistration = ({ onClose }) => {
-  // Add useEffect for mount logging
+const FaceRegistration = ({ onSuccess, onClose }) => {
+  // Component logging
   useEffect(() => {
     console.log('[FaceRegistration.jsx] Mounted');
   }, []);
@@ -71,12 +71,85 @@ const FaceRegistration = ({ onClose }) => {
   const [isFaceDetected, setIsFaceDetected] = useState(false);
   const [faceId, setFaceId] = useState(null);
   const [registeredImageUrl, setRegisteredImageUrl] = useState(null);
+  const [faceAttributes, setFaceAttributes] = useState(null);
+  const [historicalMatches, setHistoricalMatches] = useState([]);
+  const [matchCount, setMatchCount] = useState(0);
   const { user, updateUserFaceData } = useAuth();
   const webcamRef = useRef(null);
+
+  // State for camera selection
+  const [videoDevices, setVideoDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect if using a mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+      const isMobileDevice = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+      setIsMobile(isMobileDevice);
+      console.log('[FaceReg] Device detected as:', isMobileDevice ? 'Mobile' : 'Desktop');
+    };
+    
+    checkMobile();
+  }, []);
+
+  // Fetch video devices on mount
+  useEffect(() => {
+    const getVideoDevices = async () => {
+      try {
+        // First request permission
+        await navigator.mediaDevices.getUserMedia({ video: true });
+        
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cameras = devices.filter(device => device.kind === 'videoinput');
+        console.log('[FaceReg] Available cameras:', cameras);
+        setVideoDevices(cameras);
+        
+        if (cameras.length > 0) {
+          // On mobile, try to use the front-facing camera
+          if (isMobile) {
+            const frontCamera = cameras.find(camera => 
+              camera.label.toLowerCase().includes('front') || 
+              camera.label.toLowerCase().includes('user') ||
+              camera.label.toLowerCase().includes('selfie'));
+            
+            if (frontCamera) {
+              console.log('[FaceReg] Found front camera:', frontCamera.label);
+              setSelectedDeviceId(frontCamera.deviceId);
+            } else {
+              setSelectedDeviceId(cameras[0].deviceId);
+            }
+          } else {
+            // On desktop, use the first camera by default
+            setSelectedDeviceId(cameras[0].deviceId);
+          }
+        } else {
+          setError('No camera devices found.');
+          setStatus('error');
+        }
+      } catch (err) {
+        console.error("[FaceReg] Error accessing media devices:", err);
+        setError('Could not access media devices. Please check permissions.');
+        setStatus('error');
+      }
+    };
+
+    getVideoDevices();
+  }, [isMobile]);
+
+  // Updated video constraints based on selected device
   const videoConstraints = {
     width: 640,
     height: 480,
-    facingMode: 'user'
+    deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined
+  };
+
+  // Handler for camera selection change
+  const handleCameraChange = (event) => {
+    setSelectedDeviceId(event.target.value);
+    // Reset capture status if camera changes
+    retakeImage(); 
   };
 
   const captureImage = useCallback(() => {
@@ -89,7 +162,11 @@ const FaceRegistration = ({ onClose }) => {
     fetch(imageSrc)
       .then(res => res.blob())
       .then(blob => {
-        setImageBlob(blob);
+        // Create a File object with a proper name for easier debugging
+        const file = new File([blob], `face-registration-${Date.now()}.jpeg`, {
+          type: 'image/jpeg'
+        });
+        setImageBlob(file);
         setStatus('captured'); // Or appropriate status
       });
   }, [webcamRef]);
@@ -97,6 +174,9 @@ const FaceRegistration = ({ onClose }) => {
   const retakeImage = () => {
     setImageBlob(null);
     setRegisteredImageUrl(null); // Also clear registered image if retaking
+    setFaceAttributes(null); // Clear face attributes
+    setHistoricalMatches([]);
+    setMatchCount(0);
     setStatus('idle'); // Reset status
   };
 
@@ -114,10 +194,14 @@ const FaceRegistration = ({ onClose }) => {
     }
     setStatus('processing');
     setRegisteredImageUrl(null);
+    setFaceAttributes(null);
+    setHistoricalMatches([]);
+    setMatchCount(0);
     console.log('[FaceReg] Starting AWS face registration process...');
 
     try {
       console.log('[FaceReg] Indexing face with AWS Rekognition & saving to DB...');
+      // This is the key function that handles face registration and historical matching
       const result = await indexFace(user.id, blobToProcess);
 
       if (!result.success || !result.faceId) {
@@ -130,6 +214,14 @@ const FaceRegistration = ({ onClose }) => {
       console.log(`[FaceReg] Face indexed successfully with Face ID: ${result.faceId}`);
       console.log('[FaceReg] Face attributes received:', JSON.stringify(result.faceAttributes, null, 2));
       setFaceId(result.faceId);
+      setFaceAttributes(result.faceAttributes);
+
+      // Handle historical matches if they exist
+      if (result.historicalMatches && result.historicalMatches.length > 0) {
+        console.log('[FaceReg] Historical matches found:', result.historicalMatches.length);
+        setHistoricalMatches(result.historicalMatches);
+        setMatchCount(result.historicalMatches.length);
+      }
 
       const imageUrl = URL.createObjectURL(blobToProcess);
       setRegisteredImageUrl(imageUrl);
@@ -139,10 +231,17 @@ const FaceRegistration = ({ onClose }) => {
 
       if (updateUserFaceData) {
         setTimeout(() => {
-          updateUserFaceData(result.faceId, result.faceAttributes);
+          updateUserFaceData(result.faceId, result.faceAttributes, result.historicalMatches);
         }, 100);
       } else {
         console.warn('[FaceReg] updateUserFaceData function not found in AuthContext');
+      }
+      
+      // Notify parent about successful registration
+      if (onSuccess) {
+        setTimeout(() => {
+          onSuccess(result.faceId, result.faceAttributes, result.historicalMatches);
+        }, 500);
       }
 
     } catch (err) {
@@ -185,6 +284,116 @@ const FaceRegistration = ({ onClose }) => {
     };
   }, [registeredImageUrl]);
 
+  const handleContinue = () => {
+    if (onSuccess) {
+      onSuccess(faceId, faceAttributes, historicalMatches);
+    } else if (onClose) {
+      onClose();
+    }
+  };
+
+  // Helper function to render face attributes in a readable format
+  const renderFaceAttributes = () => {
+    if (!faceAttributes) return null;
+    
+    const attributes = [];
+    
+    // Age range
+    if (faceAttributes.AgeRange) {
+      attributes.push({
+        label: 'Age Range',
+        value: `${faceAttributes.AgeRange.Low}-${faceAttributes.AgeRange.High} years`
+      });
+    }
+    
+    // Gender
+    if (faceAttributes.Gender) {
+      attributes.push({
+        label: 'Gender',
+        value: `${faceAttributes.Gender.Value} (${Math.round(faceAttributes.Gender.Confidence)}%)`
+      });
+    }
+    
+    // Smile
+    if (faceAttributes.Smile) {
+      attributes.push({
+        label: 'Smiling',
+        value: faceAttributes.Smile.Value ? 'Yes' : 'No'
+      });
+    }
+    
+    // Eyeglasses
+    if (faceAttributes.Eyeglasses) {
+      attributes.push({
+        label: 'Eyeglasses',
+        value: faceAttributes.Eyeglasses.Value ? 'Yes' : 'No'
+      });
+    }
+    
+    // Sunglasses
+    if (faceAttributes.Sunglasses) {
+      attributes.push({
+        label: 'Sunglasses',
+        value: faceAttributes.Sunglasses.Value ? 'Yes' : 'No'
+      });
+    }
+    
+    // Beard
+    if (faceAttributes.Beard) {
+      attributes.push({
+        label: 'Beard',
+        value: faceAttributes.Beard.Value ? 'Yes' : 'No'
+      });
+    }
+    
+    // Mustache
+    if (faceAttributes.Mustache) {
+      attributes.push({
+        label: 'Mustache',
+        value: faceAttributes.Mustache.Value ? 'Yes' : 'No'
+      });
+    }
+    
+    // Eyes open
+    if (faceAttributes.EyesOpen) {
+      attributes.push({
+        label: 'Eyes Open',
+        value: faceAttributes.EyesOpen.Value ? 'Yes' : 'No'
+      });
+    }
+    
+    // Mouth open
+    if (faceAttributes.MouthOpen) {
+      attributes.push({
+        label: 'Mouth Open',
+        value: faceAttributes.MouthOpen.Value ? 'Yes' : 'No'
+      });
+    }
+    
+    // Emotions (top emotion)
+    if (faceAttributes.Emotions && faceAttributes.Emotions.length > 0) {
+      // Sort emotions by confidence
+      const sortedEmotions = [...faceAttributes.Emotions].sort((a, b) => b.Confidence - a.Confidence);
+      const topEmotion = sortedEmotions[0];
+      
+      attributes.push({
+        label: 'Emotion',
+        value: `${topEmotion.Type} (${Math.round(topEmotion.Confidence)}%)`
+      });
+    }
+    
+    return (
+      <div className="grid grid-cols-2 gap-2 mt-4 text-sm">
+        {attributes.map((attr, index) => (
+          <div key={index} className="border border-apple-gray-200 rounded-apple p-2 bg-apple-gray-50">
+            <p className="text-apple-gray-500">{attr.label}</p>
+            <p className="font-medium text-apple-gray-800">{attr.value}</p>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="face-registration">
       <div className="mx-auto max-w-3xl bg-white rounded-apple-xl shadow-sm border border-apple-gray-200 overflow-hidden">
@@ -214,6 +423,34 @@ const FaceRegistration = ({ onClose }) => {
           
           <div className="flex flex-col md:flex-row gap-6">
             <div className="flex-1">
+              {/* Camera Selection Dropdown - Made more prominent */}
+              {videoDevices.length > 0 && status !== 'success' && (
+                <div className="mb-4 p-3 bg-blue-50 rounded-apple border border-blue-200">
+                  <label htmlFor="cameraSelect" className="block text-sm font-medium text-blue-700 mb-2 flex items-center">
+                    <Video className="w-4 h-4 mr-1 text-blue-600" />
+                    Select Camera Device:
+                  </label>
+                  <select 
+                    id="cameraSelect"
+                    value={selectedDeviceId}
+                    onChange={handleCameraChange}
+                    className="block w-full p-2 border border-blue-300 rounded-apple shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                    aria-label="Select camera device"
+                  >
+                    {videoDevices.map(device => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Camera ${videoDevices.indexOf(device) + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-blue-600">
+                    {videoDevices.length === 1 
+                      ? "Only one camera detected" 
+                      : `${videoDevices.length} cameras available`}
+                  </p>
+                </div>
+              )}
+
               <div className="relative aspect-video bg-black rounded-apple-lg overflow-hidden border border-apple-gray-300 shadow-inner">
                 {status === 'success' && registeredImageUrl ? (
                   <img src={registeredImageUrl} alt="Registered Face" className="w-full h-full object-cover" />
@@ -290,44 +527,64 @@ const FaceRegistration = ({ onClose }) => {
             </div>
             
             <div className="md:w-64">
-              <div className="bg-apple-gray-50 p-4 rounded-apple border border-apple-gray-200">
-                <h3 className="font-medium text-apple-gray-900 mb-2">Registration Tips</h3>
-                <ul className="text-sm text-apple-gray-700 space-y-2">
-                  <li className="flex items-start">
-                    <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
-                    <span>Ensure your face is fully visible</span>
-                  </li>
-                  <li className="flex items-start">
-                    <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
-                    <span>Use good lighting - avoid shadows</span>
-                  </li>
-                  <li className="flex items-start">
-                    <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
-                    <span>Remove sunglasses for best results</span>
-                  </li>
-                  <li className="flex items-start">
-                    <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
-                    <span>Look directly at the camera</span>
-                  </li>
-                </ul>
-              </div>
+              {status === 'success' && faceAttributes ? (
+                <div className="bg-white p-4 rounded-apple border border-apple-gray-200">
+                  <h3 className="font-medium text-apple-gray-900 mb-2 flex items-center">
+                    <User className="w-4 h-4 text-apple-blue-500 mr-2" />
+                    Facial Attributes
+                  </h3>
+                  {renderFaceAttributes()}
+                </div>
+              ) : (
+                <div className="bg-apple-gray-50 p-4 rounded-apple border border-apple-gray-200">
+                  <h3 className="font-medium text-apple-gray-900 mb-2">Registration Tips</h3>
+                  <ul className="text-sm text-apple-gray-700 space-y-2">
+                    <li className="flex items-start">
+                      <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
+                      <span>Ensure your face is fully visible</span>
+                    </li>
+                    <li className="flex items-start">
+                      <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
+                      <span>Use good lighting - avoid shadows</span>
+                    </li>
+                    <li className="flex items-start">
+                      <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
+                      <span>Remove sunglasses for best results</span>
+                    </li>
+                    <li className="flex items-start">
+                      <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
+                      <span>Look directly at the camera</span>
+                    </li>
+                  </ul>
+                </div>
+              )}
               
               {status === 'success' && (
-                <div className="mt-4 bg-green-50 p-4 rounded-apple border border-green-200 md:w-64">
-                  <h3 className="font-medium text-green-900 mb-2 flex items-center">
-                    <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
-                    Registration Complete
-                  </h3>
-                  <p className="text-sm text-green-800">
-                    Your face has been successfully registered. New Face ID: {faceId || 'N/A'}
-                  </p>
-                  <button
-                    onClick={onClose}
-                    className="mt-3 w-full px-4 py-2 bg-green-600 text-white rounded-apple font-medium hover:bg-green-700 transition-colors"
-                  >
-                    Continue
-                  </button>
-                </div>
+                <>
+                  <div className="mt-4 bg-green-50 p-4 rounded-apple border border-green-200">
+                    <h3 className="font-medium text-green-900 mb-2 flex items-center">
+                      <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
+                      Registration Complete
+                    </h3>
+                    <p className="text-sm text-green-800">
+                      Your face has been successfully registered. New Face ID: {faceId || 'N/A'}
+                    </p>
+                    
+                    {matchCount > 0 && (
+                      <div className="mt-2 text-sm text-green-800">
+                        <p className="font-medium">Found you in {matchCount} existing photo{matchCount !== 1 ? 's' : ''}!</p>
+                        <p className="text-xs mt-1">View them in your dashboard.</p>
+                      </div>
+                    )}
+                    
+                    <button
+                      onClick={handleContinue}
+                      className="mt-3 w-full px-4 py-2 bg-green-600 text-white rounded-apple font-medium hover:bg-green-700 transition-colors"
+                    >
+                      Continue
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>

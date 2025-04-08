@@ -45,43 +45,64 @@ export const generateS3Url = (key) => {
 };
 
 /**
- * Converts a CloudFront URL to an S3 URL
- * @param {string} cloudFrontUrl - The CloudFront URL
- * @returns {string} The corresponding S3 URL
- */
-export const convertCloudFrontToS3Url = (cloudFrontUrl) => {
-  if (!cloudFrontUrl) return null;
-  if (!cloudFrontUrl.includes(CLOUDFRONT_DOMAIN)) return cloudFrontUrl;
-  
-  const path = cloudFrontUrl.replace(`https://${CLOUDFRONT_DOMAIN}/`, '');
-  return generateS3Url(path);
-};
-
-/**
- * Normalizes a URL to ensure it's an S3 URL
- * @param {string} url - The URL to normalize (CloudFront or S3)
- * @returns {string} The normalized S3 URL
+ * Normalize an S3 URL to ensure consistent format
+ * @param {string} url - S3 URL to normalize
+ * @returns {string} Normalized S3 URL
  */
 export const normalizeToS3Url = (url) => {
   if (!url) return null;
   
-  // If it's already an S3 URL in any format, convert to the correct format
-  if (url.includes(`.s3.`) && url.includes(S3_BUCKET_NAME)) {
-    const pattern = new RegExp(`https://${S3_BUCKET_NAME}\\.s3\\..*amazonaws\\.com/(.*)`);
-    const match = url.match(pattern);
-    if (match && match[1]) {
-      return generateS3Url(match[1]);
+  try {
+    // Parse the URL
+    const parsedUrl = new URL(url);
+    
+    // Extract bucket and key information
+    let bucket, key;
+    
+    if (parsedUrl.hostname.includes('s3.amazonaws.com')) {
+      // Format: https://bucket-name.s3.amazonaws.com/key
+      bucket = parsedUrl.hostname.replace('.s3.amazonaws.com', '');
+      key = parsedUrl.pathname.startsWith('/') ? parsedUrl.pathname.slice(1) : parsedUrl.pathname;
+    } else if (parsedUrl.hostname.endsWith('amazonaws.com') && parsedUrl.pathname.startsWith('/')) {
+      // Format: https://s3.region.amazonaws.com/bucket-name/key
+      const parts = parsedUrl.pathname.split('/');
+      bucket = parts[1];
+      key = parts.slice(2).join('/');
+    } else {
+      // Assume the URL is already in the desired format
+      return url;
     }
-    return url;
+    
+    // Return the normalized URL
+    return `https://${bucket}.s3.amazonaws.com/${key}`;
+  } catch (error) {
+    console.error('Error normalizing S3 URL:', error);
+    return url; // Return the original URL if there's an error
   }
+};
+
+/**
+ * Convert a CloudFront URL to an S3 URL
+ * @param {string} cloudFrontUrl - CloudFront URL to convert
+ * @param {string} bucketName - S3 bucket name
+ * @returns {string} Equivalent S3 URL
+ */
+export const convertCloudFrontToS3Url = (cloudFrontUrl, bucketName) => {
+  if (!cloudFrontUrl || !bucketName) return null;
   
-  // If it's a CloudFront URL, convert it
-  if (url.includes(CLOUDFRONT_DOMAIN)) {
-    return convertCloudFrontToS3Url(url);
+  try {
+    // Parse the URL
+    const parsedUrl = new URL(cloudFrontUrl);
+    
+    // Extract the key from the pathname
+    const key = parsedUrl.pathname.startsWith('/') ? parsedUrl.pathname.slice(1) : parsedUrl.pathname;
+    
+    // Return the S3 URL
+    return `https://${bucketName}.s3.amazonaws.com/${key}`;
+  } catch (error) {
+    console.error('Error converting CloudFront URL to S3 URL:', error);
+    return cloudFrontUrl; // Return the original URL if there's an error
   }
-  
-  // Otherwise, return as is
-  return url;
 };
 
 /**

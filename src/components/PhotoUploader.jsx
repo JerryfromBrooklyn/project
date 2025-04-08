@@ -1,162 +1,182 @@
-import React, { useState } from 'react';
-import { useAuth } from '../auth';
-import UppyUploader from './UppyUploader';
-import { Check, Upload, Clock, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import Uppy from '@uppy/core';
+import { Dashboard } from '@uppy/react';
+import AwsS3 from '@uppy/aws-s3';
+import { Check, Upload, Clock, AlertTriangle, XCircle } from 'lucide-react';
+
+// Import Uppy CSS
+import '@uppy/core/dist/style.min.css';
+import '@uppy/dashboard/dist/style.min.css';
 
 const PhotoUploader = () => {
-    const { user } = useAuth();
-    const [uploadStatus, setUploadStatus] = useState({
-        status: 'idle', // idle, uploading, success, error
-        message: '',
-        uploads: []
+    const [uploadResults, setUploadResults] = useState([]);
+    const [error, setError] = useState(null);
+
+    // Configure Uppy instance
+    const [uppy] = useState(() => {
+        const uppyInstance = new Uppy({
+            // debug: true, 
+            autoProceed: false, 
+            restrictions: {
+                maxFileSize: 15 * 1024 * 1024, // 15MB limit per photo
+                allowedFileTypes: ['image/jpeg', 'image/png', 'image/heic', 'image/webp'],
+            },
+            meta: { 
+                // Add any global metadata if needed
+                // E.g., eventId: 'festival-2024' 
+            }
+        });
+
+        // Configure AWS S3 plugin
+        uppyInstance.use(AwsS3, {
+            // Fetch pre-signed URL from our backend
+            getUploadParameters: async (file) => {
+                console.log('[Uppy] Requesting upload parameters for:', file.name);
+                setError(null); // Clear previous errors
+                try {
+                    const response = await fetch('/api/get-upload-credentials', { // ** YOU NEED TO CREATE THIS BACKEND ENDPOINT **
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            filename: file.name,
+                            contentType: file.type,
+                            metadata: file.meta // Pass file-specific metadata
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ message: `HTTP error ${response.status}` }));
+                        console.error('[Uppy] Failed to get upload parameters:', errorData);
+                        throw new Error(errorData.message || 'Failed to get upload parameters from server.');
+                    }
+
+                    const data = await response.json();
+                    console.log('[Uppy] Received upload parameters:', data);
+
+                    if (!data.url) {
+                         throw new Error('Invalid response from server: Missing presigned URL.');
+                    }
+
+                    return {
+                        method: 'PUT',
+                        url: data.url, // The pre-signed URL from server
+                        fields: {}, // Usually empty for pre-signed PUT URLs to S3
+                        headers: {
+                           'Content-Type': file.type,
+                           // Add any other headers required by S3/your setup if necessary
+                        },
+                    };
+                } catch (err) {
+                    console.error('[Uppy] Error fetching upload parameters:', err);
+                    setError(`Network error: Could not get upload credentials. ${err.message}`);
+                    // Notify Uppy about the error for this specific file
+                    uppyInstance.info(`Failed to get upload credentials for ${file.name}: ${err.message}`, 'error', 5000);
+                    // Throwing the error signals failure to Uppy for this file
+                    throw err; 
+                }
+            },
+        });
+
+        // Uppy Event Listeners
+        uppyInstance.on('upload-success', (file, response) => {
+            console.log('[Uppy] File uploaded successfully:', file.name, response.uploadURL);
+            // response.uploadURL will be null for AwsS3 PUT uploads, but the request succeeded.
+            // The important part is that the file is now in S3.
+            // We can store the S3 key/URL based on what our backend provided in getUploadParameters
+            // (if the backend returned the final key/URL). We might need to update this logic
+            // based on the exact response from /api/get-upload-credentials.
+
+            setUploadResults(prev => [
+                ...prev,
+                { 
+                    id: file.id,
+                    name: file.name,
+                    size: file.size,
+                    status: 'uploaded', 
+                    // s3Key: file.meta.key // Assuming backend adds the S3 key to meta
+                }
+            ]);
+            
+            // ** TODO: Trigger backend processing (face detection) for the uploaded file **
+            // This usually involves sending the S3 object key (which you should get from 
+            // your /api/get-upload-credentials endpoint response) to another backend endpoint.
+            // e.g., fetch('/api/process-s3-image', { method: 'POST', body: JSON.stringify({ s3Key: file.meta.key }) })
+            console.log(`[Uppy] TODO: Trigger backend processing for ${file.name} (key: ${file.meta?.key})`);
+        });
+
+        uppyInstance.on('upload-error', (file, error, response) => {
+            console.error('[Uppy] Upload error:', file.name, error, response);
+            setError(`Upload failed for ${file.name}: ${error.message}`);
+             setUploadResults(prev => [
+                ...prev,
+                { id: file.id, name: file.name, size: file.size, status: 'error', message: error.message }
+            ]);
+        });
+
+        uppyInstance.on('complete', (result) => {
+            console.log('[Uppy] Upload batch complete:', result);
+            if (result.failed.length === 0) {
+                console.log('[Uppy] All files uploaded successfully!');
+                // Maybe show a success message for the batch
+            } else {
+                console.warn(`[Uppy] Upload complete with ${result.failed.length} failures.`);
+                setError(`Some files failed to upload. Check details below or in the console.`);
+            }
+        });
+        
+        return uppyInstance;
     });
 
-    const handleUploadComplete = (fileInfo) => {
-        console.log('Upload completed:', fileInfo);
-        
-        setUploadStatus(prev => ({
-            status: 'success',
-            message: `Successfully uploaded ${prev.uploads.length + 1} photos.`,
-            uploads: [...prev.uploads, fileInfo]
-        }));
-        
-        // You can also trigger AWS Rekognition processing here
-        processUploadedImage(fileInfo);
-    };
+    useEffect(() => {
+        // Clean up Uppy instance when component unmounts
+        return () => uppy.close({ reason: 'unmount' });
+    }, [uppy]);
 
-    const processUploadedImage = async (fileInfo) => {
-        try {
-            // In a real implementation, this would call your backend API
-            // to process the uploaded image with AWS Rekognition
-            console.log('Processing image with Rekognition:', fileInfo.url);
-            
-            // Simulate API call to backend
-            const response = await fetch('/api/process-image', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    imageUrl: fileInfo.url,
-                    userId: user?.id,
-                    metadata: fileInfo.meta
-                })
-            });
-            
-            if (!response.ok) {
-                throw new Error('Failed to process image');
-            }
-            
-            const result = await response.json();
-            console.log('Processing result:', result);
-            
-            // Update upload with processing results
-            setUploadStatus(prev => ({
-                ...prev,
-                uploads: prev.uploads.map(upload => 
-                    upload.url === fileInfo.url 
-                        ? { ...upload, processed: true, faces: result.faces }
-                        : upload
-                )
-            }));
-            
-        } catch (error) {
-            console.error('Error processing image:', error);
-            // Update status to reflect processing error
-            setUploadStatus(prev => ({
-                ...prev,
-                uploads: prev.uploads.map(upload => 
-                    upload.url === fileInfo.url 
-                        ? { ...upload, processed: false, error: error.message }
-                        : upload
-                )
-            }));
-        }
-    };
+    
+    // Removed the previous local state handling for uploadStatus as Uppy manages file states
 
     return (
-        <div className="max-w-4xl mx-auto p-6">
-            <div className="bg-white shadow-md rounded-lg p-6">
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-2xl font-bold text-gray-800">Upload Photos</h1>
-                    {uploadStatus.status === 'success' && (
-                        <div className="flex items-center text-green-600">
-                            <Check className="w-5 h-5 mr-2" />
-                            <span>{uploadStatus.message}</span>
-                        </div>
-                    )}
+        <div className="">
+            {error && (
+                <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4">
+                    <p><strong>Upload Error:</strong> {error}</p>
                 </div>
+            )}
 
-                <div className="mb-6">
-                    <p className="text-gray-600 mb-4">
-                        Upload your photos here. They will automatically be processed for face recognition.
-                    </p>
-                    
-                    <div className="bg-blue-50 p-4 rounded-md mb-6">
-                        <h3 className="text-md font-semibold text-blue-800 mb-2">How it works</h3>
-                        <ol className="list-decimal list-inside text-gray-700 space-y-2">
-                            <li>Upload one or more photos</li>
-                            <li>Our system will automatically detect and recognize faces</li>
-                            <li>If your face is registered, you'll be notified when you appear in a photo</li>
-                            <li>You can view all your matches in the "My Photos" section</li>
-                        </ol>
-                    </div>
-                    
-                    {/* Uppy Uploader Component */}
-                    <UppyUploader onUploadComplete={handleUploadComplete} />
-                </div>
+            <Dashboard
+                uppy={uppy}
+                plugins={[]} // Add plugin names here if using any UI plugins like Webcam
+                height={450}
+                theme="light" // or "dark"
+                proudlyDisplayPoweredByUppy={false}
+                note="Images only (JPEG, PNG, HEIC, WEBP), up to 15MB"
+                // You can customize other Dashboard props here
+            />
 
-                {uploadStatus.uploads.length > 0 && (
-                    <div className="mt-8">
-                        <h2 className="text-xl font-bold text-gray-800 mb-4">Recently Uploaded Photos</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {uploadStatus.uploads.map((upload, index) => (
-                                <div key={index} className="bg-gray-50 rounded-lg overflow-hidden shadow-sm border border-gray-200">
-                                    {upload.url && (
-                                        <div className="aspect-square relative">
-                                            <img 
-                                                src={upload.url} 
-                                                alt={upload.filename} 
-                                                className="w-full h-full object-cover"
-                                            />
-                                            <div className="absolute top-2 right-2">
-                                                {upload.processed ? (
-                                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                        <Check className="w-3 h-3 mr-1" />
-                                                        Processed
-                                                    </span>
-                                                ) : upload.error ? (
-                                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                                        <AlertTriangle className="w-3 h-3 mr-1" />
-                                                        Failed
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                                        <Clock className="w-3 h-3 mr-1" />
-                                                        Processing
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div className="p-3">
-                                        <p className="text-sm font-medium text-gray-900 truncate">{upload.filename}</p>
-                                        <p className="text-xs text-gray-500">{(upload.size / (1024 * 1024)).toFixed(2)} MB</p>
-                                        
-                                        {upload.faces && upload.faces.length > 0 && (
-                                            <div className="mt-2">
-                                                <p className="text-xs font-medium text-purple-800">
-                                                    {upload.faces.length} {upload.faces.length === 1 ? 'face' : 'faces'} detected
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
+            {/* Display upload results/status (optional enhancement) */}
+            {uploadResults.length > 0 && (
+                <div className="mt-8">
+                    <h2 className="text-xl font-semibold text-gray-800 mb-4">Upload Summary</h2>
+                    <div className="space-y-2">
+                        {uploadResults.map((file) => (
+                            <div key={file.id} className={`p-3 rounded-md border ${file.status === 'error' ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm font-medium text-gray-700 truncate mr-4">{file.name}</span>
+                                    {file.status === 'uploaded' && <Check className="w-5 h-5 text-green-600" />}
+                                    {file.status === 'error' && <XCircle className="w-5 h-5 text-red-600" />}
                                 </div>
-                            ))}
-                        </div>
+                                {file.status === 'error' && (
+                                    <p className="text-xs text-red-600 mt-1">Error: {file.message}</p>
+                                )}
+                                <p className="text-xs text-gray-500">({(file.size / (1024 * 1024)).toFixed(2)} MB)</p>
+                            </div>
+                        ))}
                     </div>
-                )}
-            </div>
+                </div>
+            )}
         </div>
     );
 };

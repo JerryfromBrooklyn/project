@@ -2,10 +2,18 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { RekognitionClient, SearchFacesByImageCommand } from '@aws-sdk/client-rekognition';
-import { docClient } from '../lib/awsClient';
+import { docClient, rekognitionClient, COLLECTION_ID } from '../lib/awsClient';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { Camera, Upload, User, Sparkles, Bell, Image, Search, LogOut } from 'lucide-react';
+import FaceRegistration from '../components/FaceRegistration';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card.jsx";
 
 const Dashboard = () => {
     console.log('[DASHBOARD] Rendering Dashboard component');
@@ -23,6 +31,7 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('home');
     const [registeredFace, setRegisteredFace] = useState(null);
+    const [showRegistrationModal, setShowRegistrationModal] = useState(false);
 
     // Fetch user's face data, matched photos and notifications on load
     useEffect(() => {
@@ -103,8 +112,20 @@ const Dashboard = () => {
     };
 
     const navigateToFaceRegistration = () => {
-        console.log('[DASHBOARD] Navigating to face registration');
-        navigate('/register-face');
+        console.log('[DASHBOARD] Opening face registration modal');
+        setShowRegistrationModal(true);
+    };
+
+    const handleRegistrationSuccess = () => {
+        console.log('[DASHBOARD] Face registration successful, refreshing data');
+        setShowRegistrationModal(false);
+        // Refetch user data to get updated face registration info
+        fetchUserData();
+    };
+
+    const handleRegistrationClose = () => {
+        console.log('[DASHBOARD] Face registration modal closed');
+        setShowRegistrationModal(false);
     };
 
     const navigateToPhotos = () => {
@@ -186,18 +207,11 @@ const Dashboard = () => {
 
     const detectFace = async (imageBytes) => {
         try {
-            // Create AWS Rekognition client
-            const client = new RekognitionClient({
-                region: "us-east-1",
-                credentials: {
-                    accessKeyId: process.env.REACT_APP_AWS_ACCESS_KEY_ID,
-                    secretAccessKey: process.env.REACT_APP_AWS_SECRET_ACCESS_KEY,
-                }
-            });
-
-            // Search faces by image
+            console.log('[DASHBOARD] Detecting face with Rekognition...');
+            
+            // Use the pre-configured rekognitionClient from awsClient.js
             const command = new SearchFacesByImageCommand({
-                CollectionId: "user-faces",
+                CollectionId: COLLECTION_ID,
                 Image: {
                     Bytes: imageBytes
                 },
@@ -205,8 +219,8 @@ const Dashboard = () => {
                 FaceMatchThreshold: 80
             });
 
-            const response = await client.send(command);
-            console.log('Rekognition response:', response);
+            const response = await rekognitionClient.send(command);
+            console.log('[DASHBOARD] Rekognition response:', response);
 
             if (response.FaceMatches && response.FaceMatches.length > 0) {
                 setFaceDetected(true);
@@ -220,7 +234,7 @@ const Dashboard = () => {
                 setFaceData(null);
             }
         } catch (err) {
-            console.error('Error with Rekognition:', err);
+            console.error('[DASHBOARD] Error with Rekognition:', err);
             setErrorMessage('Error detecting face. Please try again.');
             setFaceDetected(false);
             setFaceData(null);
@@ -592,6 +606,28 @@ const Dashboard = () => {
                     {activeTab === 'matches' && renderMatchesTab()}
                     {activeTab === 'upload' && renderUploadTab()}
                 </>
+            )}
+
+            {/* Face Registration Modal */}
+            {showRegistrationModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="relative bg-white rounded-lg overflow-hidden w-full max-w-lg">
+                        <div className="absolute top-0 right-0 p-2">
+                            <button 
+                                onClick={handleRegistrationClose}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <FaceRegistration 
+                            onSuccess={handleRegistrationSuccess}
+                            onClose={handleRegistrationClose}
+                        />
+                    </div>
+                </div>
             )}
         </div>
     );
