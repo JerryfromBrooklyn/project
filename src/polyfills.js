@@ -1,39 +1,31 @@
 // Polyfills for Node.js built-ins in browser environments
-// This helps AWS SDK v3 and other Node.js modules work in browsers
+// Handled by vite-plugin-node-polyfills
 
-// Import Buffer from the 'buffer' package
-import { Buffer as BufferPolyfill } from 'buffer';
+// Removed manual import/assignment as plugin should handle it
+// import * as bufferModule from 'buffer'; // Import the entire module
+// const { Buffer } = bufferModule; // Extract the named export
 
-// Polyfill global
+/*
 if (typeof window !== 'undefined') {
-  window.global = window;
+  console.log('[POLYFILLS] polyfills.js applying polyfills...');
+
+  // Assign Buffer explicitly - Handled by plugin
+  // window.Buffer = window.Buffer || Buffer;
+  // Assign global explicitly - Handled by plugin
+  // window.global = window.global || window;
+
+  // Log polyfill status
+  // console.log('[POLYFILLS] Buffer defined on window?', typeof window.Buffer !== 'undefined');
+  // console.log('[POLYFILLS] process defined globally?', typeof process !== 'undefined');
+  // console.log('[POLYFILLS] global defined on window?', !!window.global);
 }
+*/
 
-// Polyfill Buffer
-if (typeof window !== 'undefined' && typeof window.Buffer === 'undefined') {
-  window.Buffer = BufferPolyfill;
-}
+// Exporting Buffer might still be needed if other modules import it directly from here
+// If not, this file might become obsolete
+// export { Buffer }; // Named export
+// export default { Buffer }; // Default export
 
-// Polyfill process
-if (typeof window !== 'undefined' && typeof window.process === 'undefined') {
-  window.process = { 
-    env: {},
-    browser: true,
-    version: '',
-    nextTick: (cb) => setTimeout(cb, 0),
-    // Add cwd function that returns a fixed path for browser environments
-    cwd: () => '/',
-    // Add more Node.js process functions as needed
-    platform: 'browser',
-    argv: [],
-    exit: (code) => console.log(`Process exit with code: ${code || 0}`)
-  };
-}
-
-console.log('[POLYFILLS] Node.js compatibility polyfills loaded');
-console.log('[POLYFILLS] global defined:', typeof global !== 'undefined');
-console.log('[POLYFILLS] Buffer defined:', typeof Buffer !== 'undefined');
-console.log('[POLYFILLS] process defined:', typeof process !== 'undefined');
-console.log('[POLYFILLS] process.cwd defined:', typeof process.cwd === 'function');
-
-export default {}; 
+// If this file serves no other purpose, it could potentially be removed,
+// along with its import in main.tsx, but let's keep it minimal for now.
+export {}; // Ensure it's treated as a module 

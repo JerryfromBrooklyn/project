@@ -5,7 +5,7 @@ import Login from './auth/Login';
 import SignUp from './auth/SignUp';
 import VerifyEmail from './auth/VerifyEmail';
 import SimpleApp from './SimpleApp';
-import Dashboard from './components/Dashboard.js';
+import Dashboard from './components/Dashboard';
 import FaceRegistration from './components/FaceRegistration';
 import MyPhotos from './components/MyPhotos';
 import PhotoUploader from './components/PhotoUploader';
