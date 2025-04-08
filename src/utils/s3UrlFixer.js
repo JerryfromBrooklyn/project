@@ -20,7 +20,7 @@ export const verifyAndFixUrls = async (userId = null) => {
     
     // Create a DynamoDB client
     const credentials = getCredentials();
-    const dynamoClient = new DynamoDBClient({
+    // Using docClient from awsClient import instead({
       region: 'us-east-1',
       credentials
     });

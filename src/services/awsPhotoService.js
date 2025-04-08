@@ -1,8 +1,7 @@
 import { PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
-import { PutItemCommand, GetItemCommand, DeleteItemCommand, QueryCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
+import { PutCommand, GetCommand, DeleteCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
-import { s3Client, dynamoClient, PHOTO_BUCKET, PHOTOS_TABLE } from '../lib/awsClient';
-import { marshallItem, unmarshallItems, unmarshallItem } from '../utils/dynamoUtils';
+import { s3Client, docClient, PHOTO_BUCKET, PHOTOS_TABLE } from '../lib/awsClient';
 /**
  * Service for handling photo operations with AWS S3 and DynamoDB
  */
@@ -64,12 +63,12 @@ export const awsPhotoService = {
                 description: metadata.description || ''
             };
             progressCallback(70);
-            // Save to DynamoDB
+            // Save to DynamoDB using docClient
             const putParams = {
                 TableName: PHOTOS_TABLE,
-                Item: marshallItem(photoMetadata)
+                Item: photoMetadata // No need to marshall with docClient
             };
-            await dynamoClient.send(new PutItemCommand(putParams));
+            await docClient.send(new PutCommand(putParams));
             progressCallback(100);
             return {
                 success: true,
@@ -123,21 +122,21 @@ export const awsPhotoService = {
      */
     fetchPhotos: async (userId) => {
         try {
-            // Query DynamoDB for user's photos
+            // Query DynamoDB for user's photos using docClient
             const queryParams = {
                 TableName: PHOTOS_TABLE,
-                IndexName: 'UserIdIndex', // Assuming we have this GSI
-                KeyConditionExpression: 'uploaded_by = :userId',
+                IndexName: 'UserIdIndex', // Using the GSI we confirmed exists
+                KeyConditionExpression: 'user_id = :userId',
                 ExpressionAttributeValues: {
-                    ':userId': { S: userId }
+                    ':userId': userId // No need to specify { S: userId } with docClient
                 }
             };
-            const response = await dynamoClient.send(new QueryCommand(queryParams));
+            const response = await docClient.send(new QueryCommand(queryParams));
             if (!response.Items || response.Items.length === 0) {
                 return [];
             }
-            // Transform DynamoDB items to PhotoMetadata objects
-            return unmarshallItems(response.Items);
+            // Items are already unmarshalled with docClient
+            return response.Items;
         }
         catch (error) {
             console.error('Error fetching photos:', error);
@@ -154,14 +153,14 @@ export const awsPhotoService = {
             const getParams = {
                 TableName: PHOTOS_TABLE,
                 Key: {
-                    id: { S: photoId }
+                    id: photoId // No need to specify { S: photoId } with docClient
                 }
             };
-            const response = await dynamoClient.send(new GetItemCommand(getParams));
+            const response = await docClient.send(new GetCommand(getParams));
             if (!response.Item) {
                 return null;
             }
-            return unmarshallItem(response.Item);
+            return response.Item; // Item is already unmarshalled
         }
         catch (error) {
             console.error('Error getting photo:', error);
@@ -186,14 +185,14 @@ export const awsPhotoService = {
                 Key: photo.storage_path
             };
             await s3Client.send(new DeleteObjectCommand(deleteS3Params));
-            // Delete from DynamoDB
+            // Delete from DynamoDB using docClient
             const deleteDBParams = {
                 TableName: PHOTOS_TABLE,
                 Key: {
-                    id: { S: photoId }
+                    id: photoId // No need to specify { S: photoId } with docClient
                 }
             };
-            await dynamoClient.send(new DeleteItemCommand(deleteDBParams));
+            await docClient.send(new DeleteCommand(deleteDBParams));
             return true;
         }
         catch (error) {
@@ -211,39 +210,28 @@ export const awsPhotoService = {
         // This is more complex in S3 as it requires copying and deleting objects
         // For now, we'll just update the folder path in DynamoDB metadata
         try {
-            // Scan for all photos with the old folder path
+            // Scan for all photos with the old folder path using docClient
             const scanParams = {
                 TableName: PHOTOS_TABLE,
                 FilterExpression: 'begins_with(folder_path, :oldPath)',
                 ExpressionAttributeValues: {
-                    ':oldPath': { S: oldPath }
+                    ':oldPath': oldPath // No need to specify { S: oldPath } with docClient
                 }
             };
-            const response = await dynamoClient.send(new ScanCommand(scanParams));
+            const response = await docClient.send(new ScanCommand(scanParams));
             if (!response.Items || response.Items.length === 0) {
                 return true; // No photos to update
             }
             // Update each photo's folder_path
-            for (const item of response.Items) {
-                const photo = unmarshallItem(item);
+            for (const photo of response.Items) {
                 const newPath = photo.folder_path?.replace(oldPath, newName);
-                // Update in DynamoDB
-                const updateParams = {
+                // Update in DynamoDB using docClient
+                await docClient.send(new PutCommand({
                     TableName: PHOTOS_TABLE,
-                    Key: {
-                        id: { S: photo.id }
-                    },
-                    UpdateExpression: 'SET folder_path = :newPath',
-                    ExpressionAttributeValues: {
-                        ':newPath': { S: newPath || '' }
-                    }
-                };
-                await dynamoClient.send(new PutItemCommand({
-                    TableName: PHOTOS_TABLE,
-                    Item: marshallItem({
+                    Item: {
                         ...photo,
                         folder_path: newPath
-                    })
+                    }
                 }));
             }
             return true;
