@@ -21,13 +21,26 @@ import { createUserRecord } from './database-utils';
 export const BYPASS_EMAIL_VERIFICATION = true;
 
 // Define user interface to match the previous Supabase User object shape
+// AND include potential user_metadata structure
 export interface User {
   id: string;
   email: string;
-  full_name?: string;
-  role?: string;
+  // Add other potential fields based on Cognito attributes or your DB record
+  // Example based on AuthUser in types.ts
+  user_metadata?: { 
+    name?: string; 
+    full_name?: string; 
+    avatar_url?: string; 
+    role?: string; // Keep role here or inside metadata?
+  };
+  app_metadata?: { // Example from Supabase type
+      provider?: string;
+      providers?: string[];
+  };
+  role?: string; // Keep top-level role? Decide on structure
   created_at?: string;
   updated_at?: string;
+  // Add any other fields returned by getCurrentUser or needed by the app
 }
 
 // Auth state
@@ -112,10 +125,13 @@ export const getCurrentUser = async (): Promise<User | null> => {
     const user: User = {
       id: attributes.sub || '',
       email: attributes.email || '',
-      full_name: attributes.name,
-      role: attributes['custom:role'],
-      created_at: attributes['custom:created_at'],
-      updated_at: attributes['custom:updated_at']
+      // Ensure full_name exists or default to null/empty
+      full_name: attributes.name || null, 
+      // Handle potentially missing custom:role, default to null
+      role: attributes['custom:role'] || null, 
+      // Ensure created_at/updated_at exist or default
+      created_at: attributes['custom:created_at'] || null, 
+      updated_at: attributes['custom:updated_at'] || null
     };
     
     currentUser = user;
@@ -189,15 +205,17 @@ export const signUp = async (email: string, password: string, userData: Record<s
       { Name: 'email', Value: email },
     ];
     
-    // Add additional user data
+    // Add additional user data only if they have valid values
     if (userData.full_name) {
       console.log('[AUTH] Adding full_name attribute:', userData.full_name);
       userAttributes.push({ Name: 'name', Value: userData.full_name });
     }
-    
-    if (userData.role) {
+    // Only add custom:role if userData.role is a non-empty string
+    if (typeof userData.role === 'string' && userData.role.trim() !== '') {
       console.log('[AUTH] Adding role attribute:', userData.role);
       userAttributes.push({ Name: 'custom:role', Value: userData.role });
+    } else {
+      console.log('[AUTH] Skipping role attribute (value invalid or empty):', userData.role);
     }
     
     // Create the signup command

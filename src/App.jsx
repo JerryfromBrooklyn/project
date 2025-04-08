@@ -1,14 +1,34 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './auth';
-import { Login, SignUp, VerifyEmail } from './auth';
+import { AuthProvider } from './auth/AuthContext';
+import Login from './auth/Login';
+import SignUp from './auth/SignUp';
+import VerifyEmail from './auth/VerifyEmail';
 import SimpleApp from './SimpleApp';
-import Dashboard from './components/Dashboard';
+import Dashboard from './components/Dashboard.js';
 import FaceRegistration from './components/FaceRegistration';
 import MyPhotos from './components/MyPhotos';
 import PhotoUploader from './components/PhotoUploader';
 import PrivateRoute from './components/PrivateRoute';
 import BuildInfoBanner from './components/BuildInfoBanner';
+
+// AWS Configuration for Rekognition
+// These would typically be in .env files and injected during build
+if (!process.env.REACT_APP_AWS_ACCESS_KEY_ID) {
+  process.env.REACT_APP_AWS_ACCESS_KEY_ID = 'YOUR_AWS_ACCESS_KEY_ID'; // Replace with your AWS key
+}
+if (!process.env.REACT_APP_AWS_SECRET_ACCESS_KEY) {
+  process.env.REACT_APP_AWS_SECRET_ACCESS_KEY = 'YOUR_AWS_SECRET_ACCESS_KEY'; // Replace with your AWS secret
+}
+if (!process.env.REACT_APP_AWS_REGION) {
+  process.env.REACT_APP_AWS_REGION = 'us-east-1'; // Default region
+}
+if (!process.env.REACT_APP_S3_BUCKET) {
+  process.env.REACT_APP_S3_BUCKET = 'shmong'; // Your S3 bucket name
+}
+if (!process.env.REACT_APP_REKOGNITION_COLLECTION) {
+  process.env.REACT_APP_REKOGNITION_COLLECTION = 'user-faces'; // Your Rekognition collection
+}
 
 console.log('[APP] Initializing App component');
 
@@ -31,10 +51,10 @@ const App = () => {
   return (
     <>
       <BuildInfoBanner />
-      <AuthProvider>
-        {console.log('[APP] AuthProvider rendered')}
-        <Router>
-          {console.log('[APP] Router rendered')}
+      <Router>
+        {console.log('[APP] Router rendered')}
+        <AuthProvider>
+          {console.log('[APP] AuthProvider rendered')}
           <div className="pt-6"> {/* Small padding to accommodate the thin banner */}
             <Routes>
               {console.log('[APP] Setting up routes')}
@@ -55,8 +75,8 @@ const App = () => {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
-        </Router>
-      </AuthProvider>
+        </AuthProvider>
+      </Router>
     </>
   );
 };

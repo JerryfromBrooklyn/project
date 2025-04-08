@@ -8,7 +8,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { PhotoService } from '../services/PhotoService';
-import { PhotoMetadata, MatchedUser, FaceAttributes } from '../types';
+import { PhotoMetadata, MatchedUser, FaceData } from '../types';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
 
@@ -75,8 +75,8 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
     if (normalizedPhoto.faces[0]?.attributes) {
       console.log('[PhotoInfoModal] First face attributes:', JSON.stringify(normalizedPhoto.faces[0].attributes, null, 2));
       
-      if (normalizedPhoto.faces[0].attributes.emotions?.length > 0) {
-        console.log('[PhotoInfoModal] First face emotions:', JSON.stringify(normalizedPhoto.faces[0].attributes.emotions, null, 2));
+      if (normalizedPhoto.faces[0].attributes.Emotions?.length > 0) {
+        console.log('[PhotoInfoModal] First face emotions:', JSON.stringify(normalizedPhoto.faces[0].attributes.Emotions, null, 2));
       }
     }
   }
@@ -378,23 +378,24 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
           }
           
           // Ensure attributes exist and have proper structure
-          const attributes = face.attributes || {};
+          const attributes = face.attributes;
 
           // Get primary emotion (highest confidence) if emotions exist
-          const primaryEmotion = attributes.emotions && Array.isArray(attributes.emotions) 
-            ? attributes.emotions.reduce(
-                (prev, curr) => (curr.confidence > prev.confidence) ? curr : prev, 
-                { type: 'neutral', confidence: 0 }
+          const primaryEmotion = attributes?.Emotions && Array.isArray(attributes.Emotions) 
+            ? attributes.Emotions.reduce(
+                (prev, curr) => ((curr?.Confidence ?? 0) > (prev?.Confidence ?? 0)) ? curr : prev, 
+                { Type: 'NEUTRAL', Confidence: 0 } // Default if array is empty
               )
             : null;
 
-          const hasAge = attributes.age && (
-            (attributes.age.low > 0 || attributes.age.high > 0) || 
-            (typeof attributes.age === 'object' && Object.keys(attributes.age).length > 0)
-          );
-          const hasGender = attributes.gender && (attributes.gender.value || attributes.gender.confidence > 0);
-          const hasSmile = attributes.smile && (typeof attributes.smile.value === 'boolean' || attributes.smile.confidence > 0);
-          const hasEmotions = attributes.emotions && Array.isArray(attributes.emotions) && attributes.emotions.length > 0;
+          // Check if optional attributes exist and potentially have values
+          const hasAge = attributes?.AgeRange && (attributes.AgeRange.Low != null || attributes.AgeRange.High != null);
+          const hasGender = attributes?.Gender && (attributes.Gender.Value != null);
+          const hasSmile = attributes?.Smile && (attributes.Smile.Value != null);
+          const hasEmotions = !!primaryEmotion && primaryEmotion.Confidence > 0; // Check based on derived primary emotion
+          const hasEyesOpen = attributes?.EyesOpen && attributes.EyesOpen.Value != null;
+          const hasEyeglasses = attributes?.Eyeglasses && attributes.Eyeglasses.Value != null;
+          const hasSunglasses = attributes?.Sunglasses && attributes.Sunglasses.Value != null;
 
           return (
             <div key={faceIndex} className="bg-gray-50 rounded-xl p-4">
@@ -425,7 +426,7 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
                       <span className="ml-2 text-xs font-medium text-gray-500">Age Range</span>
                     </div>
                     <span className="text-sm font-semibold">
-                      {attributes.age.low}-{attributes.age.high} years
+                      {attributes?.AgeRange?.Low}-{attributes?.AgeRange?.High} years
                     </span>
                   </div>
                 )}
@@ -440,9 +441,9 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
                       <span className="ml-2 text-xs font-medium text-gray-500">Gender</span>
                     </div>
                     <div className="flex items-center">
-                      <span className="text-sm font-semibold">{attributes.gender.value}</span>
+                      <span className="text-sm font-semibold">{attributes?.Gender?.Value}</span>
                       <div className="ml-2 text-xs text-gray-500">
-                        {Math.round(attributes.gender.confidence)}%
+                        {Math.round(attributes?.Gender?.Confidence ?? 0)}%
                       </div>
                     </div>
                   </div>
@@ -458,9 +459,9 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
                       <span className="ml-2 text-xs font-medium text-gray-500">Emotion</span>
                     </div>
                     <div className="flex items-center">
-                      <span className="text-sm font-semibold capitalize">{primaryEmotion.type}</span>
+                      <span className="text-sm font-semibold capitalize">{primaryEmotion.Type ?? 'UNKNOWN'}</span>
                       <div className="ml-2 text-xs text-gray-500">
-                        {Math.round(primaryEmotion.confidence)}%
+                        {Math.round(primaryEmotion.Confidence ?? 0)}%
                       </div>
                     </div>
                   </div>
@@ -476,16 +477,16 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
                       <span className="ml-2 text-xs font-medium text-gray-500">Expression</span>
                     </div>
                     <div className="flex items-center">
-                      <span className="text-sm font-semibold">{attributes.smile.value ? "Smiling" : "Not Smiling"}</span>
+                      <span className="text-sm font-semibold">{attributes?.Smile?.Value ? "Smiling" : "Not Smiling"}</span>
                       <div className="ml-2 text-xs text-gray-500">
-                        {Math.round(attributes.smile.confidence)}%
+                        {Math.round(attributes?.Smile?.Confidence ?? 0)}%
                       </div>
                     </div>
                   </div>
                 )}
 
                 {/* Eyes */}
-                {attributes.eyesOpen && (
+                {hasEyesOpen && (
                   <div className="flex flex-col p-3 bg-white rounded-lg shadow-sm">
                     <div className="flex items-center mb-2">
                       <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center">
@@ -494,16 +495,16 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
                       <span className="ml-2 text-xs font-medium text-gray-500">Eyes</span>
                     </div>
                     <div className="flex items-center">
-                      <span className="text-sm font-semibold">{attributes.eyesOpen.value ? "Open" : "Closed"}</span>
+                      <span className="text-sm font-semibold">{attributes?.EyesOpen?.Value ? "Open" : "Closed"}</span>
                       <div className="ml-2 text-xs text-gray-500">
-                        {Math.round(attributes.eyesOpen.confidence)}%
+                        {Math.round(attributes?.EyesOpen?.Confidence ?? 0)}%
                       </div>
                     </div>
                   </div>
                 )}
 
                 {/* Eyewear */}
-                {(attributes.sunglasses || attributes.eyeglasses) && (
+                {(hasSunglasses || hasEyeglasses) && (
                   <div className="flex flex-col p-3 bg-white rounded-lg shadow-sm">
                     <div className="flex items-center mb-2">
                       <div className="w-6 h-6 rounded-full bg-teal-50 flex items-center justify-center">
@@ -513,17 +514,17 @@ export const PhotoInfoModal: React.FC<PhotoInfoModalProps> = ({
                     </div>
                     <div className="flex items-center">
                       <span className="text-sm font-semibold">
-                        {attributes.sunglasses?.value 
+                        {attributes?.Sunglasses?.Value 
                           ? "Sunglasses" 
-                          : attributes.eyeglasses?.value 
+                          : attributes?.Eyeglasses?.Value 
                             ? "Glasses" 
                             : "None"}
                       </span>
                       <div className="ml-2 text-xs text-gray-500">
                         {Math.round(
-                          attributes.sunglasses?.value 
-                            ? attributes.sunglasses.confidence 
-                            : attributes.eyeglasses?.confidence || 0
+                          attributes?.Sunglasses?.Value 
+                            ? attributes?.Sunglasses.Confidence ?? 0
+                            : attributes?.Eyeglasses?.Confidence ?? 0
                         )}%
                       </div>
                     </div>

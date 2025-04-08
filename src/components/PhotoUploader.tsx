@@ -204,27 +204,30 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         };
 
         // Prepare photo metadata
-        const photoMetadata: Partial<PhotoMetadata> = {
+        const partialMetadata: Partial<PhotoMetadata> = {
+          id: upload.id, // Use upload item ID temporarily?
+          // url: upload.s3Url, // This might not be available yet
+          fileSize: upload.file.size,
+          fileType: upload.file.type,
           title: upload.file.name,
-          event_details: {
-            name: metadata.eventName,
-            date: metadata.date,
-            promoter: metadata.promoterName
+          description: '',
+          date_taken: new Date(metadata.date).toISOString(),
+          location: metadata.location ? {
+            lat: metadata.location.lat,
+            lng: metadata.location.lng,
+            name: metadata.location.name,
+          } : undefined,
+          event_details: { 
+            name: metadata.eventName, 
+            date: metadata.date, 
+            promoter: metadata.promoterName,
+            type: null // Ensure type is included (even if null)
           },
-          venue: {
-            name: metadata.venueName
+          venue: { 
+            id: null, // Ensure id is included (even if null)
+            name: metadata.venueName 
           },
-          // Only include location if it has valid data
-          ...(metadata.location && metadata.location.name && metadata.location.lat && metadata.location.lng 
-            ? { 
-                location: {
-                  lat: metadata.location.lat,
-                  lng: metadata.location.lng,
-                  name: metadata.location.name
-                } 
-              } 
-            : {}),
-          date_taken: metadata.date
+          tags: [],
         };
 
         // Upload photo using AWS S3 service
@@ -232,17 +235,32 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
           upload.file,
           eventId,
           upload.folderPath,
-          photoMetadata,
+          partialMetadata,
           handleProgress
         );
 
         if (result.success) {
-          const updatedUpload = {
-            ...upload,
+          // Ensure the structure fully matches PhotoMetadata & UploadItem
+          const updatedDetails: Partial<PhotoMetadata> = {
+            ...result.photoMetadata, // Start with the data from the service
+            event_details: { // Explicitly define event_details
+              name: result.photoMetadata?.event_details?.name ?? metadata.eventName,
+              date: result.photoMetadata?.event_details?.date ?? metadata.date,
+              type: result.photoMetadata?.event_details?.type ?? null,
+              promoter: (result.photoMetadata?.event_details && 'promoter' in result.photoMetadata.event_details) 
+                          ? result.photoMetadata.event_details.promoter 
+                          : metadata.promoterName,
+            }
+            // Add other potentially required fields here if needed
+          };
+          
+          const updatedUpload: UploadItem = {
+            ...upload, // Keep existing upload data
             status: 'complete' as const,
             progress: 100,
             photoId: result.photoId,
-            photoDetails: result.photoMetadata
+            photoDetails: updatedDetails, // Use the correctly structured details
+            s3Url: result.photoMetadata.url // Assuming url is the S3 URL
           };
 
           setUploads(prev => 
@@ -252,7 +270,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                 : u
             )
           );
-
+          
           onUploadComplete?.(result.photoId);
           
           // Update storage usage
@@ -422,6 +440,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                     setNewFolderName(folder.name);
                   }}
                   className="ml-2 text-apple-gray-400 hover:text-apple-gray-600"
+                  aria-label={`Edit folder name ${folder.name}`}
+                  title="Edit folder name"
                 >
                   <Edit2 className="w-3 h-3" />
                 </button>
@@ -575,16 +595,18 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                 />
               </div>
               <div>
-                <label className="ios-label flex items-center">
+                <label htmlFor="upload-date" className="ios-label flex items-center">
                   <Calendar className="w-4 h-4 mr-2" />
                   Date*
                 </label>
                 <input
+                  id="upload-date"
                   type="date"
                   value={metadata.date}
                   onChange={(e) => setMetadata({ ...metadata, date: e.target.value })}
                   className="ios-input"
                   required
+                  aria-label="Event date"
                 />
               </div>
               <div className="md:col-span-2">
@@ -665,6 +687,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                   ? "bg-apple-blue-500 text-white" 
                   : "bg-apple-gray-100 text-apple-gray-600"
               )}
+              aria-label="Set view to grid"
+              title="Grid View"
             >
               <Grid className="w-4 h-4" />
             </button>
@@ -676,6 +700,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                   ? "bg-apple-blue-500 text-white" 
                   : "bg-apple-gray-100 text-apple-gray-600"
               )}
+              aria-label="Set view to list"
+              title="List View"
             >
               <List className="w-4 h-4" />
             </button>
@@ -688,18 +714,22 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 pr-4 py-2 rounded-apple bg-apple-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-apple-blue-500"
+                aria-label="Search uploads"
               />
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <button className="ios-button-secondary flex items-center">
+            <button className="ios-button-secondary flex items-center" aria-label="Filter uploads" title="Filter uploads">
               <Filter className="w-4 h-4 mr-2" />
               Filter
             </button>
+            <label htmlFor="sort-uploads" className="sr-only">Sort uploads by</label>
             <select
+              id="sort-uploads"
               value={viewMode.sortBy}
               onChange={(e) => setViewMode(prev => ({ ...prev, sortBy: e.target.value as 'date' | 'name' | 'size' }))}
               className="ios-input py-2 pl-4 pr-10"
+              aria-label="Sort uploads by"
             >
               <option value="date">Sort by Date</option>
               <option value="name">Sort by Name</option>
@@ -797,6 +827,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                         <button
                           onClick={() => setSelectedUpload(upload)}
                           className="text-apple-gray-400 hover:text-apple-gray-600"
+                          aria-label={`Show details for ${upload.file.name}`}
+                          title="Show details"
                         >
                           <Info className="w-4 h-4" />
                         </button>
@@ -804,6 +836,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                       <button
                         onClick={() => removeUpload(upload.id)}
                         className="text-apple-gray-400 hover:text-apple-gray-600"
+                        aria-label={`Remove upload ${upload.file.name}`}
+                        title="Remove upload"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -880,6 +914,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                   <button
                     onClick={() => setSelectedUpload(null)}
                     className="text-apple-gray-400 hover:text-apple-gray-600"
+                    aria-label="Close photo details"
+                    title="Close"
                   >
                     <X className="w-5 h-5" />
                   </button>

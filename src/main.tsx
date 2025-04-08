@@ -82,8 +82,23 @@ Check your .env file or environment configuration.
   }
 });
 
+// Add type definition for the custom property if you intend to use it
+declare global {
+  interface Window {
+    diagnoseBannerIssues?: () => void;
+  }
+}
+
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,
 )
+
+// Example: Call only if it exists
+if (typeof window.diagnoseBannerIssues === 'function') {
+  console.log('Diagnosing banner issues...');
+  window.diagnoseBannerIssues();
+} else {
+  console.log('diagnoseBannerIssues function not found on window.');
+}

@@ -2,7 +2,7 @@
   "name": "enhanced-face-matching-verification",
   "version": "1.0.0",
   "description": "Verification scripts for enhanced face matching system",
-  "type": "module",
+  "__type": "module",
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7"
   }

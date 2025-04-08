@@ -1,0 +1,33 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": "logs:*",
+            "Resource": "arn:aws:logs:*:*:*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "rekognition:*",
+            "Resource": [
+                "arn:aws:rekognition:*:*:collection/shmong-faces" 
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": "rekognition:ListCollections",
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "dynamodb:*",
+            "Resource": [
+                "arn:aws:dynamodb:*:*:table/Users",
+                "arn:aws:dynamodb:*:*:table/Users/index/RekognitionFaceIdIndex",
+                "arn:aws:dynamodb:*:*:table/Photos",
+                "arn:aws:dynamodb:*:*:table/DetectedFaces",
+                "arn:aws:dynamodb:*:*:table/DetectedFaces/index/AnonymousFaceIdIndex"
+            ]
+        }
+    ]
+} 

@@ -12,9 +12,24 @@ const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
   const [isChecking, setIsChecking] = useState(true);
   const location = useLocation();
+  const [storedUser, setStoredUser] = useState(null);
+  
+  // Check localStorage for authentication as fallback
+  useEffect(() => {
+    try {
+      const storedAuthUser = localStorage.getItem('authUser');
+      if (storedAuthUser) {
+        setStoredUser(JSON.parse(storedAuthUser));
+        console.log('[PRIVATE_ROUTE] Found user in localStorage');
+      }
+    } catch (error) {
+      console.error('[PRIVATE_ROUTE] Error reading from localStorage:', error);
+    }
+  }, []);
   
   console.log('[PRIVATE_ROUTE] Current path:', location.pathname);
   console.log('[PRIVATE_ROUTE] Auth state - User:', user ? user.id : 'null');
+  console.log('[PRIVATE_ROUTE] Local storage user:', storedUser ? storedUser.id : 'null');  
   console.log('[PRIVATE_ROUTE] Auth state - Loading:', loading);
   console.log('[PRIVATE_ROUTE] Local state - IsChecking:', isChecking);
   
@@ -46,7 +61,10 @@ const PrivateRoute = ({ children }) => {
     );
   }
   
-  if (!user) {
+  // Check both context user and stored user for authentication
+  const isAuthenticated = !!user || !!storedUser;
+  
+  if (!isAuthenticated) {
     console.log('[PRIVATE_ROUTE] No authenticated user found, redirecting to login');
     // Redirect to login if not authenticated and save the location they were trying to access
     return <Navigate to="/login" state={{ from: location }} replace />;

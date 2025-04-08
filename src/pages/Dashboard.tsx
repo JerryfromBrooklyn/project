@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos } from 'lucide-react';
 import { cn } from '../utils/cn';
-import { FaceRegistration } from '../components/FaceRegistration';
+import FaceRegistration from '../components/FaceRegistration';
 import { PhotoManager } from '../components/PhotoManager';
 import { supabase } from '../lib/supabaseClient';
 
@@ -226,11 +226,11 @@ export const Dashboard = () => {
             >
               <div className="flex items-center mb-6">
                 <div className="w-12 h-12 rounded-full bg-apple-blue-100 text-apple-blue-700 flex items-center justify-center mr-4 text-xl font-semibold">
-                  {(user?.user_metadata?.full_name?.charAt(0) || user?.email?.charAt(0) || 'U').toUpperCase()}
+                  {(user?.full_name?.charAt(0) || user?.email?.charAt(0) || 'U').toUpperCase()}
                 </div>
                 <div>
                   <h1 className="text-2xl font-semibold text-apple-gray-900">
-                    Welcome back{user?.user_metadata?.full_name ? `, ${user.user_metadata.full_name}` : ''}
+                    Welcome back{user?.full_name ? `, ${user.full_name}` : ''}
                   </h1>
                   <p className="text-apple-gray-500">
                     {faceRegistered ? 'Your face is registered' : 'Complete your profile by registering your face'}
@@ -337,7 +337,7 @@ export const Dashboard = () => {
                 >
                   <div className="px-4 py-2 border-b border-apple-gray-100">
                     <p className="text-sm font-medium text-apple-gray-900">
-                      {user?.user_metadata?.full_name || 'User'}
+                      {user?.full_name || 'User'}
                     </p>
                     <p className="text-xs text-apple-gray-500 truncate">
                       {user?.email}

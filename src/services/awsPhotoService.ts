@@ -46,7 +46,7 @@ export const awsPhotoService = {
       const fileName = `${fileId}-${file.name}`;
       
       // Determine storage path - include userId if available from metadata
-      const userId = metadata.uploadedBy || metadata.uploaded_by;
+      const userId = metadata.uploadedBy || metadata.uploadedBy;
       const path = folderPath 
         ? `${userId}/${folderPath}/${fileName}`
         : `${userId}/${fileName}`;
@@ -85,7 +85,6 @@ export const awsPhotoService = {
         updated_at: new Date().toISOString(),
         faces: metadata.faces || [],
         matched_users: metadata.matched_users || [],
-        face_ids: metadata.face_ids || [],
         location: metadata.location || { lat: null, lng: null, name: null },
         venue: metadata.venue || { id: null, name: null },
         event_details: metadata.event_details || { date: null, name: null, type: null },
@@ -231,12 +230,12 @@ export const awsPhotoService = {
       }
       
       // Delete from S3
-      const deleteS3Params = {
+      const deleteObjectParams = {
         Bucket: PHOTO_BUCKET,
-        Key: photo.storage_path
+        Key: photo.url ? new URL(photo.url).pathname.substring(1) : photo.id
       };
       
-      await s3Client.send(new DeleteObjectCommand(deleteS3Params));
+      await s3Client.send(new DeleteObjectCommand(deleteObjectParams));
       
       // Delete from DynamoDB
       const deleteDBParams = {
@@ -283,7 +282,14 @@ export const awsPhotoService = {
       // Update each photo's folder_path
       for (const item of response.Items) {
         const photo = unmarshallItem(item) as PhotoMetadata;
-        const newPath = photo.folder_path?.replace(oldPath, newName);
+        const oldKey = photo.url ? new URL(photo.url).pathname.substring(1) : photo.id;
+        const newPath = photo.folderPath?.replace(oldPath, newName);
+        
+        if (!newPath || oldKey === newPath) {
+          console.log('Folder path unchanged or invalid.');
+          continue;
+        }
+        const newKey = newPath;
         
         // Update in DynamoDB
         const updateParams = {

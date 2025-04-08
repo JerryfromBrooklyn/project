@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../utils/cn';
 import { Eye, EyeOff, User, Mail, Lock, X, CheckCircle, AlertCircle, UserCog, RefreshCw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface AuthFormsProps {
   defaultView?: 'signin' | 'signup';
@@ -48,6 +49,7 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
   });
   
   const { signIn, signUp, signInWithGoogle } = useAuth();
+  const navigate = useNavigate();
 
   const generatePassword = () => {
     const length = 16;
@@ -105,13 +107,14 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
         if (error) throw error;
       } else {
         console.log('Starting signup submission...');
-        const { error } = await signUp(email, password, fullName, userType);
+        const userData = { full_name: fullName, role: userType };
+        const { data, error: signUpError } = await signUp(email, password, userData);
         
-        if (error) {
-          console.error('Signup returned error:', error);
+        if (signUpError) {
+          console.error('Signup returned error:', signUpError);
           
           // Handle specific error types with user-friendly messages
-          const errorMessage = (error as Error).message || '';
+          const errorMessage = (signUpError as Error).message || '';
           
           if (errorMessage.includes('connectivity') || 
               errorMessage.includes('timed out') ||
@@ -130,7 +133,36 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
             );
           }
           
-          throw error;
+          throw signUpError;
+        }
+        console.log('Sign up API call successful:', data);
+        
+        if (data?.userConfirmed) {
+          console.log('[AuthForms] User is confirmed. Attempting auto-login...');
+          // User is confirmed (auto or previously), attempt to sign in immediately
+          let signInError = null; // Define error variable
+          try {
+            const result = await signIn(email, password);
+            signInError = result.error; // Assign error from result
+            console.log('[AuthForms] Auto-login attempt result:', { error: signInError });
+          } catch (err) {
+            console.error('[AuthForms] Critical error during auto-login call:', err);
+            signInError = err; // Assign caught error
+          }
+          
+          if (signInError) {
+            console.error('[AuthForms] Auto-login after signup failed, navigating to /login. Error:', signInError);
+            // Navigate to login page as fallback if auto-login fails
+            setError('Signup successful, but auto-login failed. Please log in manually.');
+            navigate('/login');
+          } else {
+            console.log('[AuthForms] Auto-login seems successful. AuthContext should redirect to dashboard.');
+            // No explicit navigation needed here - AuthContext useEffect should handle it
+          }
+        } else {
+          console.log('User requires email verification. Navigating to verification page.');
+          // User requires verification
+          navigate(`/verify-email?email=${encodeURIComponent(email)}`);
         }
       }
     } catch (err) {

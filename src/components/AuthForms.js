@@ -66,6 +66,7 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }) 
     };
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setError(null);
         if (!validateForm()) {
             return;
         }
@@ -75,26 +76,48 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }) 
                 const { error } = await signIn(email, password);
                 if (error)
                     throw error;
-                // Sign in handles navigation automatically in AuthContext
             }
             else {
+                console.log('Starting signup submission...');
                 const { error } = await signUp(email, password, fullName, userType);
-                if (error)
+                if (error) {
+                    console.error('Signup returned error:', error);
+                    // Handle specific error types with user-friendly messages
+                    const errorMessage = error.message || '';
+                    if (errorMessage.includes('connectivity') ||
+                        errorMessage.includes('timed out') ||
+                        errorMessage.includes('Network error') ||
+                        errorMessage.includes('SSL')) {
+                        throw new Error('Unable to connect to authentication service. Please check your internet connection and try again.');
+                    }
+                    else if (errorMessage.includes('credentials')) {
+                        throw new Error('Authentication service configuration error. Please contact support.');
+                    }
+                    else if (errorMessage.includes('Cognito configuration')) {
+                        throw new Error('Authentication service configuration error. Please contact support.');
+                    }
                     throw error;
-                    
-                // Navigate to dashboard after successful signup
-                setError(null);
-                
-                // Switch to signin view
-                setView('signin');
-                setShowEmailForm(true);
-                
-                // Pre-fill the email field for convenience
-                // Password will need to be entered again for security
+                }
             }
         }
         catch (err) {
-            setError(err.message || 'An error occurred');
+            console.error('Auth form error:', err);
+            // Format error message for display
+            let errorMessage = err.message || 'An error occurred';
+            // Handle specific AWS error codes with more user-friendly messages
+            if (errorMessage.includes('UsernameExistsException')) {
+                errorMessage = 'This email address is already registered. Please sign in instead.';
+            }
+            else if (errorMessage.includes('InvalidPasswordException')) {
+                errorMessage = 'Password must be at least 8 characters and include uppercase, lowercase, numbers, and special characters.';
+            }
+            else if (errorMessage.includes('LimitExceededException')) {
+                errorMessage = 'Too many attempts. Please try again later.';
+            }
+            else if (errorMessage.includes('InternalErrorException')) {
+                errorMessage = 'The authentication service is currently experiencing issues. Please try again later.';
+            }
+            setError(errorMessage);
         }
         finally {
             setLoading(false);
@@ -108,7 +131,15 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }) 
             setError(err.message || 'An error occurred during Google sign-in');
         }
     };
-    return (_jsxs("div", { className: cn("w-full max-w-md mx-auto", isModal && "relative bg-white rounded-2xl shadow-2xl overflow-hidden"), children: [isModal && (_jsx("button", { onClick: onClose, className: "absolute right-4 top-4 p-2 rounded-full bg-apple-gray-100 text-apple-gray-600 hover:bg-apple-gray-200 z-10", children: _jsx(X, { className: "w-5 h-5" }) })), _jsx("div", { className: "flex justify-center mb-6 pt-6", children: _jsxs("div", { className: "flex rounded-full overflow-hidden bg-apple-gray-200 p-1", children: [_jsx("button", { onClick: () => {
+    // Add a function to forcibly enable mock mode
+    const enableMockAuthMode = () => {
+        localStorage.setItem('MOCK_AUTH_MODE', 'true');
+        console.log('MOCK AUTH MODE ENABLED via button click');
+        alert('Offline mode enabled. Your data will be stored locally in the browser.');
+        // Force a page reload to apply the change
+        window.location.reload();
+    };
+    return (_jsxs("div", { className: cn("w-full max-w-md mx-auto", isModal && "relative bg-white rounded-2xl shadow-2xl overflow-hidden"), children: [isModal && (_jsx("button", { onClick: onClose, className: "absolute right-4 top-4 p-2 rounded-full bg-apple-gray-100 text-apple-gray-600 hover:bg-apple-gray-200 z-10", "aria-label": "Close", title: "Close", children: _jsx(X, { className: "w-5 h-5" }) })), _jsx("div", { className: "flex justify-center mb-6 pt-6", children: _jsxs("div", { className: "flex rounded-full overflow-hidden bg-apple-gray-200 p-1", children: [_jsx("button", { onClick: () => {
                                 setView('signin');
                                 setShowEmailForm(false);
                                 setError(null);
@@ -124,5 +155,8 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }) 
                                                             _jsx(EyeOff, { className: "h-5 w-5" }) :
                                                             _jsx(Eye, { className: "h-5 w-5" }) })] }), touched.password && password.length >= 6 && (_jsx(CheckCircle, { className: "absolute right-20 top-1/2 transform -translate-y-1/2 h-5 w-5 text-apple-green-500" }))] }), view === 'signup' && (_jsx("p", { className: "mt-1 text-xs text-apple-gray-500", children: "Password must be at least 6 characters long" }))] }), view === 'signup' && (_jsxs("div", { className: "mb-5", children: [_jsxs("label", { htmlFor: "confirmPassword", className: "ios-label flex items-center", children: [_jsx(Lock, { className: "w-4 h-4 mr-2 text-apple-gray-500" }), "Confirm Password"] }), _jsxs("div", { className: "relative", children: [_jsx("input", { id: "confirmPassword", type: showConfirmPassword ? "text" : "password", value: confirmPassword, onChange: (e) => setConfirmPassword(e.target.value), onBlur: () => setTouched({ ...touched, confirmPassword: true }), className: cn("ios-input pr-12", touched.confirmPassword && password !== confirmPassword && "border-apple-red-300 focus:ring-apple-red-500"), placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", required: true, minLength: 6 }), _jsx("button", { type: "button", onClick: () => setShowConfirmPassword(!showConfirmPassword), className: "absolute inset-y-0 right-0 flex items-center px-4 text-apple-gray-500 hover:text-apple-gray-700", children: showConfirmPassword ?
                                                     _jsx(EyeOff, { className: "h-5 w-5" }) :
-                                                    _jsx(Eye, { className: "h-5 w-5" }) }), touched.confirmPassword && password === confirmPassword && password.length >= 6 && (_jsx(CheckCircle, { className: "absolute right-12 top-1/2 transform -translate-y-1/2 h-5 w-5 text-apple-green-500" }))] })] })), _jsxs("div", { className: "flex flex-col space-y-4", children: [_jsx("button", { type: "submit", disabled: loading || (view === 'signup' && password !== confirmPassword), className: "w-full ios-button-primary disabled:opacity-70 disabled:cursor-not-allowed", children: loading ? (_jsxs("span", { className: "flex items-center justify-center", children: [_jsxs("svg", { className: "animate-spin -ml-1 mr-2 h-5 w-5 text-white", xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24", children: [_jsx("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), _jsx("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" })] }), view === 'signin' ? 'Signing in...' : 'Creating account...'] })) : view === 'signin' ? ('Sign In') : ('Create Account') }), _jsx("button", { type: "button", onClick: () => setShowEmailForm(false), className: "text-apple-gray-600 hover:text-apple-gray-900 text-center py-2", children: "Back to options" })] })] }, "email-form")) }) })] }));
+                                                    _jsx(Eye, { className: "h-5 w-5" }) }), touched.confirmPassword && password === confirmPassword && password.length >= 6 && (_jsx(CheckCircle, { className: "absolute right-12 top-1/2 transform -translate-y-1/2 h-5 w-5 text-apple-green-500" }))] })] })), _jsxs("div", { className: "flex flex-col space-y-4", children: [_jsx("button", { type: "submit", disabled: loading || (view === 'signup' && password !== confirmPassword), className: "w-full ios-button-primary disabled:opacity-70 disabled:cursor-not-allowed", children: loading ? (_jsxs("span", { className: "flex items-center justify-center", children: [_jsxs("svg", { className: "animate-spin -ml-1 mr-2 h-5 w-5 text-white", xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24", children: [_jsx("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), _jsx("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" })] }), view === 'signin' ? 'Signing in...' : 'Creating account...'] })) : view === 'signin' ? ('Sign In') : ('Create Account') }), _jsx("button", { type: "button", onClick: () => setShowEmailForm(false), className: "text-apple-gray-600 hover:text-apple-gray-900 text-center py-2", children: "Back to options" }), view === 'signup' && (_jsxs("div", { className: "text-center mt-4 text-sm text-apple-gray-500", children: ["Having connectivity issues?", _jsx("button", { onClick: (e) => {
+                                                    e.preventDefault();
+                                                    enableMockAuthMode();
+                                                }, className: "ml-1 text-apple-blue-500 hover:text-apple-blue-700", children: "Use Offline Mode" })] }))] })] }, "email-form")) }) })] }));
 };

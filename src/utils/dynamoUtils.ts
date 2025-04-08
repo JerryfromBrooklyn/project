@@ -3,40 +3,17 @@ import {
   ExecuteStatementCommandInput
 } from '@aws-sdk/client-dynamodb';
 
+// --- Custom Marshalling/Unmarshalling (Needed if not using DocumentClient everywhere) --- //
+
 /**
  * Marshall a JavaScript object to DynamoDB format
- * @param item Object to convert
- * @returns DynamoDB formatted object
  */
 export const marshallItem = (item: any): Record<string, AttributeValue> => {
   const result: Record<string, AttributeValue> = {};
-
   for (const [key, value] of Object.entries(item)) {
     if (value === undefined) continue;
-
-    if (value === null) {
-      result[key] = { NULL: true };
-    } else if (typeof value === 'string') {
-      result[key] = { S: value };
-    } else if (typeof value === 'number') {
-      result[key] = { N: value.toString() };
-    } else if (typeof value === 'boolean') {
-      result[key] = { BOOL: value };
-    } else if (Array.isArray(value)) {
-      if (value.length === 0) {
-        result[key] = { L: [] };
-      } else if (typeof value[0] === 'string') {
-        result[key] = { SS: value as string[] };
-      } else if (typeof value[0] === 'number') {
-        result[key] = { NS: value.map(n => n.toString()) };
-      } else {
-        result[key] = { L: value.map(v => marshallValue(v)) };
-      }
-    } else if (typeof value === 'object') {
-      result[key] = { M: marshallItem(value) };
-    }
+    result[key] = marshallValue(value);
   }
-
   return result;
 };
 
@@ -52,72 +29,78 @@ const marshallValue = (value: any): AttributeValue => {
     return { N: value.toString() };
   } else if (typeof value === 'boolean') {
     return { BOOL: value };
+  } else if (value instanceof Uint8Array) { // Handle binary data
+    return { B: value };
   } else if (Array.isArray(value)) {
+    // Check for Set types (String Set, Number Set, Binary Set)
+    if (value.length > 0) {
+      if (value.every(el => typeof el === 'string')) {
+        return { SS: value };
+      }
+      if (value.every(el => typeof el === 'number')) {
+        return { NS: value.map(n => n.toString()) };
+      }
+      if (value.every(el => el instanceof Uint8Array)) {
+        return { BS: value };
+      }
+    }
+    // Otherwise, it's a generic List
     return { L: value.map(v => marshallValue(v)) };
   } else if (typeof value === 'object') {
     return { M: marshallItem(value) };
   }
-  // Default case, convert to string
+  // Fallback: attempt to stringify unknown types?
+  console.warn("Marshalling unknown type to string:", value);
   return { S: String(value) };
 };
 
 /**
  * Unmarshall a DynamoDB item to a JavaScript object
- * @param item DynamoDB formatted object
- * @returns Plain JavaScript object
  */
-export const unmarshallItem = (item: Record<string, AttributeValue>): any => {
+export const unmarshallItem = (item: Record<string, AttributeValue> | undefined): any => {
+  if (!item) return {}; // Handle undefined item gracefully
   const result: any = {};
-
   for (const [key, value] of Object.entries(item)) {
     result[key] = unmarshallValue(value);
   }
-
   return result;
 };
 
 /**
- * Unmarshall a DynamoDB value to a JavaScript value
+ * Unmarshall a DynamoDB value to a JavaScript value (Corrected for SDK v3)
  */
 const unmarshallValue = (value: AttributeValue): any => {
-  if (value.S !== undefined) {
-    return value.S;
-  } else if (value.N !== undefined) {
-    return Number(value.N);
-  } else if (value.BOOL !== undefined) {
-    return value.BOOL;
-  } else if (value.NULL !== undefined) {
-    return null;
-  } else if (value.M !== undefined) {
-    return unmarshallItem(value.M);
-  } else if (value.L !== undefined) {
-    return value.L.map(v => unmarshallValue(v));
-  } else if (value.SS !== undefined) {
-    return value.SS;
-  } else if (value.NS !== undefined) {
-    return value.NS.map(n => Number(n));
-  } else if (value.BS !== undefined) {
-    return value.BS;
-  }
+  // Explicitly assert the type to help TypeScript
+  const val = value as any; 
+
+  // Order matters slightly: check specific types before general ones
+  if (val.S !== undefined) return val.S;
+  if (val.N !== undefined) return Number(val.N);
+  if (val.BOOL !== undefined) return val.BOOL;
+  if (val.NULL !== undefined && val.NULL === true) return null; // Check NULL before M/L
+  if (val.M !== undefined) return unmarshallItem(val.M); // Check Map
+  if (val.L !== undefined) return val.L.map((v: AttributeValue) => unmarshallValue(v)); // Check List, add type to map param
+  if (val.SS !== undefined) return val.SS; // Check String Set
+  if (val.NS !== undefined) return val.NS.map((n: string) => Number(n)); // Check Number Set, add type to map param
+  if (val.BS !== undefined) return val.BS; // Check Binary Set
+  if (val.B !== undefined) return val.B;   // Check Binary
   
-  // Default case
-  return null;
+  // If none of the above match, it's an unknown or unexpected format
+  console.warn("UnmarshallValue encountered unexpected AttributeValue format:", JSON.stringify(val));
+  return undefined; // Return undefined or throw error for unknown types
 };
 
 /**
- * Unmarshall an array of DynamoDB items to JavaScript objects
- * @param items Array of DynamoDB formatted objects
- * @returns Array of plain JavaScript objects
+ * Unmarshall an array of DynamoDB items
  */
 export const unmarshallItems = (items: Record<string, AttributeValue>[]): any[] => {
   return items.map(item => unmarshallItem(item));
 };
 
+// --- Other Utility Functions --- //
+
 /**
  * Create params for a DynamoDB PartiQL query
- * @param statement PartiQL statement
- * @param parameters Query parameters
- * @returns Parameters for ExecuteStatementCommand
  */
 export const createPartiQLParams = (
   statement: string,
@@ -131,17 +114,13 @@ export const createPartiQLParams = (
 
 /**
  * Format a date for DynamoDB (ISO string)
- * @param date Date to format
- * @returns ISO string date
  */
 export const formatDate = (date: Date): string => {
   return date.toISOString();
 };
 
 /**
- * Parse a DynamoDB date string to a Date object
- * @param dateString ISO date string
- * @returns Date object
+ * Parse a DynamoDB date string
  */
 export const parseDate = (dateString: string): Date => {
   return new Date(dateString);

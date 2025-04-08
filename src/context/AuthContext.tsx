@@ -1,22 +1,38 @@
 // src/context/AuthContext.tsx
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User } from '../services/awsAuthService';
-import awsAuth from '../services/awsAuthService';
+import { User as SupabaseUser, Session } from '@supabase/supabase-js'; // Keep if using Supabase
+import {
+    getSession as getCognitoSession,
+    getCurrentUser as getCognitoUser,
+    signInWithPassword as cognitoSignIn,
+    signUp as cognitoSignUp,
+    signOut as cognitoSignOut,
+    onAuthStateChange as onCognitoAuthStateChange,
+    // BYPASS_EMAIL_VERIFICATION // Import if needed
+} from '../services/awsAuthService'; // Assuming awsAuthService is primary
 
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  signIn: (email: string, password: string) => Promise<{
-    error: Error | null;
-    data: User | null;
-  }>;
-  signInWithGoogle: () => Promise<void>;
-  signUp: (email: string, password: string, fullName: string, userType: string) => Promise<{
-    error: Error | null;
-    data: User | null;
-  }>;
-  signOut: () => Promise<void>;
+// Define a User type consistent with your application needs
+// This might combine Supabase and Cognito details if needed
+export type User = {
+    id: string;
+    email?: string | null;
+    full_name?: string | null;
+    role?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+    // Add any other fields you need from Cognito or your DB
+};
+
+export interface AuthContextType {
+    user: User | null;
+    loading: boolean;
+    // Adjust signIn return type to match awsAuthService implementation
+    signIn: (email: string, password: string) => Promise<{ data: { user: User | null, session: any | null }, error: Error | null }>;
+    signInWithGoogle?: () => Promise<void>; // Optional
+    signUp: (email: string, password: string, userData?: any) => Promise<{ data: { user: User | null, userConfirmed: boolean }, error: Error | null }>;
+    signOut: () => Promise<{ error: Error | null }>;
+    // Add other methods as needed
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,8 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[AUTH_CONTEXT] Checking for existing session...');
         
         // Get the current session and user
-        const { data } = await awsAuth.getSession();
-        const currentUser = await awsAuth.getCurrentUser();
+        const { data } = await getCognitoSession();
+        const currentUser = await getCognitoUser();
         
         console.log('[AUTH_CONTEXT] Session check complete', { 
           hasSession: !!data.session, 
@@ -50,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Set up listener for auth changes
-        const subscription = awsAuth.onAuthStateChange((currentUser) => {
+        const subscription = onCognitoAuthStateChange((currentUser) => {
           console.log('[AUTH_CONTEXT] Auth state changed', { hasUser: !!currentUser });
           setUser(currentUser);
           
@@ -71,22 +87,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkUser();
   }, [navigate]);
 
+  // NEW Effect: Redirect to dashboard when user logs in
+  useEffect(() => {
+    console.log(`[AUTH_CONTEXT] Redirect Effect Triggered: loading=${loading}, user=${!!user}`); // Add log here
+    // Only redirect if loading is finished AND we have a user object
+    if (!loading && user) {
+      console.log('[AUTH_CONTEXT] User detected after load, redirecting to /dashboard');
+      navigate('/dashboard', { replace: true });
+    }
+     // Optional: Add logic here to redirect to /login if !loading and !user?
+     // ...
+  }, [user, loading, navigate]);
+
   const signIn = async (email: string, password: string) => {
     try {
       console.log('[AUTH_CONTEXT] Attempting to sign in with email:', email);
-      const result = await awsAuth.signInWithPassword(email, password);
+      const result = await cognitoSignIn(email, password);
       
       if (result.error) {
         console.error('[AUTH_CONTEXT] Sign-in error:', result.error);
       } else {
         console.log('[AUTH_CONTEXT] Sign-in successful');
+        setUser(result.data.user);
       }
       
-      return result;
+      return result as { data: { user: User | null, session: any | null }, error: Error | null };
     } catch (error) {
       console.error('[AUTH_CONTEXT] Unexpected error during sign-in:', error);
       return { 
-        data: null, 
+        data: { user: null, session: null }, 
         error: error instanceof Error ? error : new Error('An unexpected error occurred during sign-in')
       };
     }
@@ -96,119 +125,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     navigate('/login', { state: { message: 'Social logins are not available in the current environment.' }});
   };
 
-  const signUp = async (email: string, password: string, fullName: string, userType: string) => {
+  const signUp = async (email: string, password: string, userData?: any) => {
     try {
-      console.log('[AUTH_CONTEXT] 🚀 Starting AWS signup process...');
-      console.log('[AUTH_CONTEXT] Email:', email);
-      console.log('[AUTH_CONTEXT] Full Name:', fullName);
-      console.log('[AUTH_CONTEXT] User Type:', userType);
-      console.log('[AUTH_CONTEXT] AWS Connectivity Status:', navigator.onLine ? 'Online' : 'Offline');
+      console.log('[AUTH_CONTEXT] Calling cognitoSignUp with:', email, '******', userData);
+      const result = await cognitoSignUp(email, password, userData);
       
-      // Log basic browser network status before attempting signup
-      console.log('[AUTH_CONTEXT] Browser network status:', {
-        online: navigator.onLine,
-        userAgent: navigator.userAgent,
-        url: window.location.href
-      });
-      
-      const { data, error } = await awsAuth.signUp(email, password, {
-        full_name: fullName,
-        role: userType
-      });
-
-      // Handle signup errors
-      if (error) {
-        console.error('[AUTH_CONTEXT] ❌ AWS signup failed:', error);
-        console.error('[AUTH_CONTEXT] Error type:', error?.constructor?.name);
+      // Update user state if successful signup
+      if (result.data?.user && !result.error) {
+        console.log('[AUTH_CONTEXT] Setting user after successful signup:', result.data.user.id);
+        setUser(result.data.user);
         
-        // Try to identify the specific error category
-        let errorCategory = 'Unknown';
-        
-        if (error instanceof Error) {
-          if (error.message.includes('timed out')) {
-            errorCategory = 'Timeout';
-          } else if (error.message.includes('network')) {
-            errorCategory = 'Network';
-          } else if (error.message.includes('credentials')) {
-            errorCategory = 'Authentication';
-          } else if (error.message.includes('already exists')) {
-            errorCategory = 'Duplicate';
-          }
-        }
-        
-        console.error(`[AUTH_CONTEXT] Error category: ${errorCategory}`);
-        return { data: null, error };
-      }
-
-      console.log('[AUTH_CONTEXT] SignUp API response:', 
-        JSON.stringify({
-          success: !error,
-          userData: data?.user ? {
-            id: data.user.id,
-            email: data.user.email,
-            fullName: data.user.full_name,
-            role: data.user.role,
-          } : null,
-          userConfirmed: data?.userConfirmed,
-        }, null, 2)
-      );
-
-      if (!data.user) {
-        console.error('[AUTH_CONTEXT] ❌ No user data returned from AWS signup');
-        return { data: null, error: new Error('No user data returned') };
-      }
-
-      console.log('[AUTH_CONTEXT] ✅ User created successfully:', data.user.id);
-
-      // FOR TESTING: Skip email verification and always go to dashboard
-      console.log('[AUTH_CONTEXT] TESTING MODE: Bypassing email verification and going directly to dashboard');
-      console.log('[AUTH_CONTEXT] Current location before navigation:', window.location.href);
-      console.log('[AUTH_CONTEXT] Navigate object available:', !!navigate);
-      
-      // Try direct navigation first since React Router seems to fail
-      console.log('[AUTH_CONTEXT] Trying direct window.location navigation');
-      window.location.href = '/dashboard';
-      
-      // Only try React Router navigation as fallback
-      try {
-        navigate('/dashboard');
-        console.log('[AUTH_CONTEXT] Navigation called to /dashboard');
-      } catch (navError) {
-        console.error('[AUTH_CONTEXT] Navigation error:', navError);
+        // Navigate to dashboard with replace:true
+        navigate('/dashboard', { replace: true });
       }
       
-      // No need for timeout check if we're using direct navigation
-      return { data: data.user, error: null };
+      return result as { data: { user: User | null, userConfirmed: boolean }, error: Error | null };
     } catch (error) {
-      console.error('[AUTH_CONTEXT] ❌ Unexpected error during signup:', error);
-      console.error('[AUTH_CONTEXT] Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
-      
-      // Advanced diagnostic information
-      console.error('[AUTH_CONTEXT] Is navigator online?', navigator.onLine);
-      console.error('[AUTH_CONTEXT] Current URL:', window.location.href);
-      console.error('[AUTH_CONTEXT] User agent:', navigator.userAgent);
-      
-      // Try to identify if this is a browser security or CORS issue
-      if (error instanceof Error) {
-        if (error.message.includes('Failed to fetch') || 
-            error.message.includes('NetworkError') || 
-            error.message.includes('CORS') ||
-            error.message.includes('cross-origin')) {
-          console.error('[AUTH_CONTEXT] This appears to be a CORS or browser security issue');
-        }
-      }
-      
-      // Return the error for proper handling in the UI
+      console.error('[AUTH_CONTEXT] Error during signup:', error);
       return { 
-        data: null, 
+        data: { user: null, userConfirmed: false }, 
         error: error instanceof Error ? error : new Error('An unexpected error occurred during signup')
       };
     }
   };
 
   const signOut = async () => {
-    await awsAuth.signOut();
+    const result = await cognitoSignOut();
+    setUser(null);
     navigate('/');
+    return result as { error: Error | null };
   };
 
   return (

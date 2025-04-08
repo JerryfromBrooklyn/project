@@ -1,7 +1,6 @@
 import { S3Client } from '@aws-sdk/client-s3';
 import { RekognitionClient, CreateCollectionCommand, ListCollectionsCommand, DeleteCollectionCommand } from '@aws-sdk/client-rekognition';
 import dotenv from 'dotenv';
-import { AwsMonitoringService } from '../services/AwsMonitoringService';
 // Load environment variables if running in Node.js directly
 if (typeof import.meta === 'undefined') {
     dotenv.config();
@@ -19,6 +18,15 @@ function getEnvVariable(name, defaultValue) {
 export const AWS_REGION = getEnvVariable('VITE_AWS_REGION', 'us-east-1');
 export const AWS_ACCESS_KEY_ID = getEnvVariable('VITE_AWS_ACCESS_KEY_ID');
 export const AWS_SECRET_ACCESS_KEY = getEnvVariable('VITE_AWS_SECRET_ACCESS_KEY');
+// Validate AWS credentials
+console.log('[DEBUG] AWS Configuration:');
+console.log('[DEBUG] - Region:', AWS_REGION);
+console.log('[DEBUG] - Access Key ID:', AWS_ACCESS_KEY_ID ? `${AWS_ACCESS_KEY_ID.substring(0, 4)}...` : 'Not set');
+console.log('[DEBUG] - Secret Access Key:', AWS_SECRET_ACCESS_KEY ? 'Set (hidden)' : 'Not set');
+console.log('[DEBUG] - Collection ID:', getEnvVariable('VITE_AWS_COLLECTION_ID', 'shmong-faces'));
+if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
+    console.error('[ERROR] AWS credentials are not properly configured. Face detection and matching will not work.');
+}
 // Face recognition configuration
 export const FACE_MATCH_THRESHOLD = 80; // Increased threshold for better accuracy
 export const COLLECTION_ID = getEnvVariable('VITE_AWS_COLLECTION_ID', 'shmong-faces');
@@ -80,53 +88,26 @@ export const initializeCollection = async () => {
 };
 // Initialize collection
 initializeCollection().catch(console.error);
-
 // Test AWS Rekognition connectivity
 export const testRekognitionConnectivity = async () => {
-  try {
-    console.log('[DEBUG] Testing AWS Rekognition connectivity...');
-    const listCollections = await rekognitionClient.send(
-      new ListCollectionsCommand({})
-    );
-    console.log('[DEBUG] Successfully connected to AWS Rekognition');
-    console.log('[DEBUG] Available collections:', listCollections.CollectionIds);
-    return true;
-  } catch (error) {
-    console.error('[ERROR] Failed to connect to AWS Rekognition:', error);
-    
-    // Log to monitoring service
-    AwsMonitoringService.logApiError(
-      'Rekognition',
-      'ListCollections',
-      error, 
-      {
-        source: 'aws-config.testRekognitionConnectivity',
-        isCritical: true
-      }
-    );
-    
-    return false;
-  }
+    try {
+        console.log('[DEBUG] Testing AWS Rekognition connectivity...');
+        const listCollections = await rekognitionClient.send(new ListCollectionsCommand({}));
+        console.log('[DEBUG] Successfully connected to AWS Rekognition');
+        console.log('[DEBUG] Available collections:', listCollections.CollectionIds);
+        return true;
+    }
+    catch (error) {
+        console.error('[ERROR] Failed to connect to AWS Rekognition:', error);
+        return false;
+    }
 };
-
 // Run connectivity test
 testRekognitionConnectivity().then(result => {
-  if (result) {
-    console.log('[INFO] AWS Rekognition is properly configured and working');
-  } else {
-    console.error('[ERROR] AWS Rekognition is not working. Face detection will be disabled.');
-    
-    // Add a system alert for this critical issue
-    AwsMonitoringService.logSystemAlert({
-      type: 'aws_connectivity',
-      severity: 'critical',
-      title: 'AWS Rekognition Connectivity Failure',
-      message: 'Failed to establish connection to AWS Rekognition. Face matching functionality is disabled.',
-      details: {
-        service: 'Rekognition',
-        timestamp: new Date().toISOString(),
-        affectedFeatures: ['face-detection', 'face-matching', 'face-registration']
-      }
-    });
-  }
+    if (result) {
+        console.log('[INFO] AWS Rekognition is properly configured and working');
+    }
+    else {
+        console.error('[ERROR] AWS Rekognition is not working. Face detection will be disabled.');
+    }
 });

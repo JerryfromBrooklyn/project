@@ -6,7 +6,7 @@
 export const VERSION = '1.0.0';
 
 // Build number increments automatically with each build
-const BUILD_NUMBER = '125';
+const BUILD_NUMBER = '138';
 
 // Get current date and time
 const now = new Date();
@@ -49,6 +49,39 @@ export const logVersion = () => {
   }
   
   return fullVersion;
+};
+
+// Add type definition for the custom property
+declare global {
+  interface Window {
+    __APP_VERSION__?: string;
+  }
+}
+
+export const getAppVersion = (): string => {
+  // Try reading from environment variable injected by build process
+  const envVersion = import.meta.env.VITE_APP_VERSION;
+  if (envVersion) {
+    return envVersion;
+  }
+
+  // Fallback to checking window property (less reliable)
+  if (typeof window !== 'undefined' && window.__APP_VERSION__) {
+    return window.__APP_VERSION__;
+  }
+
+  // Default version if none found
+  return '0.0.0-dev'; 
+};
+
+export const setAppVersion = (version: string) => {
+  // It's generally better to rely on build-time injection than setting on window
+  if (typeof window !== 'undefined') {
+    window.__APP_VERSION__ = version;
+    console.log(`App version set on window: ${version}`);
+  } else {
+    console.warn('Cannot set window.__APP_VERSION__ in non-browser environment.');
+  }
 };
 
 export default {

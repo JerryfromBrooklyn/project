@@ -1,19 +1,25 @@
-// Import defineConfig without specifying from 'vite'
-// This will rely on the globally available Vite during the build process
-const defineConfig = (config) => config;
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
-export default {
-  // Basic build configuration
-  build: {
-    outDir: 'dist',
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, './src'),
+    },
   },
-  
-  // Server configuration (development only)
-  server: {
-    port: 5173,
+  // Force using CommonJS module format for postcss
+  css: {
+    postcss: './postcss.config.cjs',
   },
-  
-  // Handle environment variables properly
-  envPrefix: ['VITE_', 'REACT_APP_'],
-}; 
+  // Ensure proper handling of dashboard component
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom'],
+    force: true
+  },
+  // Clear cache on startup
+  cacheDir: '.vite',
+  clearScreen: true
+}); 
