@@ -133,7 +133,14 @@ const Dashboard = () => {
         console.log('[DASHBOARD] Face registration successful, refreshing data');
         setShowRegistrationModal(false);
         // Refetch user data to get updated face registration info
-        fetchUserData();
+        fetchUserData().then(() => {
+            console.log('[DASHBOARD] Face registration successful:', {
+                faceId: registeredFace?.face_id,
+                attributesCount: registeredFace?.faceAttributes ? Object.keys(registeredFace.faceAttributes).length : 0,
+                matchesCount: matches?.length || 0
+            });
+            console.log('[DASHBOARD] Raw face attributes received:', registeredFace?.faceAttributes);
+        });
     };
 
     const handleRegistrationClose = () => {

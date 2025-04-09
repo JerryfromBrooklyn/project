@@ -10,8 +10,8 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient({
 });
 
 // Environment variables
-const USER_TABLE = 'shmong-users';
-const FACE_COLLECTION_ID = 'shmong-faces';
+const USER_TABLE = process.env.TABLE_NAME || 'shmong-users';
+const FACE_COLLECTION_ID = process.env.COLLECTION_ID || 'shmong-faces';
 
 exports.handler = async (event) => {
   try {

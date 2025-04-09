@@ -12,8 +12,12 @@ import {
   ListFacesCommand
 } from '@aws-sdk/client-rekognition';
 import { GetItemCommand } from '@aws-sdk/client-dynamodb';
-import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } from '../lib/awsClient';
+import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, rekognitionClient, dynamoClient as dynamoDBClient, s3Client, COLLECTION_ID as AWS_COLLECTION_ID } from '../lib/awsClient';
 import FaceStorageService from './FaceStorageService';
+
+// Configure Rekognition constants
+const COLLECTION_ID = AWS_COLLECTION_ID || 'shmong-faces';
+const FACE_MATCH_THRESHOLD = 80.0;
 
 // Add environment detection for browser-safe code
 const isBrowser = typeof window !== 'undefined';
@@ -125,6 +129,14 @@ const toBinary = (data) => {
 export const indexUserFace = async (imageData, userId) => {
   try {
     console.log('🔍 [FaceIndexing] Indexing face for user:', userId);
+    console.log('🔍 [FaceIndexing] Image data type:', typeof imageData);
+    
+    if (typeof imageData === 'string') {
+      console.log('🔍 [FaceIndexing] Image data starts with:', imageData.substring(0, 30) + '...');
+    }
+    
+    // Get AWS clients
+    const { rekognitionClient } = await getAWSClients();
     
     // Convert to binary format
     let imageBytes;
@@ -132,24 +144,37 @@ export const indexUserFace = async (imageData, userId) => {
     if (typeof imageData === 'string' && imageData.startsWith('data:image')) {
       // Base64 data
       const base64Data = imageData.split(',')[1];
-      const binaryString = atob(base64Data);
-      imageBytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        imageBytes[i] = binaryString.charCodeAt(i);
+      console.log('🔍 [FaceIndexing] Extracted base64 data, first 20 chars:', base64Data.substring(0, 20) + '...');
+      
+      if (hasBuffer) {
+        imageBytes = Buffer.from(base64Data, 'base64');
+      } else {
+        const binaryString = atob(base64Data);
+        imageBytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          imageBytes[i] = binaryString.charCodeAt(i);
+        }
       }
+      console.log('🔍 [FaceIndexing] Converted base64 data to binary format');
     } else if (imageData instanceof Blob) {
       // Blob data
       const arrayBuffer = await imageData.arrayBuffer();
-      imageBytes = new Uint8Array(arrayBuffer);
+      imageBytes = hasBuffer ? Buffer.from(arrayBuffer) : new Uint8Array(arrayBuffer);
+      console.log('🔍 [FaceIndexing] Converted Blob to binary format');
     } else if (imageData instanceof ArrayBuffer) {
       // ArrayBuffer data
-      imageBytes = new Uint8Array(imageData);
+      imageBytes = hasBuffer ? Buffer.from(imageData) : new Uint8Array(imageData);
+      console.log('🔍 [FaceIndexing] Converted ArrayBuffer to binary format');
     } else if (imageData instanceof Uint8Array) {
       // Already Uint8Array
       imageBytes = imageData;
+      console.log('🔍 [FaceIndexing] Using Uint8Array directly');
     } else {
+      console.error('🔍 [FaceIndexing] Unsupported image data format:', typeof imageData);
       throw new Error('Unsupported image data format');
     }
+    
+    console.log('🔍 [FaceIndexing] Image bytes prepared, calling Rekognition...');
     
     // Call AWS Rekognition to index the face
     const command = new IndexFacesCommand({
@@ -179,20 +204,29 @@ export const indexUserFace = async (imageData, userId) => {
     
     // Store the face data in your database/storage
     const imageBytesCopy = copyBinaryData(imageBytes);
-    const storageResult = await storeFaceId(userId, faceId, faceAttributes, imageBytesCopy);
+    const storageResult = await FaceStorageService.storeFaceId(
+      userId,   // userId
+      faceId,   // faceId
+      imageData, // imageData - original image data
+      null,     // imagePath - let the service generate a path
+      faceAttributes, // faceAttributes 
+      []        // historicalMatches - empty for initial registration
+    );
     
     // Return the results
     return {
       success: true,
       faceId: faceId,
       faceAttributes: faceAttributes,
-      imageUrl: storageResult.imageUrl || null
+      imageUrl: storageResult.imageUrl || null,
+      message: 'Face indexed successfully'
     };
   } catch (error) {
-    console.error('[FaceIndexing] Error indexing face:', error);
+    console.error(`❌ [FaceIndexing] Error indexing face:`, error);
+    
     return {
       success: false,
-      error: error.message || 'An unexpected error occurred'
+      error: error.message || 'Failed to index face'
     };
   }
 };
@@ -247,7 +281,7 @@ export const indexFace = async (userId, imageBlob) => {
     // Step 4: Index the face in the Collection
     console.log('[FaceIndexing] Indexing face in collection...');
     const indexParams = {
-      CollectionId: 'shmong-faces',
+      CollectionId: COLLECTION_ID,
       Image: {
         Bytes: buffer
       },
@@ -271,7 +305,7 @@ export const indexFace = async (userId, imageBlob) => {
     let historicalMatches = [];
     try {
       const searchParams = {
-        CollectionId: 'user-faces',
+        CollectionId: COLLECTION_ID,
         FaceId: faceId,
         MaxFaces: 10,
         FaceMatchThreshold: 90.0 // Higher threshold for higher confidence
@@ -376,6 +410,9 @@ const matchAgainstExistingFaces = async (userId, faceId) => {
   try {
     console.log('[FaceIndexing] Matching face against existing faces');
     
+    // Get AWS clients
+    const { rekognitionClient } = await getAWSClients();
+    
     // Search for similar faces
     const command = new SearchFacesCommand({
       CollectionId: COLLECTION_ID,
@@ -412,7 +449,7 @@ const matchAgainstExistingFaces = async (userId, faceId) => {
       };
       
       // Store match in database
-      await storeFaceMatch(matchData);
+      await FaceStorageService.storeFaceMatch(matchData);
       
       matches.push(matchData);
     }
@@ -440,6 +477,9 @@ const matchAgainstExistingFaces = async (userId, faceId) => {
 export const searchFaceByImage = async (imageData, userId = null) => {
   try {
     console.log('[FaceIndexing] Searching for face in collection');
+    
+    // Get AWS clients
+    const { rekognitionClient } = await getAWSClients();
     
     // Extract base64 data if needed (browser-safe implementation)
     let imageBytes;
@@ -538,46 +578,17 @@ const imageToBuffer = async (imageData) => {
 
 // Get AWS clients function
 const getAWSClients = async () => {
-  // Import dynamically to avoid dependency issues
-  const { 
-    RekognitionClient, 
-    DynamoDBClient,
-    S3Client
-  } = await Promise.all([
-    import('@aws-sdk/client-rekognition').then(module => ({ RekognitionClient: module.RekognitionClient })),
-    import('@aws-sdk/client-dynamodb').then(module => ({ DynamoDBClient: module.DynamoDBClient })),
-    import('@aws-sdk/client-s3').then(module => ({ S3Client: module.S3Client }))
-  ]);
-  
-  const rekognitionClient = new RekognitionClient({
-    region: AWS_REGION,
-    credentials: {
-      accessKeyId: AWS_ACCESS_KEY_ID,
-      secretAccessKey: AWS_SECRET_ACCESS_KEY
-    }
-  });
-  
-  const dynamoDBClient = new DynamoDBClient({
-    region: AWS_REGION,
-    credentials: {
-      accessKeyId: AWS_ACCESS_KEY_ID,
-      secretAccessKey: AWS_SECRET_ACCESS_KEY
-    }
-  });
-  
-  const s3Client = new S3Client({
-    region: AWS_REGION,
-    credentials: {
-      accessKeyId: AWS_ACCESS_KEY_ID,
-      secretAccessKey: AWS_SECRET_ACCESS_KEY
-    }
-  });
-  
-  return {
-    rekognitionClient,
-    dynamoDBClient,
-    s3Client
-  };
+  try {
+    // Return the pre-configured clients
+    return {
+      rekognitionClient,
+      dynamoDBClient,
+      s3Client
+    };
+  } catch (error) {
+    console.error('[FaceIndexing] Error getting AWS clients:', error);
+    throw error;
+  }
 };
 
 // Export functions as an object for easier importing

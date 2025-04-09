@@ -86,11 +86,16 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
     const registerFace = async (imgSrc, userId) => {
         try {
             setProcessing(true);
+            console.log('Registering face for user:', userId);
+            console.log('Image data type:', typeof imgSrc);
+            console.log('Image data starts with:', imgSrc.substring(0, 30) + '...');
+            
             // Use FaceIndexingService to register the face
             const result = await FaceIndexingService.indexUserFace(imgSrc, userId);
             if (result.success) {
                 console.log('Face registered successfully');
-                onSuccess();
+                console.log('Face attributes:', result.faceAttributes);
+                onSuccess(result);
             }
             else {
                 setError(result.error || 'Failed to register face. Please try again.');

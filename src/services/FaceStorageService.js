@@ -3,7 +3,7 @@ import { s3Client } from '../lib/awsClient';
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { DynamoDBClient, PutItemCommand, QueryCommand, GetItemCommand, DeleteItemCommand } from '@aws-sdk/client-dynamodb';
-import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } from '../lib/awsClient';
+import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, dynamoClient } from '../lib/awsClient';
 import { normalizeToS3Url, convertCloudFrontToS3Url } from '../utils/s3Utils';
 import { docClient } from '../lib/awsClient';
 import { marshall } from '@aws-sdk/util-dynamodb';
@@ -17,6 +17,14 @@ const hasBuffer = typeof Buffer !== 'undefined';
 
 // Log the environment for debugging
 console.log(`🔧 [FaceStorage] Environment detection: Browser=${isBrowser}, HasBuffer=${hasBuffer}`);
+
+// Access AWS Clients
+const getAWSClients = async () => {
+  return {
+    dynamoDBClient: dynamoClient,
+    s3Client
+  };
+};
 
 // Initialize DynamoDB client
 const dynamoDBClient = new DynamoDBClient({
@@ -100,9 +108,9 @@ export const storeFaceId = async (userId, faceId, imageData, imagePath, faceAttr
       console.log('[FaceStorage] Storing face attributes in DynamoDB:', 
         Object.keys(faceAttributes).length);
       
-      // Convert attributes to DynamoDB format - this requires special handling
-      // We'll store it as a stringified JSON
-      item.faceAttributes = { S: JSON.stringify(faceAttributes) };
+      // Ensure faceAttributes is properly serialized for DynamoDB
+      const attributesString = JSON.stringify(faceAttributes);
+      item.faceAttributes = { S: attributesString };
     }
     
     // Add historical matches if available
@@ -118,13 +126,16 @@ export const storeFaceId = async (userId, faceId, imageData, imagePath, faceAttr
     };
     
     console.log('[FaceStorage] Storing face data in DynamoDB:', Object.keys(item).length, 'fields');
+    console.log('[FaceStorage] Item structure:', JSON.stringify(params, null, 2));
+    
     await dynamoDBClient.send(new PutItemCommand(params));
     console.log('[FaceStorage] Face data stored successfully in DynamoDB');
     
     return {
       success: true,
       faceId,
-      imageUrl
+      imageUrl,
+      faceAttributes: faceAttributes ? JSON.parse(JSON.stringify(faceAttributes)) : null
     };
   } catch (error) {
     console.error('[FaceStorage] Error storing face ID:', error);
@@ -164,9 +175,9 @@ export const getFaceId = async (userId) => {
         
         // Parse face attributes if available
         let faceAttributes = null;
-        if (item.face_attributes && item.face_attributes.S) {
+        if (item.faceAttributes && item.faceAttributes.S) {
           try {
-            faceAttributes = JSON.parse(item.face_attributes.S);
+            faceAttributes = JSON.parse(item.faceAttributes.S);
             console.log(`✅ [FaceStorage] Face attributes retrieved from DynamoDB`);
           } catch (parseError) {
             console.error(`❌ [FaceStorage] Error parsing face attributes:`, parseError);
@@ -243,24 +254,55 @@ export const uploadFaceImage = async (userId, imageData, customPath = null) => {
   }
 
   console.log('[FaceStorage] Uploading face image for user:', userId);
+  console.log('[FaceStorage] Image type:', typeof imageData, 
+              imageData instanceof Blob ? 'is Blob' : 'not Blob',
+              imageData instanceof Uint8Array ? 'is Uint8Array' : 'not Uint8Array',
+              imageData instanceof Buffer ? 'is Buffer' : 'not Buffer',
+              typeof imageData === 'string' ? `string starts with: ${imageData.substring(0, 30)}...` : '');
 
   try {
     // Convert image data to buffer
     let buffer;
     console.log('🔄 [FaceStorage] uploadFaceImage conversion process:');
     
-    if (imageData instanceof Buffer) {
+    if (hasBuffer && Buffer.isBuffer(imageData)) {
       buffer = imageData;
+      console.log('[FaceStorage] Using Buffer directly');
     } else if (imageData instanceof Uint8Array) {
-      buffer = Buffer.from(imageData);
+      buffer = hasBuffer ? Buffer.from(imageData) : imageData;
+      console.log('[FaceStorage] Converted Uint8Array to Buffer');
     } else if (imageData instanceof Blob) {
       const arrayBuffer = await imageData.arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-    } else if (typeof imageData === 'string' && imageData.startsWith('data:')) {
-      // Handle base64 data URL
-      const base64Data = imageData.split(',')[1];
-      buffer = Buffer.from(base64Data, 'base64');
+      buffer = hasBuffer ? Buffer.from(arrayBuffer) : new Uint8Array(arrayBuffer);
+      console.log('[FaceStorage] Converted Blob to Buffer');
+    } else if (typeof imageData === 'string') {
+      if (imageData.startsWith('data:image')) {
+        // Handle base64 data URL
+        const base64Data = imageData.split(',')[1];
+        buffer = hasBuffer ? Buffer.from(base64Data, 'base64') : 
+                 Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+        console.log('[FaceStorage] Converted base64 image data to Buffer');
+      } else if (imageData.startsWith('{')){
+        // This might be a stringified JSON object - not valid image data
+        console.error('[FaceStorage] Received JSON string instead of image data');
+        return { success: false, error: 'Received JSON string instead of image data' };
+      } else {
+        // Try to handle as base64 string without data URI prefix
+        try {
+          buffer = hasBuffer ? Buffer.from(imageData, 'base64') : 
+                   Uint8Array.from(atob(imageData), c => c.charCodeAt(0));
+          console.log('[FaceStorage] Converted base64 string to Buffer');
+        } catch (e) {
+          console.error('[FaceStorage] Failed to convert string to Buffer:', e);
+          return { success: false, error: 'Invalid string format for image data' };
+        }
+      }
+    } else if (imageData && imageData.buffer instanceof ArrayBuffer) {
+      // Handle array buffer view
+      buffer = hasBuffer ? Buffer.from(imageData.buffer) : new Uint8Array(imageData.buffer);
+      console.log('[FaceStorage] Converted ArrayBuffer view to Buffer');
     } else {
+      console.error('[FaceStorage] Unsupported image data format:', typeof imageData);
       return { 
         success: false, 
         error: 'Unsupported image data format'
@@ -417,27 +459,27 @@ export const getFaceDataForUser = async (userId) => {
       TableName: 'shmong-face-data',
       KeyConditionExpression: 'userId = :userId',
       ExpressionAttributeValues: {
-        ':userId': userId
+        ':userId': { S: userId }
       },
       Limit: 1,
       ScanIndexForward: false // Get the most recent entry first
     };
     
-    console.log('[FaceStorage] Querying DynamoDB for face data...');
+    console.log('[FaceStorage] Querying DynamoDB for face data with params:', JSON.stringify(params, null, 2));
     const response = await dynamoDBClient.send(new QueryCommand(params));
     
     if (response.Items && response.Items.length > 0) {
       const faceData = response.Items[0];
-      console.log('[FaceStorage] Face data found:', faceData);
+      console.log('[FaceStorage] Face data found:', JSON.stringify(faceData, null, 2));
       
       // Format and return the face data
       return {
-        faceId: faceData.faceId,
-        faceAttributes: faceData.faceAttributes,
-        imageUrl: faceData.imageUrl,
-        imagePath: faceData.imagePath,
-        historicalMatches: faceData.historicalMatches || [],
-        createdAt: faceData.createdAt
+        faceId: faceData.faceId?.S,
+        faceAttributes: faceData.faceAttributes?.S ? JSON.parse(faceData.faceAttributes.S) : null,
+        imageUrl: faceData.imageUrl?.S,
+        imagePath: faceData.imagePath?.S,
+        historicalMatches: faceData.historicalMatches?.L || [],
+        createdAt: faceData.createdAt?.S
       };
     } else {
       console.log('[FaceStorage] No face data found for user:', userId);

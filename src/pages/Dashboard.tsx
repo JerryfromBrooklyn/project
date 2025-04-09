@@ -101,71 +101,52 @@ export const Dashboard = () => {
     fetchFaceData();
   }, [user]);
 
-  const handleRegistrationSuccess = (newFaceId, newAttributes, historicalMatches = []) => {
+  const handleRegistrationSuccess = (result: any) => {
     console.log('[Dashboard] Face registration successful:', { 
-      faceId: newFaceId, 
-      attributesCount: newAttributes ? Object.keys(newAttributes).length : 0,
-      matchesCount: historicalMatches?.length || 0 
+      faceId: result?.faceId, 
+      attributesCount: result?.faceAttributes ? Object.keys(result.faceAttributes).length : 0,
+      matchesCount: result?.historicalMatches?.length || 0 
     });
     
     // Debug the raw attribute data
-    console.log('[Dashboard] Raw face attributes received:', newAttributes);
+    console.log('[Dashboard] Raw face attributes received:', result?.faceAttributes);
     
     // Immediately update the UI with the data we just received
     setFaceRegistered(true);
     setShowRegistrationModal(false);
     
-    if (newFaceId) {
-      console.log('[Dashboard] Setting faceId:', newFaceId);
-      setFaceId(newFaceId);
+    if (result?.faceId) {
+      console.log('[Dashboard] Setting faceId:', result.faceId);
+      setFaceId(result.faceId);
     }
     
-    if (newAttributes) {
+    if (result?.faceAttributes) {
       console.log('[Dashboard] Setting face attributes directly from registration');
-      setFaceAttributes(newAttributes);
+      setFaceAttributes(result.faceAttributes);
     }
     
     // Handle historical matches if they exist  
-    if (historicalMatches && historicalMatches.length > 0) {
-      console.log('[Dashboard] Setting historical matches:', historicalMatches);
-      console.log('[Dashboard] Match details:', historicalMatches.map(match => ({
-        id: match.id,
-        similarity: match.similarity,
-        imageUrl: match.imageUrl,
-        createdAt: match.createdAt
-      })));
-      setHistoricalMatches(historicalMatches);
+    if (result?.historicalMatches && result.historicalMatches.length > 0) {
+      console.log('[Dashboard] Setting historical matches:', result.historicalMatches);
+      setHistoricalMatches(result.historicalMatches);
     }
     
-    // Get the face image URL directly from the webcam or captured image
-    const webcamElement = document.querySelector('video');
-    if (webcamElement) {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = webcamElement.videoWidth;
-        canvas.height = webcamElement.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(webcamElement, 0, 0);
-        const imageUrl = canvas.toDataURL('image/jpeg');
-        console.log('[Dashboard] Created temporary face image URL from webcam');
-        setFaceImageUrl(imageUrl);
-      } catch (e) {
-        console.error('[Dashboard] Error creating face image from webcam:', e);
-        
-        // Fallback to looking for an image element in the face registration modal
-        const capturedImage = document.querySelector('.face-registration img[src^="blob:"]');
-        if (capturedImage) {
-          const img = capturedImage as HTMLImageElement;
-          console.log('[Dashboard] Found captured image in DOM, using as fallback');
-          setFaceImageUrl(img.src);
-        } else {
-          // Final fallback - construct URL from what we know
-          if (newFaceId) {
-            const fallbackUrl = `https://shmong.s3.amazonaws.com/face-images/${user?.id}/${Date.now()}.jpg`;
-            console.log('[Dashboard] Using constructed fallback URL:', fallbackUrl);
-            setFaceImageUrl(fallbackUrl);
-          }
-        }
+    // Set image URL if available from the result
+    if (result?.imageUrl) {
+      console.log('[Dashboard] Setting face image URL from result:', result.imageUrl);
+      setFaceImageUrl(result.imageUrl);
+    } else {
+      // Fallback to looking for an image element in the face registration modal
+      const capturedImage = document.querySelector('.face-registration img[src^="blob:"]');
+      if (capturedImage) {
+        const img = capturedImage as HTMLImageElement;
+        console.log('[Dashboard] Found captured image in DOM, using as fallback');
+        setFaceImageUrl(img.src);
+      } else if (result?.faceId && user?.id) {
+        // Final fallback - construct URL from what we know
+        const fallbackUrl = `https://shmong.s3.amazonaws.com/face-images/${user.id}/${Date.now()}.jpg`;
+        console.log('[Dashboard] Using constructed fallback URL:', fallbackUrl);
+        setFaceImageUrl(fallbackUrl);
       }
     }
   };
