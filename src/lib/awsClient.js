@@ -33,7 +33,7 @@ export const AWS_ACCESS_KEY_ID = getEnvVar('VITE_AWS_ACCESS_KEY_ID');
 export const AWS_SECRET_ACCESS_KEY = getEnvVar('VITE_AWS_SECRET_ACCESS_KEY');
 
 // Rekognition configuration
-export const COLLECTION_ID = getEnvVar('VITE_AWS_COLLECTION_ID', 'user-faces');
+export const COLLECTION_ID = getEnvVar('VITE_AWS_COLLECTION_ID', 'shmong-faces');
 export const FACE_MATCH_THRESHOLD = 80; // Minimum confidence score for face matches
 
 // Cognito configuration

@@ -2,7 +2,7 @@
 import { s3Client } from '../lib/awsClient';
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { DynamoDBClient, PutItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, PutItemCommand, QueryCommand, GetItemCommand, DeleteItemCommand } from '@aws-sdk/client-dynamodb';
 import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } from '../lib/awsClient';
 import { normalizeToS3Url, convertCloudFrontToS3Url } from '../utils/s3Utils';
 import { docClient } from '../lib/awsClient';
@@ -28,49 +28,107 @@ const dynamoDBClient = new DynamoDBClient({
 });
 
 /**
- * Store face ID and metadata in the DynamoDB database
+ * Store face ID and metadata in DynamoDB and S3
  * @param {string} userId - The user ID
- * @param {string} faceId - The AWS Rekognition face ID
- * @param {Object} faceAttributes - Face attributes from Rekognition
- * @param {Uint8Array|Buffer} imageData - Binary image data (optional)
- * @returns {Promise<Object>} Result object with success status
+ * @param {string} faceId - The face ID from Rekognition
+ * @param {Blob} imageData - The face image data
+ * @param {string} imagePath - The path where the image is stored in S3
+ * @param {Object} faceAttributes - The face attributes from Rekognition
+ * @param {Array} historicalMatches - Array of historical matches
+ * @returns {Promise<Object>} - The result of the operation
  */
-export const storeFaceId = async (userId, faceId, faceAttributes, imageData = null) => {
+export const storeFaceId = async (userId, faceId, imageData, imagePath, faceAttributes, historicalMatches = []) => {
+  if (!userId || !faceId) {
+    console.error('[FaceStorage] Cannot store face ID - missing userId or faceId');
+    return { success: false, error: 'Missing user ID or face ID' };
+  }
+  
+  console.log('[FaceStorage] Storing face ID and metadata for user:', userId);
+  
   try {
-    console.log('[FaceStorage] Storing face ID and metadata in database');
-    
-    // Prepare data for storage
-    const timestamp = new Date().toISOString();
-    const faceData = {
-      user_id: userId,
-      face_id: faceId,
-      created_at: timestamp,
-      updated_at: timestamp,
-      attributes: faceAttributes || {},
-      // For now, we'll use a placeholder URL
-      // In a real implementation, you'd upload the image to S3 here
-      image_url: `https://example.com/face-images/${userId}/${faceId}.jpg`
-    };
+    // Upload image to S3 if provided
+    let imageUrl = null;
+    if (imageData) {
+      console.log('[FaceStorage] Image data provided, uploading to S3...');
+      const uploadResult = await uploadFaceImage(userId, imageData, imagePath);
+      if (uploadResult.success) {
+        imageUrl = uploadResult.imageUrl;
+        console.log('[FaceStorage] Image uploaded successfully:', imageUrl);
+      } else {
+        console.error('[FaceStorage] Failed to upload image:', uploadResult.error);
+      }
+    }
     
     // Store in DynamoDB
-    await docClient.send(new PutItemCommand({
-      TableName: 'shmong-face-data',
-      Item: marshall(faceData)
-    }));
+    const { dynamoDBClient } = await getAWSClients();
     
-    console.log('[FaceStorage] Face data stored successfully');
+    const timestamp = new Date().toISOString();
+    
+    // Process historical matches for storage if any
+    let processedMatches = [];
+    if (historicalMatches && historicalMatches.length > 0) {
+      console.log('[FaceStorage] Processing historical matches for storage:', historicalMatches.length);
+      processedMatches = historicalMatches.map(match => ({
+        id: { S: match.id || 'unknown' },
+        similarity: { N: match.similarity?.toString() || '0' },
+        imageUrl: match.imageUrl ? { S: match.imageUrl } : { NULL: true },
+        owner: match.owner ? { S: match.owner } : { NULL: true },
+        eventId: match.eventId ? { S: match.eventId } : { NULL: true },
+        createdAt: match.createdAt ? { S: match.createdAt } : { S: timestamp }
+      }));
+    }
+    
+    // Prepare DynamoDB item
+    const item = {
+      userId: { S: userId },
+      faceId: { S: faceId },
+      createdAt: { S: timestamp },
+      updatedAt: { S: timestamp }
+    };
+    
+    // Add image URL and path if available
+    if (imageUrl) {
+      item.imageUrl = { S: imageUrl };
+    }
+    
+    if (imagePath) {
+      item.imagePath = { S: imagePath };
+    }
+    
+    // Add face attributes if available
+    if (faceAttributes) {
+      console.log('[FaceStorage] Storing face attributes in DynamoDB:', 
+        Object.keys(faceAttributes).length);
+      
+      // Convert attributes to DynamoDB format - this requires special handling
+      // We'll store it as a stringified JSON
+      item.faceAttributes = { S: JSON.stringify(faceAttributes) };
+    }
+    
+    // Add historical matches if available
+    if (processedMatches.length > 0) {
+      console.log('[FaceStorage] Storing historical matches in DynamoDB:', processedMatches.length);
+      item.historicalMatches = { L: processedMatches };
+    }
+    
+    // Save to DynamoDB
+    const params = {
+      TableName: 'shmong-face-data',
+      Item: item
+    };
+    
+    console.log('[FaceStorage] Storing face data in DynamoDB:', Object.keys(item).length, 'fields');
+    await dynamoDBClient.send(new PutItemCommand(params));
+    console.log('[FaceStorage] Face data stored successfully in DynamoDB');
     
     return {
       success: true,
-      faceId: faceId,
-      imageUrl: faceData.image_url
+      faceId,
+      imageUrl
     };
   } catch (error) {
-    console.error('[FaceStorage] Error storing face data:', error);
-    return {
-      success: false,
-      error: error.message || 'Failed to store face data'
-    };
+    console.error('[FaceStorage] Error storing face ID:', error);
+    return { success: false, error: error.message || 'Error storing face ID' };
   }
 };
 
@@ -172,115 +230,86 @@ export const getFaceId = async (userId) => {
 };
 
 /**
- * Upload face image
+ * Upload a face image to S3
  * @param {string} userId - The user ID
- * @param {string} imageData - The base64 encoded image data
- * @returns {Promise<object>} - Success status and image path
+ * @param {Blob} imageData - The image data
+ * @param {string} imagePath - Optional path override
+ * @returns {Promise<Object>} - The result of the operation
  */
-export const uploadFaceImage = async (userId, imageData) => {
+export const uploadFaceImage = async (userId, imageData, customPath = null) => {
+  if (!userId || !imageData) {
+    console.error('[FaceStorage] Cannot upload face image - missing userId or imageData');
+    return { success: false, error: 'Missing user ID or image data' };
+  }
+
+  console.log('[FaceStorage] Uploading face image for user:', userId);
+
   try {
-    console.log('[FaceStorage] Uploading face image for user:', userId);
+    // Convert image data to buffer
+    let buffer;
+    console.log('🔄 [FaceStorage] uploadFaceImage conversion process:');
     
-    // Generate a unique filename
-    const filename = `${userId}/${Date.now()}.jpg`;
-    
-    // Extract base64 data if needed
-    let imageBuffer;
-    
-    // BROWSER-SAFE IMPLEMENTATION
-    console.groupCollapsed('🔄 [FaceStorage] uploadFaceImage conversion process:');
-    
-    try {
-      if (isBrowser && !hasBuffer) {
-        // Browser environment - work with native browser types
-        console.log('Using browser-native image conversion');
-        if (typeof imageData === 'string' && imageData.startsWith('data:image')) {
-          const base64Data = imageData.split(',')[1];
-          const binaryString = atob(base64Data);
-          imageBuffer = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            imageBuffer[i] = binaryString.charCodeAt(i);
-          }
-        } else if (imageData instanceof Blob) {
-          const arrayBuffer = await imageData.arrayBuffer();
-          imageBuffer = new Uint8Array(arrayBuffer);
-        } else if (imageData instanceof ArrayBuffer) {
-          imageBuffer = new Uint8Array(imageData);
-        } else if (imageData instanceof Uint8Array) {
-          imageBuffer = imageData;
-        } else {
-          // Try best effort conversion
-          console.log('Unknown image format, attempting best-effort conversion');
-          if (typeof imageData.buffer !== 'undefined') {
-            imageBuffer = new Uint8Array(imageData.buffer);
-          } else {
-            // Create placeholder image as last resort
-            imageBuffer = new Uint8Array([0, 0, 0]);
-          }
-        }
-      } else {
-        // Node.js environment or Buffer is available
-        console.log('Using Node.js/Buffer image conversion');
-        if (typeof imageData === 'string' && imageData.startsWith('data:image')) {
-          const base64Data = imageData.split(',')[1];
-          imageBuffer = hasBuffer ? Buffer.from(base64Data, 'base64') : 
-                                    (() => {
-                                      const binaryString = atob(base64Data);
-                                      const arr = new Uint8Array(binaryString.length);
-                                      for (let i = 0; i < binaryString.length; i++) {
-                                        arr[i] = binaryString.charCodeAt(i);
-                                      }
-                                      return arr;
-                                    })();
-        } else if (hasBuffer) {
-          try {
-            imageBuffer = Buffer.from(imageData);
-          } catch (e) {
-            console.warn('Buffer.from failed in uploadFaceImage, using fallback:', e.message);
-            // Fallback to Uint8Array
-            imageBuffer = new Uint8Array(imageData.buffer || imageData);
-          }
-        } else {
-          // Direct use if already in right format
-          imageBuffer = imageData instanceof Uint8Array ? imageData : new Uint8Array(imageData);
-        }
-      }
-    } catch (conversionError) {
-      console.error('❌ [FaceStorage] Image conversion error:', conversionError);
-      // Create minimal viable image data as last resort
-      imageBuffer = new Uint8Array([255, 216, 255, 224, 0, 0, 0, 0, 0]); // Minimal JPEG header
+    if (imageData instanceof Buffer) {
+      buffer = imageData;
+    } else if (imageData instanceof Uint8Array) {
+      buffer = Buffer.from(imageData);
+    } else if (imageData instanceof Blob) {
+      const arrayBuffer = await imageData.arrayBuffer();
+      buffer = Buffer.from(arrayBuffer);
+    } else if (typeof imageData === 'string' && imageData.startsWith('data:')) {
+      // Handle base64 data URL
+      const base64Data = imageData.split(',')[1];
+      buffer = Buffer.from(base64Data, 'base64');
+    } else {
+      return { 
+        success: false, 
+        error: 'Unsupported image data format'
+      };
     }
-    
-    console.log(`📦 [FaceStorage] Prepared image buffer of size: ${imageBuffer.length || imageBuffer.byteLength || 'unknown'} bytes, type: ${imageBuffer.constructor.name}`);
-    console.groupEnd();
+
+    // Generate a unique path for the image
+    const imagePath = customPath || `${userId}/${Date.now()}.jpg`;
     
     // Upload to S3
-    const command = new PutObjectCommand({
-      Bucket: FACE_BUCKET_NAME,
-      Key: `face-images/${filename}`,
-      Body: imageBuffer,
+    const { s3Client } = await getAWSClients();
+    const s3Params = {
+      Bucket: 'shmong',
+      Key: `face-images/${imagePath}`,
+      Body: buffer,
       ContentType: 'image/jpeg'
-    });
+    };
+
+    await s3Client.send(new PutObjectCommand(s3Params));
+    console.log('[FaceStorage] Face image uploaded successfully to S3');
+
+    // Generate URLs for the image
+    // 1. Direct S3 URL
+    const baseS3Url = `https://shmong.s3.amazonaws.com/face-images/${imagePath}`;
     
-    await s3Client.send(command);
-    console.log('[FaceStorage] Face image uploaded successfully');
+    // 2. Generate a pre-signed URL as a backup
+    const getObjectParams = {
+      Bucket: 'shmong',
+      Key: `face-images/${imagePath}`,
+    };
     
-    // Generate a URL to access the image
-    const getCommand = new GetObjectCommand({
-      Bucket: FACE_BUCKET_NAME,
-      Key: `face-images/${filename}`
-    });
+    const signedUrl = await getSignedUrl(
+      s3Client, 
+      new GetObjectCommand(getObjectParams), 
+      { expiresIn: 604800 } // 7 days
+    );
     
-    const url = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
-    
-    return { 
-      success: true, 
-      path: filename,
-      url: url
+    console.log('[FaceStorage] Generated permanent URL:', baseS3Url);
+    console.log('[FaceStorage] Generated signed URL (backup):', signedUrl);
+
+    return {
+      success: true,
+      imageUrl: baseS3Url,
+      signedUrl: signedUrl,
+      imagePath: imagePath
     };
   } catch (error) {
     console.error('[FaceStorage] Error uploading face image:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error.message || 'Error uploading face image' };
   }
 };
 
@@ -372,9 +401,58 @@ const streamToString = (stream) => {
   }
 };
 
+// Add the getFaceDataForUser function
+export const getFaceDataForUser = async (userId) => {
+  if (!userId) {
+    console.error('[FaceStorage] Cannot fetch face data - missing userId');
+    return null;
+  }
+  
+  console.log('[FaceStorage] Fetching face data for user:', userId);
+  
+  try {
+    const { dynamoDBClient } = await getAWSClients();
+    
+    const params = {
+      TableName: 'shmong-face-data',
+      KeyConditionExpression: 'userId = :userId',
+      ExpressionAttributeValues: {
+        ':userId': userId
+      },
+      Limit: 1,
+      ScanIndexForward: false // Get the most recent entry first
+    };
+    
+    console.log('[FaceStorage] Querying DynamoDB for face data...');
+    const response = await dynamoDBClient.send(new QueryCommand(params));
+    
+    if (response.Items && response.Items.length > 0) {
+      const faceData = response.Items[0];
+      console.log('[FaceStorage] Face data found:', faceData);
+      
+      // Format and return the face data
+      return {
+        faceId: faceData.faceId,
+        faceAttributes: faceData.faceAttributes,
+        imageUrl: faceData.imageUrl,
+        imagePath: faceData.imagePath,
+        historicalMatches: faceData.historicalMatches || [],
+        createdAt: faceData.createdAt
+      };
+    } else {
+      console.log('[FaceStorage] No face data found for user:', userId);
+      return null;
+    }
+  } catch (error) {
+    console.error('[FaceStorage] Error fetching face data from DynamoDB:', error);
+    return null;
+  }
+};
+
 export default {
   storeFaceId,
   getFaceId,
   uploadFaceImage,
-  deleteFaceImage
+  deleteFaceImage,
+  getFaceDataForUser
 }; 

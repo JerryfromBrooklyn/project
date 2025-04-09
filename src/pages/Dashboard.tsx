@@ -5,7 +5,7 @@ import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, Che
 import { cn } from '../utils/cn';
 import FaceRegistration from '../components/FaceRegistration';
 import { PhotoManager } from '../components/PhotoManager';
-import { supabase } from '../lib/supabaseClient';
+import { getFaceDataForUser } from '../services/FaceStorageService';
 
 interface FaceAttributes {
   age: { low: number; high: number };
@@ -27,107 +27,222 @@ export const Dashboard = () => {
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
   const [faceImageUrl, setFaceImageUrl] = useState<string | null>(null);
   const [faceAttributes, setFaceAttributes] = useState<FaceAttributes | null>(null);
+  const [faceId, setFaceId] = useState<string | null>(null);
+  const [historicalMatches, setHistoricalMatches] = useState<any[]>([]);
+  const [isLoadingFaceData, setIsLoadingFaceData] = useState(true);
 
   useEffect(() => {
     const fetchFaceData = async () => {
       if (!user) return;
+      
+      setIsLoadingFaceData(true);
+      console.log('[Dashboard] Fetching face data for user:', user.id);
 
       try {
-        const { data, error } = await supabase
-          .from('face_data')
-          .select('face_data')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(); // Use maybeSingle instead of single
-
-        if (error) {
-          // Only throw if it's not a "no rows returned" error
-          if (!error.message.includes('JSON object requested, multiple (or no) rows returned')) {
-            throw error;
-          }
-          // If no rows, just set the state accordingly
-          setFaceRegistered(false);
-          setFaceImageUrl(null);
-          setFaceAttributes(null);
-          return;
-        }
-
+        // Use AWS DynamoDB service instead of Supabase
+        console.log('[Dashboard] Fetching face data from DynamoDB...');
+        const data = await getFaceDataForUser(user.id);
+        
         if (data) {
+          console.log('[Dashboard] Face data found:', data);
           setFaceRegistered(true);
-          setFaceAttributes(data.face_data.attributes || null);
-          const { data: { publicUrl } } = supabase.storage
-            .from('face-data')
-            .getPublicUrl(data.face_data.image_path);
-          setFaceImageUrl(publicUrl);
+          
+          if (data.faceId) {
+            console.log('[Dashboard] Found face ID:', data.faceId);
+            setFaceId(data.faceId);
+          } else {
+            console.warn('[Dashboard] No face ID found in data');
+            setFaceId(null);
+          }
+          
+          if (data.faceAttributes) {
+            console.log('[Dashboard] Found face attributes:', data.faceAttributes);
+            setFaceAttributes(data.faceAttributes);
+          } else {
+            console.warn('[Dashboard] No face attributes found in data');
+          }
+          
+          if (data.imageUrl) {
+            console.log('[Dashboard] Found image URL:', data.imageUrl);
+            setFaceImageUrl(data.imageUrl);
+          } else if (data.imagePath) {
+            const imageUrl = `https://shmong.s3.amazonaws.com/face-images/${data.imagePath}`;
+            console.log('[Dashboard] Constructed image URL from path:', imageUrl);
+            setFaceImageUrl(imageUrl);
+          } else {
+            console.warn('[Dashboard] No image URL found in data');
+          }
+          
+          if (data.historicalMatches && data.historicalMatches.length > 0) {
+            console.log('[Dashboard] Found historical matches:', data.historicalMatches.length);
+            setHistoricalMatches(data.historicalMatches);
+          }
         } else {
-          // No data case
+          console.log('[Dashboard] No face data found for user');
           setFaceRegistered(false);
           setFaceImageUrl(null);
           setFaceAttributes(null);
+          setFaceId(null);
+          setHistoricalMatches([]);
         }
       } catch (err) {
-        console.error('Error fetching face data:', err);
+        console.error('[Dashboard] Error fetching face data:', err);
         // Set default state on error
         setFaceRegistered(false);
         setFaceImageUrl(null);
         setFaceAttributes(null);
+        setFaceId(null);
+        setHistoricalMatches([]);
+      } finally {
+        setIsLoadingFaceData(false);
       }
     };
 
     fetchFaceData();
   }, [user]);
 
-  const handleRegistrationSuccess = () => {
+  const handleRegistrationSuccess = (newFaceId, newAttributes, historicalMatches = []) => {
+    console.log('[Dashboard] Face registration successful:', { 
+      faceId: newFaceId, 
+      attributesCount: newAttributes ? Object.keys(newAttributes).length : 0,
+      matchesCount: historicalMatches?.length || 0 
+    });
+    
+    // Debug the raw attribute data
+    console.log('[Dashboard] Raw face attributes received:', newAttributes);
+    
+    // Immediately update the UI with the data we just received
     setFaceRegistered(true);
     setShowRegistrationModal(false);
-    // Refetch face data to get the new image URL and attributes
-    if (user) {
-      supabase
-        .from('face_data')
-        .select('face_data')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle() // Use maybeSingle here too
-        .then(({ data, error }) => {
-          if (!error && data) {
-            setFaceAttributes(data.face_data.attributes || null);
-            const { data: { publicUrl } } = supabase.storage
-              .from('face-data')
-              .getPublicUrl(data.face_data.image_path);
-            setFaceImageUrl(publicUrl);
+    
+    if (newFaceId) {
+      console.log('[Dashboard] Setting faceId:', newFaceId);
+      setFaceId(newFaceId);
+    }
+    
+    if (newAttributes) {
+      console.log('[Dashboard] Setting face attributes directly from registration');
+      setFaceAttributes(newAttributes);
+    }
+    
+    // Handle historical matches if they exist  
+    if (historicalMatches && historicalMatches.length > 0) {
+      console.log('[Dashboard] Setting historical matches:', historicalMatches);
+      console.log('[Dashboard] Match details:', historicalMatches.map(match => ({
+        id: match.id,
+        similarity: match.similarity,
+        imageUrl: match.imageUrl,
+        createdAt: match.createdAt
+      })));
+      setHistoricalMatches(historicalMatches);
+    }
+    
+    // Get the face image URL directly from the webcam or captured image
+    const webcamElement = document.querySelector('video');
+    if (webcamElement) {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = webcamElement.videoWidth;
+        canvas.height = webcamElement.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(webcamElement, 0, 0);
+        const imageUrl = canvas.toDataURL('image/jpeg');
+        console.log('[Dashboard] Created temporary face image URL from webcam');
+        setFaceImageUrl(imageUrl);
+      } catch (e) {
+        console.error('[Dashboard] Error creating face image from webcam:', e);
+        
+        // Fallback to looking for an image element in the face registration modal
+        const capturedImage = document.querySelector('.face-registration img[src^="blob:"]');
+        if (capturedImage) {
+          const img = capturedImage as HTMLImageElement;
+          console.log('[Dashboard] Found captured image in DOM, using as fallback');
+          setFaceImageUrl(img.src);
+        } else {
+          // Final fallback - construct URL from what we know
+          if (newFaceId) {
+            const fallbackUrl = `https://shmong.s3.amazonaws.com/face-images/${user?.id}/${Date.now()}.jpg`;
+            console.log('[Dashboard] Using constructed fallback URL:', fallbackUrl);
+            setFaceImageUrl(fallbackUrl);
           }
-        });
+        }
+      }
     }
   };
 
   const renderFaceAttributes = () => {
     if (!faceAttributes) return null;
+    
+    console.log('[Dashboard] Rendering face attributes:', faceAttributes);
+
+    // Check if we're dealing with AWS Rekognition format (uppercase keys) or our normalized format
+    const isRekognitionFormat = faceAttributes.AgeRange || faceAttributes.Gender;
+    
+    let parsedAttributes: any = { ...faceAttributes };
+    
+    // Convert Rekognition format to our normalized format if needed
+    if (isRekognitionFormat) {
+      console.log('[Dashboard] Converting Rekognition format to normalized format');
+      parsedAttributes = {
+        age: faceAttributes.AgeRange ? { 
+          low: faceAttributes.AgeRange.Low, 
+          high: faceAttributes.AgeRange.High 
+        } : undefined,
+        smile: faceAttributes.Smile ? { 
+          value: faceAttributes.Smile.Value, 
+          confidence: faceAttributes.Smile.Confidence 
+        } : undefined,
+        eyeglasses: faceAttributes.Eyeglasses ? { 
+          value: faceAttributes.Eyeglasses.Value, 
+          confidence: faceAttributes.Eyeglasses.Confidence 
+        } : undefined,
+        sunglasses: faceAttributes.Sunglasses ? { 
+          value: faceAttributes.Sunglasses.Value, 
+          confidence: faceAttributes.Sunglasses.Confidence 
+        } : undefined,
+        gender: faceAttributes.Gender ? { 
+          value: faceAttributes.Gender.Value, 
+          confidence: faceAttributes.Gender.Confidence 
+        } : undefined,
+        eyesOpen: faceAttributes.EyesOpen ? { 
+          value: faceAttributes.EyesOpen.Value, 
+          confidence: faceAttributes.EyesOpen.Confidence 
+        } : undefined,
+        mouthOpen: faceAttributes.MouthOpen ? { 
+          value: faceAttributes.MouthOpen.Value, 
+          confidence: faceAttributes.MouthOpen.Confidence 
+        } : undefined,
+        emotions: faceAttributes.Emotions ? faceAttributes.Emotions.map((e: any) => ({
+          type: e.Type,
+          confidence: e.Confidence
+        })) : undefined
+      };
+    }
 
     // Determine the primary emotion (with the highest confidence)
     const primaryEmotion =
-      faceAttributes.emotions && faceAttributes.emotions.length > 0
-        ? faceAttributes.emotions.reduce((prev, curr) => (prev.confidence > curr.confidence ? prev : curr))
+      parsedAttributes.emotions && parsedAttributes.emotions.length > 0
+        ? parsedAttributes.emotions.reduce((prev: any, curr: any) => (prev.confidence > curr.confidence ? prev : curr))
         : null;
 
+    // Create attributes list - this will work with either normalized format or our converted format
     const attributes = [
       {
         icon: <Smile className="w-4 h-4" />,
         label: "Smile",
-        value: faceAttributes.smile?.value ? "Yes" : "No",
-        confidence: faceAttributes.smile?.confidence || 0
+        value: parsedAttributes.smile?.value ? "Yes" : "No",
+        confidence: parsedAttributes.smile?.confidence || 0
       },
       {
         icon: <Eye className="w-4 h-4" />,
         label: "Eyes Open",
-        value: faceAttributes.eyesOpen?.value ? "Yes" : "No",
-        confidence: faceAttributes.eyesOpen?.confidence || 0
+        value: parsedAttributes.eyesOpen?.value ? "Yes" : "No",
+        confidence: parsedAttributes.eyesOpen?.confidence || 0
       },
       {
         icon: <Ruler className="w-4 h-4" />,
         label: "Age Range",
-        value: `${faceAttributes.age?.low || 0}-${faceAttributes.age?.high || 0}`,
+        value: `${parsedAttributes.age?.low || 0}-${parsedAttributes.age?.high || 0}`,
         confidence: 100
       },
       {
@@ -139,8 +254,8 @@ export const Dashboard = () => {
       {
         icon: <User className="w-4 h-4" />,
         label: "Gender",
-        value: faceAttributes.gender?.value || "Unknown",
-        confidence: faceAttributes.gender?.confidence || 0
+        value: parsedAttributes.gender?.value || "Unknown",
+        confidence: parsedAttributes.gender?.confidence || 0
       }
     ];
 
@@ -166,6 +281,93 @@ export const Dashboard = () => {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderHistoricalMatches = () => {
+    if (!historicalMatches || historicalMatches.length === 0) return null;
+    
+    return (
+      <div className="mt-4">
+        <h4 className="text-sm font-medium text-apple-gray-700 mb-2">Historical Matches</h4>
+        <div className="bg-green-50 p-3 rounded-apple border border-green-200">
+          <p className="text-sm text-green-800">
+            <span className="font-medium">Found you in {historicalMatches.length} existing photo{historicalMatches.length !== 1 ? 's' : ''}!</span>
+          </p>
+          <p className="text-xs text-green-600 mt-1">
+            These photos are viewable in the "My Photos" tab.
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  const renderFaceImageWithAttributes = () => {
+    if (isLoadingFaceData) {
+      return (
+        <div className="flex justify-center items-center py-8">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-apple-blue-500"></div>
+        </div>
+      );
+    }
+
+    // If not loading and not registered, don't show anything
+    if (!faceRegistered && !faceAttributes) {
+      return null;
+    }
+
+    return (
+      <div className="mb-8">
+        <h3 className="text-lg font-medium text-apple-gray-800 mb-4 border-b border-apple-gray-200 pb-2">
+          Your Registered Face
+        </h3>
+        <div className="flex flex-col md:flex-row gap-6">
+          <div className="md:w-1/3">
+            {faceImageUrl ? (
+              <div className="relative aspect-square rounded-apple-xl overflow-hidden border-2 border-apple-blue-200 shadow-md">
+                <img 
+                  src={faceImageUrl} 
+                  alt="Registered face" 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    // Handle image loading errors
+                    console.error('[Dashboard] Error loading face image:', e);
+                    // Set a fallback image or placeholder
+                    e.currentTarget.src = 'https://via.placeholder.com/400?text=Face+Image+Unavailable';
+                    e.currentTarget.classList.add('error-image');
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="relative aspect-square rounded-apple-xl overflow-hidden border-2 border-apple-gray-200 bg-apple-gray-100 shadow-md flex items-center justify-center">
+                <div className="text-center p-4">
+                  <User className="w-16 h-16 mx-auto text-apple-gray-400 mb-2" />
+                  <p className="text-sm text-apple-gray-500">Face image not available</p>
+                </div>
+              </div>
+            )}
+            {faceId && (
+              <div className="mt-2 text-xs text-apple-gray-500 bg-apple-gray-50 p-2 rounded border border-apple-gray-200">
+                <span className="font-medium">Face ID:</span> {faceId.substring(0, 8)}...
+              </div>
+            )}
+          </div>
+          <div className="md:w-2/3">
+            {faceAttributes ? (
+              <>
+                {renderFaceAttributes()}
+                {renderHistoricalMatches()}
+              </>
+            ) : (
+              <div className="p-4 bg-apple-gray-50 rounded-apple border border-apple-gray-200">
+                <p className="text-sm text-apple-gray-500">
+                  Face attributes not available
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -244,21 +446,7 @@ export const Dashboard = () => {
                   : "Get started by registering your face to enable quick authentication and find your photos at events."}
               </p>
 
-              {faceImageUrl && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium text-apple-gray-700 mb-2">Your Registered Face</h3>
-                  <div className="flex flex-col md:flex-row gap-6">
-                    <div className="relative w-full max-w-xs aspect-square rounded-apple-xl overflow-hidden border border-apple-gray-200">
-                      <img 
-                        src={faceImageUrl} 
-                        alt="Registered face" 
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    {renderFaceAttributes()}
-                  </div>
-                </div>
-              )}
+              {renderFaceImageWithAttributes()}
               
               <button
                 onClick={() => setShowRegistrationModal(true)}

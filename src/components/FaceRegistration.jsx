@@ -98,12 +98,22 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
   useEffect(() => {
     const getVideoDevices = async () => {
       try {
+        console.log('[FaceReg] Requesting camera permissions...');
         // First request permission
-        await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         
+        // Important: Store the stream temporarily so it doesn't get garbage collected
+        window.tempStream = stream;
+        
+        console.log('[FaceReg] Camera permission granted, enumerating devices...');
         const devices = await navigator.mediaDevices.enumerateDevices();
         const cameras = devices.filter(device => device.kind === 'videoinput');
-        console.log('[FaceReg] Available cameras:', cameras);
+        
+        console.log('[FaceReg] Available cameras:', cameras.map(c => ({
+          deviceId: c.deviceId.substring(0, 8) + '...',
+          label: c.label || 'Unnamed camera'
+        })));
+        
         setVideoDevices(cameras);
         
         if (cameras.length > 0) {
@@ -124,24 +134,83 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
             // On desktop, use the first camera by default
             setSelectedDeviceId(cameras[0].deviceId);
           }
+          
+          console.log('[FaceReg] Selected camera device:', 
+            cameras.find(c => c.deviceId === (cameras[0].deviceId))?.label || 'Default camera');
         } else {
-          setError('No camera devices found.');
+          console.error('[FaceReg] No camera devices found');
+          setError('No camera devices found. Please check your camera connections and permissions.');
           setStatus('error');
+        }
+        
+        // Clean up the temporary stream
+        if (window.tempStream) {
+          window.tempStream.getTracks().forEach(track => track.stop());
+          window.tempStream = null;
         }
       } catch (err) {
         console.error("[FaceReg] Error accessing media devices:", err);
-        setError('Could not access media devices. Please check permissions.');
+        setError('Could not access media devices. Please check permissions and try again.');
         setStatus('error');
       }
     };
 
     getVideoDevices();
+    
+    // Cleanup function
+    return () => {
+      // Make sure to clean up any temporary streams
+      if (window.tempStream) {
+        window.tempStream.getTracks().forEach(track => track.stop());
+        window.tempStream = null;
+      }
+    };
   }, [isMobile]);
+
+  // Add a manual camera detection function for diagnostics
+  const manualCameraDetection = async () => {
+    try {
+      console.log('[FaceReg] Manual camera detection started...');
+      setError('Detecting cameras, please wait...');
+      
+      // Stop any existing stream
+      if (window.tempStream) {
+        window.tempStream.getTracks().forEach(track => track.stop());
+        window.tempStream = null;
+      }
+      
+      // Try to get access with explicit permission request
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: 1280, height: 720 } 
+      });
+      
+      window.tempStream = stream;
+      
+      // Force a re-enumeration of devices
+      const refreshedDevices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = refreshedDevices.filter(device => device.kind === 'videoinput');
+      
+      console.log('[FaceReg] Manual detection found cameras:', cameras);
+      setVideoDevices(cameras);
+      
+      if (cameras.length > 0) {
+        setSelectedDeviceId(cameras[0].deviceId);
+        setError(null);
+        setStatus('idle');
+      } else {
+        setError('No cameras found even after manual detection.');
+      }
+    } catch (err) {
+      console.error('[FaceReg] Manual camera detection error:', err);
+      setError(`Camera detection failed: ${err.message}`);
+    }
+  };
 
   // Updated video constraints based on selected device
   const videoConstraints = {
-    width: 640,
-    height: 480,
+    width: { ideal: 640 },
+    height: { ideal: 480 },
+    facingMode: isMobile ? "user" : undefined,
     deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined
   };
 
@@ -198,9 +267,26 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
     setHistoricalMatches([]);
     setMatchCount(0);
     console.log('[FaceReg] Starting AWS face registration process...');
+    console.log('[FaceReg] User ID:', user.id);
+    console.log('[FaceReg] Image blob size:', blobToProcess.size, 'bytes');
 
     try {
       console.log('[FaceReg] Indexing face with AWS Rekognition & saving to DB...');
+      // Ensure we're passing a valid image blob
+      if (!(blobToProcess instanceof Blob)) {
+        console.warn('[FaceReg] Image is not a Blob, attempting to convert...');
+        // Try to convert to Blob if needed
+        if (typeof blobToProcess === 'string' && blobToProcess.startsWith('data:')) {
+          // Convert base64 to Blob
+          const response = await fetch(blobToProcess);
+          blobToProcess = await response.blob();
+        } else {
+          throw new Error('Invalid image format for registration');
+        }
+      }
+      
+      console.log(`[FaceReg] Image blob ready for processing: ${blobToProcess.size} bytes, type: ${blobToProcess.type}`);
+      
       // This is the key function that handles face registration and historical matching
       const result = await indexFace(user.id, blobToProcess);
 
@@ -219,29 +305,63 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
       // Handle historical matches if they exist
       if (result.historicalMatches && result.historicalMatches.length > 0) {
         console.log('[FaceReg] Historical matches found:', result.historicalMatches.length);
+        console.log('[FaceReg] Historical match details:', JSON.stringify(result.historicalMatches, null, 2));
         setHistoricalMatches(result.historicalMatches);
         setMatchCount(result.historicalMatches.length);
+      } else {
+        console.log('[FaceReg] No historical matches found');
       }
 
-      const imageUrl = URL.createObjectURL(blobToProcess);
-      setRegisteredImageUrl(imageUrl);
-      setStatus('success');
+      // Create a URL for the blob to display on success
+      if (blobToProcess instanceof Blob) {
+        console.log('[FaceReg] Creating URL for blob to display');
+        const imageUrl = URL.createObjectURL(blobToProcess);
+        setRegisteredImageUrl(imageUrl);
+        console.log('[FaceReg] Image URL created:', imageUrl);
+      } else {
+        console.warn('[FaceReg] Could not create URL for image - not a Blob');
+      }
 
-      console.log('[FaceReg] AWS Face registration complete!');
+      setStatus('success');
+      console.log('[FaceReg] Registration status updated to success');
 
       if (updateUserFaceData) {
-        setTimeout(() => {
-          updateUserFaceData(result.faceId, result.faceAttributes, result.historicalMatches);
-        }, 100);
+        try {
+          console.log('[FaceReg] Updating user face data in AuthContext with:', {
+            faceId: result.faceId,
+            attributesLength: result.faceAttributes ? Object.keys(result.faceAttributes).length : 0,
+            historicalMatches: result.historicalMatches?.length || 0
+          });
+          
+          // Call the updateUserFaceData function with all available data
+          await updateUserFaceData(
+            result.faceId, 
+            result.faceAttributes, 
+            result.historicalMatches || []
+          );
+          
+          console.log('[FaceReg] User face data updated successfully in AuthContext');
+        } catch (updateError) {
+          console.error('[FaceReg] Error updating user face data:', updateError);
+          // Continue with success flow even if there was an error updating user data
+        }
       } else {
         console.warn('[FaceReg] updateUserFaceData function not found in AuthContext');
       }
       
       // Notify parent about successful registration
       if (onSuccess) {
-        setTimeout(() => {
-          onSuccess(result.faceId, result.faceAttributes, result.historicalMatches);
-        }, 500);
+        console.log('[FaceReg] Sending face data to Dashboard:', {
+          faceId: result.faceId,
+          attributesSize: result.faceAttributes ? Object.keys(result.faceAttributes).length : 0,
+          matches: result.historicalMatches ? result.historicalMatches.length : 0
+        });
+        
+        onSuccess(
+          result.faceId, 
+          result.faceAttributes,
+          result.historicalMatches || []
+        );
       }
 
     } catch (err) {
@@ -408,6 +528,74 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
         </div>
         
         <div className="p-6">
+          {/* WEBCAM SELECTOR - ALWAYS DISPLAYED AT THE TOP */}
+          <div className="mb-6 p-4 bg-blue-100 rounded-lg border-2 border-blue-400 shadow-md">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-base font-semibold text-blue-800 flex items-center">
+                <Video className="w-5 h-5 mr-2 text-blue-700" />
+                Select Camera Device
+              </h3>
+              {videoDevices.length > 0 && (
+                <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded-full">
+                  {videoDevices.length} camera(s) found
+                </span>
+              )}
+            </div>
+            
+            {videoDevices.length > 0 ? (
+              <div className="mb-2">
+                <select 
+                  id="cameraSelect"
+                  value={selectedDeviceId}
+                  onChange={handleCameraChange}
+                  className="block w-full p-3 border border-blue-400 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                  aria-label="Select camera device"
+                >
+                  {videoDevices.map(device => (
+                    <option key={device.deviceId} value={device.deviceId}>
+                      {device.label || `Camera ${videoDevices.indexOf(device) + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-3">
+                <p className="text-sm text-red-600 font-medium flex items-center">
+                  <AlertCircle className="w-4 h-4 mr-2" />
+                  No camera devices detected
+                </p>
+                <p className="text-xs text-red-500 mt-1">
+                  Please check your camera connections and browser permissions
+                </p>
+              </div>
+            )}
+            
+            <div className="flex items-center justify-between mt-2 mb-2">
+              <button 
+                onClick={manualCameraDetection}
+                className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors flex items-center"
+              >
+                <Camera className="w-3 h-3 mr-1" />
+                Detect Cameras Manually
+              </button>
+              
+              {selectedDeviceId && (
+                <div className="text-xs text-blue-600">
+                  Active camera ID: {selectedDeviceId.substring(0, 6)}...
+                </div>
+              )}
+            </div>
+            
+            <div className="text-xs bg-white p-2 rounded border border-blue-200 text-blue-800">
+              <p><strong>Camera Troubleshooting:</strong></p>
+              <ol className="list-decimal pl-4 mt-1 space-y-1">
+                <li>Make sure your webcam is connected and not being used by another application</li>
+                <li>Allow camera permissions when prompted by your browser</li>
+                <li>Try refreshing the page or restarting your browser</li>
+              </ol>
+            </div>
+          </div>
+
           {status === 'error' && (
             <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6 rounded-r">
               <div className="flex">
@@ -423,34 +611,6 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
           
           <div className="flex flex-col md:flex-row gap-6">
             <div className="flex-1">
-              {/* Camera Selection Dropdown - Made more prominent */}
-              {videoDevices.length > 0 && status !== 'success' && (
-                <div className="mb-4 p-3 bg-blue-50 rounded-apple border border-blue-200">
-                  <label htmlFor="cameraSelect" className="block text-sm font-medium text-blue-700 mb-2 flex items-center">
-                    <Video className="w-4 h-4 mr-1 text-blue-600" />
-                    Select Camera Device:
-                  </label>
-                  <select 
-                    id="cameraSelect"
-                    value={selectedDeviceId}
-                    onChange={handleCameraChange}
-                    className="block w-full p-2 border border-blue-300 rounded-apple shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
-                    aria-label="Select camera device"
-                  >
-                    {videoDevices.map(device => (
-                      <option key={device.deviceId} value={device.deviceId}>
-                        {device.label || `Camera ${videoDevices.indexOf(device) + 1}`}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-xs text-blue-600">
-                    {videoDevices.length === 1 
-                      ? "Only one camera detected" 
-                      : `${videoDevices.length} cameras available`}
-                  </p>
-                </div>
-              )}
-
               <div className="relative aspect-video bg-black rounded-apple-lg overflow-hidden border border-apple-gray-300 shadow-inner">
                 {status === 'success' && registeredImageUrl ? (
                   <img src={registeredImageUrl} alt="Registered Face" className="w-full h-full object-cover" />

@@ -5,6 +5,7 @@ import {
   signOut as awsSignOut, 
   onAuthStateChange 
 } from '../services/awsAuthService';
+import { storeFaceId } from '../services/FaceStorageService';
 
 // Create context
 const AuthContext = createContext(null);
@@ -74,9 +75,14 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // --- ADD Function to update face data in user state ---
-  const updateUserFaceData = useCallback((faceId, attributes) => {
-    console.log('[AuthContext] Updating user state with new face data:', { faceId, attributes });
+  // Enhanced function to update face data in user state and persist to database
+  const updateUserFaceData = useCallback(async (faceId, attributes, historicalMatches = []) => {
+    console.log('[AuthContext] Updating user state with new face data:', { 
+      faceId: faceId, 
+      attributesCount: attributes ? Object.keys(attributes).length : 0 
+    });
+    
+    // First update the user state for immediate UI feedback
     setUser(currentUser => {
       if (!currentUser) return null; // Should not happen if called after login
       const updatedUser = {
@@ -84,13 +90,28 @@ export const AuthProvider = ({ children }) => {
         faceId: faceId, // Add/Update faceId
         faceAttributes: attributes // Add/Update attributes
       };
-      // Log the attributes specifically after setting them in context
       console.log('[AuthContext] User faceAttributes after update:', JSON.stringify(updatedUser.faceAttributes, null, 2));
       return updatedUser;
     });
-    // Optional: Consider triggering a background refetch from DB here if needed
-    // for absolute consistency, but updating context state directly is faster for UI.
-  }, []); // No dependencies needed if only using setUser
+    
+    // Then persist the data to DynamoDB to ensure it's available after sign-out/sign-in
+    try {
+      if (user?.id && faceId) {
+        console.log('[AuthContext] Persisting face data to DynamoDB for user:', user.id);
+        const storageResult = await storeFaceId(user.id, faceId, attributes);
+        
+        if (storageResult.success) {
+          console.log('[AuthContext] Face data successfully stored in DynamoDB. Image URL:', storageResult.imageUrl);
+        } else {
+          console.error('[AuthContext] Error storing face data in DynamoDB:', storageResult.error);
+          // Even if DynamoDB storage fails, we've already updated the local state
+          // so the UI will show the face data for the current session
+        }
+      }
+    } catch (error) {
+      console.error('[AuthContext] Exception storing face data:', error);
+    }
+  }, [user]); // Now depends on user for the ID
 
   // Auth context value
   const value = {
