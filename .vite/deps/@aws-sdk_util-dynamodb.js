@@ -11,8 +11,8 @@ import {
   convertToNative,
   marshall,
   unmarshall
-} from "./chunk-3XGQZKZ2.js";
-import "./chunk-TJZ7TNHW.js";
+} from "./chunk-BP2VP2DT.js";
+import "./chunk-GJFZQ5ET.js";
 export {
   NumberValue as NumberValueImpl,
   convertToAttr,
@@ -20,4 +20,3 @@ export {
   marshall,
   unmarshall
 };
-//# sourceMappingURL=@aws-sdk_util-dynamodb.js.map

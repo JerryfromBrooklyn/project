@@ -16,12 +16,12 @@ import {
   getValidateBucketNamePlugin,
   resolveS3Config,
   signatureV4CrtContainer
-} from "./chunk-63DTDML4.js";
+} from "./chunk-XAMNCCZR.js";
 import {
   WaiterState,
   checkExceptions,
   createWaiter
-} from "./chunk-P4Q54ZJD.js";
+} from "./chunk-ZCIX2HLB.js";
 import {
   DEFAULT_MAX_ATTEMPTS,
   DEFAULT_RETRY_MODE,
@@ -31,6 +31,7 @@ import {
   Sha256,
   awsEndpointFunctions,
   calculateBodyLength,
+  convertToBuffer,
   createDefaultUserAgentProvider,
   customEndpointFunctions,
   getAwsRegionExtensionConfiguration,
@@ -41,7 +42,9 @@ import {
   getRetryPlugin,
   getUserAgentPlugin,
   invalidProvider,
+  isEmptyData,
   locateWindow,
+  numToUint8,
   resolveAwsRegionExtensionConfiguration,
   resolveDefaultsModeConfig,
   resolveEndpoint,
@@ -49,9 +52,15 @@ import {
   resolveRegionConfig,
   resolveRetryConfig,
   resolveUserAgentConfig,
-  supportsWebCrypto
-} from "./chunk-7HCX43OA.js";
-import "./chunk-3MNGUTHY.js";
+  supportsWebCrypto,
+  uint32ArrayFrom
+} from "./chunk-V333OXM4.js";
+import "./chunk-3TAN77E7.js";
+import {
+  __awaiter,
+  __generator,
+  __values
+} from "./chunk-W2ANHD2T.js";
 import {
   AwsSdkSigV4ASigner,
   AwsSdkSigV4Signer,
@@ -118,24 +127,24 @@ import {
   toUint8Array,
   toUtf8,
   withBaseException
-} from "./chunk-N6DQ7J7M.js";
+} from "./chunk-WLALPDKA.js";
 import {
   __publicField,
   __toESM,
   require_dist,
   require_dist2,
   require_dist3
-} from "./chunk-TJZ7TNHW.js";
+} from "./chunk-GJFZQ5ET.js";
 
 // node_modules/@aws-sdk/client-s3/dist-es/index.js
-var import_dist661 = __toESM(require_dist());
-var import_dist662 = __toESM(require_dist2());
-var import_dist663 = __toESM(require_dist3());
+var import_dist586 = __toESM(require_dist());
+var import_dist587 = __toESM(require_dist2());
+var import_dist588 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-s3/dist-es/S3Client.js
-var import_dist319 = __toESM(require_dist());
-var import_dist320 = __toESM(require_dist2());
-var import_dist321 = __toESM(require_dist3());
+var import_dist244 = __toESM(require_dist());
+var import_dist245 = __toESM(require_dist2());
+var import_dist246 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/middleware-expect-continue/dist-es/index.js
 var import_dist = __toESM(require_dist());
@@ -172,9 +181,9 @@ var getAddExpectContinuePlugin = (options) => ({
 });
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/index.js
-var import_dist145 = __toESM(require_dist());
-var import_dist146 = __toESM(require_dist2());
-var import_dist147 = __toESM(require_dist3());
+var import_dist85 = __toESM(require_dist());
+var import_dist86 = __toESM(require_dist2());
+var import_dist87 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/NODE_REQUEST_CHECKSUM_CALCULATION_CONFIG_OPTIONS.js
 var import_dist10 = __toESM(require_dist());
@@ -235,9 +244,9 @@ var crc64NvmeCrtContainer = {
 };
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/flexibleChecksumsMiddleware.js
-var import_dist118 = __toESM(require_dist());
-var import_dist119 = __toESM(require_dist2());
-var import_dist120 = __toESM(require_dist3());
+var import_dist58 = __toESM(require_dist());
+var import_dist59 = __toESM(require_dist2());
+var import_dist60 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/getChecksumAlgorithmForRequest.js
 var import_dist22 = __toESM(require_dist());
@@ -319,229 +328,19 @@ var import_dist36 = __toESM(require_dist3());
 var isStreaming = (body) => body !== void 0 && typeof body !== "string" && !ArrayBuffer.isView(body) && !isArrayBuffer(body);
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/selectChecksumAlgorithmFunction.js
-var import_dist112 = __toESM(require_dist());
-var import_dist113 = __toESM(require_dist2());
-var import_dist114 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/crc32c/build/module/index.js
-var import_dist70 = __toESM(require_dist());
-var import_dist71 = __toESM(require_dist2());
-var import_dist72 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/crc32c/node_modules/tslib/tslib.es6.mjs
-var import_dist37 = __toESM(require_dist(), 1);
-var import_dist38 = __toESM(require_dist2(), 1);
-var import_dist39 = __toESM(require_dist3(), 1);
-function __awaiter(thisArg, _arguments, P2, generator) {
-  function adopt(value) {
-    return value instanceof P2 ? value : new P2(function(resolve) {
-      resolve(value);
-    });
-  }
-  return new (P2 || (P2 = Promise))(function(resolve, reject) {
-    function fulfilled(value) {
-      try {
-        step(generator.next(value));
-      } catch (e2) {
-        reject(e2);
-      }
-    }
-    function rejected(value) {
-      try {
-        step(generator["throw"](value));
-      } catch (e2) {
-        reject(e2);
-      }
-    }
-    function step(result) {
-      result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-    }
-    step((generator = generator.apply(thisArg, _arguments || [])).next());
-  });
-}
-function __generator(thisArg, body) {
-  var _ = { label: 0, sent: function() {
-    if (t2[0] & 1)
-      throw t2[1];
-    return t2[1];
-  }, trys: [], ops: [] }, f2, y2, t2, g2 = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
-  return g2.next = verb(0), g2["throw"] = verb(1), g2["return"] = verb(2), typeof Symbol === "function" && (g2[Symbol.iterator] = function() {
-    return this;
-  }), g2;
-  function verb(n2) {
-    return function(v2) {
-      return step([n2, v2]);
-    };
-  }
-  function step(op) {
-    if (f2)
-      throw new TypeError("Generator is already executing.");
-    while (g2 && (g2 = 0, op[0] && (_ = 0)), _)
-      try {
-        if (f2 = 1, y2 && (t2 = op[0] & 2 ? y2["return"] : op[0] ? y2["throw"] || ((t2 = y2["return"]) && t2.call(y2), 0) : y2.next) && !(t2 = t2.call(y2, op[1])).done)
-          return t2;
-        if (y2 = 0, t2)
-          op = [op[0] & 2, t2.value];
-        switch (op[0]) {
-          case 0:
-          case 1:
-            t2 = op;
-            break;
-          case 4:
-            _.label++;
-            return { value: op[1], done: false };
-          case 5:
-            _.label++;
-            y2 = op[1];
-            op = [0];
-            continue;
-          case 7:
-            op = _.ops.pop();
-            _.trys.pop();
-            continue;
-          default:
-            if (!(t2 = _.trys, t2 = t2.length > 0 && t2[t2.length - 1]) && (op[0] === 6 || op[0] === 2)) {
-              _ = 0;
-              continue;
-            }
-            if (op[0] === 3 && (!t2 || op[1] > t2[0] && op[1] < t2[3])) {
-              _.label = op[1];
-              break;
-            }
-            if (op[0] === 6 && _.label < t2[1]) {
-              _.label = t2[1];
-              t2 = op;
-              break;
-            }
-            if (t2 && _.label < t2[2]) {
-              _.label = t2[2];
-              _.ops.push(op);
-              break;
-            }
-            if (t2[2])
-              _.ops.pop();
-            _.trys.pop();
-            continue;
-        }
-        op = body.call(thisArg, _);
-      } catch (e2) {
-        op = [6, e2];
-        y2 = 0;
-      } finally {
-        f2 = t2 = 0;
-      }
-    if (op[0] & 5)
-      throw op[1];
-    return { value: op[0] ? op[1] : void 0, done: true };
-  }
-}
-function __values(o2) {
-  var s2 = typeof Symbol === "function" && Symbol.iterator, m2 = s2 && o2[s2], i2 = 0;
-  if (m2)
-    return m2.call(o2);
-  if (o2 && typeof o2.length === "number")
-    return {
-      next: function() {
-        if (o2 && i2 >= o2.length)
-          o2 = void 0;
-        return { value: o2 && o2[i2++], done: !o2 };
-      }
-    };
-  throw new TypeError(s2 ? "Object is not iterable." : "Symbol.iterator is not defined.");
-}
-
-// node_modules/@aws-crypto/crc32c/node_modules/@aws-crypto/util/build/module/index.js
-var import_dist64 = __toESM(require_dist());
-var import_dist65 = __toESM(require_dist2());
-var import_dist66 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/crc32c/node_modules/@aws-crypto/util/build/module/convertToBuffer.js
 var import_dist52 = __toESM(require_dist());
 var import_dist53 = __toESM(require_dist2());
 var import_dist54 = __toESM(require_dist3());
 
-// node_modules/@aws-crypto/crc32c/node_modules/@smithy/util-utf8/dist-es/index.js
-var import_dist49 = __toESM(require_dist());
-var import_dist50 = __toESM(require_dist2());
-var import_dist51 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/crc32c/node_modules/@smithy/util-utf8/dist-es/fromUtf8.browser.js
+// node_modules/@aws-crypto/crc32c/build/module/index.js
 var import_dist40 = __toESM(require_dist());
 var import_dist41 = __toESM(require_dist2());
 var import_dist42 = __toESM(require_dist3());
-var fromUtf82 = (input) => new TextEncoder().encode(input);
-
-// node_modules/@aws-crypto/crc32c/node_modules/@smithy/util-utf8/dist-es/toUint8Array.js
-var import_dist43 = __toESM(require_dist());
-var import_dist44 = __toESM(require_dist2());
-var import_dist45 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/crc32c/node_modules/@smithy/util-utf8/dist-es/toUtf8.browser.js
-var import_dist46 = __toESM(require_dist());
-var import_dist47 = __toESM(require_dist2());
-var import_dist48 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/crc32c/node_modules/@aws-crypto/util/build/module/convertToBuffer.js
-var fromUtf83 = typeof Buffer !== "undefined" && Buffer.from ? function(input) {
-  return Buffer.from(input, "utf8");
-} : fromUtf82;
-function convertToBuffer(data) {
-  if (data instanceof Uint8Array)
-    return data;
-  if (typeof data === "string") {
-    return fromUtf83(data);
-  }
-  if (ArrayBuffer.isView(data)) {
-    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength / Uint8Array.BYTES_PER_ELEMENT);
-  }
-  return new Uint8Array(data);
-}
-
-// node_modules/@aws-crypto/crc32c/node_modules/@aws-crypto/util/build/module/isEmptyData.js
-var import_dist55 = __toESM(require_dist());
-var import_dist56 = __toESM(require_dist2());
-var import_dist57 = __toESM(require_dist3());
-function isEmptyData(data) {
-  if (typeof data === "string") {
-    return data.length === 0;
-  }
-  return data.byteLength === 0;
-}
-
-// node_modules/@aws-crypto/crc32c/node_modules/@aws-crypto/util/build/module/numToUint8.js
-var import_dist58 = __toESM(require_dist());
-var import_dist59 = __toESM(require_dist2());
-var import_dist60 = __toESM(require_dist3());
-function numToUint8(num) {
-  return new Uint8Array([
-    (num & 4278190080) >> 24,
-    (num & 16711680) >> 16,
-    (num & 65280) >> 8,
-    num & 255
-  ]);
-}
-
-// node_modules/@aws-crypto/crc32c/node_modules/@aws-crypto/util/build/module/uint32ArrayFrom.js
-var import_dist61 = __toESM(require_dist());
-var import_dist62 = __toESM(require_dist2());
-var import_dist63 = __toESM(require_dist3());
-function uint32ArrayFrom(a_lookUpTable2) {
-  if (!Uint32Array.from) {
-    var return_array = new Uint32Array(a_lookUpTable2.length);
-    var a_index = 0;
-    while (a_index < a_lookUpTable2.length) {
-      return_array[a_index] = a_lookUpTable2[a_index];
-      a_index += 1;
-    }
-    return return_array;
-  }
-  return Uint32Array.from(a_lookUpTable2);
-}
 
 // node_modules/@aws-crypto/crc32c/build/module/aws_crc32c.js
-var import_dist67 = __toESM(require_dist());
-var import_dist68 = __toESM(require_dist2());
-var import_dist69 = __toESM(require_dist3());
+var import_dist37 = __toESM(require_dist());
+var import_dist38 = __toESM(require_dist2());
+var import_dist39 = __toESM(require_dist3());
 var AwsCrc32c = (
   /** @class */
   function() {
@@ -585,11 +384,9 @@ var Crc32c = (
         e_1 = { error: e_1_1 };
       } finally {
         try {
-          if (data_1_1 && !data_1_1.done && (_a2 = data_1.return))
-            _a2.call(data_1);
+          if (data_1_1 && !data_1_1.done && (_a2 = data_1.return)) _a2.call(data_1);
         } finally {
-          if (e_1)
-            throw e_1.error;
+          if (e_1) throw e_1.error;
         }
       }
       return this;
@@ -861,229 +658,19 @@ var a_lookupTable = [
 var lookupTable = uint32ArrayFrom(a_lookupTable);
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/getCrc32ChecksumAlgorithmFunction.browser.js
-var import_dist109 = __toESM(require_dist());
-var import_dist110 = __toESM(require_dist2());
-var import_dist111 = __toESM(require_dist3());
+var import_dist49 = __toESM(require_dist());
+var import_dist50 = __toESM(require_dist2());
+var import_dist51 = __toESM(require_dist3());
 
 // node_modules/@aws-crypto/crc32/build/module/index.js
-var import_dist106 = __toESM(require_dist());
-var import_dist107 = __toESM(require_dist2());
-var import_dist108 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/crc32/node_modules/tslib/tslib.es6.mjs
-var import_dist73 = __toESM(require_dist(), 1);
-var import_dist74 = __toESM(require_dist2(), 1);
-var import_dist75 = __toESM(require_dist3(), 1);
-function __awaiter2(thisArg, _arguments, P2, generator) {
-  function adopt(value) {
-    return value instanceof P2 ? value : new P2(function(resolve) {
-      resolve(value);
-    });
-  }
-  return new (P2 || (P2 = Promise))(function(resolve, reject) {
-    function fulfilled(value) {
-      try {
-        step(generator.next(value));
-      } catch (e2) {
-        reject(e2);
-      }
-    }
-    function rejected(value) {
-      try {
-        step(generator["throw"](value));
-      } catch (e2) {
-        reject(e2);
-      }
-    }
-    function step(result) {
-      result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
-    }
-    step((generator = generator.apply(thisArg, _arguments || [])).next());
-  });
-}
-function __generator2(thisArg, body) {
-  var _ = { label: 0, sent: function() {
-    if (t2[0] & 1)
-      throw t2[1];
-    return t2[1];
-  }, trys: [], ops: [] }, f2, y2, t2, g2 = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
-  return g2.next = verb(0), g2["throw"] = verb(1), g2["return"] = verb(2), typeof Symbol === "function" && (g2[Symbol.iterator] = function() {
-    return this;
-  }), g2;
-  function verb(n2) {
-    return function(v2) {
-      return step([n2, v2]);
-    };
-  }
-  function step(op) {
-    if (f2)
-      throw new TypeError("Generator is already executing.");
-    while (g2 && (g2 = 0, op[0] && (_ = 0)), _)
-      try {
-        if (f2 = 1, y2 && (t2 = op[0] & 2 ? y2["return"] : op[0] ? y2["throw"] || ((t2 = y2["return"]) && t2.call(y2), 0) : y2.next) && !(t2 = t2.call(y2, op[1])).done)
-          return t2;
-        if (y2 = 0, t2)
-          op = [op[0] & 2, t2.value];
-        switch (op[0]) {
-          case 0:
-          case 1:
-            t2 = op;
-            break;
-          case 4:
-            _.label++;
-            return { value: op[1], done: false };
-          case 5:
-            _.label++;
-            y2 = op[1];
-            op = [0];
-            continue;
-          case 7:
-            op = _.ops.pop();
-            _.trys.pop();
-            continue;
-          default:
-            if (!(t2 = _.trys, t2 = t2.length > 0 && t2[t2.length - 1]) && (op[0] === 6 || op[0] === 2)) {
-              _ = 0;
-              continue;
-            }
-            if (op[0] === 3 && (!t2 || op[1] > t2[0] && op[1] < t2[3])) {
-              _.label = op[1];
-              break;
-            }
-            if (op[0] === 6 && _.label < t2[1]) {
-              _.label = t2[1];
-              t2 = op;
-              break;
-            }
-            if (t2 && _.label < t2[2]) {
-              _.label = t2[2];
-              _.ops.push(op);
-              break;
-            }
-            if (t2[2])
-              _.ops.pop();
-            _.trys.pop();
-            continue;
-        }
-        op = body.call(thisArg, _);
-      } catch (e2) {
-        op = [6, e2];
-        y2 = 0;
-      } finally {
-        f2 = t2 = 0;
-      }
-    if (op[0] & 5)
-      throw op[1];
-    return { value: op[0] ? op[1] : void 0, done: true };
-  }
-}
-function __values2(o2) {
-  var s2 = typeof Symbol === "function" && Symbol.iterator, m2 = s2 && o2[s2], i2 = 0;
-  if (m2)
-    return m2.call(o2);
-  if (o2 && typeof o2.length === "number")
-    return {
-      next: function() {
-        if (o2 && i2 >= o2.length)
-          o2 = void 0;
-        return { value: o2 && o2[i2++], done: !o2 };
-      }
-    };
-  throw new TypeError(s2 ? "Object is not iterable." : "Symbol.iterator is not defined.");
-}
-
-// node_modules/@aws-crypto/crc32/node_modules/@aws-crypto/util/build/module/index.js
-var import_dist100 = __toESM(require_dist());
-var import_dist101 = __toESM(require_dist2());
-var import_dist102 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/crc32/node_modules/@aws-crypto/util/build/module/convertToBuffer.js
-var import_dist88 = __toESM(require_dist());
-var import_dist89 = __toESM(require_dist2());
-var import_dist90 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/crc32/node_modules/@smithy/util-utf8/dist-es/index.js
-var import_dist85 = __toESM(require_dist());
-var import_dist86 = __toESM(require_dist2());
-var import_dist87 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/crc32/node_modules/@smithy/util-utf8/dist-es/fromUtf8.browser.js
-var import_dist76 = __toESM(require_dist());
-var import_dist77 = __toESM(require_dist2());
-var import_dist78 = __toESM(require_dist3());
-var fromUtf84 = (input) => new TextEncoder().encode(input);
-
-// node_modules/@aws-crypto/crc32/node_modules/@smithy/util-utf8/dist-es/toUint8Array.js
-var import_dist79 = __toESM(require_dist());
-var import_dist80 = __toESM(require_dist2());
-var import_dist81 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/crc32/node_modules/@smithy/util-utf8/dist-es/toUtf8.browser.js
-var import_dist82 = __toESM(require_dist());
-var import_dist83 = __toESM(require_dist2());
-var import_dist84 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/crc32/node_modules/@aws-crypto/util/build/module/convertToBuffer.js
-var fromUtf85 = typeof Buffer !== "undefined" && Buffer.from ? function(input) {
-  return Buffer.from(input, "utf8");
-} : fromUtf84;
-function convertToBuffer2(data) {
-  if (data instanceof Uint8Array)
-    return data;
-  if (typeof data === "string") {
-    return fromUtf85(data);
-  }
-  if (ArrayBuffer.isView(data)) {
-    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength / Uint8Array.BYTES_PER_ELEMENT);
-  }
-  return new Uint8Array(data);
-}
-
-// node_modules/@aws-crypto/crc32/node_modules/@aws-crypto/util/build/module/isEmptyData.js
-var import_dist91 = __toESM(require_dist());
-var import_dist92 = __toESM(require_dist2());
-var import_dist93 = __toESM(require_dist3());
-function isEmptyData2(data) {
-  if (typeof data === "string") {
-    return data.length === 0;
-  }
-  return data.byteLength === 0;
-}
-
-// node_modules/@aws-crypto/crc32/node_modules/@aws-crypto/util/build/module/numToUint8.js
-var import_dist94 = __toESM(require_dist());
-var import_dist95 = __toESM(require_dist2());
-var import_dist96 = __toESM(require_dist3());
-function numToUint82(num) {
-  return new Uint8Array([
-    (num & 4278190080) >> 24,
-    (num & 16711680) >> 16,
-    (num & 65280) >> 8,
-    num & 255
-  ]);
-}
-
-// node_modules/@aws-crypto/crc32/node_modules/@aws-crypto/util/build/module/uint32ArrayFrom.js
-var import_dist97 = __toESM(require_dist());
-var import_dist98 = __toESM(require_dist2());
-var import_dist99 = __toESM(require_dist3());
-function uint32ArrayFrom2(a_lookUpTable2) {
-  if (!Uint32Array.from) {
-    var return_array = new Uint32Array(a_lookUpTable2.length);
-    var a_index = 0;
-    while (a_index < a_lookUpTable2.length) {
-      return_array[a_index] = a_lookUpTable2[a_index];
-      a_index += 1;
-    }
-    return return_array;
-  }
-  return Uint32Array.from(a_lookUpTable2);
-}
+var import_dist46 = __toESM(require_dist());
+var import_dist47 = __toESM(require_dist2());
+var import_dist48 = __toESM(require_dist3());
 
 // node_modules/@aws-crypto/crc32/build/module/aws_crc32.js
-var import_dist103 = __toESM(require_dist());
-var import_dist104 = __toESM(require_dist2());
-var import_dist105 = __toESM(require_dist3());
+var import_dist43 = __toESM(require_dist());
+var import_dist44 = __toESM(require_dist2());
+var import_dist45 = __toESM(require_dist3());
 var AwsCrc32 = (
   /** @class */
   function() {
@@ -1091,14 +678,14 @@ var AwsCrc32 = (
       this.crc32 = new Crc32();
     }
     AwsCrc322.prototype.update = function(toHash) {
-      if (isEmptyData2(toHash))
+      if (isEmptyData(toHash))
         return;
-      this.crc32.update(convertToBuffer2(toHash));
+      this.crc32.update(convertToBuffer(toHash));
     };
     AwsCrc322.prototype.digest = function() {
-      return __awaiter2(this, void 0, void 0, function() {
-        return __generator2(this, function(_a2) {
-          return [2, numToUint82(this.crc32.digest())];
+      return __awaiter(this, void 0, void 0, function() {
+        return __generator(this, function(_a2) {
+          return [2, numToUint8(this.crc32.digest())];
         });
       });
     };
@@ -1119,7 +706,7 @@ var Crc32 = (
     Crc322.prototype.update = function(data) {
       var e_1, _a2;
       try {
-        for (var data_1 = __values2(data), data_1_1 = data_1.next(); !data_1_1.done; data_1_1 = data_1.next()) {
+        for (var data_1 = __values(data), data_1_1 = data_1.next(); !data_1_1.done; data_1_1 = data_1.next()) {
           var byte = data_1_1.value;
           this.checksum = this.checksum >>> 8 ^ lookupTable2[(this.checksum ^ byte) & 255];
         }
@@ -1127,11 +714,9 @@ var Crc32 = (
         e_1 = { error: e_1_1 };
       } finally {
         try {
-          if (data_1_1 && !data_1_1.done && (_a2 = data_1.return))
-            _a2.call(data_1);
+          if (data_1_1 && !data_1_1.done && (_a2 = data_1.return)) _a2.call(data_1);
         } finally {
-          if (e_1)
-            throw e_1.error;
+          if (e_1) throw e_1.error;
         }
       }
       return this;
@@ -1400,7 +985,7 @@ var a_lookUpTable = [
   1510334235,
   755167117
 ];
-var lookupTable2 = uint32ArrayFrom2(a_lookUpTable);
+var lookupTable2 = uint32ArrayFrom(a_lookUpTable);
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/getCrc32ChecksumAlgorithmFunction.browser.js
 var getCrc32ChecksumAlgorithmFunction = () => AwsCrc32;
@@ -1431,9 +1016,9 @@ For more information please go to https://github.com/aws/aws-sdk-js-v3#functiona
 };
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/stringHasher.js
-var import_dist115 = __toESM(require_dist());
-var import_dist116 = __toESM(require_dist2());
-var import_dist117 = __toESM(require_dist3());
+var import_dist55 = __toESM(require_dist());
+var import_dist56 = __toESM(require_dist2());
+var import_dist57 = __toESM(require_dist3());
 var stringHasher = (checksumAlgorithmFn, body) => {
   const hash = new checksumAlgorithmFn();
   hash.update(toUint8Array(body || ""));
@@ -1534,14 +1119,14 @@ var flexibleChecksumsMiddleware = (config, middlewareConfig) => (next, context) 
 };
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/getFlexibleChecksumsPlugin.js
-var import_dist139 = __toESM(require_dist());
-var import_dist140 = __toESM(require_dist2());
-var import_dist141 = __toESM(require_dist3());
+var import_dist79 = __toESM(require_dist());
+var import_dist80 = __toESM(require_dist2());
+var import_dist81 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/flexibleChecksumsInputMiddleware.js
-var import_dist121 = __toESM(require_dist());
-var import_dist122 = __toESM(require_dist2());
-var import_dist123 = __toESM(require_dist3());
+var import_dist61 = __toESM(require_dist());
+var import_dist62 = __toESM(require_dist2());
+var import_dist63 = __toESM(require_dist3());
 var flexibleChecksumsInputMiddlewareOptions = {
   name: "flexibleChecksumsInputMiddleware",
   toMiddleware: "serializerMiddleware",
@@ -1579,14 +1164,14 @@ var flexibleChecksumsInputMiddleware = (config, middlewareConfig) => (next, cont
 };
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/flexibleChecksumsResponseMiddleware.js
-var import_dist136 = __toESM(require_dist());
-var import_dist137 = __toESM(require_dist2());
-var import_dist138 = __toESM(require_dist3());
+var import_dist76 = __toESM(require_dist());
+var import_dist77 = __toESM(require_dist2());
+var import_dist78 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/getChecksumAlgorithmListForResponse.js
-var import_dist124 = __toESM(require_dist());
-var import_dist125 = __toESM(require_dist2());
-var import_dist126 = __toESM(require_dist3());
+var import_dist64 = __toESM(require_dist());
+var import_dist65 = __toESM(require_dist2());
+var import_dist66 = __toESM(require_dist3());
 var getChecksumAlgorithmListForResponse = (responseAlgorithms = []) => {
   const validChecksumAlgorithms = [];
   for (const algorithm of PRIORITY_ORDER_ALGORITHMS) {
@@ -1599,9 +1184,9 @@ var getChecksumAlgorithmListForResponse = (responseAlgorithms = []) => {
 };
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/isChecksumWithPartNumber.js
-var import_dist127 = __toESM(require_dist());
-var import_dist128 = __toESM(require_dist2());
-var import_dist129 = __toESM(require_dist3());
+var import_dist67 = __toESM(require_dist());
+var import_dist68 = __toESM(require_dist2());
+var import_dist69 = __toESM(require_dist3());
 var isChecksumWithPartNumber = (checksum) => {
   const lastHyphenIndex = checksum.lastIndexOf("-");
   if (lastHyphenIndex !== -1) {
@@ -1617,14 +1202,14 @@ var isChecksumWithPartNumber = (checksum) => {
 };
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/validateChecksumFromResponse.js
-var import_dist133 = __toESM(require_dist());
-var import_dist134 = __toESM(require_dist2());
-var import_dist135 = __toESM(require_dist3());
+var import_dist73 = __toESM(require_dist());
+var import_dist74 = __toESM(require_dist2());
+var import_dist75 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/getChecksum.js
-var import_dist130 = __toESM(require_dist());
-var import_dist131 = __toESM(require_dist2());
-var import_dist132 = __toESM(require_dist3());
+var import_dist70 = __toESM(require_dist());
+var import_dist71 = __toESM(require_dist2());
+var import_dist72 = __toESM(require_dist3());
 var getChecksum = async (body, { checksumAlgorithmFn, base64Encoder }) => base64Encoder(await stringHasher(checksumAlgorithmFn, body));
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/validateChecksumFromResponse.js
@@ -1710,9 +1295,9 @@ var getFlexibleChecksumsPlugin = (config, middlewareConfig) => ({
 });
 
 // node_modules/@aws-sdk/middleware-flexible-checksums/dist-es/resolveFlexibleChecksumsConfig.js
-var import_dist142 = __toESM(require_dist());
-var import_dist143 = __toESM(require_dist2());
-var import_dist144 = __toESM(require_dist3());
+var import_dist82 = __toESM(require_dist());
+var import_dist83 = __toESM(require_dist2());
+var import_dist84 = __toESM(require_dist3());
 var resolveFlexibleChecksumsConfig = (input) => {
   const { requestChecksumCalculation, responseChecksumValidation, requestStreamBufferSize } = input;
   return Object.assign(input, {
@@ -1723,32 +1308,32 @@ var resolveFlexibleChecksumsConfig = (input) => {
 };
 
 // node_modules/@smithy/eventstream-serde-config-resolver/dist-es/index.js
-var import_dist151 = __toESM(require_dist());
-var import_dist152 = __toESM(require_dist2());
-var import_dist153 = __toESM(require_dist3());
+var import_dist91 = __toESM(require_dist());
+var import_dist92 = __toESM(require_dist2());
+var import_dist93 = __toESM(require_dist3());
 
 // node_modules/@smithy/eventstream-serde-config-resolver/dist-es/EventStreamSerdeConfig.js
-var import_dist148 = __toESM(require_dist());
-var import_dist149 = __toESM(require_dist2());
-var import_dist150 = __toESM(require_dist3());
+var import_dist88 = __toESM(require_dist());
+var import_dist89 = __toESM(require_dist2());
+var import_dist90 = __toESM(require_dist3());
 var resolveEventStreamSerdeConfig = (input) => Object.assign(input, {
   eventStreamMarshaller: input.eventStreamSerdeProvider(input)
 });
 
 // node_modules/@aws-sdk/client-s3/dist-es/auth/httpAuthSchemeProvider.js
-var import_dist160 = __toESM(require_dist());
-var import_dist161 = __toESM(require_dist2());
-var import_dist162 = __toESM(require_dist3());
+var import_dist100 = __toESM(require_dist());
+var import_dist101 = __toESM(require_dist2());
+var import_dist102 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-s3/dist-es/endpoint/endpointResolver.js
-var import_dist157 = __toESM(require_dist());
-var import_dist158 = __toESM(require_dist2());
-var import_dist159 = __toESM(require_dist3());
+var import_dist97 = __toESM(require_dist());
+var import_dist98 = __toESM(require_dist2());
+var import_dist99 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-s3/dist-es/endpoint/ruleset.js
-var import_dist154 = __toESM(require_dist());
-var import_dist155 = __toESM(require_dist2());
-var import_dist156 = __toESM(require_dist3());
+var import_dist94 = __toESM(require_dist());
+var import_dist95 = __toESM(require_dist2());
+var import_dist96 = __toESM(require_dist3());
 var cp = "required";
 var cq = "type";
 var cr = "rules";
@@ -2085,14 +1670,14 @@ var resolveHttpAuthSchemeConfig = (config) => {
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/CreateSessionCommand.js
-var import_dist193 = __toESM(require_dist());
-var import_dist194 = __toESM(require_dist2());
-var import_dist195 = __toESM(require_dist3());
+var import_dist133 = __toESM(require_dist());
+var import_dist134 = __toESM(require_dist2());
+var import_dist135 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-s3/dist-es/endpoint/EndpointParameters.js
-var import_dist163 = __toESM(require_dist());
-var import_dist164 = __toESM(require_dist2());
-var import_dist165 = __toESM(require_dist3());
+var import_dist103 = __toESM(require_dist());
+var import_dist104 = __toESM(require_dist2());
+var import_dist105 = __toESM(require_dist3());
 var resolveClientEndpointParameters = (options) => {
   return Object.assign(options, {
     useFipsEndpoint: options.useFipsEndpoint ?? false,
@@ -2118,14 +1703,14 @@ var commonParams = {
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/models/models_0.js
-var import_dist169 = __toESM(require_dist());
-var import_dist170 = __toESM(require_dist2());
-var import_dist171 = __toESM(require_dist3());
+var import_dist109 = __toESM(require_dist());
+var import_dist110 = __toESM(require_dist2());
+var import_dist111 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-s3/dist-es/models/S3ServiceException.js
-var import_dist166 = __toESM(require_dist());
-var import_dist167 = __toESM(require_dist2());
-var import_dist168 = __toESM(require_dist3());
+var import_dist106 = __toESM(require_dist());
+var import_dist107 = __toESM(require_dist2());
+var import_dist108 = __toESM(require_dist3());
 var S3ServiceException = class _S3ServiceException extends ServiceException {
   constructor(options) {
     super(options);
@@ -2726,37 +2311,37 @@ var ListPartsRequestFilterSensitiveLog = (obj) => ({
 });
 
 // node_modules/@aws-sdk/client-s3/dist-es/protocols/Aws_restXml.js
-var import_dist190 = __toESM(require_dist());
-var import_dist191 = __toESM(require_dist2());
-var import_dist192 = __toESM(require_dist3());
+var import_dist130 = __toESM(require_dist());
+var import_dist131 = __toESM(require_dist2());
+var import_dist132 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/xml-builder/dist-es/index.js
-var import_dist184 = __toESM(require_dist());
-var import_dist185 = __toESM(require_dist2());
-var import_dist186 = __toESM(require_dist3());
+var import_dist124 = __toESM(require_dist());
+var import_dist125 = __toESM(require_dist2());
+var import_dist126 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/xml-builder/dist-es/XmlNode.js
-var import_dist181 = __toESM(require_dist());
-var import_dist182 = __toESM(require_dist2());
-var import_dist183 = __toESM(require_dist3());
+var import_dist121 = __toESM(require_dist());
+var import_dist122 = __toESM(require_dist2());
+var import_dist123 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/xml-builder/dist-es/escape-attribute.js
-var import_dist172 = __toESM(require_dist());
-var import_dist173 = __toESM(require_dist2());
-var import_dist174 = __toESM(require_dist3());
+var import_dist112 = __toESM(require_dist());
+var import_dist113 = __toESM(require_dist2());
+var import_dist114 = __toESM(require_dist3());
 function escapeAttribute(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 // node_modules/@aws-sdk/xml-builder/dist-es/XmlText.js
-var import_dist178 = __toESM(require_dist());
-var import_dist179 = __toESM(require_dist2());
-var import_dist180 = __toESM(require_dist3());
+var import_dist118 = __toESM(require_dist());
+var import_dist119 = __toESM(require_dist2());
+var import_dist120 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/xml-builder/dist-es/escape-element.js
-var import_dist175 = __toESM(require_dist());
-var import_dist176 = __toESM(require_dist2());
-var import_dist177 = __toESM(require_dist3());
+var import_dist115 = __toESM(require_dist());
+var import_dist116 = __toESM(require_dist2());
+var import_dist117 = __toESM(require_dist3());
 function escapeElement(value) {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&apos;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\r/g, "&#x0D;").replace(/\n/g, "&#x0A;").replace(/\u0085/g, "&#x85;").replace(/\u2028/, "&#x2028;");
 }
@@ -2861,9 +2446,9 @@ var XmlNode = class _XmlNode {
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/models/models_1.js
-var import_dist187 = __toESM(require_dist());
-var import_dist188 = __toESM(require_dist2());
-var import_dist189 = __toESM(require_dist3());
+var import_dist127 = __toESM(require_dist());
+var import_dist128 = __toESM(require_dist2());
+var import_dist129 = __toESM(require_dist3());
 var MFADelete = {
   Disabled: "Disabled",
   Enabled: "Enabled"
@@ -10581,9 +10166,9 @@ var CreateSessionCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/runtimeConfig.browser.js
-var import_dist310 = __toESM(require_dist());
-var import_dist311 = __toESM(require_dist2());
-var import_dist312 = __toESM(require_dist3());
+var import_dist235 = __toESM(require_dist());
+var import_dist236 = __toESM(require_dist2());
+var import_dist237 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-s3/package.json
 var package_default = {
@@ -10711,46 +10296,46 @@ var package_default = {
 };
 
 // node_modules/@aws-crypto/sha1-browser/build/module/index.js
-var import_dist235 = __toESM(require_dist());
-var import_dist236 = __toESM(require_dist2());
-var import_dist237 = __toESM(require_dist3());
+var import_dist160 = __toESM(require_dist());
+var import_dist161 = __toESM(require_dist2());
+var import_dist162 = __toESM(require_dist3());
 
 // node_modules/@aws-crypto/sha1-browser/build/module/crossPlatformSha1.js
-var import_dist232 = __toESM(require_dist());
-var import_dist233 = __toESM(require_dist2());
-var import_dist234 = __toESM(require_dist3());
+var import_dist157 = __toESM(require_dist());
+var import_dist158 = __toESM(require_dist2());
+var import_dist159 = __toESM(require_dist3());
 
 // node_modules/@aws-crypto/sha1-browser/build/module/webCryptoSha1.js
-var import_dist214 = __toESM(require_dist());
-var import_dist215 = __toESM(require_dist2());
-var import_dist216 = __toESM(require_dist3());
+var import_dist154 = __toESM(require_dist());
+var import_dist155 = __toESM(require_dist2());
+var import_dist156 = __toESM(require_dist3());
 
 // node_modules/@aws-crypto/sha1-browser/node_modules/@smithy/util-utf8/dist-es/index.js
-var import_dist205 = __toESM(require_dist());
-var import_dist206 = __toESM(require_dist2());
-var import_dist207 = __toESM(require_dist3());
+var import_dist145 = __toESM(require_dist());
+var import_dist146 = __toESM(require_dist2());
+var import_dist147 = __toESM(require_dist3());
 
 // node_modules/@aws-crypto/sha1-browser/node_modules/@smithy/util-utf8/dist-es/fromUtf8.browser.js
-var import_dist196 = __toESM(require_dist());
-var import_dist197 = __toESM(require_dist2());
-var import_dist198 = __toESM(require_dist3());
-var fromUtf86 = (input) => new TextEncoder().encode(input);
+var import_dist136 = __toESM(require_dist());
+var import_dist137 = __toESM(require_dist2());
+var import_dist138 = __toESM(require_dist3());
+var fromUtf82 = (input) => new TextEncoder().encode(input);
 
 // node_modules/@aws-crypto/sha1-browser/node_modules/@smithy/util-utf8/dist-es/toUint8Array.js
-var import_dist199 = __toESM(require_dist());
-var import_dist200 = __toESM(require_dist2());
-var import_dist201 = __toESM(require_dist3());
+var import_dist139 = __toESM(require_dist());
+var import_dist140 = __toESM(require_dist2());
+var import_dist141 = __toESM(require_dist3());
 
 // node_modules/@aws-crypto/sha1-browser/node_modules/@smithy/util-utf8/dist-es/toUtf8.browser.js
-var import_dist202 = __toESM(require_dist());
-var import_dist203 = __toESM(require_dist2());
-var import_dist204 = __toESM(require_dist3());
+var import_dist142 = __toESM(require_dist());
+var import_dist143 = __toESM(require_dist2());
+var import_dist144 = __toESM(require_dist3());
 
 // node_modules/@aws-crypto/sha1-browser/build/module/isEmptyData.js
-var import_dist208 = __toESM(require_dist());
-var import_dist209 = __toESM(require_dist2());
-var import_dist210 = __toESM(require_dist3());
-function isEmptyData3(data) {
+var import_dist148 = __toESM(require_dist());
+var import_dist149 = __toESM(require_dist2());
+var import_dist150 = __toESM(require_dist3());
+function isEmptyData2(data) {
   if (typeof data === "string") {
     return data.length === 0;
   }
@@ -10758,9 +10343,9 @@ function isEmptyData3(data) {
 }
 
 // node_modules/@aws-crypto/sha1-browser/build/module/constants.js
-var import_dist211 = __toESM(require_dist());
-var import_dist212 = __toESM(require_dist2());
-var import_dist213 = __toESM(require_dist3());
+var import_dist151 = __toESM(require_dist());
+var import_dist152 = __toESM(require_dist2());
+var import_dist153 = __toESM(require_dist3());
 var SHA_1_HASH = { name: "SHA-1" };
 var SHA_1_HMAC_ALGO = {
   name: "HMAC",
@@ -10797,17 +10382,17 @@ var Sha1 = (
       this.toHash = new Uint8Array(0);
       if (secret !== void 0) {
         this.key = new Promise(function(resolve, reject) {
-          locateWindow().crypto.subtle.importKey("raw", convertToBuffer3(secret), SHA_1_HMAC_ALGO, false, ["sign"]).then(resolve, reject);
+          locateWindow().crypto.subtle.importKey("raw", convertToBuffer2(secret), SHA_1_HMAC_ALGO, false, ["sign"]).then(resolve, reject);
         });
         this.key.catch(function() {
         });
       }
     }
     Sha13.prototype.update = function(data) {
-      if (isEmptyData3(data)) {
+      if (isEmptyData2(data)) {
         return;
       }
-      var update = convertToBuffer3(data);
+      var update = convertToBuffer2(data);
       var typedArray = new Uint8Array(this.toHash.byteLength + update.byteLength);
       typedArray.set(this.toHash, 0);
       typedArray.set(update, this.toHash.byteLength);
@@ -10822,7 +10407,7 @@ var Sha1 = (
           });
         });
       }
-      if (isEmptyData3(this.toHash)) {
+      if (isEmptyData2(this.toHash)) {
         return Promise.resolve(EMPTY_DATA_SHA_1);
       }
       return Promise.resolve().then(function() {
@@ -10837,54 +10422,15 @@ var Sha1 = (
     return Sha13;
   }()
 );
-function convertToBuffer3(data) {
+function convertToBuffer2(data) {
   if (typeof data === "string") {
-    return fromUtf86(data);
+    return fromUtf82(data);
   }
   if (ArrayBuffer.isView(data)) {
     return new Uint8Array(data.buffer, data.byteOffset, data.byteLength / Uint8Array.BYTES_PER_ELEMENT);
   }
   return new Uint8Array(data);
 }
-
-// node_modules/@aws-crypto/sha1-browser/node_modules/@aws-crypto/util/build/module/index.js
-var import_dist229 = __toESM(require_dist());
-var import_dist230 = __toESM(require_dist2());
-var import_dist231 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/sha1-browser/node_modules/@aws-crypto/util/build/module/convertToBuffer.js
-var import_dist217 = __toESM(require_dist());
-var import_dist218 = __toESM(require_dist2());
-var import_dist219 = __toESM(require_dist3());
-var fromUtf87 = typeof Buffer !== "undefined" && Buffer.from ? function(input) {
-  return Buffer.from(input, "utf8");
-} : fromUtf86;
-function convertToBuffer4(data) {
-  if (data instanceof Uint8Array)
-    return data;
-  if (typeof data === "string") {
-    return fromUtf87(data);
-  }
-  if (ArrayBuffer.isView(data)) {
-    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength / Uint8Array.BYTES_PER_ELEMENT);
-  }
-  return new Uint8Array(data);
-}
-
-// node_modules/@aws-crypto/sha1-browser/node_modules/@aws-crypto/util/build/module/isEmptyData.js
-var import_dist220 = __toESM(require_dist());
-var import_dist221 = __toESM(require_dist2());
-var import_dist222 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/sha1-browser/node_modules/@aws-crypto/util/build/module/numToUint8.js
-var import_dist223 = __toESM(require_dist());
-var import_dist224 = __toESM(require_dist2());
-var import_dist225 = __toESM(require_dist3());
-
-// node_modules/@aws-crypto/sha1-browser/node_modules/@aws-crypto/util/build/module/uint32ArrayFrom.js
-var import_dist226 = __toESM(require_dist());
-var import_dist227 = __toESM(require_dist2());
-var import_dist228 = __toESM(require_dist3());
 
 // node_modules/@aws-crypto/sha1-browser/build/module/crossPlatformSha1.js
 var Sha12 = (
@@ -10898,7 +10444,7 @@ var Sha12 = (
       }
     }
     Sha13.prototype.update = function(data, encoding) {
-      this.hash.update(convertToBuffer4(data));
+      this.hash.update(convertToBuffer(data));
     };
     Sha13.prototype.digest = function() {
       return this.hash.digest();
@@ -10911,44 +10457,44 @@ var Sha12 = (
 );
 
 // node_modules/@smithy/eventstream-serde-browser/dist-es/index.js
-var import_dist292 = __toESM(require_dist());
-var import_dist293 = __toESM(require_dist2());
-var import_dist294 = __toESM(require_dist3());
+var import_dist217 = __toESM(require_dist());
+var import_dist218 = __toESM(require_dist2());
+var import_dist219 = __toESM(require_dist3());
 
 // node_modules/@smithy/eventstream-serde-browser/dist-es/EventStreamMarshaller.js
-var import_dist286 = __toESM(require_dist());
-var import_dist287 = __toESM(require_dist2());
-var import_dist288 = __toESM(require_dist3());
+var import_dist211 = __toESM(require_dist());
+var import_dist212 = __toESM(require_dist2());
+var import_dist213 = __toESM(require_dist3());
 
 // node_modules/@smithy/eventstream-serde-universal/dist-es/index.js
-var import_dist280 = __toESM(require_dist());
-var import_dist281 = __toESM(require_dist2());
-var import_dist282 = __toESM(require_dist3());
+var import_dist205 = __toESM(require_dist());
+var import_dist206 = __toESM(require_dist2());
+var import_dist207 = __toESM(require_dist3());
 
 // node_modules/@smithy/eventstream-serde-universal/dist-es/EventStreamMarshaller.js
-var import_dist274 = __toESM(require_dist());
-var import_dist275 = __toESM(require_dist2());
-var import_dist276 = __toESM(require_dist3());
+var import_dist199 = __toESM(require_dist());
+var import_dist200 = __toESM(require_dist2());
+var import_dist201 = __toESM(require_dist3());
 
 // node_modules/@smithy/eventstream-codec/dist-es/index.js
-var import_dist265 = __toESM(require_dist());
-var import_dist266 = __toESM(require_dist2());
-var import_dist267 = __toESM(require_dist3());
+var import_dist190 = __toESM(require_dist());
+var import_dist191 = __toESM(require_dist2());
+var import_dist192 = __toESM(require_dist3());
 
 // node_modules/@smithy/eventstream-codec/dist-es/EventStreamCodec.js
-var import_dist247 = __toESM(require_dist());
-var import_dist248 = __toESM(require_dist2());
-var import_dist249 = __toESM(require_dist3());
+var import_dist172 = __toESM(require_dist());
+var import_dist173 = __toESM(require_dist2());
+var import_dist174 = __toESM(require_dist3());
 
 // node_modules/@smithy/eventstream-codec/dist-es/HeaderMarshaller.js
-var import_dist241 = __toESM(require_dist());
-var import_dist242 = __toESM(require_dist2());
-var import_dist243 = __toESM(require_dist3());
+var import_dist166 = __toESM(require_dist());
+var import_dist167 = __toESM(require_dist2());
+var import_dist168 = __toESM(require_dist3());
 
 // node_modules/@smithy/eventstream-codec/dist-es/Int64.js
-var import_dist238 = __toESM(require_dist());
-var import_dist239 = __toESM(require_dist2());
-var import_dist240 = __toESM(require_dist3());
+var import_dist163 = __toESM(require_dist());
+var import_dist164 = __toESM(require_dist2());
+var import_dist165 = __toESM(require_dist3());
 var Int64 = class _Int64 {
   constructor(bytes) {
     this.bytes = bytes;
@@ -10994,9 +10540,9 @@ function negate(bytes) {
 
 // node_modules/@smithy/eventstream-codec/dist-es/HeaderMarshaller.js
 var HeaderMarshaller = class {
-  constructor(toUtf82, fromUtf88) {
+  constructor(toUtf82, fromUtf83) {
     this.toUtf8 = toUtf82;
-    this.fromUtf8 = fromUtf88;
+    this.fromUtf8 = fromUtf83;
   }
   format(headers) {
     const chunks = [];
@@ -11175,9 +10721,9 @@ var UUID_TAG = "uuid";
 var UUID_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 
 // node_modules/@smithy/eventstream-codec/dist-es/splitMessage.js
-var import_dist244 = __toESM(require_dist());
-var import_dist245 = __toESM(require_dist2());
-var import_dist246 = __toESM(require_dist3());
+var import_dist169 = __toESM(require_dist());
+var import_dist170 = __toESM(require_dist2());
+var import_dist171 = __toESM(require_dist3());
 var PRELUDE_MEMBER_LENGTH = 4;
 var PRELUDE_LENGTH = PRELUDE_MEMBER_LENGTH * 2;
 var CHECKSUM_LENGTH = 4;
@@ -11210,8 +10756,8 @@ function splitMessage({ byteLength, byteOffset, buffer }) {
 
 // node_modules/@smithy/eventstream-codec/dist-es/EventStreamCodec.js
 var EventStreamCodec = class {
-  constructor(toUtf82, fromUtf88) {
-    this.headerMarshaller = new HeaderMarshaller(toUtf82, fromUtf88);
+  constructor(toUtf82, fromUtf83) {
+    this.headerMarshaller = new HeaderMarshaller(toUtf82, fromUtf83);
     this.messageBuffer = [];
     this.isEndOfStream = false;
   }
@@ -11270,14 +10816,14 @@ var EventStreamCodec = class {
 };
 
 // node_modules/@smithy/eventstream-codec/dist-es/Message.js
-var import_dist250 = __toESM(require_dist());
-var import_dist251 = __toESM(require_dist2());
-var import_dist252 = __toESM(require_dist3());
+var import_dist175 = __toESM(require_dist());
+var import_dist176 = __toESM(require_dist2());
+var import_dist177 = __toESM(require_dist3());
 
 // node_modules/@smithy/eventstream-codec/dist-es/MessageDecoderStream.js
-var import_dist253 = __toESM(require_dist());
-var import_dist254 = __toESM(require_dist2());
-var import_dist255 = __toESM(require_dist3());
+var import_dist178 = __toESM(require_dist());
+var import_dist179 = __toESM(require_dist2());
+var import_dist180 = __toESM(require_dist3());
 var MessageDecoderStream = class {
   constructor(options) {
     this.options = options;
@@ -11294,9 +10840,9 @@ var MessageDecoderStream = class {
 };
 
 // node_modules/@smithy/eventstream-codec/dist-es/MessageEncoderStream.js
-var import_dist256 = __toESM(require_dist());
-var import_dist257 = __toESM(require_dist2());
-var import_dist258 = __toESM(require_dist3());
+var import_dist181 = __toESM(require_dist());
+var import_dist182 = __toESM(require_dist2());
+var import_dist183 = __toESM(require_dist3());
 var MessageEncoderStream = class {
   constructor(options) {
     this.options = options;
@@ -11316,9 +10862,9 @@ var MessageEncoderStream = class {
 };
 
 // node_modules/@smithy/eventstream-codec/dist-es/SmithyMessageDecoderStream.js
-var import_dist259 = __toESM(require_dist());
-var import_dist260 = __toESM(require_dist2());
-var import_dist261 = __toESM(require_dist3());
+var import_dist184 = __toESM(require_dist());
+var import_dist185 = __toESM(require_dist2());
+var import_dist186 = __toESM(require_dist3());
 var SmithyMessageDecoderStream = class {
   constructor(options) {
     this.options = options;
@@ -11337,9 +10883,9 @@ var SmithyMessageDecoderStream = class {
 };
 
 // node_modules/@smithy/eventstream-codec/dist-es/SmithyMessageEncoderStream.js
-var import_dist262 = __toESM(require_dist());
-var import_dist263 = __toESM(require_dist2());
-var import_dist264 = __toESM(require_dist3());
+var import_dist187 = __toESM(require_dist());
+var import_dist188 = __toESM(require_dist2());
+var import_dist189 = __toESM(require_dist3());
 var SmithyMessageEncoderStream = class {
   constructor(options) {
     this.options = options;
@@ -11356,9 +10902,9 @@ var SmithyMessageEncoderStream = class {
 };
 
 // node_modules/@smithy/eventstream-serde-universal/dist-es/getChunkedStream.js
-var import_dist268 = __toESM(require_dist());
-var import_dist269 = __toESM(require_dist2());
-var import_dist270 = __toESM(require_dist3());
+var import_dist193 = __toESM(require_dist());
+var import_dist194 = __toESM(require_dist2());
+var import_dist195 = __toESM(require_dist3());
 function getChunkedStream(source) {
   let currentMessageTotalLength = 0;
   let currentMessagePendingLength = 0;
@@ -11425,9 +10971,9 @@ function getChunkedStream(source) {
 }
 
 // node_modules/@smithy/eventstream-serde-universal/dist-es/getUnmarshalledStream.js
-var import_dist271 = __toESM(require_dist());
-var import_dist272 = __toESM(require_dist2());
-var import_dist273 = __toESM(require_dist3());
+var import_dist196 = __toESM(require_dist());
+var import_dist197 = __toESM(require_dist2());
+var import_dist198 = __toESM(require_dist3());
 function getMessageUnmarshaller(deserializer, toUtf82) {
   return async function(message) {
     const { value: messageType } = message.headers[":message-type"];
@@ -11482,14 +11028,14 @@ var EventStreamMarshaller = class {
 };
 
 // node_modules/@smithy/eventstream-serde-universal/dist-es/provider.js
-var import_dist277 = __toESM(require_dist());
-var import_dist278 = __toESM(require_dist2());
-var import_dist279 = __toESM(require_dist3());
+var import_dist202 = __toESM(require_dist());
+var import_dist203 = __toESM(require_dist2());
+var import_dist204 = __toESM(require_dist3());
 
 // node_modules/@smithy/eventstream-serde-browser/dist-es/utils.js
-var import_dist283 = __toESM(require_dist());
-var import_dist284 = __toESM(require_dist2());
-var import_dist285 = __toESM(require_dist3());
+var import_dist208 = __toESM(require_dist());
+var import_dist209 = __toESM(require_dist2());
+var import_dist210 = __toESM(require_dist3());
 var readableStreamtoIterable = (readableStream) => ({
   [Symbol.asyncIterator]: async function* () {
     const reader = readableStream.getReader();
@@ -11538,20 +11084,20 @@ var EventStreamMarshaller2 = class {
 var isReadableStream = (body) => typeof ReadableStream === "function" && body instanceof ReadableStream;
 
 // node_modules/@smithy/eventstream-serde-browser/dist-es/provider.js
-var import_dist289 = __toESM(require_dist());
-var import_dist290 = __toESM(require_dist2());
-var import_dist291 = __toESM(require_dist3());
+var import_dist214 = __toESM(require_dist());
+var import_dist215 = __toESM(require_dist2());
+var import_dist216 = __toESM(require_dist3());
 var eventStreamSerdeProvider = (options) => new EventStreamMarshaller2(options);
 
 // node_modules/@smithy/hash-blob-browser/dist-es/index.js
-var import_dist298 = __toESM(require_dist());
-var import_dist299 = __toESM(require_dist2());
-var import_dist300 = __toESM(require_dist3());
+var import_dist223 = __toESM(require_dist());
+var import_dist224 = __toESM(require_dist2());
+var import_dist225 = __toESM(require_dist3());
 
 // node_modules/@smithy/chunked-blob-reader/dist-es/index.js
-var import_dist295 = __toESM(require_dist());
-var import_dist296 = __toESM(require_dist2());
-var import_dist297 = __toESM(require_dist3());
+var import_dist220 = __toESM(require_dist());
+var import_dist221 = __toESM(require_dist2());
+var import_dist222 = __toESM(require_dist3());
 async function blobReader(blob, onChunk, chunkSize = 1024 * 1024) {
   const size = blob.size;
   let totalBytesRead = 0;
@@ -11572,14 +11118,14 @@ var blobHasher = async function blobHasher2(hashCtor, blob) {
 };
 
 // node_modules/@smithy/md5-js/dist-es/index.js
-var import_dist304 = __toESM(require_dist());
-var import_dist305 = __toESM(require_dist2());
-var import_dist306 = __toESM(require_dist3());
+var import_dist229 = __toESM(require_dist());
+var import_dist230 = __toESM(require_dist2());
+var import_dist231 = __toESM(require_dist3());
 
 // node_modules/@smithy/md5-js/dist-es/constants.js
-var import_dist301 = __toESM(require_dist());
-var import_dist302 = __toESM(require_dist2());
-var import_dist303 = __toESM(require_dist3());
+var import_dist226 = __toESM(require_dist());
+var import_dist227 = __toESM(require_dist2());
+var import_dist228 = __toESM(require_dist3());
 var BLOCK_SIZE = 64;
 var DIGEST_LENGTH = 16;
 var INIT = [1732584193, 4023233417, 2562383102, 271733878];
@@ -11590,12 +11136,12 @@ var Md5 = class {
     this.reset();
   }
   update(sourceData) {
-    if (isEmptyData5(sourceData)) {
+    if (isEmptyData3(sourceData)) {
       return;
     } else if (this.finished) {
       throw new Error("Attempted to update an already finished hash.");
     }
-    const data = convertToBuffer5(sourceData);
+    const data = convertToBuffer3(sourceData);
     let position = 0;
     let { byteLength } = data;
     this.bytesHashed += byteLength;
@@ -11730,13 +11276,13 @@ function hh(a2, b2, c2, d2, x2, s2, t2) {
 function ii(a2, b2, c2, d2, x2, s2, t2) {
   return cmn(c2 ^ (b2 | ~d2), a2, b2, x2, s2, t2);
 }
-function isEmptyData5(data) {
+function isEmptyData3(data) {
   if (typeof data === "string") {
     return data.length === 0;
   }
   return data.byteLength === 0;
 }
-function convertToBuffer5(data) {
+function convertToBuffer3(data) {
   if (typeof data === "string") {
     return fromUtf8(data);
   }
@@ -11747,9 +11293,9 @@ function convertToBuffer5(data) {
 }
 
 // node_modules/@aws-sdk/client-s3/dist-es/runtimeConfig.shared.js
-var import_dist307 = __toESM(require_dist());
-var import_dist308 = __toESM(require_dist2());
-var import_dist309 = __toESM(require_dist3());
+var import_dist232 = __toESM(require_dist());
+var import_dist233 = __toESM(require_dist2());
+var import_dist234 = __toESM(require_dist3());
 var getRuntimeConfig = (config) => {
   return {
     apiVersion: "2006-03-01",
@@ -11813,14 +11359,14 @@ var getRuntimeConfig2 = (config) => {
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/runtimeExtensions.js
-var import_dist316 = __toESM(require_dist());
-var import_dist317 = __toESM(require_dist2());
-var import_dist318 = __toESM(require_dist3());
+var import_dist241 = __toESM(require_dist());
+var import_dist242 = __toESM(require_dist2());
+var import_dist243 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-s3/dist-es/auth/httpAuthExtensionConfiguration.js
-var import_dist313 = __toESM(require_dist());
-var import_dist314 = __toESM(require_dist2());
-var import_dist315 = __toESM(require_dist3());
+var import_dist238 = __toESM(require_dist());
+var import_dist239 = __toESM(require_dist2());
+var import_dist240 = __toESM(require_dist3());
 var getHttpAuthExtensionConfiguration = (runtimeConfig) => {
   const _httpAuthSchemes = runtimeConfig.httpAuthSchemes;
   let _httpAuthSchemeProvider = runtimeConfig.httpAuthSchemeProvider;
@@ -11911,14 +11457,14 @@ var S3Client = class extends Client {
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/S3.js
-var import_dist619 = __toESM(require_dist());
-var import_dist620 = __toESM(require_dist2());
-var import_dist621 = __toESM(require_dist3());
+var import_dist544 = __toESM(require_dist());
+var import_dist545 = __toESM(require_dist2());
+var import_dist546 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/AbortMultipartUploadCommand.js
-var import_dist322 = __toESM(require_dist());
-var import_dist323 = __toESM(require_dist2());
-var import_dist324 = __toESM(require_dist3());
+var import_dist247 = __toESM(require_dist());
+var import_dist248 = __toESM(require_dist2());
+var import_dist249 = __toESM(require_dist3());
 var AbortMultipartUploadCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -11933,14 +11479,14 @@ var AbortMultipartUploadCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/CompleteMultipartUploadCommand.js
-var import_dist328 = __toESM(require_dist());
-var import_dist329 = __toESM(require_dist2());
-var import_dist330 = __toESM(require_dist3());
+var import_dist253 = __toESM(require_dist());
+var import_dist254 = __toESM(require_dist2());
+var import_dist255 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/middleware-ssec/dist-es/index.js
-var import_dist325 = __toESM(require_dist());
-var import_dist326 = __toESM(require_dist2());
-var import_dist327 = __toESM(require_dist3());
+var import_dist250 = __toESM(require_dist());
+var import_dist251 = __toESM(require_dist2());
+var import_dist252 = __toESM(require_dist3());
 function ssecMiddleware(options) {
   return (next) => async (args) => {
     const input = { ...args.input };
@@ -12019,9 +11565,9 @@ var CompleteMultipartUploadCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/CopyObjectCommand.js
-var import_dist331 = __toESM(require_dist());
-var import_dist332 = __toESM(require_dist2());
-var import_dist333 = __toESM(require_dist3());
+var import_dist256 = __toESM(require_dist());
+var import_dist257 = __toESM(require_dist2());
+var import_dist258 = __toESM(require_dist3());
 var CopyObjectCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   DisableS3ExpressSessionAuth: { type: "staticContextParams", value: true },
@@ -12039,14 +11585,14 @@ var CopyObjectCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/CreateBucketCommand.js
-var import_dist337 = __toESM(require_dist());
-var import_dist338 = __toESM(require_dist2());
-var import_dist339 = __toESM(require_dist3());
+var import_dist262 = __toESM(require_dist());
+var import_dist263 = __toESM(require_dist2());
+var import_dist264 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/middleware-location-constraint/dist-es/index.js
-var import_dist334 = __toESM(require_dist());
-var import_dist335 = __toESM(require_dist2());
-var import_dist336 = __toESM(require_dist3());
+var import_dist259 = __toESM(require_dist());
+var import_dist260 = __toESM(require_dist2());
+var import_dist261 = __toESM(require_dist3());
 function locationConstraintMiddleware(options) {
   return (next) => async (args) => {
     const { CreateBucketConfiguration } = args.input;
@@ -12092,9 +11638,9 @@ var CreateBucketCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/CreateBucketMetadataTableConfigurationCommand.js
-var import_dist340 = __toESM(require_dist());
-var import_dist341 = __toESM(require_dist2());
-var import_dist342 = __toESM(require_dist3());
+var import_dist265 = __toESM(require_dist());
+var import_dist266 = __toESM(require_dist2());
+var import_dist267 = __toESM(require_dist3());
 var CreateBucketMetadataTableConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12112,9 +11658,9 @@ var CreateBucketMetadataTableConfigurationCommand = class extends Command.classB
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/CreateMultipartUploadCommand.js
-var import_dist343 = __toESM(require_dist());
-var import_dist344 = __toESM(require_dist2());
-var import_dist345 = __toESM(require_dist3());
+var import_dist268 = __toESM(require_dist());
+var import_dist269 = __toESM(require_dist2());
+var import_dist270 = __toESM(require_dist3());
 var CreateMultipartUploadCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -12130,9 +11676,9 @@ var CreateMultipartUploadCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketAnalyticsConfigurationCommand.js
-var import_dist346 = __toESM(require_dist());
-var import_dist347 = __toESM(require_dist2());
-var import_dist348 = __toESM(require_dist3());
+var import_dist271 = __toESM(require_dist());
+var import_dist272 = __toESM(require_dist2());
+var import_dist273 = __toESM(require_dist3());
 var DeleteBucketAnalyticsConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12146,9 +11692,9 @@ var DeleteBucketAnalyticsConfigurationCommand = class extends Command.classBuild
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketCommand.js
-var import_dist349 = __toESM(require_dist());
-var import_dist350 = __toESM(require_dist2());
-var import_dist351 = __toESM(require_dist3());
+var import_dist274 = __toESM(require_dist());
+var import_dist275 = __toESM(require_dist2());
+var import_dist276 = __toESM(require_dist3());
 var DeleteBucketCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12162,9 +11708,9 @@ var DeleteBucketCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketCorsCommand.js
-var import_dist352 = __toESM(require_dist());
-var import_dist353 = __toESM(require_dist2());
-var import_dist354 = __toESM(require_dist3());
+var import_dist277 = __toESM(require_dist());
+var import_dist278 = __toESM(require_dist2());
+var import_dist279 = __toESM(require_dist3());
 var DeleteBucketCorsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12178,9 +11724,9 @@ var DeleteBucketCorsCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketEncryptionCommand.js
-var import_dist355 = __toESM(require_dist());
-var import_dist356 = __toESM(require_dist2());
-var import_dist357 = __toESM(require_dist3());
+var import_dist280 = __toESM(require_dist());
+var import_dist281 = __toESM(require_dist2());
+var import_dist282 = __toESM(require_dist3());
 var DeleteBucketEncryptionCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12194,9 +11740,9 @@ var DeleteBucketEncryptionCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketIntelligentTieringConfigurationCommand.js
-var import_dist358 = __toESM(require_dist());
-var import_dist359 = __toESM(require_dist2());
-var import_dist360 = __toESM(require_dist3());
+var import_dist283 = __toESM(require_dist());
+var import_dist284 = __toESM(require_dist2());
+var import_dist285 = __toESM(require_dist3());
 var DeleteBucketIntelligentTieringConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12210,9 +11756,9 @@ var DeleteBucketIntelligentTieringConfigurationCommand = class extends Command.c
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketInventoryConfigurationCommand.js
-var import_dist361 = __toESM(require_dist());
-var import_dist362 = __toESM(require_dist2());
-var import_dist363 = __toESM(require_dist3());
+var import_dist286 = __toESM(require_dist());
+var import_dist287 = __toESM(require_dist2());
+var import_dist288 = __toESM(require_dist3());
 var DeleteBucketInventoryConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12226,9 +11772,9 @@ var DeleteBucketInventoryConfigurationCommand = class extends Command.classBuild
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketLifecycleCommand.js
-var import_dist364 = __toESM(require_dist());
-var import_dist365 = __toESM(require_dist2());
-var import_dist366 = __toESM(require_dist3());
+var import_dist289 = __toESM(require_dist());
+var import_dist290 = __toESM(require_dist2());
+var import_dist291 = __toESM(require_dist3());
 var DeleteBucketLifecycleCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12242,9 +11788,9 @@ var DeleteBucketLifecycleCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketMetadataTableConfigurationCommand.js
-var import_dist367 = __toESM(require_dist());
-var import_dist368 = __toESM(require_dist2());
-var import_dist369 = __toESM(require_dist3());
+var import_dist292 = __toESM(require_dist());
+var import_dist293 = __toESM(require_dist2());
+var import_dist294 = __toESM(require_dist3());
 var DeleteBucketMetadataTableConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12258,9 +11804,9 @@ var DeleteBucketMetadataTableConfigurationCommand = class extends Command.classB
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketMetricsConfigurationCommand.js
-var import_dist370 = __toESM(require_dist());
-var import_dist371 = __toESM(require_dist2());
-var import_dist372 = __toESM(require_dist3());
+var import_dist295 = __toESM(require_dist());
+var import_dist296 = __toESM(require_dist2());
+var import_dist297 = __toESM(require_dist3());
 var DeleteBucketMetricsConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12274,9 +11820,9 @@ var DeleteBucketMetricsConfigurationCommand = class extends Command.classBuilder
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketOwnershipControlsCommand.js
-var import_dist373 = __toESM(require_dist());
-var import_dist374 = __toESM(require_dist2());
-var import_dist375 = __toESM(require_dist3());
+var import_dist298 = __toESM(require_dist());
+var import_dist299 = __toESM(require_dist2());
+var import_dist300 = __toESM(require_dist3());
 var DeleteBucketOwnershipControlsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12290,9 +11836,9 @@ var DeleteBucketOwnershipControlsCommand = class extends Command.classBuilder().
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketPolicyCommand.js
-var import_dist376 = __toESM(require_dist());
-var import_dist377 = __toESM(require_dist2());
-var import_dist378 = __toESM(require_dist3());
+var import_dist301 = __toESM(require_dist());
+var import_dist302 = __toESM(require_dist2());
+var import_dist303 = __toESM(require_dist3());
 var DeleteBucketPolicyCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12306,9 +11852,9 @@ var DeleteBucketPolicyCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketReplicationCommand.js
-var import_dist379 = __toESM(require_dist());
-var import_dist380 = __toESM(require_dist2());
-var import_dist381 = __toESM(require_dist3());
+var import_dist304 = __toESM(require_dist());
+var import_dist305 = __toESM(require_dist2());
+var import_dist306 = __toESM(require_dist3());
 var DeleteBucketReplicationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12322,9 +11868,9 @@ var DeleteBucketReplicationCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketTaggingCommand.js
-var import_dist382 = __toESM(require_dist());
-var import_dist383 = __toESM(require_dist2());
-var import_dist384 = __toESM(require_dist3());
+var import_dist307 = __toESM(require_dist());
+var import_dist308 = __toESM(require_dist2());
+var import_dist309 = __toESM(require_dist3());
 var DeleteBucketTaggingCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12338,9 +11884,9 @@ var DeleteBucketTaggingCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteBucketWebsiteCommand.js
-var import_dist385 = __toESM(require_dist());
-var import_dist386 = __toESM(require_dist2());
-var import_dist387 = __toESM(require_dist3());
+var import_dist310 = __toESM(require_dist());
+var import_dist311 = __toESM(require_dist2());
+var import_dist312 = __toESM(require_dist3());
 var DeleteBucketWebsiteCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12354,9 +11900,9 @@ var DeleteBucketWebsiteCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteObjectCommand.js
-var import_dist388 = __toESM(require_dist());
-var import_dist389 = __toESM(require_dist2());
-var import_dist390 = __toESM(require_dist3());
+var import_dist313 = __toESM(require_dist());
+var import_dist314 = __toESM(require_dist2());
+var import_dist315 = __toESM(require_dist3());
 var DeleteObjectCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -12371,9 +11917,9 @@ var DeleteObjectCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteObjectsCommand.js
-var import_dist391 = __toESM(require_dist());
-var import_dist392 = __toESM(require_dist2());
-var import_dist393 = __toESM(require_dist3());
+var import_dist316 = __toESM(require_dist());
+var import_dist317 = __toESM(require_dist2());
+var import_dist318 = __toESM(require_dist3());
 var DeleteObjectsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -12391,9 +11937,9 @@ var DeleteObjectsCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeleteObjectTaggingCommand.js
-var import_dist394 = __toESM(require_dist());
-var import_dist395 = __toESM(require_dist2());
-var import_dist396 = __toESM(require_dist3());
+var import_dist319 = __toESM(require_dist());
+var import_dist320 = __toESM(require_dist2());
+var import_dist321 = __toESM(require_dist3());
 var DeleteObjectTaggingCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -12407,9 +11953,9 @@ var DeleteObjectTaggingCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/DeletePublicAccessBlockCommand.js
-var import_dist397 = __toESM(require_dist());
-var import_dist398 = __toESM(require_dist2());
-var import_dist399 = __toESM(require_dist3());
+var import_dist322 = __toESM(require_dist());
+var import_dist323 = __toESM(require_dist2());
+var import_dist324 = __toESM(require_dist3());
 var DeletePublicAccessBlockCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12423,9 +11969,9 @@ var DeletePublicAccessBlockCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketAccelerateConfigurationCommand.js
-var import_dist400 = __toESM(require_dist());
-var import_dist401 = __toESM(require_dist2());
-var import_dist402 = __toESM(require_dist3());
+var import_dist325 = __toESM(require_dist());
+var import_dist326 = __toESM(require_dist2());
+var import_dist327 = __toESM(require_dist3());
 var GetBucketAccelerateConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12440,9 +11986,9 @@ var GetBucketAccelerateConfigurationCommand = class extends Command.classBuilder
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketAclCommand.js
-var import_dist403 = __toESM(require_dist());
-var import_dist404 = __toESM(require_dist2());
-var import_dist405 = __toESM(require_dist3());
+var import_dist328 = __toESM(require_dist());
+var import_dist329 = __toESM(require_dist2());
+var import_dist330 = __toESM(require_dist3());
 var GetBucketAclCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12457,9 +12003,9 @@ var GetBucketAclCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketAnalyticsConfigurationCommand.js
-var import_dist406 = __toESM(require_dist());
-var import_dist407 = __toESM(require_dist2());
-var import_dist408 = __toESM(require_dist3());
+var import_dist331 = __toESM(require_dist());
+var import_dist332 = __toESM(require_dist2());
+var import_dist333 = __toESM(require_dist3());
 var GetBucketAnalyticsConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12474,9 +12020,9 @@ var GetBucketAnalyticsConfigurationCommand = class extends Command.classBuilder(
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketCorsCommand.js
-var import_dist409 = __toESM(require_dist());
-var import_dist410 = __toESM(require_dist2());
-var import_dist411 = __toESM(require_dist3());
+var import_dist334 = __toESM(require_dist());
+var import_dist335 = __toESM(require_dist2());
+var import_dist336 = __toESM(require_dist3());
 var GetBucketCorsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12491,9 +12037,9 @@ var GetBucketCorsCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketEncryptionCommand.js
-var import_dist412 = __toESM(require_dist());
-var import_dist413 = __toESM(require_dist2());
-var import_dist414 = __toESM(require_dist3());
+var import_dist337 = __toESM(require_dist());
+var import_dist338 = __toESM(require_dist2());
+var import_dist339 = __toESM(require_dist3());
 var GetBucketEncryptionCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12508,9 +12054,9 @@ var GetBucketEncryptionCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketIntelligentTieringConfigurationCommand.js
-var import_dist415 = __toESM(require_dist());
-var import_dist416 = __toESM(require_dist2());
-var import_dist417 = __toESM(require_dist3());
+var import_dist340 = __toESM(require_dist());
+var import_dist341 = __toESM(require_dist2());
+var import_dist342 = __toESM(require_dist3());
 var GetBucketIntelligentTieringConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12525,9 +12071,9 @@ var GetBucketIntelligentTieringConfigurationCommand = class extends Command.clas
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketInventoryConfigurationCommand.js
-var import_dist418 = __toESM(require_dist());
-var import_dist419 = __toESM(require_dist2());
-var import_dist420 = __toESM(require_dist3());
+var import_dist343 = __toESM(require_dist());
+var import_dist344 = __toESM(require_dist2());
+var import_dist345 = __toESM(require_dist3());
 var GetBucketInventoryConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12542,9 +12088,9 @@ var GetBucketInventoryConfigurationCommand = class extends Command.classBuilder(
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketLifecycleConfigurationCommand.js
-var import_dist421 = __toESM(require_dist());
-var import_dist422 = __toESM(require_dist2());
-var import_dist423 = __toESM(require_dist3());
+var import_dist346 = __toESM(require_dist());
+var import_dist347 = __toESM(require_dist2());
+var import_dist348 = __toESM(require_dist3());
 var GetBucketLifecycleConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12559,9 +12105,9 @@ var GetBucketLifecycleConfigurationCommand = class extends Command.classBuilder(
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketLocationCommand.js
-var import_dist424 = __toESM(require_dist());
-var import_dist425 = __toESM(require_dist2());
-var import_dist426 = __toESM(require_dist3());
+var import_dist349 = __toESM(require_dist());
+var import_dist350 = __toESM(require_dist2());
+var import_dist351 = __toESM(require_dist3());
 var GetBucketLocationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12576,9 +12122,9 @@ var GetBucketLocationCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketLoggingCommand.js
-var import_dist427 = __toESM(require_dist());
-var import_dist428 = __toESM(require_dist2());
-var import_dist429 = __toESM(require_dist3());
+var import_dist352 = __toESM(require_dist());
+var import_dist353 = __toESM(require_dist2());
+var import_dist354 = __toESM(require_dist3());
 var GetBucketLoggingCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12593,9 +12139,9 @@ var GetBucketLoggingCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketMetadataTableConfigurationCommand.js
-var import_dist430 = __toESM(require_dist());
-var import_dist431 = __toESM(require_dist2());
-var import_dist432 = __toESM(require_dist3());
+var import_dist355 = __toESM(require_dist());
+var import_dist356 = __toESM(require_dist2());
+var import_dist357 = __toESM(require_dist3());
 var GetBucketMetadataTableConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12610,9 +12156,9 @@ var GetBucketMetadataTableConfigurationCommand = class extends Command.classBuil
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketMetricsConfigurationCommand.js
-var import_dist433 = __toESM(require_dist());
-var import_dist434 = __toESM(require_dist2());
-var import_dist435 = __toESM(require_dist3());
+var import_dist358 = __toESM(require_dist());
+var import_dist359 = __toESM(require_dist2());
+var import_dist360 = __toESM(require_dist3());
 var GetBucketMetricsConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12627,9 +12173,9 @@ var GetBucketMetricsConfigurationCommand = class extends Command.classBuilder().
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketNotificationConfigurationCommand.js
-var import_dist436 = __toESM(require_dist());
-var import_dist437 = __toESM(require_dist2());
-var import_dist438 = __toESM(require_dist3());
+var import_dist361 = __toESM(require_dist());
+var import_dist362 = __toESM(require_dist2());
+var import_dist363 = __toESM(require_dist3());
 var GetBucketNotificationConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12644,9 +12190,9 @@ var GetBucketNotificationConfigurationCommand = class extends Command.classBuild
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketOwnershipControlsCommand.js
-var import_dist439 = __toESM(require_dist());
-var import_dist440 = __toESM(require_dist2());
-var import_dist441 = __toESM(require_dist3());
+var import_dist364 = __toESM(require_dist());
+var import_dist365 = __toESM(require_dist2());
+var import_dist366 = __toESM(require_dist3());
 var GetBucketOwnershipControlsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12661,9 +12207,9 @@ var GetBucketOwnershipControlsCommand = class extends Command.classBuilder().ep(
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketPolicyCommand.js
-var import_dist442 = __toESM(require_dist());
-var import_dist443 = __toESM(require_dist2());
-var import_dist444 = __toESM(require_dist3());
+var import_dist367 = __toESM(require_dist());
+var import_dist368 = __toESM(require_dist2());
+var import_dist369 = __toESM(require_dist3());
 var GetBucketPolicyCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12678,9 +12224,9 @@ var GetBucketPolicyCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketPolicyStatusCommand.js
-var import_dist445 = __toESM(require_dist());
-var import_dist446 = __toESM(require_dist2());
-var import_dist447 = __toESM(require_dist3());
+var import_dist370 = __toESM(require_dist());
+var import_dist371 = __toESM(require_dist2());
+var import_dist372 = __toESM(require_dist3());
 var GetBucketPolicyStatusCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12695,9 +12241,9 @@ var GetBucketPolicyStatusCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketReplicationCommand.js
-var import_dist448 = __toESM(require_dist());
-var import_dist449 = __toESM(require_dist2());
-var import_dist450 = __toESM(require_dist3());
+var import_dist373 = __toESM(require_dist());
+var import_dist374 = __toESM(require_dist2());
+var import_dist375 = __toESM(require_dist3());
 var GetBucketReplicationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12712,9 +12258,9 @@ var GetBucketReplicationCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketRequestPaymentCommand.js
-var import_dist451 = __toESM(require_dist());
-var import_dist452 = __toESM(require_dist2());
-var import_dist453 = __toESM(require_dist3());
+var import_dist376 = __toESM(require_dist());
+var import_dist377 = __toESM(require_dist2());
+var import_dist378 = __toESM(require_dist3());
 var GetBucketRequestPaymentCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12729,9 +12275,9 @@ var GetBucketRequestPaymentCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketTaggingCommand.js
-var import_dist454 = __toESM(require_dist());
-var import_dist455 = __toESM(require_dist2());
-var import_dist456 = __toESM(require_dist3());
+var import_dist379 = __toESM(require_dist());
+var import_dist380 = __toESM(require_dist2());
+var import_dist381 = __toESM(require_dist3());
 var GetBucketTaggingCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12746,9 +12292,9 @@ var GetBucketTaggingCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketVersioningCommand.js
-var import_dist457 = __toESM(require_dist());
-var import_dist458 = __toESM(require_dist2());
-var import_dist459 = __toESM(require_dist3());
+var import_dist382 = __toESM(require_dist());
+var import_dist383 = __toESM(require_dist2());
+var import_dist384 = __toESM(require_dist3());
 var GetBucketVersioningCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12763,9 +12309,9 @@ var GetBucketVersioningCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetBucketWebsiteCommand.js
-var import_dist460 = __toESM(require_dist());
-var import_dist461 = __toESM(require_dist2());
-var import_dist462 = __toESM(require_dist3());
+var import_dist385 = __toESM(require_dist());
+var import_dist386 = __toESM(require_dist2());
+var import_dist387 = __toESM(require_dist3());
 var GetBucketWebsiteCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12780,9 +12326,9 @@ var GetBucketWebsiteCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetObjectAclCommand.js
-var import_dist463 = __toESM(require_dist());
-var import_dist464 = __toESM(require_dist2());
-var import_dist465 = __toESM(require_dist3());
+var import_dist388 = __toESM(require_dist());
+var import_dist389 = __toESM(require_dist2());
+var import_dist390 = __toESM(require_dist3());
 var GetObjectAclCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -12797,9 +12343,9 @@ var GetObjectAclCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetObjectAttributesCommand.js
-var import_dist466 = __toESM(require_dist());
-var import_dist467 = __toESM(require_dist2());
-var import_dist468 = __toESM(require_dist3());
+var import_dist391 = __toESM(require_dist());
+var import_dist392 = __toESM(require_dist2());
+var import_dist393 = __toESM(require_dist3());
 var GetObjectAttributesCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -12814,9 +12360,9 @@ var GetObjectAttributesCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetObjectCommand.js
-var import_dist469 = __toESM(require_dist());
-var import_dist470 = __toESM(require_dist2());
-var import_dist471 = __toESM(require_dist3());
+var import_dist394 = __toESM(require_dist());
+var import_dist395 = __toESM(require_dist2());
+var import_dist396 = __toESM(require_dist3());
 var GetObjectCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -12837,9 +12383,9 @@ var GetObjectCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetObjectLegalHoldCommand.js
-var import_dist472 = __toESM(require_dist());
-var import_dist473 = __toESM(require_dist2());
-var import_dist474 = __toESM(require_dist3());
+var import_dist397 = __toESM(require_dist());
+var import_dist398 = __toESM(require_dist2());
+var import_dist399 = __toESM(require_dist3());
 var GetObjectLegalHoldCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -12853,9 +12399,9 @@ var GetObjectLegalHoldCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetObjectLockConfigurationCommand.js
-var import_dist475 = __toESM(require_dist());
-var import_dist476 = __toESM(require_dist2());
-var import_dist477 = __toESM(require_dist3());
+var import_dist400 = __toESM(require_dist());
+var import_dist401 = __toESM(require_dist2());
+var import_dist402 = __toESM(require_dist3());
 var GetObjectLockConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -12869,9 +12415,9 @@ var GetObjectLockConfigurationCommand = class extends Command.classBuilder().ep(
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetObjectRetentionCommand.js
-var import_dist478 = __toESM(require_dist());
-var import_dist479 = __toESM(require_dist2());
-var import_dist480 = __toESM(require_dist3());
+var import_dist403 = __toESM(require_dist());
+var import_dist404 = __toESM(require_dist2());
+var import_dist405 = __toESM(require_dist3());
 var GetObjectRetentionCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -12885,9 +12431,9 @@ var GetObjectRetentionCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetObjectTaggingCommand.js
-var import_dist481 = __toESM(require_dist());
-var import_dist482 = __toESM(require_dist2());
-var import_dist483 = __toESM(require_dist3());
+var import_dist406 = __toESM(require_dist());
+var import_dist407 = __toESM(require_dist2());
+var import_dist408 = __toESM(require_dist3());
 var GetObjectTaggingCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -12901,9 +12447,9 @@ var GetObjectTaggingCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetObjectTorrentCommand.js
-var import_dist484 = __toESM(require_dist());
-var import_dist485 = __toESM(require_dist2());
-var import_dist486 = __toESM(require_dist3());
+var import_dist409 = __toESM(require_dist());
+var import_dist410 = __toESM(require_dist2());
+var import_dist411 = __toESM(require_dist3());
 var GetObjectTorrentCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -12916,9 +12462,9 @@ var GetObjectTorrentCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/GetPublicAccessBlockCommand.js
-var import_dist487 = __toESM(require_dist());
-var import_dist488 = __toESM(require_dist2());
-var import_dist489 = __toESM(require_dist3());
+var import_dist412 = __toESM(require_dist());
+var import_dist413 = __toESM(require_dist2());
+var import_dist414 = __toESM(require_dist3());
 var GetPublicAccessBlockCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12933,9 +12479,9 @@ var GetPublicAccessBlockCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/HeadBucketCommand.js
-var import_dist490 = __toESM(require_dist());
-var import_dist491 = __toESM(require_dist2());
-var import_dist492 = __toESM(require_dist3());
+var import_dist415 = __toESM(require_dist());
+var import_dist416 = __toESM(require_dist2());
+var import_dist417 = __toESM(require_dist3());
 var HeadBucketCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -12949,9 +12495,9 @@ var HeadBucketCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/HeadObjectCommand.js
-var import_dist493 = __toESM(require_dist());
-var import_dist494 = __toESM(require_dist2());
-var import_dist495 = __toESM(require_dist3());
+var import_dist418 = __toESM(require_dist());
+var import_dist419 = __toESM(require_dist2());
+var import_dist420 = __toESM(require_dist3());
 var HeadObjectCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -12968,9 +12514,9 @@ var HeadObjectCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/ListBucketAnalyticsConfigurationsCommand.js
-var import_dist496 = __toESM(require_dist());
-var import_dist497 = __toESM(require_dist2());
-var import_dist498 = __toESM(require_dist3());
+var import_dist421 = __toESM(require_dist());
+var import_dist422 = __toESM(require_dist2());
+var import_dist423 = __toESM(require_dist3());
 var ListBucketAnalyticsConfigurationsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -12985,9 +12531,9 @@ var ListBucketAnalyticsConfigurationsCommand = class extends Command.classBuilde
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/ListBucketIntelligentTieringConfigurationsCommand.js
-var import_dist499 = __toESM(require_dist());
-var import_dist500 = __toESM(require_dist2());
-var import_dist501 = __toESM(require_dist3());
+var import_dist424 = __toESM(require_dist());
+var import_dist425 = __toESM(require_dist2());
+var import_dist426 = __toESM(require_dist3());
 var ListBucketIntelligentTieringConfigurationsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13002,9 +12548,9 @@ var ListBucketIntelligentTieringConfigurationsCommand = class extends Command.cl
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/ListBucketInventoryConfigurationsCommand.js
-var import_dist502 = __toESM(require_dist());
-var import_dist503 = __toESM(require_dist2());
-var import_dist504 = __toESM(require_dist3());
+var import_dist427 = __toESM(require_dist());
+var import_dist428 = __toESM(require_dist2());
+var import_dist429 = __toESM(require_dist3());
 var ListBucketInventoryConfigurationsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13019,9 +12565,9 @@ var ListBucketInventoryConfigurationsCommand = class extends Command.classBuilde
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/ListBucketMetricsConfigurationsCommand.js
-var import_dist505 = __toESM(require_dist());
-var import_dist506 = __toESM(require_dist2());
-var import_dist507 = __toESM(require_dist3());
+var import_dist430 = __toESM(require_dist());
+var import_dist431 = __toESM(require_dist2());
+var import_dist432 = __toESM(require_dist3());
 var ListBucketMetricsConfigurationsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -13035,9 +12581,9 @@ var ListBucketMetricsConfigurationsCommand = class extends Command.classBuilder(
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/ListBucketsCommand.js
-var import_dist508 = __toESM(require_dist());
-var import_dist509 = __toESM(require_dist2());
-var import_dist510 = __toESM(require_dist3());
+var import_dist433 = __toESM(require_dist());
+var import_dist434 = __toESM(require_dist2());
+var import_dist435 = __toESM(require_dist3());
 var ListBucketsCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs2, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -13048,9 +12594,9 @@ var ListBucketsCommand = class extends Command.classBuilder().ep(commonParams).m
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/ListDirectoryBucketsCommand.js
-var import_dist511 = __toESM(require_dist());
-var import_dist512 = __toESM(require_dist2());
-var import_dist513 = __toESM(require_dist3());
+var import_dist436 = __toESM(require_dist());
+var import_dist437 = __toESM(require_dist2());
+var import_dist438 = __toESM(require_dist3());
 var ListDirectoryBucketsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true }
@@ -13064,9 +12610,9 @@ var ListDirectoryBucketsCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/ListMultipartUploadsCommand.js
-var import_dist514 = __toESM(require_dist());
-var import_dist515 = __toESM(require_dist2());
-var import_dist516 = __toESM(require_dist3());
+var import_dist439 = __toESM(require_dist());
+var import_dist440 = __toESM(require_dist2());
+var import_dist441 = __toESM(require_dist3());
 var ListMultipartUploadsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -13081,9 +12627,9 @@ var ListMultipartUploadsCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/ListObjectsCommand.js
-var import_dist517 = __toESM(require_dist());
-var import_dist518 = __toESM(require_dist2());
-var import_dist519 = __toESM(require_dist3());
+var import_dist442 = __toESM(require_dist());
+var import_dist443 = __toESM(require_dist2());
+var import_dist444 = __toESM(require_dist3());
 var ListObjectsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -13098,9 +12644,9 @@ var ListObjectsCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/ListObjectsV2Command.js
-var import_dist520 = __toESM(require_dist());
-var import_dist521 = __toESM(require_dist2());
-var import_dist522 = __toESM(require_dist3());
+var import_dist445 = __toESM(require_dist());
+var import_dist446 = __toESM(require_dist2());
+var import_dist447 = __toESM(require_dist3());
 var ListObjectsV2Command = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -13115,9 +12661,9 @@ var ListObjectsV2Command = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/ListObjectVersionsCommand.js
-var import_dist523 = __toESM(require_dist());
-var import_dist524 = __toESM(require_dist2());
-var import_dist525 = __toESM(require_dist3());
+var import_dist448 = __toESM(require_dist());
+var import_dist449 = __toESM(require_dist2());
+var import_dist450 = __toESM(require_dist3());
 var ListObjectVersionsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -13132,9 +12678,9 @@ var ListObjectVersionsCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/ListPartsCommand.js
-var import_dist526 = __toESM(require_dist());
-var import_dist527 = __toESM(require_dist2());
-var import_dist528 = __toESM(require_dist3());
+var import_dist451 = __toESM(require_dist());
+var import_dist452 = __toESM(require_dist2());
+var import_dist453 = __toESM(require_dist3());
 var ListPartsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -13150,9 +12696,9 @@ var ListPartsCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketAccelerateConfigurationCommand.js
-var import_dist529 = __toESM(require_dist());
-var import_dist530 = __toESM(require_dist2());
-var import_dist531 = __toESM(require_dist3());
+var import_dist454 = __toESM(require_dist());
+var import_dist455 = __toESM(require_dist2());
+var import_dist456 = __toESM(require_dist3());
 var PutBucketAccelerateConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13170,9 +12716,9 @@ var PutBucketAccelerateConfigurationCommand = class extends Command.classBuilder
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketAclCommand.js
-var import_dist532 = __toESM(require_dist());
-var import_dist533 = __toESM(require_dist2());
-var import_dist534 = __toESM(require_dist3());
+var import_dist457 = __toESM(require_dist());
+var import_dist458 = __toESM(require_dist2());
+var import_dist459 = __toESM(require_dist3());
 var PutBucketAclCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13190,9 +12736,9 @@ var PutBucketAclCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketAnalyticsConfigurationCommand.js
-var import_dist535 = __toESM(require_dist());
-var import_dist536 = __toESM(require_dist2());
-var import_dist537 = __toESM(require_dist3());
+var import_dist460 = __toESM(require_dist());
+var import_dist461 = __toESM(require_dist2());
+var import_dist462 = __toESM(require_dist3());
 var PutBucketAnalyticsConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13206,9 +12752,9 @@ var PutBucketAnalyticsConfigurationCommand = class extends Command.classBuilder(
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketCorsCommand.js
-var import_dist538 = __toESM(require_dist());
-var import_dist539 = __toESM(require_dist2());
-var import_dist540 = __toESM(require_dist3());
+var import_dist463 = __toESM(require_dist());
+var import_dist464 = __toESM(require_dist2());
+var import_dist465 = __toESM(require_dist3());
 var PutBucketCorsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13226,9 +12772,9 @@ var PutBucketCorsCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketEncryptionCommand.js
-var import_dist541 = __toESM(require_dist());
-var import_dist542 = __toESM(require_dist2());
-var import_dist543 = __toESM(require_dist3());
+var import_dist466 = __toESM(require_dist());
+var import_dist467 = __toESM(require_dist2());
+var import_dist468 = __toESM(require_dist3());
 var PutBucketEncryptionCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13246,9 +12792,9 @@ var PutBucketEncryptionCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketIntelligentTieringConfigurationCommand.js
-var import_dist544 = __toESM(require_dist());
-var import_dist545 = __toESM(require_dist2());
-var import_dist546 = __toESM(require_dist3());
+var import_dist469 = __toESM(require_dist());
+var import_dist470 = __toESM(require_dist2());
+var import_dist471 = __toESM(require_dist3());
 var PutBucketIntelligentTieringConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13262,9 +12808,9 @@ var PutBucketIntelligentTieringConfigurationCommand = class extends Command.clas
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketInventoryConfigurationCommand.js
-var import_dist547 = __toESM(require_dist());
-var import_dist548 = __toESM(require_dist2());
-var import_dist549 = __toESM(require_dist3());
+var import_dist472 = __toESM(require_dist());
+var import_dist473 = __toESM(require_dist2());
+var import_dist474 = __toESM(require_dist3());
 var PutBucketInventoryConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13278,9 +12824,9 @@ var PutBucketInventoryConfigurationCommand = class extends Command.classBuilder(
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketLifecycleConfigurationCommand.js
-var import_dist550 = __toESM(require_dist());
-var import_dist551 = __toESM(require_dist2());
-var import_dist552 = __toESM(require_dist3());
+var import_dist475 = __toESM(require_dist());
+var import_dist476 = __toESM(require_dist2());
+var import_dist477 = __toESM(require_dist3());
 var PutBucketLifecycleConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13299,9 +12845,9 @@ var PutBucketLifecycleConfigurationCommand = class extends Command.classBuilder(
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketLoggingCommand.js
-var import_dist553 = __toESM(require_dist());
-var import_dist554 = __toESM(require_dist2());
-var import_dist555 = __toESM(require_dist3());
+var import_dist478 = __toESM(require_dist());
+var import_dist479 = __toESM(require_dist2());
+var import_dist480 = __toESM(require_dist3());
 var PutBucketLoggingCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13319,9 +12865,9 @@ var PutBucketLoggingCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketMetricsConfigurationCommand.js
-var import_dist556 = __toESM(require_dist());
-var import_dist557 = __toESM(require_dist2());
-var import_dist558 = __toESM(require_dist3());
+var import_dist481 = __toESM(require_dist());
+var import_dist482 = __toESM(require_dist2());
+var import_dist483 = __toESM(require_dist3());
 var PutBucketMetricsConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13335,9 +12881,9 @@ var PutBucketMetricsConfigurationCommand = class extends Command.classBuilder().
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketNotificationConfigurationCommand.js
-var import_dist559 = __toESM(require_dist());
-var import_dist560 = __toESM(require_dist2());
-var import_dist561 = __toESM(require_dist3());
+var import_dist484 = __toESM(require_dist());
+var import_dist485 = __toESM(require_dist2());
+var import_dist486 = __toESM(require_dist3());
 var PutBucketNotificationConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13351,9 +12897,9 @@ var PutBucketNotificationConfigurationCommand = class extends Command.classBuild
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketOwnershipControlsCommand.js
-var import_dist562 = __toESM(require_dist());
-var import_dist563 = __toESM(require_dist2());
-var import_dist564 = __toESM(require_dist3());
+var import_dist487 = __toESM(require_dist());
+var import_dist488 = __toESM(require_dist2());
+var import_dist489 = __toESM(require_dist3());
 var PutBucketOwnershipControlsCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13370,9 +12916,9 @@ var PutBucketOwnershipControlsCommand = class extends Command.classBuilder().ep(
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketPolicyCommand.js
-var import_dist565 = __toESM(require_dist());
-var import_dist566 = __toESM(require_dist2());
-var import_dist567 = __toESM(require_dist3());
+var import_dist490 = __toESM(require_dist());
+var import_dist491 = __toESM(require_dist2());
+var import_dist492 = __toESM(require_dist3());
 var PutBucketPolicyCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13390,9 +12936,9 @@ var PutBucketPolicyCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketReplicationCommand.js
-var import_dist568 = __toESM(require_dist());
-var import_dist569 = __toESM(require_dist2());
-var import_dist570 = __toESM(require_dist3());
+var import_dist493 = __toESM(require_dist());
+var import_dist494 = __toESM(require_dist2());
+var import_dist495 = __toESM(require_dist3());
 var PutBucketReplicationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13410,9 +12956,9 @@ var PutBucketReplicationCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketRequestPaymentCommand.js
-var import_dist571 = __toESM(require_dist());
-var import_dist572 = __toESM(require_dist2());
-var import_dist573 = __toESM(require_dist3());
+var import_dist496 = __toESM(require_dist());
+var import_dist497 = __toESM(require_dist2());
+var import_dist498 = __toESM(require_dist3());
 var PutBucketRequestPaymentCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13430,9 +12976,9 @@ var PutBucketRequestPaymentCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketTaggingCommand.js
-var import_dist574 = __toESM(require_dist());
-var import_dist575 = __toESM(require_dist2());
-var import_dist576 = __toESM(require_dist3());
+var import_dist499 = __toESM(require_dist());
+var import_dist500 = __toESM(require_dist2());
+var import_dist501 = __toESM(require_dist3());
 var PutBucketTaggingCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13450,9 +12996,9 @@ var PutBucketTaggingCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketVersioningCommand.js
-var import_dist577 = __toESM(require_dist());
-var import_dist578 = __toESM(require_dist2());
-var import_dist579 = __toESM(require_dist3());
+var import_dist502 = __toESM(require_dist());
+var import_dist503 = __toESM(require_dist2());
+var import_dist504 = __toESM(require_dist3());
 var PutBucketVersioningCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13470,9 +13016,9 @@ var PutBucketVersioningCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutBucketWebsiteCommand.js
-var import_dist580 = __toESM(require_dist());
-var import_dist581 = __toESM(require_dist2());
-var import_dist582 = __toESM(require_dist3());
+var import_dist505 = __toESM(require_dist());
+var import_dist506 = __toESM(require_dist2());
+var import_dist507 = __toESM(require_dist3());
 var PutBucketWebsiteCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13490,9 +13036,9 @@ var PutBucketWebsiteCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutObjectAclCommand.js
-var import_dist583 = __toESM(require_dist());
-var import_dist584 = __toESM(require_dist2());
-var import_dist585 = __toESM(require_dist3());
+var import_dist508 = __toESM(require_dist());
+var import_dist509 = __toESM(require_dist2());
+var import_dist510 = __toESM(require_dist3());
 var PutObjectAclCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -13511,9 +13057,9 @@ var PutObjectAclCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutObjectCommand.js
-var import_dist586 = __toESM(require_dist());
-var import_dist587 = __toESM(require_dist2());
-var import_dist588 = __toESM(require_dist3());
+var import_dist511 = __toESM(require_dist());
+var import_dist512 = __toESM(require_dist2());
+var import_dist513 = __toESM(require_dist3());
 var PutObjectCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -13534,9 +13080,9 @@ var PutObjectCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutObjectLegalHoldCommand.js
-var import_dist589 = __toESM(require_dist());
-var import_dist590 = __toESM(require_dist2());
-var import_dist591 = __toESM(require_dist3());
+var import_dist514 = __toESM(require_dist());
+var import_dist515 = __toESM(require_dist2());
+var import_dist516 = __toESM(require_dist3());
 var PutObjectLegalHoldCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -13554,9 +13100,9 @@ var PutObjectLegalHoldCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutObjectLockConfigurationCommand.js
-var import_dist592 = __toESM(require_dist());
-var import_dist593 = __toESM(require_dist2());
-var import_dist594 = __toESM(require_dist3());
+var import_dist517 = __toESM(require_dist());
+var import_dist518 = __toESM(require_dist2());
+var import_dist519 = __toESM(require_dist3());
 var PutObjectLockConfigurationCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -13574,9 +13120,9 @@ var PutObjectLockConfigurationCommand = class extends Command.classBuilder().ep(
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutObjectRetentionCommand.js
-var import_dist595 = __toESM(require_dist());
-var import_dist596 = __toESM(require_dist2());
-var import_dist597 = __toESM(require_dist3());
+var import_dist520 = __toESM(require_dist());
+var import_dist521 = __toESM(require_dist2());
+var import_dist522 = __toESM(require_dist3());
 var PutObjectRetentionCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -13594,9 +13140,9 @@ var PutObjectRetentionCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutObjectTaggingCommand.js
-var import_dist598 = __toESM(require_dist());
-var import_dist599 = __toESM(require_dist2());
-var import_dist600 = __toESM(require_dist3());
+var import_dist523 = __toESM(require_dist());
+var import_dist524 = __toESM(require_dist2());
+var import_dist525 = __toESM(require_dist3());
 var PutObjectTaggingCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -13614,9 +13160,9 @@ var PutObjectTaggingCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/PutPublicAccessBlockCommand.js
-var import_dist601 = __toESM(require_dist());
-var import_dist602 = __toESM(require_dist2());
-var import_dist603 = __toESM(require_dist3());
+var import_dist526 = __toESM(require_dist());
+var import_dist527 = __toESM(require_dist2());
+var import_dist528 = __toESM(require_dist3());
 var PutPublicAccessBlockCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseS3ExpressControlEndpoint: { type: "staticContextParams", value: true },
@@ -13634,9 +13180,9 @@ var PutPublicAccessBlockCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/RestoreObjectCommand.js
-var import_dist604 = __toESM(require_dist());
-var import_dist605 = __toESM(require_dist2());
-var import_dist606 = __toESM(require_dist3());
+var import_dist529 = __toESM(require_dist());
+var import_dist530 = __toESM(require_dist2());
+var import_dist531 = __toESM(require_dist3());
 var RestoreObjectCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -13654,9 +13200,9 @@ var RestoreObjectCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/SelectObjectContentCommand.js
-var import_dist607 = __toESM(require_dist());
-var import_dist608 = __toESM(require_dist2());
-var import_dist609 = __toESM(require_dist3());
+var import_dist532 = __toESM(require_dist());
+var import_dist533 = __toESM(require_dist2());
+var import_dist534 = __toESM(require_dist3());
 var SelectObjectContentCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" }
@@ -13675,9 +13221,9 @@ var SelectObjectContentCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/UploadPartCommand.js
-var import_dist610 = __toESM(require_dist());
-var import_dist611 = __toESM(require_dist2());
-var import_dist612 = __toESM(require_dist3());
+var import_dist535 = __toESM(require_dist());
+var import_dist536 = __toESM(require_dist2());
+var import_dist537 = __toESM(require_dist3());
 var UploadPartCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   Bucket: { type: "contextParams", name: "Bucket" },
@@ -13697,9 +13243,9 @@ var UploadPartCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/UploadPartCopyCommand.js
-var import_dist613 = __toESM(require_dist());
-var import_dist614 = __toESM(require_dist2());
-var import_dist615 = __toESM(require_dist3());
+var import_dist538 = __toESM(require_dist());
+var import_dist539 = __toESM(require_dist2());
+var import_dist540 = __toESM(require_dist3());
 var UploadPartCopyCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   DisableS3ExpressSessionAuth: { type: "staticContextParams", value: true },
@@ -13715,9 +13261,9 @@ var UploadPartCopyCommand = class extends Command.classBuilder().ep({
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/WriteGetObjectResponseCommand.js
-var import_dist616 = __toESM(require_dist());
-var import_dist617 = __toESM(require_dist2());
-var import_dist618 = __toESM(require_dist3());
+var import_dist541 = __toESM(require_dist());
+var import_dist542 = __toESM(require_dist2());
+var import_dist543 = __toESM(require_dist3());
 var WriteGetObjectResponseCommand = class extends Command.classBuilder().ep({
   ...commonParams,
   UseObjectLambdaEndpoint: { type: "staticContextParams", value: true }
@@ -13835,53 +13381,53 @@ var S3 = class extends S3Client {
 createAggregatedClient(commands, S3);
 
 // node_modules/@aws-sdk/client-s3/dist-es/commands/index.js
-var import_dist622 = __toESM(require_dist());
-var import_dist623 = __toESM(require_dist2());
-var import_dist624 = __toESM(require_dist3());
+var import_dist547 = __toESM(require_dist());
+var import_dist548 = __toESM(require_dist2());
+var import_dist549 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-s3/dist-es/pagination/index.js
-var import_dist640 = __toESM(require_dist());
-var import_dist641 = __toESM(require_dist2());
-var import_dist642 = __toESM(require_dist3());
+var import_dist565 = __toESM(require_dist());
+var import_dist566 = __toESM(require_dist2());
+var import_dist567 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-s3/dist-es/pagination/Interfaces.js
-var import_dist625 = __toESM(require_dist());
-var import_dist626 = __toESM(require_dist2());
-var import_dist627 = __toESM(require_dist3());
+var import_dist550 = __toESM(require_dist());
+var import_dist551 = __toESM(require_dist2());
+var import_dist552 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-s3/dist-es/pagination/ListBucketsPaginator.js
-var import_dist628 = __toESM(require_dist());
-var import_dist629 = __toESM(require_dist2());
-var import_dist630 = __toESM(require_dist3());
+var import_dist553 = __toESM(require_dist());
+var import_dist554 = __toESM(require_dist2());
+var import_dist555 = __toESM(require_dist3());
 var paginateListBuckets = createPaginator(S3Client, ListBucketsCommand, "ContinuationToken", "ContinuationToken", "MaxBuckets");
 
 // node_modules/@aws-sdk/client-s3/dist-es/pagination/ListDirectoryBucketsPaginator.js
-var import_dist631 = __toESM(require_dist());
-var import_dist632 = __toESM(require_dist2());
-var import_dist633 = __toESM(require_dist3());
+var import_dist556 = __toESM(require_dist());
+var import_dist557 = __toESM(require_dist2());
+var import_dist558 = __toESM(require_dist3());
 var paginateListDirectoryBuckets = createPaginator(S3Client, ListDirectoryBucketsCommand, "ContinuationToken", "ContinuationToken", "MaxDirectoryBuckets");
 
 // node_modules/@aws-sdk/client-s3/dist-es/pagination/ListObjectsV2Paginator.js
-var import_dist634 = __toESM(require_dist());
-var import_dist635 = __toESM(require_dist2());
-var import_dist636 = __toESM(require_dist3());
+var import_dist559 = __toESM(require_dist());
+var import_dist560 = __toESM(require_dist2());
+var import_dist561 = __toESM(require_dist3());
 var paginateListObjectsV2 = createPaginator(S3Client, ListObjectsV2Command, "ContinuationToken", "NextContinuationToken", "MaxKeys");
 
 // node_modules/@aws-sdk/client-s3/dist-es/pagination/ListPartsPaginator.js
-var import_dist637 = __toESM(require_dist());
-var import_dist638 = __toESM(require_dist2());
-var import_dist639 = __toESM(require_dist3());
+var import_dist562 = __toESM(require_dist());
+var import_dist563 = __toESM(require_dist2());
+var import_dist564 = __toESM(require_dist3());
 var paginateListParts = createPaginator(S3Client, ListPartsCommand, "PartNumberMarker", "NextPartNumberMarker", "MaxParts");
 
 // node_modules/@aws-sdk/client-s3/dist-es/waiters/index.js
-var import_dist655 = __toESM(require_dist());
-var import_dist656 = __toESM(require_dist2());
-var import_dist657 = __toESM(require_dist3());
+var import_dist580 = __toESM(require_dist());
+var import_dist581 = __toESM(require_dist2());
+var import_dist582 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-s3/dist-es/waiters/waitForBucketExists.js
-var import_dist643 = __toESM(require_dist());
-var import_dist644 = __toESM(require_dist2());
-var import_dist645 = __toESM(require_dist3());
+var import_dist568 = __toESM(require_dist());
+var import_dist569 = __toESM(require_dist2());
+var import_dist570 = __toESM(require_dist3());
 var checkState = async (client, input) => {
   let reason;
   try {
@@ -13907,9 +13453,9 @@ var waitUntilBucketExists = async (params, input) => {
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/waiters/waitForBucketNotExists.js
-var import_dist646 = __toESM(require_dist());
-var import_dist647 = __toESM(require_dist2());
-var import_dist648 = __toESM(require_dist3());
+var import_dist571 = __toESM(require_dist());
+var import_dist572 = __toESM(require_dist2());
+var import_dist573 = __toESM(require_dist3());
 var checkState2 = async (client, input) => {
   let reason;
   try {
@@ -13934,9 +13480,9 @@ var waitUntilBucketNotExists = async (params, input) => {
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/waiters/waitForObjectExists.js
-var import_dist649 = __toESM(require_dist());
-var import_dist650 = __toESM(require_dist2());
-var import_dist651 = __toESM(require_dist3());
+var import_dist574 = __toESM(require_dist());
+var import_dist575 = __toESM(require_dist2());
+var import_dist576 = __toESM(require_dist3());
 var checkState3 = async (client, input) => {
   let reason;
   try {
@@ -13962,9 +13508,9 @@ var waitUntilObjectExists = async (params, input) => {
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/waiters/waitForObjectNotExists.js
-var import_dist652 = __toESM(require_dist());
-var import_dist653 = __toESM(require_dist2());
-var import_dist654 = __toESM(require_dist3());
+var import_dist577 = __toESM(require_dist());
+var import_dist578 = __toESM(require_dist2());
+var import_dist579 = __toESM(require_dist3());
 var checkState4 = async (client, input) => {
   let reason;
   try {
@@ -13989,9 +13535,9 @@ var waitUntilObjectNotExists = async (params, input) => {
 };
 
 // node_modules/@aws-sdk/client-s3/dist-es/models/index.js
-var import_dist658 = __toESM(require_dist());
-var import_dist659 = __toESM(require_dist2());
-var import_dist660 = __toESM(require_dist3());
+var import_dist583 = __toESM(require_dist());
+var import_dist584 = __toESM(require_dist2());
+var import_dist585 = __toESM(require_dist3());
 export {
   Command as $Command,
   AbortMultipartUploadCommand,

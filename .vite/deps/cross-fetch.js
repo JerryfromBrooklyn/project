@@ -11,7 +11,7 @@ import {
   require_dist,
   require_dist2,
   require_dist3
-} from "./chunk-TJZ7TNHW.js";
+} from "./chunk-GJFZQ5ET.js";
 
 // node_modules/cross-fetch/dist/browser-ponyfill.js
 var require_browser_ponyfill = __commonJS({
@@ -164,8 +164,7 @@ var require_browser_ponyfill = __commonJS({
           Headers.prototype[Symbol.iterator] = Headers.prototype.entries;
         }
         function consumed(body) {
-          if (body._noBody)
-            return;
+          if (body._noBody) return;
           if (body.bodyUsed) {
             return Promise.reject(new TypeError("Already read"));
           }

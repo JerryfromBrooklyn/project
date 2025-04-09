@@ -7,14 +7,14 @@ globalThis.process = globalThis.process || __process_polyfill
 
 import {
   require_react
-} from "./chunk-QAUW4PZC.js";
+} from "./chunk-KMLDHAXH.js";
 import {
   __commonJS,
   __toESM,
   require_dist,
   require_dist2,
   require_dist3
-} from "./chunk-TJZ7TNHW.js";
+} from "./chunk-GJFZQ5ET.js";
 
 // node_modules/react-webcam/dist/react-webcam.js
 var require_react_webcam = __commonJS({
@@ -67,20 +67,15 @@ var require_react_webcam = __commonJS({
             Object.defineProperty(exports2, "__esModule", { value: true });
           };
           __webpack_require__.t = function(value, mode) {
-            if (mode & 1)
-              value = __webpack_require__(value);
-            if (mode & 8)
-              return value;
-            if (mode & 4 && typeof value === "object" && value && value.__esModule)
-              return value;
+            if (mode & 1) value = __webpack_require__(value);
+            if (mode & 8) return value;
+            if (mode & 4 && typeof value === "object" && value && value.__esModule) return value;
             var ns = /* @__PURE__ */ Object.create(null);
             __webpack_require__.r(ns);
             Object.defineProperty(ns, "default", { enumerable: true, value });
-            if (mode & 2 && typeof value != "string")
-              for (var key in value)
-                __webpack_require__.d(ns, key, (function(key2) {
-                  return value[key2];
-                }).bind(null, key));
+            if (mode & 2 && typeof value != "string") for (var key in value) __webpack_require__.d(ns, key, (function(key2) {
+              return value[key2];
+            }).bind(null, key));
             return ns;
           };
           __webpack_require__.n = function(module2) {
@@ -124,9 +119,7 @@ var require_react_webcam = __commonJS({
                   extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
                     d2.__proto__ = b2;
                   } || function(d2, b2) {
-                    for (var p in b2)
-                      if (b2.hasOwnProperty(p))
-                        d2[p] = b2[p];
+                    for (var p in b2) if (b2.hasOwnProperty(p)) d2[p] = b2[p];
                   };
                   return extendStatics(d, b);
                 };
@@ -142,9 +135,8 @@ var require_react_webcam = __commonJS({
                 __assign = Object.assign || function(t) {
                   for (var s, i = 1, n = arguments.length; i < n; i++) {
                     s = arguments[i];
-                    for (var p in s)
-                      if (Object.prototype.hasOwnProperty.call(s, p))
-                        t[p] = s[p];
+                    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                      t[p] = s[p];
                   }
                   return t;
                 };
@@ -152,9 +144,8 @@ var require_react_webcam = __commonJS({
               };
               var __rest = function(s, e) {
                 var t = {};
-                for (var p in s)
-                  if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-                    t[p] = s[p];
+                for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+                  t[p] = s[p];
                 if (s != null && typeof Object.getOwnPropertySymbols === "function")
                   for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
                     if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))

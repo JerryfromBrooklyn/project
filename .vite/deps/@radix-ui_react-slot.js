@@ -7,16 +7,16 @@ globalThis.process = globalThis.process || __process_polyfill
 
 import {
   require_jsx_runtime
-} from "./chunk-MSM2D5WN.js";
+} from "./chunk-HUCHNPY6.js";
 import {
   require_react
-} from "./chunk-QAUW4PZC.js";
+} from "./chunk-KMLDHAXH.js";
 import {
   __toESM,
   require_dist,
   require_dist2,
   require_dist3
-} from "./chunk-TJZ7TNHW.js";
+} from "./chunk-GJFZQ5ET.js";
 
 // node_modules/@radix-ui/react-slot/dist/index.mjs
 var import_dist4 = __toESM(require_dist(), 1);
@@ -24,7 +24,7 @@ var import_dist5 = __toESM(require_dist2(), 1);
 var import_dist6 = __toESM(require_dist3(), 1);
 var React2 = __toESM(require_react(), 1);
 
-// node_modules/@radix-ui/react-slot/node_modules/@radix-ui/react-compose-refs/dist/index.mjs
+// node_modules/@radix-ui/react-compose-refs/dist/index.mjs
 var import_dist = __toESM(require_dist(), 1);
 var import_dist2 = __toESM(require_dist2(), 1);
 var import_dist3 = __toESM(require_dist3(), 1);
@@ -73,8 +73,7 @@ function createSlot(ownerName) {
       const newElement = slottable.props.children;
       const newChildren = childrenArray.map((child) => {
         if (child === slottable) {
-          if (React2.Children.count(newElement) > 1)
-            return React2.Children.only(null);
+          if (React2.Children.count(newElement) > 1) return React2.Children.only(null);
           return React2.isValidElement(newElement) ? newElement.props.children : null;
         } else {
           return child;

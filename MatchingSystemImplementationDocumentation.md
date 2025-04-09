@@ -150,6 +150,46 @@ The system needs to handle:
        - Implemented tests for API endpoints, face registration, historical matching, future matching, and error handling
        - Documented test results and remaining issues in test logs
 
+### Phase 5: Lambda Function Implementation and Error Handling (Completed)
+
+*   **Goal:** Implement all Lambda functions for face recognition system and improve error handling.
+*   **Status:** Completed.
+*   **Tasks Completed:**
+
+    1. **Lambda Function Implementation:**
+       - Implemented full Lambda function code for all required endpoints:
+         - `shmong-login`: User authentication with JWT token generation
+         - `shmong-face-register`: Face registration and indexing with AWS Rekognition
+         - `shmong-user-face-data`: Retrieval of user's face data and statistics
+         - `shmong-historical-matches`: Fetching historical photo matches
+         - `shmong-recent-matches`: Fetching recent photo matches
+         - `shmong-face-stats`: Computing face match statistics for dashboard
+       - Each function includes standardized request validation and error handling
+
+    2. **Error Handling Enhancement:**
+       - Added comprehensive error handling to all Lambda functions
+       - Implemented proper validation for all request parameters
+       - Included detailed error messages and status codes for different failure scenarios
+       - Added try/catch blocks with appropriate logging for debugging
+       - Standardized error response format across all endpoints
+
+    3. **CORS Implementation:**
+       - Added CORS headers to all API responses
+       - Configured OPTIONS method handling for pre-flight requests
+       - Set up proper Access-Control-Allow-* headers for cross-origin access
+
+    4. **API Gateway Integration:**
+       - Updated all API Gateway integrations to connect to the new Lambda functions
+       - Configured proper permission policies for API Gateway to invoke Lambda functions
+       - Set up resource methods and request mappings
+       - Deployed all changes to the production stage
+
+    5. **Testing and Validation:**
+       - Created test scripts to verify correct function of all endpoints
+       - Implemented end-to-end test script for system testing
+       - Fixed DynamoDB key schema in the face registration Lambda function
+       - Tested with live user IDs from the database
+
 ## 4. Testing the Historical Matching Functionality
 
 To test the historical matching functionality:
@@ -170,6 +210,8 @@ To test the historical matching functionality:
    - Position your face in the frame
    - Capture your face image
    - The system will register your face with AWS Rekognition
+   - If the face is detected successfully, you'll receive a confirmation
+   - If no face is detected, you'll be prompted to try again with better lighting
 
 4. **View Historical Matches:**
    - After registration, the system automatically runs historical matching
@@ -199,7 +241,10 @@ To test the historical matching functionality:
 *   **Table Name Inconsistency:** Found inconsistent references to DynamoDB tables with some code using 'shmong-face-data' and others using 'face_data'. **Resolution:** Standardized all table references to consistently use 'shmong-face-data', particularly in FaceStorageService.js.
 *   **API Endpoint Misalignment:** Identified that front-end expected API endpoints that weren't properly implemented or aligned with back-end resources. **Resolution:** Created API Gateway resources matching front-end expectations, though some endpoints (login, register, face registration, photo upload) still require additional implementation.
 *   **Package Dependency Conflicts:** Encountered incompatible Uppy package versions and missing dependencies causing build and runtime issues. **Resolution:** Updated package.json with corrected versions and added missing dependencies, though some package conflicts remain.
-*   **API Gateway Integration Issues:** Despite setting up Lambda functions and API Gateway resources with correct integrations, API endpoints return "Missing Authentication Token" errors. **Partial Resolution:** Created and deployed Lambda functions for all required endpoints, integrated them with API Gateway, and added proper permissions. Further investigation is needed to resolve "Missing Authentication Token" errors, which might be related to API Gateway configuration, resource path issues, or authorization settings.
+*   **API Gateway Integration Issues:** Despite setting up Lambda functions and API Gateway resources with correct integrations, API endpoints return 502 "Internal server error" responses. **Resolution:** The issue was related to Lambda function handlers not being correctly specified. We updated the handler names to match the file structure and added proper handler exports.
+*   **DynamoDB Key Schema Issue:** The face registration Lambda function was using `userId` as the key in DynamoDB queries, but the table uses `id` as the primary key. **Resolution:** Updated the Lambda function to use `id` as the key in DynamoDB queries, which fixed the schema validation error.
+*   **Face Detection Quality Issues:** Users attempting to register with poor quality images were getting generic errors. **Resolution:** Enhanced error handling to provide specific feedback when no face is detected in the image.
+*   **Lambda Function Permission Issues:** Lambda functions could not be invoked by API Gateway due to missing permissions. **Resolution:** Added required permissions for API Gateway to invoke Lambda functions using the Lambda add-permission command.
 
 ## 6. Next Steps & Future Improvements
 
@@ -207,38 +252,43 @@ To test the historical matching functionality:
    - Add pagination for photo matches display
    - Implement lazy loading for matched photos
    - Optimize AWS Rekognition calls for batch processing
+   - Consider caching frequent queries to reduce DynamoDB costs
 
 2. **Enhanced User Experience:**
    - Add real-time notifications for new matches
    - Implement photo sharing capabilities
    - Create albums for organizing matched photos
+   - Add live face detection feedback during registration
 
 3. **Security Enhancements:**
    - Add multi-factor authentication
    - Implement AWS Cognito pools for authentication
    - Add fine-grained access controls for photos
+   - Implement rate limiting on API endpoints
 
 4. **Additional Features:**
    - Group photos by events or time periods
    - Add face recognition confidence thresholds settings
    - Implement photo filtering and sorting options
+   - Enable face blur/anonymization for privacy
 
 5. **API Completion & Stability:**
-   - **Complete API Gateway Configuration:** Investigate and resolve the "Missing Authentication Token" errors by checking API Gateway configuration, resource paths, and authorization settings.
-   - **Verify API Gateway Path Mapping:** Ensure API Gateway resource paths match the expected endpoints in the front-end code.
-   - **Test with Different API Gateway Configuration:** Consider recreating the API with different settings, such as using REST API instead of HTTP API, or updating the resource path structure.
-   - **Add Custom Domains:** Set up a custom domain for the API Gateway to make the URLs more user-friendly.
-   - **Add comprehensive error handling for all API endpoints:** Standardize error responses and add proper validation.
-   - **Implement proper response formats and status codes:** Ensure all endpoints follow REST API best practices.
+   - Implement more robust error handling and validation
+   - Add custom domain for API Gateway
+   - Implement proper response caching
+   - Add comprehensive logging for debugging
+   - Update Lambda functions to use environment variables for configuration
 
 6. **Dependency Management:**
    - Resolve remaining package conflicts in package.json
    - Update deprecated dependencies
    - Implement proper version locking for critical dependencies
+   - Consider migrating to AWS SDK v3 for all functions
 
 7. **Testing & Monitoring:**
-   - Complete API endpoint testing once deployment issues are resolved
-   - Add monitoring for AWS service quotas and usage
+   - Implement unit tests for all Lambda functions
+   - Add integration tests for API endpoints
+   - Set up CloudWatch dashboards for monitoring
    - Create alerting system for service disruptions or failures
    - Test with real user data and photo datasets
 

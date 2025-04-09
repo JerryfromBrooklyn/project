@@ -25,8 +25,8 @@ import {
   kStringMaxLength,
   resolveObjectURL,
   transcode
-} from "./chunk-BDXQJUIC.js";
-import "./chunk-TJZ7TNHW.js";
+} from "./chunk-WOZX6X2B.js";
+import "./chunk-GJFZQ5ET.js";
 init_dist();
 export {
   Blob,
@@ -48,4 +48,3 @@ export {
   resolveObjectURL,
   transcode
 };
-//# sourceMappingURL=vite-plugin-node-polyfills_shims_buffer.js.map

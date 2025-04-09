@@ -1,0 +1,13 @@
+{
+  "TableName": "shmong-users",
+  "Key": {
+    "id": {"S": "a4f85438-2021-70f4-8254-368539c97353"}
+  },
+  "UpdateExpression": "SET #pw = :pw",
+  "ExpressionAttributeNames": {
+    "#pw": "password"
+  },
+  "ExpressionAttributeValues": {
+    ":pw": {"S": "$2a$10$CwTycUXWue0Thq9StjUM0uALAyKVQA50oK.YGtF8z/VUfqX9VEcIm"}
+  }
+} 

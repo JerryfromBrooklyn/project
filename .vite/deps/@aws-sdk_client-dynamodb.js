@@ -151,15 +151,16 @@ import {
   waitForTableNotExists,
   waitUntilTableExists,
   waitUntilTableNotExists
-} from "./chunk-T3UAAWMM.js";
-import "./chunk-P4Q54ZJD.js";
-import "./chunk-7HCX43OA.js";
-import "./chunk-3MNGUTHY.js";
+} from "./chunk-WFOSQHNO.js";
+import "./chunk-ZCIX2HLB.js";
+import "./chunk-V333OXM4.js";
+import "./chunk-3TAN77E7.js";
+import "./chunk-W2ANHD2T.js";
 import {
   Client,
   Command
-} from "./chunk-N6DQ7J7M.js";
-import "./chunk-TJZ7TNHW.js";
+} from "./chunk-WLALPDKA.js";
+import "./chunk-GJFZQ5ET.js";
 export {
   Command as $Command,
   ApproximateCreationDateTimePrecision,
@@ -309,4 +310,3 @@ export {
   waitUntilTableExists,
   waitUntilTableNotExists
 };
-//# sourceMappingURL=@aws-sdk_client-dynamodb.js.map

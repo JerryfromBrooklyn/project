@@ -15,8 +15,8 @@ import {
   v5_default,
   validate_default,
   version_default
-} from "./chunk-3MNGUTHY.js";
-import "./chunk-TJZ7TNHW.js";
+} from "./chunk-3TAN77E7.js";
+import "./chunk-GJFZQ5ET.js";
 export {
   nil_default as NIL,
   parse_default as parse,
@@ -28,4 +28,3 @@ export {
   validate_default as validate,
   version_default as version
 };
-//# sourceMappingURL=uuid.js.map
