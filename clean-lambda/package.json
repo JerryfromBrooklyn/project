@@ -1,0 +1,11 @@
+{
+  "name": "shmong-face-register",
+  "version": "1.0.0",
+  "description": "Face registration Lambda function for Shmong app",
+  "main": "index.js",
+  "dependencies": {
+    "aws-sdk": "^2.1181.0"
+  },
+  "author": "",
+  "license": "ISC"
+} 

@@ -9,7 +9,7 @@ const fs = require('fs');
 const axios = require('axios');
 
 // Configuration
-const API_ENDPOINT = 'http://localhost:5177'; // Update if your server runs on a different port
+const API_ENDPOINT = 'https://dwqg3yjx8i.execute-api.us-east-1.amazonaws.com/prod'; // AWS API Gateway URL
 const LOG_FILE = 'api-test-results.log';
 
 // Initialize log file

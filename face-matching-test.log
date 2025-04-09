@@ -1,0 +1,8 @@
+2025-04-09T15:49:38.437Z - === Face Matching System Test ===
+2025-04-09T15:49:38.438Z - Testing functionality of face registration, historical matching, and future matching
+2025-04-09T15:49:38.439Z - Starting test...
+2025-04-09T15:49:38.439Z - 
+=== Step 1: Creating test user ===
+2025-04-09T15:49:38.458Z - Error creating test user: 
+2025-04-09T15:49:38.458Z - 
+!!! Test failed:  !!!

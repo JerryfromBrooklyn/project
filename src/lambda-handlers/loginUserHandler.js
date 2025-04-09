@@ -1,55 +1,135 @@
-// import * as databaseService from '../services/databaseService'; // Adjust path if needed
-// import bcrypt from 'bcryptjs';
-// import jwt from 'jsonwebtoken'; // For session tokens (install: npm i jsonwebtoken @types/jsonwebtoken)
-// --- Helper Function for Responses ---
-const createResponse = (statusCode, body) => {
-    return {
-        statusCode: statusCode,
-        headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type",
-            "Access-Control-Allow-Methods": "OPTIONS,POST"
-        },
-        body: JSON.stringify(body),
+const AWS = require('aws-sdk');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+// Initialize DynamoDB DocumentClient
+const dynamoDB = new AWS.DynamoDB.DocumentClient({
+  region: process.env.AWS_REGION || 'us-east-1'
+});
+
+// Environment variables
+const USER_TABLE = 'shmong-users';
+const JWT_SECRET = process.env.JWT_SECRET || 'shmong-face-matching-secret';
+const TOKEN_EXPIRATION = '24h';
+
+/**
+ * Handles user login by validating credentials and returning a JWT token
+ */
+exports.handler = async (event) => {
+  try {
+    // Set CORS headers
+    const headers = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+      'Access-Control-Allow-Methods': 'OPTIONS,POST'
     };
-};
-// --- Lambda Handler --- 
-export const handler = async (event) => {
-    console.log("LoginUserHandler invoked. Event body:", event.body);
-    if (!event.body) {
-        return createResponse(400, { message: 'Missing request body.' });
+
+    // Handle preflight requests
+    if (event.httpMethod === 'OPTIONS') {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ message: 'CORS preflight successful' })
+      };
     }
+
+    // Parse request body
+    let requestBody;
     try {
-        // TODO: Parse email, password from event.body
-        const { email, password } = JSON.parse(event.body);
-        if (!email || !password) {
-            return createResponse(400, { message: 'Missing email or password.' });
+      requestBody = JSON.parse(event.body);
+    } catch (error) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ message: 'Invalid request body' })
+      };
+    }
+
+    // Validate request parameters
+    const { email, password } = requestBody;
+    if (!email || !password) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ message: 'Email and password are required' })
+      };
+    }
+
+    // Query DynamoDB for user
+    const params = {
+      TableName: USER_TABLE,
+      IndexName: 'EmailIndex',
+      KeyConditionExpression: 'email = :email',
+      ExpressionAttributeValues: {
+        ':email': email.toLowerCase()
+      }
+    };
+
+    const result = await dynamoDB.query(params).promise();
+    
+    // Check if user exists
+    if (!result.Items || result.Items.length === 0) {
+      return {
+        statusCode: 401,
+        headers,
+        body: JSON.stringify({ message: 'Invalid email or password' })
+      };
+    }
+
+    const user = result.Items[0];
+
+    // Verify password
+    const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+    if (!passwordMatches) {
+      return {
+        statusCode: 401,
+        headers,
+        body: JSON.stringify({ message: 'Invalid email or password' })
+      };
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        userId: user.userId,
+        email: user.email,
+        role: user.role || 'user'
+      },
+      JWT_SECRET,
+      { expiresIn: TOKEN_EXPIRATION }
+    );
+
+    // Return successful response with token
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        message: 'Login successful',
+        token,
+        user: {
+          userId: user.userId,
+          email: user.email,
+          fullName: user.fullName,
+          role: user.role || 'user',
+          hasFaceRegistered: !!user.rekognitionFaceId
         }
-        // TODO: Find user by email (using databaseService.findUserByEmail - needs implementation)
-        // const user = await databaseService.findUserByEmail(email);
-        // if (!user) {
-        //     return createResponse(401, { message: 'Invalid credentials.' }); // User not found
-        // }
-        // TODO: Compare provided password with stored hash (using bcrypt.compare)
-        // const isMatch = await bcrypt.compare(password, user.passwordHash);
-        // if (!isMatch) {
-        //     return createResponse(401, { message: 'Invalid credentials.' }); // Password incorrect
-        // }
-        // --- Login successful --- 
-        // TODO: Generate JWT token or session identifier
-        // const jwtSecret = process.env.JWT_SECRET || 'your-default-secret'; // Load from env!
-        // const token = jwt.sign({ userId: user.userId, email: user.email }, jwtSecret, { expiresIn: '1h' });
-        const token = `dummy_token_for_${email}`; // **PLACEHOLDER**
-        console.log(`User ${email} logged in successfully.`);
-        // Return token (and maybe some user info)
-        return createResponse(200, {
-            message: 'Login successful!',
-            token: token,
-            // user: { userId: user.userId, email: user.email } // Don't send hash!
-        });
-    }
-    catch (error) {
-        console.error("Error during login:", error);
-        return createResponse(500, { message: 'Internal server error during login.', error: error.message });
-    }
+      })
+    };
+  } catch (error) {
+    console.error('Login error:', error);
+    
+    // Return error response
+    return {
+      statusCode: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+        'Access-Control-Allow-Methods': 'OPTIONS,POST'
+      },
+      body: JSON.stringify({ 
+        message: 'Internal server error',
+        error: process.env.DEBUG === 'true' ? error.message : undefined
+      })
+    };
+  }
 };

@@ -2,6 +2,18 @@ import * as faceMatchingService from '../services/faceMatchingService'; // Adjus
 import * as databaseService from '../services/databaseService'; // Adjust path if needed
 import { randomUUID } from 'crypto'; // For generating user IDs
 import bcrypt from 'bcryptjs'; // Import bcrypt for password hashing
+import AWS from 'aws-sdk';
+import { v4 as uuidv4 } from 'uuid';
+
+// Initialize DynamoDB DocumentClient
+const dynamoDB = new AWS.DynamoDB.DocumentClient({
+  region: process.env.AWS_REGION || 'us-east-1'
+});
+
+// Environment variables
+const USER_TABLE = 'shmong-users';
+const SALT_ROUNDS = 10;
+
 // --- Helper Function for Responses ---
 const createResponse = (statusCode, body) => {
     return {
@@ -14,103 +26,122 @@ const createResponse = (statusCode, body) => {
         body: JSON.stringify(body),
     };
 };
+
 // --- Lambda Handler --- 
 export const handler = async (event) => {
-    console.log("RegisterUserHandler invoked. Event body:", event.body);
-    if (!event.body) {
-        return createResponse(400, { message: 'Missing request body.' });
-    }
-    let email;
-    let password;
-    let imageBase64Data;
-    // 1. Parse and Validate Input
     try {
-        const body = JSON.parse(event.body);
-        email = body.email;
-        password = body.password;
-        imageBase64Data = body.imageBase64Data;
-        // Basic validation
-        if (!email || !password || !imageBase64Data) {
-            return createResponse(400, { message: 'Missing email, password, or image data.' });
+        // Set CORS headers
+        const headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+            'Access-Control-Allow-Methods': 'OPTIONS,POST'
+        };
+
+        // Handle preflight requests
+        if (event.httpMethod === 'OPTIONS') {
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({ message: 'CORS preflight successful' })
+            };
         }
-        // Add more validation if needed (e.g., email format, password complexity)
-    }
-    catch (parseError) {
-        console.error("Failed to parse request body:", parseError);
-        return createResponse(400, { message: 'Invalid request body format.' });
-    }
-    try {
-        // 2. Check if user already exists
-        const existingUser = await databaseService.findUserByEmail(email);
-        if (existingUser) {
-            console.warn(`Attempt to register existing email: ${email}`);
-            return createResponse(409, { message: 'User with this email already exists.' });
-        }
-        // 3. Hash password securely
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(password, salt);
-        // 4. Generate a unique user ID
-        const userId = randomUUID();
-        // 5. Convert base64 image data to Buffer for Rekognition
-        let imageBuffer;
+
+        // Parse request body
+        let requestBody;
         try {
-            // Ensure the frontend sends only the base64 part, without 'data:image/jpeg;base64,' prefix
-            imageBuffer = Buffer.from(imageBase64Data, 'base64');
+            requestBody = JSON.parse(event.body);
+        } catch (error) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ message: 'Invalid request body' })
+            };
         }
-        catch (bufferError) {
-            console.error("Failed to convert base64 image data:", bufferError);
-            return createResponse(400, { message: 'Invalid image data format.' });
+
+        // Validate request parameters
+        const { email, password, fullName, role = 'attendee' } = requestBody;
+        if (!email || !password || !fullName) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ message: 'Email, password, and fullName are required' })
+            };
         }
-        // 6. Index the user's face with Rekognition
-        const canonicalFaceId = await faceMatchingService.indexFaceForRegistration(imageBuffer, userId);
-        if (!canonicalFaceId) {
-            // Handle case where face couldn't be indexed
-            console.warn(`Could not index face for user ${userId} (email: ${email})`);
-            return createResponse(400, { message: 'Could not detect or index face from image. Please try a clearer photo.' });
-        }
-        console.log(`Successfully indexed canonicalFaceId ${canonicalFaceId} for user ${userId}`);
-        // 7. Create user record in DynamoDB
-        await databaseService.createUser(userId, email, passwordHash);
-        // 8. Save canonicalFaceId to the user record
-        await databaseService.saveUserRekognitionFaceId(userId, canonicalFaceId);
-        // --- 9. Historical Matching --- 
-        let matchCount = 0;
-        try {
-            const matchedAnonFaceIds = await faceMatchingService.searchFacesByFaceId(canonicalFaceId);
-            if (matchedAnonFaceIds && matchedAnonFaceIds.length > 0) {
-                console.log(`Found ${matchedAnonFaceIds.length} potential historical matches for user ${userId}`);
-                // Attempt to link each found anonymous face ID to the user's canonical ID
-                // The linkDetectedFaceToUser function handles finding the item and updating the userId
-                const linkPromises = matchedAnonFaceIds.map(anonId => databaseService.linkDetectedFaceToUser(anonId, canonicalFaceId)
-                    .then(() => true) // Indicate success
-                    .catch(err => {
-                    console.error(`Failed to link anonId ${anonId} for user ${userId}:`, err);
-                    return false; // Indicate failure
-                }));
-                const results = await Promise.all(linkPromises);
-                matchCount = results.filter(success => success).length; // Count only successful links
-                console.log(`Successfully linked ${matchCount} historical faces for user ${userId}`);
+
+        // Check if user already exists
+        const checkParams = {
+            TableName: USER_TABLE,
+            IndexName: 'EmailIndex',
+            KeyConditionExpression: 'email = :email',
+            ExpressionAttributeValues: {
+                ':email': email.toLowerCase()
             }
-            else {
-                console.log(`No historical face matches found for user ${userId}`);
-            }
+        };
+
+        const existingUser = await dynamoDB.query(checkParams).promise();
+        if (existingUser.Items && existingUser.Items.length > 0) {
+            return {
+                statusCode: 409,
+                headers,
+                body: JSON.stringify({ message: 'User with this email already exists' })
+            };
         }
-        catch (searchLinkError) {
-            console.error(`Error during historical face search/linking for user ${userId}:`, searchLinkError);
-            // Decide if registration should still succeed even if historical search fails
-            // For now, we'll let it succeed but log the error.
-        }
-        // 10. Return success response
-        console.log(`Registration complete for user ${userId}`);
-        return createResponse(201, {
-            message: 'User registered successfully!',
-            userId: userId,
-            historicalMatchesFound: matchCount
-        });
-    }
-    catch (error) {
-        console.error(`Error during registration process for email ${email}:`, error);
-        // Provide a generic error message to the client
-        return createResponse(500, { message: 'Internal server error during registration.', details: error.message });
+
+        // Hash password
+        const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+
+        // Generate unique user ID
+        const userId = uuidv4();
+        const timestamp = new Date().toISOString();
+
+        // Create new user
+        const newUser = {
+            userId,
+            email: email.toLowerCase(),
+            passwordHash,
+            fullName,
+            role,
+            createdAt: timestamp,
+            updatedAt: timestamp
+        };
+
+        // Save user to DynamoDB
+        const putParams = {
+            TableName: USER_TABLE,
+            Item: newUser
+        };
+
+        await dynamoDB.put(putParams).promise();
+
+        // Return successful response
+        return {
+            statusCode: 201,
+            headers,
+            body: JSON.stringify({
+                message: 'User registered successfully',
+                user: {
+                    userId,
+                    email: email.toLowerCase(),
+                    fullName,
+                    role
+                }
+            })
+        };
+    } catch (error) {
+        console.error('Registration error:', error);
+        
+        // Return error response
+        return {
+            statusCode: 500,
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+                'Access-Control-Allow-Methods': 'OPTIONS,POST'
+            },
+            body: JSON.stringify({ 
+                message: 'Internal server error',
+                error: process.env.DEBUG === 'true' ? error.message : undefined
+            })
+        };
     }
 };

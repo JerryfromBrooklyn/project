@@ -53,4 +53,256 @@ You can test this function directly in the AWS Lambda Console:
 
 - Make sure the Lambda role has permissions to call Cognito services
 - Check CloudWatch logs for detailed errors
-- Verify your Cognito Pool ID and Client ID are correct 
+- Verify your Cognito Pool ID and Client ID are correct
+
+# Shmong Face Matching System
+
+A facial recognition web application that allows festival attendees to register with their face and discover photos they appear in.
+
+## Project Overview
+
+The Shmong Face Matching System enables:
+- User registration with facial recognition
+- Historical matching of users against previously uploaded photos
+- Automatic matching of newly uploaded photos to registered users
+- Photo display and management for matched users
+
+## Recent Improvements
+
+### System Standardization and API Enhancement (April 2023)
+
+1. **Collection Name Standardization**
+   - Standardized AWS Rekognition collection references to 'shmong-faces' and 'user-faces'
+   - Updated default collection in awsClient.js for consistency
+
+2. **Table Name Standardization**
+   - Fixed inconsistent DynamoDB table references
+   - Ensured consistent use of 'shmong-face-data' instead of 'face_data'
+
+3. **API Endpoint Implementation**
+   - Created Lambda functions for critical endpoints (login, register)
+   - Configured API Gateway integrations for these endpoints
+   - Identified and documented issues preventing full API deployment
+   - Set up proper Lambda-API Gateway permissions
+
+4. **Dependency Conflict Resolution**
+   - Updated package.json to fix incompatible Uppy package versions
+   - Added missing dependencies required by the application
+
+5. **Comprehensive Testing**
+   - Created testing scripts (test-face-matching-system.js and simple-api-test.js)
+   - Updated tests to use production API endpoints
+   - Identified integration issues requiring further work
+
+## Project Structure
+
+- `src/` - Source code for the web application
+- `api/` - API endpoints and Lambda functions
+- `docs/` - Documentation files
+- `scripts/` - Utility scripts for development and deployment
+- `lambda/` - AWS Lambda function code
+
+## Getting Started
+
+1. **Install dependencies:**
+```bash
+npm install
+```
+
+2. **Start the development server:**
+```bash
+npm run dev
+```
+
+3. **Run tests:**
+```bash
+node test-face-matching-system.js
+node simple-api-test.js
+```
+
+## Documentation
+
+For detailed implementation documentation, see:
+- [Matching System Implementation Documentation](./MatchingSystemImplementationDocumentation.md)
+- [AWS Migration Guide](./AWS-MIGRATION.md)
+- [Test Documentation](./TEST-README.md)
+
+## Known Issues
+
+See the [Matching System Implementation Documentation](./MatchingSystemImplementationDocumentation.md) for a complete list of known issues and troubleshooting information.
+
+## Next Steps
+
+- **Fix API Gateway Configuration Issues:** Resolve the "Missing Authentication Token" errors by investigating API Gateway settings, resource paths, and authorization configuration.
+- **Complete End-to-End Testing:** Once API Gateway issues are resolved, perform comprehensive testing of all endpoints.
+- **Implement Custom Domain:** Set up a custom domain for the API Gateway to improve usability and integration.
+- **Resolve Dependency Conflicts:** Address remaining package conflicts in the frontend dependencies.
+- **Add Monitoring:** Implement AWS CloudWatch monitoring for all Lambda functions and API endpoints.
+
+# Shmong Face Matching System
+
+A facial recognition web application that allows festival attendees to register with their face and discover photos they appear in.
+
+## Project Overview
+
+The Shmong Face Matching System enables:
+- User registration with facial recognition
+- Historical matching of users against previously uploaded photos
+- Automatic matching of newly uploaded photos to registered users
+- Photo display and management for matched users
+
+## Recent Improvements
+
+### System Standardization and API Enhancement (April 2023)
+
+1. **Collection Name Standardization**
+   - Standardized AWS Rekognition collection references to 'shmong-faces' and 'user-faces'
+   - Updated default collection in awsClient.js for consistency
+
+2. **Table Name Standardization**
+   - Fixed inconsistent DynamoDB table references
+   - Ensured consistent use of 'shmong-face-data' instead of 'face_data'
+
+3. **API Endpoint Implementation**
+   - Created Lambda functions for critical endpoints (login, register)
+   - Configured API Gateway integrations for these endpoints
+   - Identified and documented issues preventing full API deployment
+   - Set up proper Lambda-API Gateway permissions
+
+4. **Dependency Conflict Resolution**
+   - Updated package.json to fix incompatible Uppy package versions
+   - Added missing dependencies required by the application
+
+5. **Comprehensive Testing**
+   - Created testing scripts (test-face-matching-system.js and simple-api-test.js)
+   - Updated tests to use production API endpoints
+   - Identified integration issues requiring further work
+
+## Project Structure
+
+- `src/` - Source code for the web application
+- `api/` - API endpoints and Lambda functions
+- `docs/` - Documentation files
+- `scripts/` - Utility scripts for development and deployment
+- `lambda/` - AWS Lambda function code
+
+## Getting Started
+
+1. **Install dependencies:**
+```bash
+npm install
+```
+
+2. **Start the development server:**
+```bash
+npm run dev
+```
+
+3. **Run tests:**
+```bash
+node test-face-matching-system.js
+node simple-api-test.js
+```
+
+## Documentation
+
+For detailed implementation documentation, see:
+- [Matching System Implementation Documentation](./MatchingSystemImplementationDocumentation.md)
+- [AWS Migration Guide](./AWS-MIGRATION.md)
+- [Test Documentation](./TEST-README.md)
+
+## Known Issues
+
+See the [Matching System Implementation Documentation](./MatchingSystemImplementationDocumentation.md) for a complete list of known issues and troubleshooting information.
+
+## Next Steps
+
+- **Fix API Gateway Configuration Issues:** Resolve the "Missing Authentication Token" errors by investigating API Gateway settings, resource paths, and authorization configuration.
+- **Complete End-to-End Testing:** Once API Gateway issues are resolved, perform comprehensive testing of all endpoints.
+- **Implement Custom Domain:** Set up a custom domain for the API Gateway to improve usability and integration.
+- **Resolve Dependency Conflicts:** Address remaining package conflicts in the frontend dependencies.
+- **Add Monitoring:** Implement AWS CloudWatch monitoring for all Lambda functions and API endpoints.
+
+# Shmong Face Matching System
+
+A facial recognition web application that allows festival attendees to register with their face and discover photos they appear in.
+
+## Project Overview
+
+The Shmong Face Matching System enables:
+- User registration with facial recognition
+- Historical matching of users against previously uploaded photos
+- Automatic matching of newly uploaded photos to registered users
+- Photo display and management for matched users
+
+## Recent Improvements
+
+### System Standardization and API Enhancement (April 2023)
+
+1. **Collection Name Standardization**
+   - Standardized AWS Rekognition collection references to 'shmong-faces' and 'user-faces'
+   - Updated default collection in awsClient.js for consistency
+
+2. **Table Name Standardization**
+   - Fixed inconsistent DynamoDB table references
+   - Ensured consistent use of 'shmong-face-data' instead of 'face_data'
+
+3. **API Endpoint Implementation**
+   - Created Lambda functions for critical endpoints (login, register)
+   - Configured API Gateway integrations for these endpoints
+   - Identified and documented issues preventing full API deployment
+   - Set up proper Lambda-API Gateway permissions
+
+4. **Dependency Conflict Resolution**
+   - Updated package.json to fix incompatible Uppy package versions
+   - Added missing dependencies required by the application
+
+5. **Comprehensive Testing**
+   - Created testing scripts (test-face-matching-system.js and simple-api-test.js)
+   - Updated tests to use production API endpoints
+   - Identified integration issues requiring further work
+
+## Project Structure
+
+- `src/` - Source code for the web application
+- `api/` - API endpoints and Lambda functions
+- `docs/` - Documentation files
+- `scripts/` - Utility scripts for development and deployment
+- `lambda/` - AWS Lambda function code
+
+## Getting Started
+
+1. **Install dependencies:**
+```bash
+npm install
+```
+
+2. **Start the development server:**
+```bash
+npm run dev
+```
+
+3. **Run tests:**
+```bash
+node test-face-matching-system.js
+node simple-api-test.js
+```
+
+## Documentation
+
+For detailed implementation documentation, see:
+- [Matching System Implementation Documentation](./MatchingSystemImplementationDocumentation.md)
+- [AWS Migration Guide](./AWS-MIGRATION.md)
+- [Test Documentation](./TEST-README.md)
+
+## Known Issues
+
+See the [Matching System Implementation Documentation](./MatchingSystemImplementationDocumentation.md) for a complete list of known issues and troubleshooting information.
+
+## Next Steps
+
+- **Fix API Gateway Configuration Issues:** Resolve the "Missing Authentication Token" errors by investigating API Gateway settings, resource paths, and authorization configuration.
+- **Complete End-to-End Testing:** Once API Gateway issues are resolved, perform comprehensive testing of all endpoints.
+- **Implement Custom Domain:** Set up a custom domain for the API Gateway to improve usability and integration.
+- **Resolve Dependency Conflicts:** Address remaining package conflicts in the frontend dependencies.
+- **Add Monitoring:** Implement AWS CloudWatch monitoring for all Lambda functions and API endpoints. 
