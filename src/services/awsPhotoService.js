@@ -1,7 +1,8 @@
 import { PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { PutCommand, GetCommand, DeleteCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
-import { s3Client, docClient, PHOTO_BUCKET, PHOTOS_TABLE } from '../lib/awsClient';
+import { s3Client, docClient, rekognitionClient, PHOTO_BUCKET, PHOTOS_TABLE, COLLECTION_ID } from '../lib/awsClient';
+import { IndexFacesCommand, SearchFacesCommand } from '@aws-sdk/client-rekognition';
 /**
  * Service for handling photo operations with AWS S3 and DynamoDB
  */
@@ -15,30 +16,46 @@ export const awsPhotoService = {
      * @returns {Promise<Object>} The uploaded photo data
      */
     uploadPhoto: async (file, eventId, folderPath, metadata = {}, progressCallback = () => { }) => {
+        const uploadId = uuidv4().substring(0, 8);
+        console.groupCollapsed(`📸 [Upload ${uploadId}] Starting upload for: ${file.name}`);
+        console.log(`   File Size: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+        console.log(`   Target Folder: ${folderPath || 'root'}`);
+        console.log(`   Event ID: ${eventId || 'N/A'}`);
+        console.log(`   Provided Metadata:`, metadata);
+        console.groupEnd();
+
         try {
-            // Generate ID for the file
             const fileId = uuidv4();
             const fileName = `${fileId}-${file.name}`;
-            // Determine storage path - include userId if available from metadata
             const userId = metadata.uploadedBy || metadata.uploaded_by;
             const path = folderPath
-                ? `${userId}/${folderPath}/${fileName}`
-                : `${userId}/${fileName}`;
+                ? `photos/${userId}/${folderPath}/${fileName}` // Standardized photos path
+                : `photos/${userId}/${fileName}`;
+            
+            console.log(`🔄 [Upload ${uploadId}] Generated Photo ID: ${fileId}`);
+            console.log(`🔄 [Upload ${uploadId}] S3 Storage Path: ${path}`);
             progressCallback(20);
-            // Upload to S3
+
+            console.log(`⬆️ [Upload ${uploadId}] Reading file into buffer...`);
+            const fileBuffer = await file.arrayBuffer(); // Read file as ArrayBuffer
+            console.log(`   File Buffer Size: ${fileBuffer.byteLength} bytes`);
+
+            console.log(`⬆️ [Upload ${uploadId}] Uploading to S3 Bucket: ${PHOTO_BUCKET}`);
             const uploadParams = {
                 Bucket: PHOTO_BUCKET,
                 Key: path,
-                Body: file,
+                Body: fileBuffer, // Use the ArrayBuffer as the body
                 ContentType: file.type
             };
             await s3Client.send(new PutObjectCommand(uploadParams));
+            console.log(`✅ [Upload ${uploadId}] S3 Upload successful.`);
             progressCallback(50);
-            // Get public URL - using the S3 URL pattern
+
             const publicUrl = `https://${PHOTO_BUCKET}.s3.amazonaws.com/${path}`;
-            // Process metadata with required fields and formats
+            console.log(`🔗 [Upload ${uploadId}] Generated Public URL: ${publicUrl}`);
+
             const photoMetadata = {
-                id: fileId,
+                id: fileId, 
                 user_id: userId,
                 storage_path: path,
                 url: publicUrl,
@@ -51,9 +68,9 @@ export const awsPhotoService = {
                 fileType: file.type,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
-                faces: metadata.faces || [],
-                matched_users: metadata.matched_users || [],
-                face_ids: metadata.face_ids || [],
+                faces: [], // Will be populated after Rekognition
+                matched_users: [], // Will be populated after Rekognition
+                face_ids: [], // Will be populated after Rekognition
                 location: metadata.location || { lat: null, lng: null, name: null },
                 venue: metadata.venue || { id: null, name: null },
                 event_details: metadata.event_details || { date: null, name: null, type: null },
@@ -62,55 +79,138 @@ export const awsPhotoService = {
                 title: metadata.title || file.name,
                 description: metadata.description || ''
             };
-            progressCallback(70);
-            // Save to DynamoDB using docClient
+            console.log(`📝 [Upload ${uploadId}] Prepared initial metadata for DynamoDB.`);
+            progressCallback(60);
+
+            // --- Rekognition Face Detection & Indexing --- 
+            console.groupCollapsed(`🧠 [Upload ${uploadId}] Running Rekognition...`);
+            console.log(`   Entering Rekognition processing block...`);
+            try {
+                console.log(`   Rekognition Client available: ${!!rekognitionClient}`); // Verify client exists
+                console.log(`   IndexFacesCommand available: ${!!IndexFacesCommand}`); // Verify command exists
+                console.log(`   Action: Indexing faces from S3 object`);
+                const indexParams = {
+                    CollectionId: COLLECTION_ID || 'shmong-faces', // Use imported COLLECTION_ID or default
+                    Image: {
+                        S3Object: {
+                            Bucket: PHOTO_BUCKET,
+                            Name: path
+                        }
+                    },
+                    ExternalImageId: fileId, // Link detected faces to the PHOTO ID
+                    MaxFaces: 10, // Index up to 10 faces per photo
+                    DetectionAttributes: ['ALL']
+                };
+                console.log(`   IndexFaces Params Prepared:`, JSON.stringify(indexParams, null, 2)); // Log before send
+                console.log(`   Sending IndexFaces command...`);
+                const indexResponse = await rekognitionClient.send(new IndexFacesCommand(indexParams));
+                console.log(`   Rekognition IndexFaces response received successfully.`);
+
+                if (indexResponse.FaceRecords && indexResponse.FaceRecords.length > 0) {
+                    console.log(`   ✅ Detected ${indexResponse.FaceRecords.length} faces.`);
+                    photoMetadata.faces = indexResponse.FaceRecords.map(record => {
+                        console.groupCollapsed(`      👤 Face ID: ${record.Face.FaceId}`);
+                        console.log(`         Confidence: ${record.Face.Confidence?.toFixed(2)}%`);
+                        console.log(`         Bounding Box:`, record.Face.BoundingBox);
+                        console.log(`         Attributes:`, record.FaceDetail);
+                        console.groupEnd();
+                        return {
+                            faceId: record.Face.FaceId,
+                            boundingBox: record.Face.BoundingBox,
+                            confidence: record.Face.Confidence,
+                            attributes: record.FaceDetail
+                        };
+                    });
+                    photoMetadata.face_ids = indexResponse.FaceRecords.map(r => r.Face.FaceId);
+                    
+                    // --- Future Matching (Search detected faces against registered users) ---
+                    console.groupCollapsed(`   🔄 Searching for matches against registered users...`);
+                    for (const faceRecord of indexResponse.FaceRecords) {
+                        const detectedFaceId = faceRecord.Face.FaceId;
+                        console.log(`      Searching for matches for detected Face ID: ${detectedFaceId}`);
+                        try {
+                            const searchParams = {
+                                CollectionId: 'shmong-faces', // Search in the same collection
+                                FaceId: detectedFaceId,
+                                MaxFaces: 5, // Find top 5 similar registered users
+                                FaceMatchThreshold: 85 // Confidence threshold
+                            };
+                            const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
+                            
+                            if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
+                                console.log(`      ✅ Found ${searchResponse.FaceMatches.length} potential user matches.`);
+                                for (const match of searchResponse.FaceMatches) {
+                                    // IMPORTANT: We assume ExternalImageId for registered users IS the userId
+                                    const matchedUserId = match.Face.ExternalImageId;
+                                    const matchedFaceId = match.Face.FaceId;
+                                    const similarity = match.Similarity;
+                                    
+                                    // Avoid matching the *exact* same face record if it somehow appears
+                                    if (matchedFaceId === detectedFaceId) continue; 
+                                    
+                                    // Check if this user is already matched for this photo
+                                    if (!photoMetadata.matched_users.some(u => u.userId === matchedUserId)) {
+                                        console.log(`         -> Matched User ID: ${matchedUserId} (Similarity: ${similarity.toFixed(2)}%)`);
+                                        photoMetadata.matched_users.push({
+                                            userId: matchedUserId,
+                                            faceId: matchedFaceId, // The registered user's FaceId
+                                            similarity: similarity
+                                        });
+                                        // TODO: Optionally, fetch user details (name) from shmong-users table here
+                                        // TODO: Trigger a notification for the matched user
+                                    }
+                                }
+                            } else {
+                                console.log(`      ❌ No registered users matched this detected face.`);
+                            }
+                        } catch (searchError) {
+                            console.error(`      ⚠️ Error searching for matches for Face ID ${detectedFaceId}:`, searchError);
+                        }
+                    }
+                    console.groupEnd(); // End searching group
+                    
+                } else {
+                    console.log(`   ⚠️ No faces detected in the photo.`);
+                }
+                
+            } catch (rekognitionError) {
+                console.error(`   ❌ Rekognition processing failed inside the 'try' block:`);
+                console.error(rekognitionError); // Log the full error object
+                // Optionally log specific properties if they exist
+                if (rekognitionError.name) console.error(`      Error Name: ${rekognitionError.name}`);
+                if (rekognitionError.message) console.error(`      Error Message: ${rekognitionError.message}`);
+                if (rekognitionError.$metadata) console.error(`      Error Metadata:`, rekognitionError.$metadata);
+                // Don't fail the whole upload, just log the error
+            }
+            console.groupEnd(); // End Rekognition group
+            progressCallback(90);
+
+            console.log(`💾 [Upload ${uploadId}] Saving final metadata to DynamoDB Table: ${PHOTOS_TABLE}`);
             const putParams = {
                 TableName: PHOTOS_TABLE,
-                Item: photoMetadata // No need to marshall with docClient
+                Item: photoMetadata 
             };
             await docClient.send(new PutCommand(putParams));
+            console.log(`✅ [Upload ${uploadId}] DynamoDB save successful.`);
             progressCallback(100);
+            
+            console.log(`🎉 [Upload ${uploadId}] SUCCESS! Photo upload and processing complete.`);
+            console.log(`   Photo ID: ${fileId}`);
+            console.log(`   S3 URL: ${publicUrl}`);
+            console.log(`   Detected Faces: ${photoMetadata.faces.length}`);
+            console.log(`   Matched Users: ${photoMetadata.matched_users.length}`);
+
             return {
                 success: true,
                 photoId: fileId,
-                photoMetadata
+                photoMetadata,
+                s3Url: publicUrl, // Add S3 URL to the final result
+                externalId: fileId // Add External ID (photo ID) to the final result
             };
-        }
-        catch (error) {
-            console.error('Upload error:', error);
+        } catch (error) {
+            console.error(`❌ [Upload ${uploadId}] Upload process failed:`, error);
             return {
                 success: false,
-                error: error.message
-            };
-        }
-    },
-    /**
-     * Get user's storage usage
-     * @param {string} userId - User ID
-     * @returns {Promise<Object>} Storage usage data
-     */
-    getUserStorageUsage: async (userId) => {
-        try {
-            // List objects in user's folder
-            const listParams = {
-                Bucket: PHOTO_BUCKET,
-                Prefix: `${userId}/`
-            };
-            const response = await s3Client.send(new ListObjectsV2Command(listParams));
-            // Calculate total size
-            const totalSize = (response.Contents || []).reduce((total, obj) => total + (obj.Size || 0), 0);
-            return {
-                data: {
-                    total_size: totalSize,
-                    file_count: response.KeyCount || 0
-                },
-                error: null
-            };
-        }
-        catch (error) {
-            console.error('Error fetching storage usage:', error);
-            return {
-                data: null,
                 error: error.message
             };
         }
