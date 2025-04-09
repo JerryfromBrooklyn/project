@@ -2,7 +2,7 @@
 import { s3Client } from '../lib/awsClient';
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { DynamoDBClient, PutItemCommand, QueryCommand, GetItemCommand, DeleteItemCommand } from '@aws-sdk/client-dynamodb';
+import { PutItemCommand, QueryCommand, GetItemCommand, DeleteItemCommand } from '@aws-sdk/client-dynamodb';
 import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, dynamoClient } from '../lib/awsClient';
 import { normalizeToS3Url, convertCloudFrontToS3Url } from '../utils/s3Utils';
 import { docClient } from '../lib/awsClient';
@@ -21,19 +21,10 @@ console.log(`🔧 [FaceStorage] Environment detection: Browser=${isBrowser}, Has
 // Access AWS Clients
 const getAWSClients = async () => {
   return {
-    dynamoDBClient: dynamoClient,
+    dynamoClient: dynamoClient,
     s3Client
   };
 };
-
-// Initialize DynamoDB client
-const dynamoDBClient = new DynamoDBClient({
-  region: AWS_REGION,
-  credentials: {
-    accessKeyId: AWS_ACCESS_KEY_ID,
-    secretAccessKey: AWS_SECRET_ACCESS_KEY
-  }
-});
 
 /**
  * Store face ID and metadata in DynamoDB and S3
@@ -68,7 +59,7 @@ export const storeFaceId = async (userId, faceId, imageData, imagePath, faceAttr
     }
     
     // Store in DynamoDB
-    const { dynamoDBClient } = await getAWSClients();
+    const { dynamoClient } = await getAWSClients();
     
     const timestamp = new Date().toISOString();
     
@@ -76,14 +67,18 @@ export const storeFaceId = async (userId, faceId, imageData, imagePath, faceAttr
     let processedMatches = [];
     if (historicalMatches && historicalMatches.length > 0) {
       console.log('[FaceStorage] Processing historical matches for storage:', historicalMatches.length);
-      processedMatches = historicalMatches.map(match => ({
-        id: { S: match.id || 'unknown' },
-        similarity: { N: match.similarity?.toString() || '0' },
-        imageUrl: match.imageUrl ? { S: match.imageUrl } : { NULL: true },
-        owner: match.owner ? { S: match.owner } : { NULL: true },
-        eventId: match.eventId ? { S: match.eventId } : { NULL: true },
-        createdAt: match.createdAt ? { S: match.createdAt } : { S: timestamp }
-      }));
+      processedMatches = historicalMatches
+        .filter(match => match && match.id && match.similarity != null) // Ensure basic required fields exist
+        .map(match => ({
+          M: { // Explicitly define as a Map
+            id: { S: match.id },
+            similarity: { N: String(match.similarity) }, // Ensure similarity is a string for N type
+            imageUrl: match.imageUrl ? { S: match.imageUrl } : { NULL: true },
+            owner: match.owner ? { S: match.owner } : { NULL: true },
+            eventId: match.eventId ? { S: match.eventId } : { NULL: true },
+            createdAt: match.createdAt ? { S: match.createdAt } : { S: timestamp }
+          }
+        }));
     }
     
     // Prepare DynamoDB item
@@ -128,7 +123,7 @@ export const storeFaceId = async (userId, faceId, imageData, imagePath, faceAttr
     console.log('[FaceStorage] Storing face data in DynamoDB:', Object.keys(item).length, 'fields');
     console.log('[FaceStorage] Item structure:', JSON.stringify(params, null, 2));
     
-    await dynamoDBClient.send(new PutItemCommand(params));
+    await dynamoClient.send(new PutItemCommand(params));
     console.log('[FaceStorage] Face data stored successfully in DynamoDB');
     
     return {
@@ -167,7 +162,7 @@ export const getFaceId = async (userId) => {
       
       console.log(`🔍 [FaceStorage] Executing DynamoDB query for userId: ${userId}`);
       
-      const queryResult = await dynamoDBClient.send(queryCommand);
+      const queryResult = await dynamoClient.send(queryCommand);
       
       if (queryResult.Items && queryResult.Items.length > 0) {
         const item = queryResult.Items[0];
@@ -453,33 +448,52 @@ export const getFaceDataForUser = async (userId) => {
   console.log('[FaceStorage] Fetching face data for user:', userId);
   
   try {
-    const { dynamoDBClient } = await getAWSClients();
+    const { dynamoClient } = await getAWSClients();
     
+    // Query using the secondary index to get the most recent face record by created_at
     const params = {
       TableName: 'shmong-face-data',
+      IndexName: 'UserIdCreatedAtIndex',
       KeyConditionExpression: 'userId = :userId',
       ExpressionAttributeValues: {
         ':userId': { S: userId }
       },
-      Limit: 1,
-      ScanIndexForward: false // Get the most recent entry first
+      Limit: 5,
+      ScanIndexForward: false // Get the most recent entries first
     };
     
     console.log('[FaceStorage] Querying DynamoDB for face data with params:', JSON.stringify(params, null, 2));
-    const response = await dynamoDBClient.send(new QueryCommand(params));
+    const response = await dynamoClient.send(new QueryCommand(params));
     
     if (response.Items && response.Items.length > 0) {
-      const faceData = response.Items[0];
-      console.log('[FaceStorage] Face data found:', JSON.stringify(faceData, null, 2));
+      // Log all results for debugging
+      console.log(`[FaceStorage] Found ${response.Items.length} face records for user ${userId}`);
+      response.Items.forEach((item, index) => {
+        console.log(`[FaceStorage] Face record ${index + 1}:`, 
+          JSON.stringify({
+            faceId: item.faceId?.S,
+            createdAt: item.createdAt?.S || item.created_at?.S,
+            imageUrl: item.imageUrl?.S,
+            status: item.status?.S
+          }, null, 2));
+      });
+      
+      // Get the most recent "active" record if available
+      const activeRecord = response.Items.find(item => item.status?.S === 'active');
+      
+      // Otherwise, use the most recent record
+      const faceData = activeRecord || response.Items[0];
+      console.log('[FaceStorage] Selected face data:', JSON.stringify(faceData, null, 2));
       
       // Format and return the face data
       return {
         faceId: faceData.faceId?.S,
-        faceAttributes: faceData.faceAttributes?.S ? JSON.parse(faceData.faceAttributes.S) : null,
-        imageUrl: faceData.imageUrl?.S,
+        faceAttributes: faceData.faceAttributes?.S ? JSON.parse(faceData.faceAttributes.S) 
+          : faceData.face_attributes?.S ? JSON.parse(faceData.face_attributes.S) : null,
+        imageUrl: faceData.imageUrl?.S || faceData.public_url?.S,
         imagePath: faceData.imagePath?.S,
         historicalMatches: faceData.historicalMatches?.L || [],
-        createdAt: faceData.createdAt?.S
+        createdAt: faceData.createdAt?.S || faceData.created_at?.S
       };
     } else {
       console.log('[FaceStorage] No face data found for user:', userId);

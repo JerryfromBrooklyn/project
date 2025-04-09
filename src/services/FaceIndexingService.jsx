@@ -12,8 +12,10 @@ import {
   ListFacesCommand
 } from '@aws-sdk/client-rekognition';
 import { GetItemCommand } from '@aws-sdk/client-dynamodb';
-import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, rekognitionClient, dynamoClient as dynamoDBClient, s3Client, COLLECTION_ID as AWS_COLLECTION_ID } from '../lib/awsClient';
-import FaceStorageService from './FaceStorageService';
+import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, rekognitionClient, dynamoClient, s3Client, COLLECTION_ID as AWS_COLLECTION_ID } from '../lib/awsClient';
+import * as FaceStorageService from './FaceStorageService';
+import { storeFaceMatch } from './database-utils';
+import { Buffer } from 'buffer';
 
 // Configure Rekognition constants
 const COLLECTION_ID = AWS_COLLECTION_ID || 'shmong-faces';
@@ -325,29 +327,30 @@ export const indexFace = async (userId, imageBlob) => {
           console.log(`[FaceIndexing] Match found - Photo ID: ${photoId}, Similarity: ${similarityScore}%`);
           
           try {
-            // Fetch photo details from DynamoDB
-            const { dynamoDBClient } = await getAWSClients();
+            // Fetch photo details from shmong-photos table instead of user_photos
+            const { dynamoClient } = await getAWSClients();
             const params = {
-              TableName: 'user_photos',
+              TableName: 'shmong-photos',
               Key: {
                 id: { S: photoId }
               }
             };
             
-            const photoData = await dynamoDBClient.send(new GetItemCommand(params));
+            const photoData = await dynamoClient.send(new GetItemCommand(params));
             
             if (photoData && photoData.Item) {
               const photoDetails = photoData.Item;
               return {
                 id: photoId,
                 similarity: similarityScore,
-                imageUrl: photoDetails.imageUrl?.S || null,
-                owner: photoDetails.userId?.S || null,
-                eventId: photoDetails.eventId?.S || null,
-                createdAt: photoDetails.createdAt?.S || null
+                imageUrl: photoDetails.imageUrl?.S || photoDetails.public_url?.S || null,
+                owner: photoDetails.userId?.S || photoDetails.user_id?.S || null,
+                eventId: photoDetails.eventId?.S || photoDetails.event_id?.S || null,
+                createdAt: photoDetails.createdAt?.S || photoDetails.created_at?.S || null
               };
             }
             
+            // If no photo found, still return basic match info
             return {
               id: photoId,
               similarity: similarityScore
@@ -449,7 +452,7 @@ const matchAgainstExistingFaces = async (userId, faceId) => {
       };
       
       // Store match in database
-      await FaceStorageService.storeFaceMatch(matchData);
+      await storeFaceMatch(matchData);
       
       matches.push(matchData);
     }
@@ -582,7 +585,7 @@ const getAWSClients = async () => {
     // Return the pre-configured clients
     return {
       rekognitionClient,
-      dynamoDBClient,
+      dynamoClient,
       s3Client
     };
   } catch (error) {
@@ -594,6 +597,7 @@ const getAWSClients = async () => {
 // Export functions as an object for easier importing
 export const FaceIndexingService = {
   indexUserFace,
+  indexFace,
   searchFaceByImage
 };
 

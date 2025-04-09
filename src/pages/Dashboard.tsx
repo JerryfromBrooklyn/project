@@ -111,6 +111,16 @@ export const Dashboard = () => {
     // Debug the raw attribute data
     console.log('[Dashboard] Raw face attributes received:', result?.faceAttributes);
     
+    // Log historical matches if any
+    if (result?.historicalMatches && result.historicalMatches.length > 0) {
+      console.log('[Dashboard] Historical matches found!', result.historicalMatches.length);
+      result.historicalMatches.forEach((match: any, index: number) => {
+        console.log(`[Dashboard] Match ${index + 1}:`, match);
+      });
+    } else {
+      console.log('[Dashboard] No historical matches found.');
+    }
+    
     // Immediately update the UI with the data we just received
     setFaceRegistered(true);
     setShowRegistrationModal(false);
@@ -136,6 +146,9 @@ export const Dashboard = () => {
       console.log('[Dashboard] Setting face image URL from result:', result.imageUrl);
       setFaceImageUrl(result.imageUrl);
     } else {
+      // If the result didn't contain an image URL (e.g., storage failed),
+      // try the less reliable fallbacks.
+      console.warn('[Dashboard] No image URL in registration result, attempting fallbacks.');
       // Fallback to looking for an image element in the face registration modal
       const capturedImage = document.querySelector('.face-registration img[src^="blob:"]');
       if (capturedImage) {
@@ -143,7 +156,7 @@ export const Dashboard = () => {
         console.log('[Dashboard] Found captured image in DOM, using as fallback');
         setFaceImageUrl(img.src);
       } else if (result?.faceId && user?.id) {
-        // Final fallback - construct URL from what we know
+        // Final fallback - construct URL from what we know (least reliable)
         const fallbackUrl = `https://shmong.s3.amazonaws.com/face-images/${user.id}/${Date.now()}.jpg`;
         console.log('[Dashboard] Using constructed fallback URL:', fallbackUrl);
         setFaceImageUrl(fallbackUrl);
@@ -315,9 +328,13 @@ export const Dashboard = () => {
                   onError={(e) => {
                     // Handle image loading errors
                     console.error('[Dashboard] Error loading face image:', e);
-                    // Set a fallback image or placeholder
-                    e.currentTarget.src = 'https://via.placeholder.com/400?text=Face+Image+Unavailable';
-                    e.currentTarget.classList.add('error-image');
+                    
+                    // Only set fallback if not already set (prevents infinite loop)
+                    if (!e.currentTarget.classList.contains('error-image')) {
+                      // Use data URI instead of external placeholder to prevent network errors
+                      e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIGZpbGw9IiM4ODg4ODgiPkZhY2UgSW1hZ2UgVW5hdmFpbGFibGU8L3RleHQ+PC9zdmc+';
+                      e.currentTarget.classList.add('error-image');
+                    }
                   }}
                 />
               </div>

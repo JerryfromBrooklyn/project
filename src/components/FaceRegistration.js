@@ -90,11 +90,22 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
             console.log('Image data type:', typeof imgSrc);
             console.log('Image data starts with:', imgSrc.substring(0, 30) + '...');
             
-            // Use FaceIndexingService to register the face
-            const result = await FaceIndexingService.indexUserFace(imgSrc, userId);
+            // Use FaceIndexingService to register the face with historical matching
+            const result = await FaceIndexingService.indexFace(userId, imgSrc);
             if (result.success) {
                 console.log('Face registered successfully');
                 console.log('Face attributes:', result.faceAttributes);
+                
+                // Log any historical matches
+                if (result.historicalMatches && result.historicalMatches.length > 0) {
+                    console.log('Historical matches found:', result.historicalMatches.length);
+                    result.historicalMatches.forEach((match, index) => {
+                        console.log(`Match ${index + 1}: Photo ID=${match.id}, Similarity=${match.similarity.toFixed(2)}%, URL=${match.imageUrl || 'N/A'}`);
+                    });
+                } else {
+                    console.log('No historical matches found');
+                }
+                
                 onSuccess(result);
             }
             else {
