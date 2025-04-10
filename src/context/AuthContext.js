@@ -3,6 +3,7 @@ import { jsx as _jsx } from "react/jsx-runtime";
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import awsAuth from '../services/awsAuthService';
+import BackgroundJobService from '../services/BackgroundJobService';
 
 // Helper functions to persist user state
 const saveUserToStorage = (user) => {
@@ -109,6 +110,16 @@ export function AuthProvider({ children }) {
             else {
                 console.log('[AUTH_CONTEXT] Sign-in successful');
                 updateUser(result.data.user);
+                
+                // Run face matching for the user after successful sign-in using the direct Rekognition method
+                console.log('🔍🔍🔍 [AUTH_CONTEXT] Running face matching for user after sign-in:', result.data.user.id);
+                try {
+                    // Use the more efficient method that directly calls Rekognition API
+                    const matchResult = await BackgroundJobService.runUserMatchesWithRekognition(result.data.user.id);
+                    console.log('🔥 [AUTH_CONTEXT] Face matching completed:', matchResult);
+                } catch (matchError) {
+                    console.error('🔥 [AUTH_CONTEXT] Error running face matching:', matchError);
+                }
             }
             return result;
         }
@@ -183,6 +194,15 @@ export function AuthProvider({ children }) {
             
             // Update our local user state with the newly created user
             updateUser(data.user);
+            
+            // Run face matching for the new user after successful signup
+            console.log('🔍🔍🔍 [AUTH_CONTEXT] Running face matching for new user after signup:', data.user.id);
+            try {
+                const matchResult = await BackgroundJobService.runOneTimeFaceMatchingJobForUser(data.user.id);
+                console.log('🔥 [AUTH_CONTEXT] Face matching for new user completed:', matchResult);
+            } catch (matchError) {
+                console.error('🔥 [AUTH_CONTEXT] Error running face matching for new user:', matchError);
+            }
             
             // FOR TESTING: Skip email verification and go to dashboard using React Router
             console.log('[AUTH_CONTEXT] TESTING MODE: Bypassing email verification and going directly to dashboard');

@@ -214,6 +214,273 @@ export const processUploadedPhotoForIndexingAndMatching = async (photoId, imageB
 // }
 
 /**
+ * Updates a user's matches by directly calling Rekognition's searchFaces API
+ * This is more efficient than the bidirectional matching method for finding
+ * all potential matches at once
+ * 
+ * @param {string} userId - The user ID to update matches for
+ * @returns {Promise<{success: boolean, updatedCount: number}>}
+ */
+export const updateUserMatchesWithRekognition = async (userId) => {
+  console.log(`🔍🔍🔍 [FaceMatchingService] Running direct Rekognition search for user ${userId}`);
+  
+  try {
+    // 1. Get the user's face ID
+    const faceData = await getFaceDataForUser(userId);
+    
+    if (!faceData || !faceData.faceId) {
+      console.log(`❌ [FaceMatchingService] No face data found for user ${userId}`);
+      return { success: false, updatedCount: 0 };
+    }
+    
+    const userFaceId = faceData.faceId;
+    console.log(`✅ [FaceMatchingService] Found user's face ID: ${userFaceId}`);
+    
+    // 2. Call Rekognition SearchFaces API directly
+    const client = initializeRekognitionClient();
+    const searchCommand = new SearchFacesCommand({
+      CollectionId: REKOGNITION_COLLECTION_ID,
+      FaceId: userFaceId,
+      FaceMatchThreshold: 80.0, // Lower threshold to catch more potential matches
+      MaxFaces: 1000  // Get as many matches as possible
+    });
+    
+    console.log(`🔍 [FaceMatchingService] Searching for matches in Rekognition...`);
+    const searchResponse = await client.send(searchCommand);
+    
+    if (!searchResponse.FaceMatches || searchResponse.FaceMatches.length === 0) {
+      console.log(`❌ [FaceMatchingService] No matches found for user's face in Rekognition!`);
+      return { success: false, updatedCount: 0 };
+    }
+    
+    console.log(`✅ [FaceMatchingService] Found ${searchResponse.FaceMatches.length} potential matches in Rekognition`);
+    
+    // 3. Extract photo matches (filters out user_ prefixes)
+    const photoMatches = [];
+    const timestamp = new Date().toISOString();
+    
+    for (const match of searchResponse.FaceMatches) {
+      if (!match.Face || !match.Face.ExternalImageId) continue;
+      
+      const externalId = match.Face.ExternalImageId;
+      const similarity = match.Similarity;
+      
+      // Improved ExternalImageId handling - extract the correct photoId format
+      // Handle various formats: "photo-{id}", "photo_{id}", "user-{id}", "user_{id}", or just the raw id
+      let photoId = externalId;
+      
+      // Handle user IDs - we want to skip these but with proper prefix detection
+      if (externalId.startsWith('user-') || externalId.startsWith('user_')) {
+        continue;
+      }
+      
+      // Extract photo ID from different formats
+      if (externalId.startsWith('photo-')) {
+        photoId = externalId.substring(6); // Remove "photo-" prefix
+      } else if (externalId.startsWith('photo_')) {
+        photoId = externalId.substring(6); // Remove "photo_" prefix
+      }
+      
+      console.log(`🔍 [FaceMatchingService] Processing match with ExternalImageId=${externalId}, extracted photoId=${photoId}`);
+      
+      photoMatches.push({
+        photoId,
+        externalId, // Keep the original ID for debugging
+        similarity: parseFloat(similarity.toFixed(2))
+      });
+    }
+    
+    console.log(`✅ [FaceMatchingService] Filtered to ${photoMatches.length} valid photo matches`);
+    
+    // 4. Query the photos table to get full photo data
+    if (photoMatches.length === 0) {
+      console.log(`❌ [FaceMatchingService] No valid photo matches found`);
+      return { success: false, updatedCount: 0 };
+    }
+    
+    const matchedPhotos = [];
+    const updatedPhotos = [];
+    
+    // 5. Process each matched photo - update matched_users and collect data for historicalMatches
+    for (const match of photoMatches) {
+      try {
+        // Get original externalId for more flexible searching
+        const originalId = match.externalId;
+        const extractedId = match.photoId;
+        
+        // Try multiple search strategies to find the photo in the database
+        let photo = null;
+        
+        // First try direct ID match
+        const directScanCommand = new ScanCommand({
+          TableName: PHOTOS_TABLE,
+          FilterExpression: "id = :photoId",
+          ExpressionAttributeValues: {
+            ":photoId": extractedId
+          }
+        });
+        
+        let scanResult = await docClient.send(directScanCommand);
+        photo = scanResult.Items && scanResult.Items.length > 0 ? scanResult.Items[0] : null;
+        
+        // If not found, try with the original external ID
+        if (!photo && originalId !== extractedId) {
+          const originalScanCommand = new ScanCommand({
+            TableName: PHOTOS_TABLE,
+            FilterExpression: "id = :photoId",
+            ExpressionAttributeValues: {
+              ":photoId": originalId
+            }
+          });
+          
+          scanResult = await docClient.send(originalScanCommand);
+          photo = scanResult.Items && scanResult.Items.length > 0 ? scanResult.Items[0] : null;
+        }
+        
+        // If still not found, try looking in external_id or externalId fields
+        if (!photo) {
+          // Try external_id field
+          const externalIdScanCommand = new ScanCommand({
+            TableName: PHOTOS_TABLE,
+            FilterExpression: "external_id = :externalId OR externalId = :externalId",
+            ExpressionAttributeValues: {
+              ":externalId": originalId
+            }
+          });
+          
+          scanResult = await docClient.send(externalIdScanCommand);
+          photo = scanResult.Items && scanResult.Items.length > 0 ? scanResult.Items[0] : null;
+        }
+        
+        if (!photo) {
+          console.log(`❌ [FaceMatchingService] Photo ${match.photoId} (ExternalId: ${originalId}) not found in database!`);
+          continue;
+        }
+        
+        console.log(`✅ [FaceMatchingService] Found photo match in database: ${photo.id}`);
+        
+        // Add to matchedPhotos for historicalMatches update
+        matchedPhotos.push({
+          id: photo.id,
+          uploadedBy: photo.uploaded_by || photo.user_id,
+          uploadedAt: photo.uploaded_at || photo.created_at || timestamp,
+          url: photo.url || photo.photo_url,
+          thumbnailUrl: photo.thumbnail_url || photo.url,
+          similarity: match.similarity,
+          matchedAt: timestamp
+        });
+        
+        // Process matched_users array in the photo
+        let matchedUsers = photo.matched_users || [];
+        
+        // Convert to array if it's a string
+        if (typeof matchedUsers === 'string') {
+          try {
+            matchedUsers = JSON.parse(matchedUsers);
+          } catch (e) {
+            console.log(`❌ [FaceMatchingService] Invalid JSON in matched_users for photo ${photo.id}`);
+            matchedUsers = [];
+          }
+        }
+        
+        // Ensure it's an array
+        if (!Array.isArray(matchedUsers)) {
+          matchedUsers = [];
+        }
+        
+        // Skip photos uploaded by the user themselves (they already have access)
+        if (photo.uploaded_by === userId || photo.user_id === userId) {
+          continue;
+        }
+        
+        // Check if user is already in matched_users
+        const userIndex = matchedUsers.findIndex(m => {
+          if (typeof m === 'string') return m === userId;
+          if (m && typeof m === 'object') {
+            return m.userId === userId || m.user_id === userId;
+          }
+          return false;
+        });
+        
+        // If user is not already in matched_users, add them
+        if (userIndex === -1) {
+          // Add user to matched_users
+          matchedUsers.push({
+            userId: userId,
+            faceId: userFaceId,
+            similarity: match.similarity,
+            matchedAt: timestamp
+          });
+          
+          // Update the photo record
+          const updateParams = {
+            TableName: PHOTOS_TABLE,
+            Key: { id: photo.id },
+            UpdateExpression: 'SET matched_users = :matchedUsers, updated_at = :updatedAt',
+            ExpressionAttributeValues: {
+              ':matchedUsers': matchedUsers,
+              ':updatedAt': timestamp
+            },
+            ReturnValues: 'UPDATED_NEW'
+          };
+          
+          await docClient.send(new UpdateCommand(updateParams));
+          updatedPhotos.push(photo.id);
+          console.log(`✅ [FaceMatchingService] Added user to matched_users for photo ${photo.id} (Similarity: ${match.similarity}%)`);
+        }
+      } catch (error) {
+        console.error(`❌ [FaceMatchingService] Error processing photo match:`, error);
+      }
+    }
+    
+    // 6. Update the user's historicalMatches
+    console.log(`[FaceMatchingService] Updating user's historicalMatches with ${matchedPhotos.length} photos`);
+    
+    // Get current historicalMatches
+    const currentFaceData = await getFaceDataForUser(userId);
+    let historicalMatches = currentFaceData?.historicalMatches || [];
+    
+    // Filter out matches that already exist
+    const newMatches = matchedPhotos.filter(newMatch => 
+      !historicalMatches.some(existingMatch => existingMatch.id === newMatch.id)
+    );
+    
+    if (newMatches.length > 0) {
+      // Add new matches
+      historicalMatches = [...historicalMatches, ...newMatches];
+      
+      // Update the face data record
+      const updateParams = {
+        TableName: 'shmong-face-data',
+        Key: { userId: userId },
+        UpdateExpression: 'SET historicalMatches = :historicalMatches',
+        ExpressionAttributeValues: {
+          ':historicalMatches': historicalMatches
+        },
+        ReturnValues: 'UPDATED_NEW'
+      };
+      
+      await docClient.send(new UpdateCommand(updateParams));
+      console.log(`✅ [FaceMatchingService] Updated user's historicalMatches, now has ${historicalMatches.length} total matches`);
+    } else {
+      console.log(`⚠️ [FaceMatchingService] No new historical matches to add for user ${userId}`);
+    }
+    
+    console.log(`🎉 [FaceMatchingService] Direct Rekognition update complete! Added user to ${updatedPhotos.length} photos, historical matches: ${historicalMatches.length}`);
+    
+    return { 
+      success: true, 
+      updatedCount: updatedPhotos.length,
+      totalHistoricalMatches: historicalMatches.length 
+    };
+    
+  } catch (error) {
+    console.error(`❌ [FaceMatchingService] Error in direct Rekognition update:`, error);
+    return { success: false, updatedCount: 0, error };
+  }
+};
+
+/**
  * FaceMatchingService - Handles bidirectional face matching functionality
  */
 const FaceMatchingService = {
@@ -258,6 +525,10 @@ const FaceMatchingService = {
       // 3. For each photo where user's face is detected, ensure bidirectional match
       let updatedCount = 0;
       const timestamp = new Date().toISOString();
+      
+      // Track which photos match the current user's face for later updating their historicalMatches
+      const matchedPhotoIds = [];
+      const matchedPhotos = [];
       
       for (const photo of response.Items) {
         // Skip photos uploaded by the user themselves (they already have access)
@@ -321,6 +592,18 @@ const FaceMatchingService = {
               
               needsUpdate = true;
             }
+            
+            // Track this photo for updating the user's historicalMatches later
+            matchedPhotoIds.push(photo.id);
+            matchedPhotos.push({
+              id: photo.id,
+              uploadedBy: photo.uploaded_by || photo.user_id,
+              uploadedAt: photo.uploaded_at || photo.created_at,
+              url: photo.url || photo.photo_url,
+              thumbnailUrl: photo.thumbnail_url || photo.url,
+              similarity: 90, // Default
+              matchedAt: timestamp
+            });
           }
         }
         
@@ -347,12 +630,61 @@ const FaceMatchingService = {
         }
       }
       
+      // 4. Update the user's historicalMatches in their face data record
+      if (matchedPhotoIds.length > 0) {
+        try {
+          console.log(`[FaceMatchingService] Updating user ${userId} historical matches with ${matchedPhotoIds.length} photos`);
+          
+          // Get current historicalMatches
+          const currentFaceData = await getFaceDataForUser(userId);
+          let historicalMatches = currentFaceData?.historicalMatches || [];
+          
+          // Filter out matches that already exist
+          const newMatches = matchedPhotos.filter(newMatch => 
+            !historicalMatches.some(existingMatch => existingMatch.id === newMatch.id)
+          );
+          
+          if (newMatches.length > 0) {
+            // Add new matches
+            historicalMatches = [...historicalMatches, ...newMatches];
+            
+            // Update the face data record
+            const updateParams = {
+              TableName: 'shmong-face-data',
+              Key: { userId: userId },
+              UpdateExpression: 'SET historicalMatches = :historicalMatches',
+              ExpressionAttributeValues: {
+                ':historicalMatches': historicalMatches
+              },
+              ReturnValues: 'UPDATED_NEW'
+            };
+            
+            await docClient.send(new UpdateCommand(updateParams));
+            console.log(`[FaceMatchingService] Updated user ${userId} historicalMatches, added ${newMatches.length} new matches`);
+          } else {
+            console.log(`[FaceMatchingService] No new historical matches to add for user ${userId}`);
+          }
+        } catch (historyUpdateError) {
+          console.error(`[FaceMatchingService] Error updating historicalMatches for user ${userId}:`, historyUpdateError);
+        }
+      }
+      
       console.log(`[FaceMatchingService] Bidirectional match update complete. Updated ${updatedCount} photos.`);
       return { success: true, updated: updatedCount };
     } catch (error) {
       console.error('[FaceMatchingService] Error updating bidirectional matches:', error);
       return { success: false, updated: 0, error };
     }
+  },
+  
+  /**
+   * Updates a user's matches using direct Rekognition API calls
+   * More efficient for finding all matches at once
+   * @param {string} userId - The user ID to update matches for
+   * @returns {Promise<{success: boolean, updatedCount: number}>}
+   */
+  updateUserMatchesWithRekognition: async (userId) => {
+    return updateUserMatchesWithRekognition(userId);
   },
   
   /**
@@ -387,11 +719,11 @@ const FaceMatchingService = {
       
       console.log(`[FaceMatchingService] Found ${userIds.size} unique users with photos.`);
       
-      // 2. Update matches for each user
+      // 2. Update matches for each user using the direct Rekognition method
       const results = [];
       for (const userId of userIds) {
         console.log(`[FaceMatchingService] Processing matches for user: ${userId}`);
-        const result = await FaceMatchingService.updateBidirectionalMatches(userId);
+        const result = await FaceMatchingService.updateUserMatchesWithRekognition(userId);
         results.push({ userId, ...result });
       }
       

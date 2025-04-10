@@ -110,6 +110,12 @@ export const UserDashboard = () => {
     });
   };
 
+  // Pagination logic
+  const totalPages = Math.ceil(matches.length / pagination.pageSize);
+  const indexOfLastMatch = pagination.page * pagination.pageSize;
+  const indexOfFirstMatch = indexOfLastMatch - pagination.pageSize;
+  const currentMatches = matches.slice(indexOfFirstMatch, indexOfLastMatch);
+
   return (
     <div className="user-dashboard p-6">
       <div className="flex justify-between items-center mb-6">
@@ -196,7 +202,7 @@ export const UserDashboard = () => {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {matches.map((match) => (
+            {currentMatches.map((match) => (
               <div key={match.id} className="bg-white rounded-lg overflow-hidden shadow-md">
                 <div className="relative pb-[100%]">
                   <img
@@ -247,12 +253,12 @@ export const UserDashboard = () => {
               </button>
               
               <span className="px-4 py-1">
-                Page {pagination.page} of {Math.ceil(pagination.totalItems / pagination.pageSize)}
+                Page {pagination.page} of {totalPages}
               </span>
               
               <button
                 onClick={() => handlePageChange(pagination.page + 1)}
-                disabled={pagination.page >= Math.ceil(pagination.totalItems / pagination.pageSize)}
+                disabled={pagination.page >= totalPages}
                 className="px-3 py-1 rounded-md ml-2 border border-gray-300 disabled:opacity-50"
               >
                 Next

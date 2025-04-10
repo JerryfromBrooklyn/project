@@ -1,0 +1,6 @@
+/* Import all component styles */
+@import './main.css';
+@import './dashboard.css';
+@import './photo-upload.css';
+@import './photo-match-stats.css';
+/* ... other imports ... */ 

@@ -6288,14 +6288,14 @@ var import_dist662 = __toESM(require_dist2());
 var import_dist663 = __toESM(require_dist3());
 
 export {
+  EndpointURLScheme,
+  getSmithyContext,
+  normalizeProvider,
   getHttpHandlerExtensionConfiguration,
   resolveHttpHandlerRuntimeConfig,
-  EndpointURLScheme,
   HttpRequest,
   HttpResponse,
   isValidHostname,
-  getSmithyContext,
-  normalizeProvider,
   getHttpAuthSchemeEndpointRuleSetPlugin,
   getSerdePlugin,
   httpSigningMiddlewareOptions,
@@ -6380,4 +6380,4 @@ export {
   getEndpointPlugin,
   resolveEndpointConfig
 };
-//# sourceMappingURL=chunk-WLALPDKA.js.map
+//# sourceMappingURL=chunk-VSJWH2EA.js.map

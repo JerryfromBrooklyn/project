@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUserPhotos } from '../services/PhotoService';
 import { useAuth } from '../context/AuthContext';
 import PhotoDetailsModal from './PhotoDetailsModal';
-import { Trash2, RefreshCw, Search, Filter, User } from 'lucide-react';
+import { Trash2, RefreshCw, Search, Filter, User, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const MyPhotos = () => {
   // Add useEffect for mount logging
@@ -17,6 +17,15 @@ const MyPhotos = () => {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshInterval, setRefreshInterval] = useState(null);
+
+  // Add pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const photosPerPage = 20;
+  
+  // Get total matches count
+  const totalMatchesCount = photos.reduce((total, photo) => {
+    return total + (photo.matched_users?.length || 0);
+  }, 0);
 
   useEffect(() => {
     // Fetch photos on component mount
@@ -87,11 +96,28 @@ const MyPhotos = () => {
     
     return searchTerm === '' || searchFields.includes(searchTerm.toLowerCase());
   });
+  
+  // Pagination logic
+  const totalPages = Math.ceil(filteredPhotos.length / photosPerPage);
+  const indexOfLastPhoto = currentPage * photosPerPage;
+  const indexOfFirstPhoto = indexOfLastPhoto - photosPerPage;
+  const currentPhotos = filteredPhotos.slice(indexOfFirstPhoto, indexOfLastPhoto);
+  
+  const handlePageChange = (pageNumber) => {
+    setCurrentPage(pageNumber);
+  };
 
   return (
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">My Photos</h2>
+        <div>
+          <h2 className="text-2xl font-bold">My Photos</h2>
+          {totalMatchesCount > 0 && (
+            <p className="text-sm text-gray-600 mt-1">
+              You have been matched with {totalMatchesCount} {totalMatchesCount === 1 ? 'photo' : 'photos'} in total
+            </p>
+          )}
+        </div>
         <div className="flex space-x-2">
           <button 
             onClick={handleRefresh}
@@ -135,39 +161,80 @@ const MyPhotos = () => {
             Try again
           </button>
         </div>
-      ) : filteredPhotos.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {filteredPhotos.map((photo) => (
-            <div 
-              key={photo.id} 
-              className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
-              onClick={() => handlePhotoSelect(photo)}
-            >
-              <div className="relative w-full aspect-square">
-                <img 
-                  src={photo.url} 
-                  alt="User uploaded" 
-                  className="object-cover w-full h-full"
-                />
+      ) : currentPhotos.length > 0 ? (
+        <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {currentPhotos.map((photo) => (
+              <div 
+                key={photo.id} 
+                className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                onClick={() => handlePhotoSelect(photo)}
+              >
+                <div className="relative w-full aspect-square">
+                  <img 
+                    src={photo.url} 
+                    alt="User uploaded" 
+                    className="object-cover w-full h-full"
+                  />
+                  
+                  {photo.matched_users && photo.matched_users.length > 0 && (
+                    <div className="absolute bottom-2 right-2 bg-green-600 text-white px-2 py-1 rounded-full text-xs flex items-center">
+                      <User size={12} className="mr-1" />
+                      <span>{photo.matched_users.length}</span>
+                    </div>
+                  )}
+                </div>
                 
-                {photo.matched_users && photo.matched_users.length > 0 && (
-                  <div className="absolute bottom-2 right-2 bg-green-600 text-white px-2 py-1 rounded-full text-xs flex items-center">
-                    <User size={12} className="mr-1" />
-                    <span>{photo.matched_users.length}</span>
-                  </div>
-                )}
+                <div className="p-3">
+                  <p className="text-sm text-gray-600 mb-1">
+                    {new Date(photo.created_at).toLocaleDateString()}
+                  </p>
+                  {photo.description && (
+                    <p className="text-sm text-gray-900 truncate">{photo.description}</p>
+                  )}
+                </div>
               </div>
-              
-              <div className="p-3">
-                <p className="text-sm text-gray-600 mb-1">
-                  {new Date(photo.created_at).toLocaleDateString()}
-                </p>
-                {photo.description && (
-                  <p className="text-sm text-gray-900 truncate">{photo.description}</p>
-                )}
-              </div>
+            ))}
+          </div>
+          
+          {/* Pagination controls */}
+          {totalPages > 1 && (
+            <div className="mt-8 flex justify-center">
+              <nav className="flex items-center">
+                <button 
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="p-2 mr-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                
+                <div className="flex space-x-1">
+                  {[...Array(totalPages)].map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handlePageChange(i + 1)}
+                      className={`px-3 py-1 rounded-md ${
+                        currentPage === i + 1
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 hover:bg-gray-200'
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+                
+                <button 
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="p-2 ml-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </nav>
             </div>
-          ))}
+          )}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center h-64 bg-gray-50 rounded-lg border border-gray-200">

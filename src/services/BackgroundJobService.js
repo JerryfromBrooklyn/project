@@ -87,6 +87,17 @@ const BackgroundJobService = {
   },
   
   /**
+   * Runs face matching using direct Rekognition API for a specific user
+   * This is more efficient for finding all potential matches at once
+   * @param {string} userId - User ID to update matches for
+   * @returns {Promise<object>} - Result of the operation
+   */
+  runUserMatchesWithRekognition: async (userId) => {
+    console.log(`[BackgroundJobService] Running Rekognition face matching for user: ${userId}`);
+    return await FaceMatchingService.updateUserMatchesWithRekognition(userId);
+  },
+  
+  /**
    * Stops all running background jobs
    */
   stopAllJobs: () => {

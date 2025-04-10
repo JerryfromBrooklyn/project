@@ -1,491 +1,832 @@
-# Shmong Face Matching System Implementation Documentation
+# Shmong Face Matching System - Complete Implementation Guide
 
-## 1. Overview & Goal
+## 1. System Overview
 
-The primary goal is to implement a system that allows festival attendees (Users) to register with their face and automatically discover photos they appear in, which were previously uploaded by photographers.
+The Shmong face matching system is a powerful AWS-based facial recognition platform that lets users register their faces and automatically discover photos containing them. The system uses AWS Rekognition for face detection, indexing, and matching, along with DynamoDB for data storage and S3 for photo storage.
 
-The system needs to handle:
-*   **User Registration:** Email, password, and face capture via webcam.
-*   **Photo Upload:** Photographers upload large batches of photos.
-*   **Face Indexing:** Processing uploaded photos to detect and index faces anonymously.
-*   **Face Matching (Historical):** Upon user registration, searching all indexed anonymous faces to find matches for the newly registered user.
-*   **Face Matching (Future):** When new photos are uploaded, checking detected faces against already registered users in near real-time.
-*   **Photo Display:** Users can view photos they have been matched in.
+### 1.1 Core Functionality
 
-## 2. Architecture
+* **User Registration:** Users register with email, password, and a facial scan
+* **Photo Upload:** Users can upload photos containing faces
+* **Face Indexing:** System detects and indexes faces in uploaded photos
+* **Historical Matching:** When users register, the system searches all existing photos for matches
+* **Future Matching:** New photo uploads are automatically matched against registered users
+* **Dashboard View:** Users can see all photos they appear in
 
-*   **Frontend:** React (Vite) + TypeScript, TailwindCSS.
-*   **Backend:** Serverless approach using AWS Lambda + API Gateway.
-*   **Database:** AWS DynamoDB for storing user data, photo metadata, and detected face information.
-*   **Face Recognition:** AWS Rekognition (Image API).
-*   **File Storage (Implied):** AWS S3 for storing uploaded photos (details TBD in Phase 3).
-*   **Authentication:** Standard email/password login, likely using JWT or sessions managed by backend logic (details TBD).
+### 1.2 Key Technical Components
 
-## 3. Implementation Phases
+* **AWS Rekognition:** Powers face detection, storage, and matching
+* **AWS DynamoDB:** Stores user data, photo metadata, and face matching relationships
+* **AWS S3:** Stores uploaded photos
+* **AWS Lambda:** Processes background tasks for matching and indexing
+* **React Frontend:** Provides user interface for registration, upload, and viewing matches
 
-### Phase 1: Backend Foundation & Core Services (Completed)
+## 2. How the Face Matching System Works
 
-*   **Goal:** Set up essential AWS infrastructure, database structure, and isolated backend service modules.
-*   **Status:** Completed (verified via AWS CLI where possible).
+### 2.1 The Matching Architecture
 
-**Tasks Completed & AWS Resources:**
-    *   **DynamoDB Tables Created & Verified Active:**
-        *   `Users` (Partition Key: `userId`)
-        *   `Photos` (Partition Key: `photoId`)
-        *   `DetectedFaces` (Partition Key: `photoId`, Sort Key: `anonymousRekognitionFaceId`)
-    *   **DynamoDB GSIs Created & Verified Active:**
-        *   On `Users`: `RekognitionFaceIdIndex` (Partition Key: `rekognitionFaceId`)
-        *   On `Users`: `EmailIndex` (Partition Key: `email`) - Verified Active
-        *   On `DetectedFaces`: `AnonymousFaceIdIndex` (Partition Key: `anonymousRekognitionFaceId`)
-    *   **AWS Rekognition Collection Created & Verified:**
-        *   `shmong-faces`
-    *   **IAM Role Created & Verified:**
-        *   `ShmongLambdaExecRole` (Trusts lambda.amazonaws.com)
-    *   **IAM Policy Created & Verified:**
-        *   `ShmongLambdaExecPolicy` (JSON defined in `lambda-exec-policy.json`, includes permissions for Logs, Rekognition, DynamoDB)
-    *   **Policy Attached to Role:** `ShmongLambdaExecPolicy` attached to `ShmongLambdaExecRole` (Verified via CLI).
-    *   **Code Dependencies Installed:** Core AWS SDK v3 clients (`@aws-sdk/client-rekognition`, `@aws-sdk/client-dynamodb`, `@aws-sdk/lib-dynamodb`, `@aws-sdk/credential-providers`), `express`, `dotenv`, `cors`, `bcryptjs`, `jsonwebtoken` and corresponding `@types`. (*Installation assumed complete*).
-    *   **Environment Variables:** `.env` file created and updated with backend-specific variable names (e.g., `AWS_REGION`). (*Requires manual input of actual AWS Keys*).
-    *   **Local Dev Environment:** Frontend `npm run dev` confirmed working after fixing PostCSS config.
+The face matching system uses a sophisticated dual-prefix architecture to distinguish between user registration faces and faces detected in photos:
 
-**Key Code Files Created:**
-    *   `src/services/faceMatchingService.ts`: Handles interactions with AWS Rekognition API (`indexFaceForRegistration`, `searchFacesByFaceId`, `processUploadedPhotoForIndexingAndMatching`).
-    *   `src/services/databaseService.ts`: Handles interactions with DynamoDB (initial functions `saveDetectedFaceToDB`, `linkDetectedFaceToUser`, `createUser`, `findUserByEmail`, `saveUserRekognitionFaceId` implemented; others pending).
-    *   `src/lambda-handlers/` directory created.
-    *   `src/lambda-handlers/registerUserHandler.ts`: Placeholder Lambda handler structure.
-    *   `src/lambda-handlers/loginUserHandler.ts`: Placeholder Lambda handler structure.
-    *   `src/lambda-handlers/getMyPhotosHandler.ts`: Placeholder Lambda handler structure.
-    *   `src/lambda-handlers/uploadPhotoHandler.ts`: Placeholder Lambda handler structure.
-    *   `lambda-exec-policy.json`: IAM Policy definition.
-    *   `lambda-trust-policy.json`: IAM Role trust policy definition.
+```
+┌─────────────────┐     Registers     ┌─────────────────┐
+│                 │  with face scan   │                 │
+│      User       ├──────────────────►│ AWS Rekognition │
+│                 │                   │    Collection   │
+└────────┬────────┘                   │                 │
+         │                            │  ┌───────────┐  │
+         │                            │  │user_[UUID]│  │
+         │                            │  └───────────┘  │
+         │                            │                 │
+         │                            │  ┌───────────┐  │
+         │         Uploads            │  │photo_[UUID│  │
+         └─────────photos─────────────►  └───────────┘  │
+                                      │                 │
+                                      └────────┬────────┘
+                                               │
+                                               │ Searches for
+                                               │ matches
+                                               ▼
+┌─────────────────┐                   ┌─────────────────┐
+│                 │                   │                 │
+│  User's "My     │◄──────────────────┤  DynamoDB      │
+│  Photos" View   │   Shows matches   │  matched_users  │
+│                 │                   │                 │
+└─────────────────┘                   └─────────────────┘
+```
 
-### Phase 2: User Registration & Historical Matching Flow (Completed)
+### 2.2 The Prefix System Explained
 
-*   **Goal:** Build the end-to-end flow for user signup with face scanning and displaying initial matches.
-*   **Status:** Completed.
-*   **Tasks Completed:**
-    1.  **Implement Backend `/api/register` Lambda Logic:** Fleshed out `src/lambda-handlers/registerUserHandler.ts`.
-    2.  **Implement Supporting DB Functions:** Completed `createUser`, `findUserByEmail`, `saveUserRekognitionFaceId` in `databaseService.ts`.
-    3.  **Deploy `registerUser` Lambda:** Packaged and deployed the handler to AWS Lambda with `ShmongLambdaExecRole`.
-    4.  **Configure API Gateway for `/api/register`:** Created `POST /api/register` route integrated with the Lambda.
-    5.  **Build Frontend `FaceRegistration` Component:** Created UI with webcam integration.
-    6.  **Integrate Frontend:** Connected `FaceRegistration` to `/api/register` endpoint.
-    7.  **Implement `MyPhotos` Backend:** Implemented `findDetectedFacesByUserId`, `findPhotosByIds` in `databaseService.ts`.
-    8.  **Deploy `getMyPhotos` Lambda & API Gateway:** Deployed and configured `GET /api/my-photos` route.
-    9.  **Build Frontend `MyPhotos` Dashboard:** Created component to display matched photos.
+The core of the system relies on a critical distinction between two types of faces in the Rekognition collection:
 
-### Phase 3: Historical Matching & Photo Upload Implementation (Completed)
+1. **User Registration Faces** (`user_` prefix):
+   - When a user registers, their face is stored in Rekognition with a `user_[userId]` external ID
+   - These faces are considered the canonical representation of a user's identity
+   - Example: `user_b428d4f8-70d1-70e7-564d-1e1dc029929b`
 
-*   **Goal:** Implement the historical matching functionality for newly registered users and photo upload workflow.
-*   **Status:** Completed.
-*   **Tasks Completed:**
+2. **Photo Faces** (`photo_` prefix):
+   - When a photo is uploaded, detected faces are stored with a `photo_[photoId]` external ID
+   - These faces represent instances of faces in uploaded photos
+   - Example: `photo_f2520b6d-a689-408c-b53e-546dfe986609`
 
-    1. **Enhanced Dashboard Implementation:**
-       - Created a full-featured dashboard with face recognition capabilities
-       - Added tabs for Home, Matches, and Upload sections
-       - Implemented UI for displaying historical matches
-       - Set up face verification using webcam
-       - Added user information and status indicators
+This prefix system solves several critical problems:
+- Prevents users from seeing other users' registration faces in "My Photos"
+- Allows proper distinction between a user identity and a photo instance
+- Enables accurate bidirectional matching across the system
 
-    2. **AWS Integration Enhancement:**
-       - Added DynamoDB Document Client implementation
-       - Created necessary Marshal/Unmarshal functions for DynamoDB data
-       - Implemented proper error handling for AWS API calls
+### 2.3 The Matching Process Step-by-Step
 
-    3. **Historical Matching Implementation:**
-       - Enhanced the `matchAgainstExistingFaces` function in FaceIndexingService.js
-       - Implemented SearchFaces API calls to find faces in previously uploaded photos
-       - Added logic to update Photos table with user associations
-       - Created notifications system for historical matches
+#### User Registration & Historical Matching:
 
-    4. **Database Table Creation:**
-       - Created `shmong-notifications` table for historical match notifications
-       - Added UserIdIndex GSI to efficiently query by user ID
-       - Created proper update mechanisms for face-match associations
+1. User registers via frontend with email, password, and face scan
+2. System captures face image and sends to AWS Lambda function
+3. Lambda indexes the face with `user_[userId]` prefix in Rekognition collection
+4. Lambda stores user's face ID in DynamoDB `shmong-face-data` table
+5. System performs immediate historical matching:
+   - Searches Rekognition for all previously indexed faces matching the new user's face
+   - Filters matches to only include faces with `photo_` prefix (actual photos)
+   - Updates each matching photo's `matched_users` array to include the new user
+   - Stores match information in `historicalMatches` array for the user
 
-    5. **Authentication and Routing Fixes:**
-       - Updated auth context imports to ensure proper authentication
-       - Fixed PrivateRoute component for protected views
-       - Ensured proper routing for registration and dashboard
-       - Fixed Dashboard.js vs Dashboard.jsx conflicts
+#### Photo Upload & Future Matching:
 
-    6. **Testing Implementation:**
-       - Added verification steps in the face registration process
-       - Implemented face detection to validate user images
-       - Added support for viewing matched photos
+1. User uploads photo through frontend
+2. Photo is stored in S3 with a unique photoId
+3. Photo metadata is stored in DynamoDB `shmong-photos` table
+4. AWS Rekognition detects faces in the photo
+5. Each detected face is indexed with `photo_[photoId]` prefix
+6. System performs immediate matching:
+   - For each detected face, searches Rekognition for matching registered faces
+   - Filters matches to only include faces with `user_` prefix (user identities)
+   - Updates the photo's `matched_users` array with matching users
+   - Matched users will see this photo in their "My Photos" view
 
-### Phase 4: System Standardization and API Enhancement (Completed)
+#### Bidirectional Matching Updates:
 
-*   **Goal:** Standardize collection names, table references, enhance API endpoints, and improve system reliability.
-*   **Status:** Completed.
-*   **Tasks Completed:**
+The system also includes a background process that ensures bidirectional consistency:
+- Periodically scans all photos and all users
+- For each user, ensures their face ID is properly linked in all matching photos
+- Updates `matched_users` arrays to maintain consistency
 
-    1. **Collection Name Standardization:**
-       - Standardized AWS Rekognition collection names throughout the codebase
-       - Replaced non-existent collections ('face-registration' and 'user-photos') with existing collections ('shmong-faces' and 'user-faces')
-       - Updated default collection in awsClient.js to consistently use 'shmong-faces'
+## 3. Recent Fixes & Improvements
 
-    2. **Table Name Standardization:**
-       - Fixed inconsistent references to DynamoDB tables
-       - Ensured consistent use of 'shmong-face-data' instead of 'face_data' throughout the codebase
-       - Updated FaceStorageService.js and related components with standardized table references
+### 3.1 Prefix System Implementation
 
-    3. **API Endpoint Alignment:**
-       - Created API Gateway resources to match front-end expectations
-       - Implemented standardized endpoints for:
-         - User registration and login
-         - Face registration
-         - Face data retrieval
-         - Historical and recent matches
-         - Photo upload processing
-       - Verified endpoints return appropriate responses, though some endpoints require additional implementation
+We recently fixed a critical issue with inconsistent matching by implementing the prefix system. Before this fix:
+- Users were seeing inconsistent numbers of matches (Leon saw 13, Fred saw 6)
+- User registration faces were appearing in "My Photos" views
+- The system couldn't properly distinguish between user identities and photo instances
 
-    4. **Dependency Conflict Resolution:**
-       - Updated package.json to fix incompatible Uppy package versions
-       - Added missing dependencies required by the application
-       - Resolved some package conflicts, though some dependency issues remain
+The fix involved:
+1. Updating `faceMatchingService.js` to use the `user_` prefix when registering faces
+2. Updating `awsPhotoService.js` to use the `photo_` prefix when indexing photo faces
+3. Adding filtering logic to only match appropriate prefixes during search
+4. Implementing proper ID extraction by removing prefixes where needed
 
-    5. **Comprehensive Testing:**
-       - Created testing scripts (test-face-matching-system.js and simple-api-test.js)
-       - Implemented tests for API endpoints, face registration, historical matching, future matching, and error handling
-       - Documented test results and remaining issues in test logs
+### 3.2 Syntax Error Fixes
 
-### Phase 5: Lambda Function Implementation and Error Handling (Completed)
+Fixed a syntax error in `faceMatchingService.js` by removing duplicated code that was causing parsing issues during build. This error appeared as:
 
-*   **Goal:** Implement all Lambda functions for face recognition system and improve error handling.
-*   **Status:** Completed.
-*   **Tasks Completed:**
+```
+[plugin:vite:import-analysis] Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+```
 
-    1. **Lambda Function Implementation:**
-       - Implemented full Lambda function code for all required endpoints:
-         - `shmong-login`: User authentication with JWT token generation
-         - `shmong-face-register`: Face registration and indexing with AWS Rekognition
-         - `shmong-user-face-data`: Retrieval of user's face data and statistics
-         - `shmong-historical-matches`: Fetching historical photo matches
-         - `shmong-recent-matches`: Fetching recent photo matches
-         - `shmong-face-stats`: Computing face match statistics for dashboard
-       - Each function includes standardized request validation and error handling
+### 3.3 Matching Accuracy Improvements
 
-    2. **Error Handling Enhancement:**
-       - Added comprehensive error handling to all Lambda functions
-       - Implemented proper validation for all request parameters
-       - Included detailed error messages and status codes for different failure scenarios
-       - Added try/catch blocks with appropriate logging for debugging
-       - Standardized error response format across all endpoints
+Improved matching accuracy by:
+- Using a threshold of 80% for photo matching but 99% for identity verification
+- Implementing better handling of confidence scores and similarity metrics
+- Properly skipping exact self-matches and suspiciously perfect 100% matches
 
-    3. **CORS Implementation:**
-       - Added CORS headers to all API responses
-       - Configured OPTIONS method handling for pre-flight requests
-       - Set up proper Access-Control-Allow-* headers for cross-origin access
+## 4. Complete Setup Instructions for New AWS Account
 
-    4. **API Gateway Integration:**
-       - Updated all API Gateway integrations to connect to the new Lambda functions
-       - Configured proper permission policies for API Gateway to invoke Lambda functions
-       - Set up resource methods and request mappings
-       - Deployed all changes to the production stage
+### 4.1 AWS Account Setup
 
-    5. **Testing and Validation:**
-       - Created test scripts to verify correct function of all endpoints
-       - Implemented end-to-end test script for system testing
-       - Fixed DynamoDB key schema in the face registration Lambda function
-       - Tested with live user IDs from the database
+1. **Create AWS Account**:
+   - Go to https://aws.amazon.com and click "Create an AWS Account"
+   - Follow the signup steps and verify your identity
+   - Choose the "Free Tier" option
 
-### Phase 6: Face Recognition ID Prefix System Implementation (Completed)
-
-*   **Goal:** Implement a system to distinguish between user registration faces and photo faces in AWS Rekognition.
-*   **Status:** Completed and Verified Working.
-*   **Tasks Completed:**
-
-    1. **Root Cause Analysis of Matching Issues:**
-       - Identified critical issue: AWS Rekognition collection was using the same ExternalImageId format for both user registration faces and photo faces
-       - Determined this was causing confusion when searching for matches - the system couldn't tell if a match was a user registration or an actual photo
-       - Concluded a prefix system was needed to disambiguate these two types of entries
-
-    2. **Prefix Implementation in Face Registration:**
-       - Modified `FaceIndexingService.jsx` to use a `user_` prefix when registering user faces:
-         ```javascript
-         ExternalImageId: `user_${userId}` // Clearly identifies this as a user registration face
-         ```
-       - Updated existing code to properly filter for this prefix when processing matches
-
-    3. **Prefix Implementation in Photo Upload:**
-       - Modified `awsPhotoService.js` to use a `photo_` prefix when indexing faces from uploaded photos:
-         ```javascript
-         ExternalImageId: `photo_${fileId}` // Clearly identifies this as a photo face
-         ```
-       - Added filtering logic to skip matches with the `user_` prefix during photo processing
-
-    4. **Database Schema Updates:**
-       - Updated match processing logic to properly extract actual user/photo IDs by removing prefixes
-       - Ensured matching logic correctly identified self-matches using the prefixed IDs
-
-    5. **Collection Reset and Testing:**
-       - Recreated the AWS Rekognition collection to implement the new prefixing system
-       - Tested with both self-photos and group photos containing multiple faces
-       - Verified:
-         - Self-photo correctly matched with user registration face (99.96% match)
-         - Group photo with 10 faces correctly found no matches with registered user
-         - "My Photos" tab only showed photos containing the actual user
-
-    6. **System Verification:**
-       - Conducted comprehensive testing to validate the new prefix system
-       - Confirmed historical matching correctly identifies matches based on actual face similarity
-       - Validated that the "My Photos" feature now only shows photos containing the user's face
-       - Ensured no false positives with user registration faces in other contexts
-
-    7. **Future Matching Verification (Upload Matching):**
-       - Verified that the prefix system works correctly for photos uploaded after user registration
-       - Tested with multiple users uploading photos of themselves and others
-       - Confirmed that the system correctly identifies registered faces in newly uploaded photos
-       - Verified that only actual photos (not user registration images) appear in the "My Photos" tab
-       - Proved that the system can correctly distinguish between user registration faces and photo faces during the matching process
-
-## 4. Testing the Historical and Future Matching Functionality
-
-To test the historical matching functionality:
-
-1. **Start the Application:**
+2. **Install AWS CLI**:
+   ```bash
+   # For Windows (using installer) or
+   # For macOS
+   brew install awscli
+   # For Linux
+   pip install awscli
    ```
-   npm run dev
+
+3. **Configure AWS CLI**:
+   ```bash
+   aws configure
+   # Enter your AWS Access Key ID
+   # Enter your AWS Secret Access Key
+   # Enter default region (e.g., us-east-1)
+   # Enter default output format (json)
    ```
-   Access the application at http://localhost:5173/
 
-2. **Register an Account:**
-   - Visit the login page and create a new account
-   - Complete the email verification process
-   - Log in with your new account
+### 4.2 Create Required AWS Resources
 
-3. **Register Your Face:**
-   - On the dashboard, click the "Register Face" button
-   - Position your face in the frame
-   - Capture your face image
-   - The system will register your face with AWS Rekognition (using the new `user_` prefix)
-   - If the face is detected successfully, you'll receive a confirmation
-   - If no face is detected, you'll be prompted to try again with better lighting
+1. **Create IAM Role and Policy**:
 
-4. **View Historical Matches:**
-   - After registration, the system automatically runs historical matching
-   - If matches are found in photos (indexed with the `photo_` prefix), they'll appear on your dashboard
-   - The "Matches" tab will display all photos you've been found in
-   - You'll receive a notification about the number of matches found
+   ```bash
+   # Create IAM role for Lambda execution
+   aws iam create-role --role-name ShmongLambdaExecRole --assume-role-policy-document file://lambda-trust-policy.json
 
-5. **Test Future Matching (Upload New Photos):**
-   - Click the "Upload" tab
-   - Use the "Upload New Photos" button to upload test photos
-   - Photos with faces will be processed and indexed with the `photo_` prefix
-   - The system will automatically match detected faces against registered users (looking for faces with the `user_` prefix)
-   - If your face is found in the uploaded photos, they will appear in your "My Photos" tab
-   - Other registered users whose faces appear in the photos will also see these photos in their "My Photos" tab
-   - This confirms both the historical and future matching capabilities are working correctly
+   # Create IAM policy
+   aws iam create-policy --policy-name ShmongLambdaExecPolicy --policy-document file://lambda-exec-policy.json
 
-6. **Cross-Account Testing:**
-   - Create a second user account
-   - Register a face that has already been registered with the first account
-   - The system will detect the match and correctly associate the face with both accounts
-   - Upload a photo containing this face using the second account
-   - Verify that the photo appears in the "My Photos" tab for both accounts
-   - This confirms that the matching system works across different user accounts
+   # Attach policy to role
+   aws iam attach-role-policy --role-name ShmongLambdaExecRole --policy-arn arn:aws:iam::YOUR_ACCOUNT_ID:policy/ShmongLambdaExecPolicy
+   ```
 
-7. **Verify Identity:**
-   - Use the "Verify Identity" button to confirm your face matches the registered one
-   - The system will display match confidence and similarity scores
+   Contents of `lambda-trust-policy.json`:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Principal": {
+           "Service": "lambda.amazonaws.com"
+         },
+         "Action": "sts:AssumeRole"
+       }
+     ]
+   }
+   ```
 
-## 5. Known Issues / Troubleshooting Log
+   Contents of `lambda-exec-policy.json`:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": [
+           "logs:CreateLogGroup",
+           "logs:CreateLogStream",
+           "logs:PutLogEvents"
+         ],
+         "Resource": "arn:aws:logs:*:*:*"
+       },
+       {
+         "Effect": "Allow",
+         "Action": [
+           "rekognition:CreateCollection",
+           "rekognition:DeleteCollection",
+           "rekognition:DeleteFaces",
+           "rekognition:DetectFaces",
+           "rekognition:IndexFaces",
+           "rekognition:ListCollections",
+           "rekognition:ListFaces",
+           "rekognition:SearchFaces",
+           "rekognition:SearchFacesByImage"
+         ],
+         "Resource": "*"
+       },
+       {
+         "Effect": "Allow",
+         "Action": [
+           "dynamodb:GetItem",
+           "dynamodb:PutItem",
+           "dynamodb:UpdateItem",
+           "dynamodb:DeleteItem",
+           "dynamodb:Scan",
+           "dynamodb:Query",
+           "dynamodb:BatchGetItem",
+           "dynamodb:BatchWriteItem"
+         ],
+         "Resource": [
+           "arn:aws:dynamodb:*:*:table/shmong-users",
+           "arn:aws:dynamodb:*:*:table/shmong-photos",
+           "arn:aws:dynamodb:*:*:table/shmong-face-data",
+           "arn:aws:dynamodb:*:*:table/shmong-face-matches",
+           "arn:aws:dynamodb:*:*:table/shmong-notifications"
+         ]
+       },
+       {
+         "Effect": "Allow",
+         "Action": [
+           "s3:GetObject",
+           "s3:PutObject",
+           "s3:DeleteObject"
+         ],
+         "Resource": "arn:aws:s3:::shmong/*"
+       }
+     ]
+   }
+   ```
 
-*   **PostCSS Config Error:** Initially encountered persistent `[ReferenceError] module is not defined in ES module scope` errors when running `npm run dev`, related to `postcss.config.js` being treated as ESM due to `"type": "module"` in `package.json`. **Resolution:** Renamed config to `postcss.config.cjs` and ensured `module.exports` syntax was used. Verified `npm run dev` now works.
-*   **AWS CLI Failures:** Experienced difficulties creating IAM Policies and DynamoDB GSIs reliably via AWS CLI, possibly due to JSON parsing/quoting issues or terminal environment limitations. **Workaround:** Used AWS Management Console for manual creation/verification of IAM Policy (`ShmongLambdaExecPolicy`) and DynamoDB GSIs (`RekognitionFaceIdIndex`, `AnonymousFaceIdIndex`, `EmailIndex`). Policy attachment to Role (`ShmongLambdaExecRole`) was eventually successful via CLI.
-*   **Dummy API Gateway Test Failure:** Creating a test Lambda (`shmong-dummy-test`) and HTTP API Gateway (`shmong-test-api`) via CLI resulted in "Internal Server Error" on invocation, despite direct Lambda test succeeding. **Resolution:** Decided to ignore this test failure and proceed, creating specific API Gateway integrations for actual function Lambdas later, assuming the issue was specific to the test setup or default route integration.
-*   **DynamoDB Index Creation Time:** Noted that GSI creation (`EmailIndex`) status was `CREATING` after the command; requires waiting for `ACTIVE` status before dependent code (`findUserByEmail`) works efficiently.
-*   **Dashboard Import Issues:** Encountered issues with duplicate Dashboard components (Dashboard.js vs Dashboard.jsx) causing rendering conflicts. **Resolution:** Properly configured App.jsx to import Dashboard.js and removed the duplicate component.
-*   **AWS Client Configuration:** Faced issues with missing docClient in awsClient.js causing white screens. **Resolution:** Added DynamoDBDocumentClient implementation and proper marshalling functions.
-*   **Auth Context Path Issues:** Experienced authentication errors due to incorrect import paths. **Resolution:** Updated all imports to use the correct path for AuthContext.
-*   **Collection Name Mismatch:** Discovered references to non-existent collections ('face-registration' and 'user-photos') throughout the codebase. **Resolution:** Standardized all references to use existing collections ('shmong-faces' and 'user-faces') and updated awsClient.js default collection to consistently use 'shmong-faces'.
-*   **Table Name Inconsistency:** Found inconsistent references to DynamoDB tables with some code using 'shmong-face-data' and others using 'face_data'. **Resolution:** Standardized all table references to consistently use 'shmong-face-data', particularly in FaceStorageService.js.
-*   **API Endpoint Misalignment:** Identified that front-end expected API endpoints that weren't properly implemented or aligned with back-end resources. **Resolution:** Created API Gateway resources matching front-end expectations, though some endpoints (login, register, face registration, photo upload) still require additional implementation.
-*   **Package Dependency Conflicts:** Encountered incompatible Uppy package versions and missing dependencies causing build and runtime issues. **Resolution:** Updated package.json with corrected versions and added missing dependencies, though some package conflicts remain.
-*   **API Gateway Integration Issues:** Despite setting up Lambda functions and API Gateway resources with correct integrations, API endpoints return 502 "Internal server error" responses. **Resolution:** The issue was related to Lambda function handlers not being correctly specified. We updated the handler names to match the file structure and added proper handler exports.
-*   **DynamoDB Key Schema Issue:** The face registration Lambda function was using `userId` as the key in DynamoDB queries, but the table uses `id` as the primary key. **Resolution:** Updated the Lambda function to use `id` as the key in DynamoDB queries, which fixed the schema validation error.
-*   **Face Detection Quality Issues:** Users attempting to register with poor quality images were getting generic errors. **Resolution:** Enhanced error handling to provide specific feedback when no face is detected in the image.
-*   **Lambda Function Permission Issues:** Lambda functions could not be invoked by API Gateway due to missing permissions. **Resolution:** Added required permissions for API Gateway to invoke Lambda functions using the Lambda add-permission command.
-*   **S3 `ListBucket` Permission Error:** The photo uploader component (`PhotoUploader.js` via `awsPhotoService.js`) was attempting to calculate user storage usage by directly listing S3 bucket contents (`s3:ListBucket`). This action was denied by IAM policies for security reasons. **Resolution:** Removed the storage usage calculation feature from the frontend (`getUserStorageUsage` function and related UI elements) as it's not critical for the upload functionality and violates security best practices for client-side code.
-*   **DynamoDB Marshalling Error (`historicalMatches`):** Storing the `historicalMatches` array in `shmong-face-data` failed due to an AWS SDK marshalling error (`TypeError: Cannot read properties of undefined (reading '0')`). This likely occurred because the array contained items with unexpected structures or null/undefined values. **Resolution:** Updated `FaceStorageService.js` (`storeFaceId` function) to explicitly define the `historicalMatches` array as a DynamoDB List (`L`) of Maps (`M`) and added filtering to ensure each map contains the required fields (`id`, `similarity`) before attempting to save.
-*   **Historical Match Confusion (`ExternalImageId`):** Initial testing showed historical matches linking to `userId`s instead of `photoId`s, causing confusion about what was being matched and why image URLs were missing. **Resolution:** Implemented a prefix system to clearly distinguish between face types:
-    - Added `user_` prefix to user registration faces in Rekognition's ExternalImageId
-    - Added `photo_` prefix to photo faces in Rekognition's ExternalImageId
-    - Updated code to properly filter matches based on these prefixes
-    - This ensured that only actual photos (not other users' registration faces) appeared in "My Photos"
-*   **Delay in Photo Matching Display:** The "My Photos" tab had a 3-second delay when loading, causing potential confusion for users. We attempted to remove this delay by modifying the PhotoManager component, but the delay persisted due to the complexity of the component structure and build process. This could be addressed in future updates.
+2. **Create DynamoDB Tables**:
 
-## 6. Next Steps & Future Improvements
+   ```bash
+   # Create Users table
+   aws dynamodb create-table \
+     --table-name shmong-users \
+     --attribute-definitions AttributeName=id,AttributeType=S \
+     --key-schema AttributeName=id,KeyType=HASH \
+     --billing-mode PAY_PER_REQUEST
 
-1. **Performance Optimization:**
-   - Remove the 3-second delay when loading the "My Photos" tab
-   - Add pagination for photo matches display
-   - Implement lazy loading for matched photos
-   - Optimize AWS Rekognition calls for batch processing
-   - Consider caching frequent queries to reduce DynamoDB costs
+   # Create Photos table
+   aws dynamodb create-table \
+     --table-name shmong-photos \
+     --attribute-definitions AttributeName=id,AttributeType=S AttributeName=user_id,AttributeType=S \
+     --key-schema AttributeName=id,KeyType=HASH \
+     --global-secondary-indexes '[{"IndexName":"UserIdIndex","KeySchema":[{"AttributeName":"user_id","KeyType":"HASH"}],"Projection":{"ProjectionType":"ALL"}}]' \
+     --billing-mode PAY_PER_REQUEST
 
-2. **Enhanced User Experience:**
-   - Add real-time notifications for new matches
-   - Implement photo sharing capabilities
-   - Create albums for organizing matched photos
-   - Add live face detection feedback during registration
+   # Create Face Data table
+   aws dynamodb create-table \
+     --table-name shmong-face-data \
+     --attribute-definitions AttributeName=userId,AttributeType=S AttributeName=faceId,AttributeType=S \
+     --key-schema AttributeName=userId,KeyType=HASH \
+     --global-secondary-indexes '[{"IndexName":"FaceIdIndex","KeySchema":[{"AttributeName":"faceId","KeyType":"HASH"}],"Projection":{"ProjectionType":"ALL"}}]' \
+     --billing-mode PAY_PER_REQUEST
+     
+   # Create Notifications table
+   aws dynamodb create-table \
+     --table-name shmong-notifications \
+     --attribute-definitions AttributeName=id,AttributeType=S AttributeName=userId,AttributeType=S \
+     --key-schema AttributeName=id,KeyType=HASH \
+     --global-secondary-indexes '[{"IndexName":"UserIdIndex","KeySchema":[{"AttributeName":"userId","KeyType":"HASH"}],"Projection":{"ProjectionType":"ALL"}}]' \
+     --billing-mode PAY_PER_REQUEST
+   ```
 
-3. **Security Enhancements:**
+3. **Create S3 Bucket**:
+
+   ```bash
+   # Create S3 bucket for photos
+   aws s3 mb s3://shmong --region us-east-1
+   
+   # Set CORS policy for bucket
+   aws s3api put-bucket-cors --bucket shmong --cors-configuration file://s3-cors-config.json
+   ```
+
+   Contents of `s3-cors-config.json`:
+   ```json
+   {
+     "CORSRules": [
+       {
+         "AllowedHeaders": ["*"],
+         "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+         "AllowedOrigins": ["*"],
+         "ExposeHeaders": ["ETag"]
+       }
+     ]
+   }
+   ```
+
+4. **Create Rekognition Collection**:
+
+   ```bash
+   # Create face collection
+   aws rekognition create-collection --collection-id shmong-faces --region us-east-1
+   ```
+
+### 4.3 Set Up Lambda Functions
+
+1. **Create Lambda Functions**:
+
+   ```bash
+   # Create function directory
+   mkdir -p lambda/shmong-face-register
+   
+   # Create package.json
+   echo '{
+     "name": "shmong-face-register",
+     "version": "1.0.0",
+     "dependencies": {
+       "aws-sdk": "^2.1040.0"
+     }
+   }' > lambda/shmong-face-register/package.json
+   
+   # Install dependencies
+   cd lambda/shmong-face-register && npm install && cd ../..
+   ```
+
+   Create the Lambda handler file (`lambda/shmong-face-register/index.js`):
+   ```javascript
+   const AWS = require('aws-sdk');
+   const rekognition = new AWS.Rekognition();
+   const dynamoDB = new AWS.DynamoDB.DocumentClient();
+
+   exports.handler = async (event) => {
+     try {
+       // Parse request body
+       const body = JSON.parse(event.body);
+       const { userId, imageData } = body;
+       
+       if (!userId || !imageData) {
+         return {
+           statusCode: 400,
+           headers: {
+             "Access-Control-Allow-Origin": "*",
+             "Access-Control-Allow-Headers": "Content-Type",
+             "Access-Control-Allow-Methods": "OPTIONS,POST"
+           },
+           body: JSON.stringify({ error: "Missing required parameters" })
+         };
+       }
+       
+       // Decode base64 image
+       const buffer = Buffer.from(imageData.replace(/^data:image\/\w+;base64,/, ""), 'base64');
+       
+       // Index face in Rekognition
+       const indexParams = {
+         CollectionId: 'shmong-faces',
+         Image: { Bytes: buffer },
+         ExternalImageId: `user_${userId}`,
+         MaxFaces: 1,
+         QualityFilter: "AUTO",
+         DetectionAttributes: ["DEFAULT"]
+       };
+       
+       const indexResponse = await rekognition.indexFaces(indexParams).promise();
+       
+       if (!indexResponse.FaceRecords || indexResponse.FaceRecords.length === 0) {
+         return {
+           statusCode: 400,
+           headers: {
+             "Access-Control-Allow-Origin": "*",
+             "Access-Control-Allow-Headers": "Content-Type",
+             "Access-Control-Allow-Methods": "OPTIONS,POST"
+           },
+           body: JSON.stringify({ error: "No face detected in image" })
+         };
+       }
+       
+       const faceId = indexResponse.FaceRecords[0].Face.FaceId;
+       
+       // Store face ID in DynamoDB
+       const dbParams = {
+         TableName: 'shmong-face-data',
+         Item: {
+           userId: userId,
+           faceId: faceId,
+           createdAt: new Date().toISOString(),
+           updatedAt: new Date().toISOString(),
+           historicalMatches: []
+         }
+       };
+       
+       await dynamoDB.put(dbParams).promise();
+       
+       // Find historical matches
+       const searchParams = {
+         CollectionId: 'shmong-faces',
+         FaceId: faceId,
+         FaceMatchThreshold: 80.0,
+         MaxFaces: 1000
+       };
+       
+       const searchResult = await rekognition.searchFaces(searchParams).promise();
+       
+       let matchCount = 0;
+       
+       if (searchResult.FaceMatches && searchResult.FaceMatches.length > 0) {
+         // Process matches
+         for (const match of searchResult.FaceMatches) {
+           // Skip self-match
+           if (match.Face.FaceId === faceId) continue;
+           
+           const externalId = match.Face.ExternalImageId;
+           
+           // Only process photo_ matches (not user_ matches)
+           if (externalId && externalId.startsWith('photo_')) {
+             const photoId = externalId.substring(6); // Remove 'photo_' prefix
+             
+             // Get photo
+             const photoParams = {
+               TableName: 'shmong-photos',
+               Key: { id: photoId }
+             };
+             
+             try {
+               const photoData = await dynamoDB.get(photoParams).promise();
+               
+               if (photoData.Item) {
+                 // Update matched_users array
+                 let matchedUsers = photoData.Item.matched_users || [];
+                 
+                 if (typeof matchedUsers === 'string') {
+                   try {
+                     matchedUsers = JSON.parse(matchedUsers);
+                   } catch (e) {
+                     matchedUsers = [];
+                   }
+                 }
+                 
+                 if (!Array.isArray(matchedUsers)) {
+                   matchedUsers = [];
+                 }
+                 
+                 // Check if user already exists in matched_users
+                 const userIndex = matchedUsers.findIndex(m => 
+                   (m.userId && m.userId === userId) || 
+                   (m.user_id && m.user_id === userId) ||
+                   (typeof m === 'string' && m === userId)
+                 );
+                 
+                 if (userIndex === -1) {
+                   // Add user to matched_users
+                   matchedUsers.push({
+                     userId: userId,
+                     faceId: faceId,
+                     similarity: match.Similarity,
+                     matchedAt: new Date().toISOString()
+                   });
+                   
+                   // Update photo
+                   const updateParams = {
+                     TableName: 'shmong-photos',
+                     Key: { id: photoId },
+                     UpdateExpression: 'SET matched_users = :matchedUsers, updated_at = :updatedAt',
+                     ExpressionAttributeValues: {
+                       ':matchedUsers': matchedUsers,
+                       ':updatedAt': new Date().toISOString()
+                     }
+                   };
+                   
+                   await dynamoDB.update(updateParams).promise();
+                   matchCount++;
+                 }
+               }
+             } catch (photoError) {
+               console.error('Error processing photo:', photoError);
+             }
+           }
+         }
+       }
+       
+       return {
+         statusCode: 200,
+         headers: {
+           "Access-Control-Allow-Origin": "*",
+           "Access-Control-Allow-Headers": "Content-Type",
+           "Access-Control-Allow-Methods": "OPTIONS,POST"
+         },
+         body: JSON.stringify({ 
+           success: true,
+           faceId: faceId,
+           matchCount: matchCount
+         })
+       };
+     } catch (error) {
+       console.error('Error:', error);
+       return {
+         statusCode: 500,
+         headers: {
+           "Access-Control-Allow-Origin": "*",
+           "Access-Control-Allow-Headers": "Content-Type",
+           "Access-Control-Allow-Methods": "OPTIONS,POST"
+         },
+         body: JSON.stringify({ error: error.message })
+       };
+     }
+   };
+   ```
+
+2. **Deploy Lambda Function**:
+
+   ```bash
+   # Create zip package
+   cd lambda/shmong-face-register && zip -r function.zip . && cd ../..
+   
+   # Deploy Lambda function
+   aws lambda create-function \
+     --function-name shmong-face-register \
+     --runtime nodejs14.x \
+     --role arn:aws:iam::YOUR_ACCOUNT_ID:role/ShmongLambdaExecRole \
+     --handler index.handler \
+     --zip-file fileb://lambda/shmong-face-register/function.zip \
+     --timeout 30 \
+     --memory-size 256
+   ```
+
+3. **Create API Gateway**:
+
+   ```bash
+   # Create HTTP API
+   aws apigatewayv2 create-api --name shmong-api --protocol-type HTTP
+   
+   # Get the API ID
+   API_ID=$(aws apigatewayv2 get-apis --query "Items[?Name=='shmong-api'].ApiId" --output text)
+   
+   # Create route for face registration
+   aws apigatewayv2 create-route \
+     --api-id $API_ID \
+     --route-key "POST /api/register-face" \
+     --target "integrations/$INTEGRATION_ID"
+     
+   # Create Lambda integration
+   INTEGRATION_ID=$(aws apigatewayv2 create-integration \
+     --api-id $API_ID \
+     --integration-type AWS_PROXY \
+     --integration-uri arn:aws:lambda:us-east-1:YOUR_ACCOUNT_ID:function:shmong-face-register \
+     --payload-format-version 2.0 \
+     --query "IntegrationId" \
+     --output text)
+     
+   # Update route with integration
+   aws apigatewayv2 update-route \
+     --api-id $API_ID \
+     --route-id $ROUTE_ID \
+     --target "integrations/$INTEGRATION_ID"
+     
+   # Deploy API
+   aws apigatewayv2 create-deployment \
+     --api-id $API_ID \
+     --stage-name prod
+   ```
+
+### 4.4 Connect Frontend to AWS Backend
+
+1. **Create AWS Client Configuration File**:
+
+Create `src/lib/awsClient.js`:
+
+```javascript
+import { Rekognition } from '@aws-sdk/client-rekognition';
+import { S3 } from '@aws-sdk/client-s3';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+
+// Configuration
+export const AWS_REGION = 'us-east-1';
+export const PHOTO_BUCKET = 'shmong';
+export const COLLECTION_ID = 'shmong-faces';
+export const PHOTOS_TABLE = 'shmong-photos';
+export const USERS_TABLE = 'shmong-users';
+export const FACE_DATA_TABLE = 'shmong-face-data';
+export const NOTIFICATIONS_TABLE = 'shmong-notifications';
+
+// Initialize clients
+export const rekognitionClient = new Rekognition({
+  region: AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.REACT_APP_AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.REACT_APP_AWS_SECRET_ACCESS_KEY
+  }
+});
+
+export const s3Client = new S3({
+  region: AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.REACT_APP_AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.REACT_APP_AWS_SECRET_ACCESS_KEY
+  }
+});
+
+export const dynamoClient = new DynamoDBClient({
+  region: AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.REACT_APP_AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.REACT_APP_AWS_SECRET_ACCESS_KEY
+  }
+});
+
+// Create a DocumentClient to simplify working with DynamoDB
+export const docClient = DynamoDBDocumentClient.from(dynamoClient);
+
+export default {
+  rekognitionClient,
+  s3Client,
+  dynamoClient,
+  docClient
+};
+```
+
+2. **Create `.env` File**:
+
+Create `.env` at project root:
+
+```
+REACT_APP_AWS_ACCESS_KEY_ID=YOUR_ACCESS_KEY
+REACT_APP_AWS_SECRET_ACCESS_KEY=YOUR_SECRET_KEY
+REACT_APP_AWS_REGION=us-east-1
+REACT_APP_API_ENDPOINT=https://your-api-gateway-id.execute-api.us-east-1.amazonaws.com/prod
+```
+
+## 5. Troubleshooting & FAQ
+
+### 5.1 Common Issues
+
+#### Missing Matches Issue
+**Problem**: Users are seeing different numbers of matched photos (e.g., Leon sees 13 photos but Fred sees 6)
+
+**Solution**: 
+1. Check if the prefix system is correctly implemented (`user_` for registration, `photo_` for uploads)
+2. Verify `matched_users` arrays in the DynamoDB photos table 
+3. Run a retroactive matching script to update all matched_users arrays
+
+Example check script:
+```javascript
+const AWS = require('aws-sdk');
+AWS.config.update({ region: 'us-east-1' });
+const dynamodb = new AWS.DynamoDB.DocumentClient();
+
+async function compareMatchedUsers(photoId1, photoId2) {
+  const params1 = {
+    TableName: 'shmong-photos',
+    Key: { id: photoId1 }
+  };
+  
+  const params2 = {
+    TableName: 'shmong-photos',
+    Key: { id: photoId2 }
+  };
+  
+  const [photo1, photo2] = await Promise.all([
+    dynamodb.get(params1).promise(),
+    dynamodb.get(params2).promise()
+  ]);
+  
+  console.log('Photo 1 matched_users:', photo1.Item.matched_users);
+  console.log('Photo 2 matched_users:', photo2.Item.matched_users);
+  
+  // Compare arrays
+  const users1 = new Set(photo1.Item.matched_users.map(m => m.userId));
+  const users2 = new Set(photo2.Item.matched_users.map(m => m.userId));
+  
+  console.log('Users in Photo 1 but not Photo 2:', 
+    [...users1].filter(u => !users2.has(u)));
+  console.log('Users in Photo 2 but not Photo 1:', 
+    [...users2].filter(u => !users1.has(u)));
+}
+
+compareMatchedUsers('photoId1', 'photoId2');
+```
+
+#### Syntax Error in faceMatchingService.js
+**Problem**: Build fails with syntax error in faceMatchingService.js
+
+**Solution**: Fix duplicate code blocks and ensure service is only defined once.
+
+#### Performance Issues
+**Problem**: Slow dashboard loading or matching
+
+**Solution**: 
+1. Use pagination for photo retrieval
+2. Implement lazy loading for images
+3. Add caching for frequently accessed data
+4. Optimize Lambda configuration (memory allocation)
+
+### 5.2 AWS Rekognition Limitations
+
+1. **Collection Size**: Limited to 20 million faces per collection
+2. **Image Requirements**:
+   - Max file size: 5MB (JPEG/PNG)
+   - Min face size: 50x50 pixels
+   - Max image resolution: 1920x1080
+3. **API Limits**:
+   - IndexFaces: 50 TPS (transactions per second) 
+   - SearchFaces: 5 TPS
+   - SearchFacesByImage: 5 TPS
+
+### 5.3 Cost Optimization
+
+1. **Reduce Rekognition API Calls**:
+   - Batch process photos when possible
+   - Implement a queue system for large uploads
+
+2. **DynamoDB Optimization**:
+   - Use sparse indexes
+   - Enable on-demand capacity for unpredictable workloads
+   - Use TTL for temporary data
+
+3. **S3 Cost Reduction**:
+   - Implement lifecycle policies for old/unused photos
+   - Use compression for stored images
+
+## 6. Next Steps & Future Enhancements
+
+1. **Improved Error Handling**:
+   - Add detailed error logging and reporting
+   - Implement retry mechanisms for API failures
+
+2. **Authentication Enhancement**:
+   - Implement AWS Cognito for user management
    - Add multi-factor authentication
-   - Implement AWS Cognito pools for authentication
-   - Add fine-grained access controls for photos
-   - Implement rate limiting on API endpoints
 
-4. **Additional Features:**
-   - Group photos by events or time periods
-   - Add face recognition confidence thresholds settings
-   - Implement photo filtering and sorting options
-   - Enable face blur/anonymization for privacy
+3. **Advanced Features**:
+   - Add photo grouping by events
+   - Implement user-controlled privacy settings
+   - Add sharing capabilities for matched photos
 
-5. **API Completion & Stability:**
-   - Implement more robust error handling and validation
-   - Add custom domain for API Gateway
-   - Implement proper response caching
-   - Add comprehensive logging for debugging
-   - Update Lambda functions to use environment variables for configuration
+4. **Performance Optimization**:
+   - Implement Redis caching for frequent queries
+   - Add serverless background jobs for matching
+   - Optimize photo storage with compression
 
-6. **Dependency Management:**
-   - Resolve remaining package conflicts in package.json
-   - Update deprecated dependencies
-   - Implement proper version locking for critical dependencies
-   - Consider migrating to AWS SDK v3 for all functions
+## 7. API Reference
 
-7. **Testing & Monitoring:**
-   - Implement unit tests for all Lambda functions
-   - Add integration tests for API endpoints
-   - Set up CloudWatch dashboards for monitoring
-   - Create alerting system for service disruptions or failures
-   - Test with real user data and photo datasets
+### 7.1 Face Registration API
 
-8. **Prefix System Enhancements:**
-   - Create utility functions to standardize prefix handling
-   - Add migration script for existing collections to update to prefix system
-   - Implement detailed logging to track matches by prefix type
-   - Consider adding timestamp or version indicators to prefixes for future flexibility
+**Endpoint**: `POST /api/register-face`
 
-9. **Cross-Account Matching Enhancements:**
-   - Improve handling of the same face being registered to multiple accounts
-   - Add user-controllable privacy settings for cross-account matches
-   - Implement notification preferences for new matches from other users
-   - Create a mechanism for users to claim or dispute face matches
+**Request**:
+```json
+{
+  "userId": "user-uuid-here",
+  "imageData": "base64-encoded-image-data"
+}
+```
 
-## 7. Potential Issues & Technical Considerations
+**Response**:
+```json
+{
+  "success": true,
+  "faceId": "rekognition-face-id",
+  "matchCount": 5
+}
+```
 
-### 7.1 Device and Browser Compatibility
+### 7.2 Photo Upload API
 
-- **Camera Requirements:**
-  - Front-facing camera is required for face registration
-  - Minimum camera recording capability: 15 frames per second
-  - Color camera that can record in at least 320x240px resolution
-  - Virtual cameras or camera software are not supported
+**Endpoint**: `POST /api/upload-photo`
 
-- **Display Requirements:**
-  - Minimum refresh rate: 60 Hz
-  - Minimum screen size: 4 inches
-  - Device should not be jailbroken or rooted
+**Request**:
+```json
+{
+  "userId": "user-uuid-here",
+  "imageData": "base64-encoded-image-data",
+  "metadata": {
+    "title": "Beach Day",
+    "location": {
+      "lat": 34.052235,
+      "lng": -118.243683
+    },
+    "event_details": {
+      "name": "Summer Party",
+      "date": "2023-07-15"
+    }
+  }
+}
+```
 
-- **Browser Support:**
-  - Only the latest three versions of major browsers are supported (Chrome, Firefox, Safari, Edge)
-  - Mobile browsers may have inconsistent camera access implementations
+**Response**:
+```json
+{
+  "success": true,
+  "photoId": "generated-photo-uuid",
+  "url": "s3-photo-url",
+  "faceCount": 3,
+  "matchedUsers": [
+    {
+      "userId": "matched-user-uuid",
+      "similarity": 99.8
+    }
+  ]
+}
+```
 
-### 7.2 Performance Considerations
+## 8. Conclusion
 
-- **AWS Service Quotas:**
-  - AWS Rekognition has service quotas that could be exceeded during high traffic
-  - Consider implementing request rate limiting and queue mechanisms for large events
+The Shmong Face Matching System provides a robust and scalable architecture for facial recognition and matching. By following the setup instructions and understanding the core matching principles outlined in this document, developers can deploy this system on a new AWS account and extend its functionality as needed.
 
-- **Network Requirements:**
-  - Minimum bandwidth of 100kbps required for face registration
-  - Users with poor connections may experience timeouts or failures
-  - Large photo uploads might fail on unstable connections
+Remember that the key to successful face matching is the prefix system (`user_` and `photo_`) and proper handling of the `matched_users` arrays in the DynamoDB photos table.
 
-- **Storage Scaling:**
-  - S3 storage costs will scale with photo volume
-  - Consider implementing photo compression strategies while maintaining recognition quality
-
-### 7.3 Recognition Accuracy Challenges
-
-- **Lighting Conditions:**
-  - Poor lighting significantly reduces face detection accuracy
-  - Consider adding lighting recommendations in the UI
-
-- **Face Occlusion:**
-  - Masks, sunglasses, hats may prevent successful registration or matching
-  - Implement clear guidance for users about proper face positioning
-
-- **Image Format Considerations:**
-  - JPEG with EXIF metadata and PNG are handled differently by Rekognition
-  - JPEG orientation is automatically corrected while PNG orientation is not
-  - Implement proper handling for both formats
-
-### 7.4 User Experience Challenges
-
-- **Face Positioning:**
-  - Users may struggle with proper face positioning during registration
-  - Implement clear visual guides in the UI for optimal face registration
-
-- **Match Expectations:**
-  - Users may have unrealistic expectations for match accuracy
-  - Clearly communicate confidence thresholds and potential limitations
-
-- **Notification Overload:**
-  - Highly photographed users could receive excessive notifications
-  - Implement notification batching and preference settings
-
-### 7.5 Security and Privacy Considerations
-
-- **Biometric Data Handling:**
-  - Facial biometric data requires proper user consent and secure handling
-  - Implement clear privacy policies and consent mechanisms
-  - Consider data retention policies for face vectors and registration data
-
-- **False Positives/Negatives:**
-  - Large collections increase the risk of false matches
-  - Implement confidence threshold settings and manual verification options
-
-- **Access Control:**
-  - DynamoDB and S3 permissions need careful configuration
-  - Implement proper IAM roles and policies for all lambda functions
-
-### 7.6 AWS Rekognition Specific Considerations
-
-- **Face Liveness Detection:**
-  - If implementing liveness detection, note the additional requirements:
-    - Proper webcam mounting for desktop users
-    - Minimum refresh rate and display size requirements
-    - FaceLivenessDetector component from AWS Amplify SDKs required
-
-- **Error Handling:**
-  - Implement proper handling for common Rekognition errors:
-    - ProvisionedThroughputExceededException
-    - ServiceQuotaExceededException
-    - InvalidParameterException
-    - ResourceNotFoundException
-
-- **Versioning:**
-  - AWS regularly updates Face Recognition SDKs
-  - Maintain compatibility with AWS SDK versions
-  - Plan for regular updates to maintain security 
-
-### 7.7 Cross-Account Face Recognition Privacy Considerations
-
-- **Same Person, Multiple Accounts:**
-  - The system will match the same face across different user accounts
-  - This raises privacy implications that should be addressed with clear user policies
-  - Consider adding settings for users to control cross-account matching visibility
-
-- **Account Merging:**
-  - Users may want to merge accounts if they registered the same face multiple times
-  - A future improvement could include account merging functionality
-  - This would require careful handling of photo ownership and access rights
-
-- **Disputed Matches:**
-  - Users may dispute matches that incorrectly identify them
-  - Implementation of a match dispute system would be valuable
-  - This should include verification steps and human review options 
+For detailed code implementation, refer to:
+1. `src/services/faceMatchingService.js` - Core face matching logic
+2. `src/services/awsPhotoService.js` - Photo upload and processing
+3. `src/services/FaceStorageService.js` - Face data storage and retrieval 

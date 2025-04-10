@@ -320,8 +320,8 @@ export const indexFace = async (userId, imageBlob) => {
       const searchParams = {
         CollectionId: COLLECTION_ID,
         FaceId: faceId,
-        MaxFaces: 10,
-        FaceMatchThreshold: 85.0 // Changed from 99.0 to require more reasonable confidence matches
+        MaxFaces: 1000,
+        FaceMatchThreshold: 85.0
       };
       
       console.log('[FaceIndexing] Searching for historical matches with threshold: 85.0%');
@@ -404,93 +404,99 @@ export const indexFace = async (userId, imageBlob) => {
           const photoIdsToUpdate = [...new Set(historicalMatches.map(match => match.id))];
           console.log(`[FaceIndexing] Found ${photoIdsToUpdate.length} unique photos to update with user ID: ${userId}`);
           
+          // Add retry logic configuration
+          const MAX_RETRIES = 3;
+          const RETRY_DELAY = 1000; // ms
+          
+          // Helper function to sleep
+          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+          
           for (const photoId of photoIdsToUpdate) {
-            try {
-              // Get the current photo metadata
-              const getPhotoCommand = new GetCommand({
-                TableName: PHOTOS_TABLE,
-                Key: { id: photoId }
-              });
-              
-              console.log(`[FaceIndexing] Getting photo ${photoId} to update with user ${userId}...`);
-              const photoData = await docClient.send(getPhotoCommand);
-              
-              if (!photoData || !photoData.Item) {
-                console.log(`[FaceIndexing] Photo ${photoId} not found in database, skipping update`);
-                continue;
-              }
-              
-              console.log(`[FaceIndexing] Processing photo ${photoId}, current matched_users:`, 
-                JSON.stringify(photoData.Item.matched_users || []));
-              
-              // Get the current matched_users array or initialize if not exists
-              let matchedUsers = photoData.Item.matched_users || [];
-              
-              // Handle string format if needed (some older entries might have serialized JSON)
-              if (typeof matchedUsers === 'string') {
-                try {
-                  matchedUsers = JSON.parse(matchedUsers);
-                } catch (e) {
-                  console.error(`[FaceIndexing] Invalid JSON in matched_users for photo ${photoId}:`, e);
+            let retries = 0;
+            let success = false;
+            
+            while (!success && retries < MAX_RETRIES) {
+              try {
+                // Get the current photo data
+                const getPhotoCommand = new GetCommand({
+                  TableName: PHOTOS_TABLE,
+                  Key: {
+                    id: photoId
+                  }
+                });
+                
+                const photoData = await docClient.send(getPhotoCommand);
+                
+                if (!photoData || !photoData.Item) {
+                  console.log(`[FaceIndexing] Photo not found with ID: ${photoId}`);
+                  break; // Skip to the next photo
+                }
+                
+                // Extract and ensure matched_users is an array
+                let matchedUsers = photoData.Item.matched_users || [];
+                if (!Array.isArray(matchedUsers)) {
                   matchedUsers = [];
                 }
-              }
-              
-              if (!Array.isArray(matchedUsers)) {
-                console.log(`[FaceIndexing] matched_users is not an array, resetting to empty array`);
-                matchedUsers = [];
-              }
-              
-              // Check if user is already in matched_users (case insensitive)
-              const alreadyMatched = matchedUsers.some(match => {
-                if (typeof match === 'object' && match !== null) {
-                  const matchUserId = match.userId || match.user_id || '';
-                  return matchUserId.toLowerCase() === userId.toLowerCase();
-                } else if (typeof match === 'string') {
-                  return match.toLowerCase() === userId.toLowerCase();
-                }
-                return false;
-              });
-              
-              if (alreadyMatched) {
-                console.log(`[FaceIndexing] User ${userId} already in matched_users for photo ${photoId}`);
-                continue;
-              }
-              
-              // Get the match details for this photo
-              const matchInfo = historicalMatches.find(match => match.id === photoId);
-              
-              // Add the current user to matched_users
-              const newMatchEntry = {
-                userId: userId,
-                faceId: faceId,
-                similarity: matchInfo.similarity,
-                matchedAt: new Date().toISOString()
-              };
-              
-              console.log(`[FaceIndexing] Adding user ${userId} to matched_users for photo ${photoId}:`, 
-                JSON.stringify(newMatchEntry));
                 
-              matchedUsers.push(newMatchEntry);
-              
-              // Update the photo record
-              console.log(`[FaceIndexing] Updating photo ${photoId} with modified matched_users array (${matchedUsers.length} entries)`);
-              
-              const updatePhotoCommand = new PutCommand({
-                TableName: PHOTOS_TABLE,
-                Item: {
-                  ...photoData.Item,
-                  matched_users: matchedUsers,
-                  updated_at: new Date().toISOString()
+                // Check if current user is already in the matched_users array
+                const alreadyMatched = matchedUsers.some(match => {
+                  if (typeof match === 'object' && match !== null) {
+                    const matchUserId = match.userId || match.user_id || '';
+                    return matchUserId.toLowerCase() === userId.toLowerCase();
+                  } else if (typeof match === 'string') {
+                    return match.toLowerCase() === userId.toLowerCase();
+                  }
+                  return false;
+                });
+                
+                if (alreadyMatched) {
+                  console.log(`[FaceIndexing] User ${userId} already in matched_users for photo ${photoId}`);
+                  success = true; // Consider this a success and move to next photo
+                  continue;
                 }
-              });
-              
-              await docClient.send(updatePhotoCommand);
-              console.log(`[FaceIndexing] ✅ Successfully updated matched_users for photo ${photoId}`);
-            } catch (error) {
-              console.error(`[FaceIndexing] Error updating matched_users for photo ${photoId}:`, error);
-              console.error(`[FaceIndexing] Error details:`, error.stack);
-              // Continue with other photos even if one fails
+                
+                // Get the match details for this photo
+                const matchInfo = historicalMatches.find(match => match.id === photoId);
+                
+                // Add the current user to matched_users
+                const newMatchEntry = {
+                  userId: userId,
+                  faceId: faceId,
+                  similarity: matchInfo.similarity,
+                  matchedAt: new Date().toISOString()
+                };
+                
+                console.log(`[FaceIndexing] Adding user ${userId} to matched_users for photo ${photoId}:`, 
+                  JSON.stringify(newMatchEntry));
+                  
+                matchedUsers.push(newMatchEntry);
+                
+                // Update the photo record
+                console.log(`[FaceIndexing] Updating photo ${photoId} with modified matched_users array (${matchedUsers.length} entries)`);
+                
+                const updatePhotoCommand = new PutCommand({
+                  TableName: PHOTOS_TABLE,
+                  Item: {
+                    ...photoData.Item,
+                    matched_users: matchedUsers,
+                    updated_at: new Date().toISOString()
+                  }
+                });
+                
+                await docClient.send(updatePhotoCommand);
+                console.log(`[FaceIndexing] ✅ Successfully updated matched_users for photo ${photoId}`);
+                success = true;
+              } catch (error) {
+                retries++;
+                console.error(`[FaceIndexing] Error updating matched_users for photo ${photoId} (Retry ${retries}/${MAX_RETRIES}):`, error);
+                
+                if (retries < MAX_RETRIES) {
+                  console.log(`[FaceIndexing] Retrying in ${RETRY_DELAY}ms...`);
+                  await sleep(RETRY_DELAY);
+                } else {
+                  console.error(`[FaceIndexing] Failed to update matched_users after ${MAX_RETRIES} retries for photo ${photoId}`);
+                }
+              }
             }
           }
           console.log('[FaceIndexing] Finished updating all matched photos with current user ID');
@@ -549,7 +555,7 @@ const matchAgainstExistingFaces = async (userId, faceId) => {
     const command = new SearchFacesCommand({
       CollectionId: COLLECTION_ID,
       FaceId: faceId,
-      MaxFaces: 10,
+      MaxFaces: 1000,
       FaceMatchThreshold: FACE_MATCH_THRESHOLD
     });
     
