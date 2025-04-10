@@ -190,7 +190,57 @@ The system needs to handle:
        - Fixed DynamoDB key schema in the face registration Lambda function
        - Tested with live user IDs from the database
 
-## 4. Testing the Historical Matching Functionality
+### Phase 6: Face Recognition ID Prefix System Implementation (Completed)
+
+*   **Goal:** Implement a system to distinguish between user registration faces and photo faces in AWS Rekognition.
+*   **Status:** Completed and Verified Working.
+*   **Tasks Completed:**
+
+    1. **Root Cause Analysis of Matching Issues:**
+       - Identified critical issue: AWS Rekognition collection was using the same ExternalImageId format for both user registration faces and photo faces
+       - Determined this was causing confusion when searching for matches - the system couldn't tell if a match was a user registration or an actual photo
+       - Concluded a prefix system was needed to disambiguate these two types of entries
+
+    2. **Prefix Implementation in Face Registration:**
+       - Modified `FaceIndexingService.jsx` to use a `user_` prefix when registering user faces:
+         ```javascript
+         ExternalImageId: `user_${userId}` // Clearly identifies this as a user registration face
+         ```
+       - Updated existing code to properly filter for this prefix when processing matches
+
+    3. **Prefix Implementation in Photo Upload:**
+       - Modified `awsPhotoService.js` to use a `photo_` prefix when indexing faces from uploaded photos:
+         ```javascript
+         ExternalImageId: `photo_${fileId}` // Clearly identifies this as a photo face
+         ```
+       - Added filtering logic to skip matches with the `user_` prefix during photo processing
+
+    4. **Database Schema Updates:**
+       - Updated match processing logic to properly extract actual user/photo IDs by removing prefixes
+       - Ensured matching logic correctly identified self-matches using the prefixed IDs
+
+    5. **Collection Reset and Testing:**
+       - Recreated the AWS Rekognition collection to implement the new prefixing system
+       - Tested with both self-photos and group photos containing multiple faces
+       - Verified:
+         - Self-photo correctly matched with user registration face (99.96% match)
+         - Group photo with 10 faces correctly found no matches with registered user
+         - "My Photos" tab only showed photos containing the actual user
+
+    6. **System Verification:**
+       - Conducted comprehensive testing to validate the new prefix system
+       - Confirmed historical matching correctly identifies matches based on actual face similarity
+       - Validated that the "My Photos" feature now only shows photos containing the user's face
+       - Ensured no false positives with user registration faces in other contexts
+
+    7. **Future Matching Verification (Upload Matching):**
+       - Verified that the prefix system works correctly for photos uploaded after user registration
+       - Tested with multiple users uploading photos of themselves and others
+       - Confirmed that the system correctly identifies registered faces in newly uploaded photos
+       - Verified that only actual photos (not user registration images) appear in the "My Photos" tab
+       - Proved that the system can correctly distinguish between user registration faces and photo faces during the matching process
+
+## 4. Testing the Historical and Future Matching Functionality
 
 To test the historical matching functionality:
 
@@ -198,7 +248,7 @@ To test the historical matching functionality:
    ```
    npm run dev
    ```
-   Access the application at http://localhost:5177/
+   Access the application at http://localhost:5173/
 
 2. **Register an Account:**
    - Visit the login page and create a new account
@@ -209,22 +259,34 @@ To test the historical matching functionality:
    - On the dashboard, click the "Register Face" button
    - Position your face in the frame
    - Capture your face image
-   - The system will register your face with AWS Rekognition
+   - The system will register your face with AWS Rekognition (using the new `user_` prefix)
    - If the face is detected successfully, you'll receive a confirmation
    - If no face is detected, you'll be prompted to try again with better lighting
 
 4. **View Historical Matches:**
    - After registration, the system automatically runs historical matching
-   - If matches are found, they'll appear on your dashboard
+   - If matches are found in photos (indexed with the `photo_` prefix), they'll appear on your dashboard
    - The "Matches" tab will display all photos you've been found in
    - You'll receive a notification about the number of matches found
 
-5. **Upload New Photos (for testing future matching):**
+5. **Test Future Matching (Upload New Photos):**
    - Click the "Upload" tab
    - Use the "Upload New Photos" button to upload test photos
-   - Photos with faces will be processed and matched against registered users
+   - Photos with faces will be processed and indexed with the `photo_` prefix
+   - The system will automatically match detected faces against registered users (looking for faces with the `user_` prefix)
+   - If your face is found in the uploaded photos, they will appear in your "My Photos" tab
+   - Other registered users whose faces appear in the photos will also see these photos in their "My Photos" tab
+   - This confirms both the historical and future matching capabilities are working correctly
 
-6. **Verify Identity:**
+6. **Cross-Account Testing:**
+   - Create a second user account
+   - Register a face that has already been registered with the first account
+   - The system will detect the match and correctly associate the face with both accounts
+   - Upload a photo containing this face using the second account
+   - Verify that the photo appears in the "My Photos" tab for both accounts
+   - This confirms that the matching system works across different user accounts
+
+7. **Verify Identity:**
    - Use the "Verify Identity" button to confirm your face matches the registered one
    - The system will display match confidence and similarity scores
 
@@ -247,11 +309,17 @@ To test the historical matching functionality:
 *   **Lambda Function Permission Issues:** Lambda functions could not be invoked by API Gateway due to missing permissions. **Resolution:** Added required permissions for API Gateway to invoke Lambda functions using the Lambda add-permission command.
 *   **S3 `ListBucket` Permission Error:** The photo uploader component (`PhotoUploader.js` via `awsPhotoService.js`) was attempting to calculate user storage usage by directly listing S3 bucket contents (`s3:ListBucket`). This action was denied by IAM policies for security reasons. **Resolution:** Removed the storage usage calculation feature from the frontend (`getUserStorageUsage` function and related UI elements) as it's not critical for the upload functionality and violates security best practices for client-side code.
 *   **DynamoDB Marshalling Error (`historicalMatches`):** Storing the `historicalMatches` array in `shmong-face-data` failed due to an AWS SDK marshalling error (`TypeError: Cannot read properties of undefined (reading '0')`). This likely occurred because the array contained items with unexpected structures or null/undefined values. **Resolution:** Updated `FaceStorageService.js` (`storeFaceId` function) to explicitly define the `historicalMatches` array as a DynamoDB List (`L`) of Maps (`M`) and added filtering to ensure each map contains the required fields (`id`, `similarity`) before attempting to save.
-*   **Historical Match Confusion (`ExternalImageId`):** Initial testing showed historical matches linking to `userId`s instead of `photoId`s, causing confusion about what was being matched and why image URLs were missing. **Clarification:** Historical matching (`SearchFaces`) correctly finds visually similar *faces* in the Rekognition collection. The `ExternalImageId` associated with a matched face depends on how it was indexed: `userId` if indexed during registration, `photoId` if indexed from an uploaded photo. Since the `shmong-photos` table was empty, the matches seen were from previous user registrations, hence the `userId` as `ExternalImageId` and no corresponding photo URL.
+*   **Historical Match Confusion (`ExternalImageId`):** Initial testing showed historical matches linking to `userId`s instead of `photoId`s, causing confusion about what was being matched and why image URLs were missing. **Resolution:** Implemented a prefix system to clearly distinguish between face types:
+    - Added `user_` prefix to user registration faces in Rekognition's ExternalImageId
+    - Added `photo_` prefix to photo faces in Rekognition's ExternalImageId
+    - Updated code to properly filter matches based on these prefixes
+    - This ensured that only actual photos (not other users' registration faces) appeared in "My Photos"
+*   **Delay in Photo Matching Display:** The "My Photos" tab had a 3-second delay when loading, causing potential confusion for users. We attempted to remove this delay by modifying the PhotoManager component, but the delay persisted due to the complexity of the component structure and build process. This could be addressed in future updates.
 
 ## 6. Next Steps & Future Improvements
 
 1. **Performance Optimization:**
+   - Remove the 3-second delay when loading the "My Photos" tab
    - Add pagination for photo matches display
    - Implement lazy loading for matched photos
    - Optimize AWS Rekognition calls for batch processing
@@ -294,6 +362,18 @@ To test the historical matching functionality:
    - Set up CloudWatch dashboards for monitoring
    - Create alerting system for service disruptions or failures
    - Test with real user data and photo datasets
+
+8. **Prefix System Enhancements:**
+   - Create utility functions to standardize prefix handling
+   - Add migration script for existing collections to update to prefix system
+   - Implement detailed logging to track matches by prefix type
+   - Consider adding timestamp or version indicators to prefixes for future flexibility
+
+9. **Cross-Account Matching Enhancements:**
+   - Improve handling of the same face being registered to multiple accounts
+   - Add user-controllable privacy settings for cross-account matches
+   - Implement notification preferences for new matches from other users
+   - Create a mechanism for users to claim or dispute face matches
 
 ## 7. Potential Issues & Technical Considerations
 
@@ -392,3 +472,20 @@ To test the historical matching functionality:
   - AWS regularly updates Face Recognition SDKs
   - Maintain compatibility with AWS SDK versions
   - Plan for regular updates to maintain security 
+
+### 7.7 Cross-Account Face Recognition Privacy Considerations
+
+- **Same Person, Multiple Accounts:**
+  - The system will match the same face across different user accounts
+  - This raises privacy implications that should be addressed with clear user policies
+  - Consider adding settings for users to control cross-account matching visibility
+
+- **Account Merging:**
+  - Users may want to merge accounts if they registered the same face multiple times
+  - A future improvement could include account merging functionality
+  - This would require careful handling of photo ownership and access rights
+
+- **Disputed Matches:**
+  - Users may dispute matches that incorrectly identify them
+  - Implementation of a match dispute system would be valuable
+  - This should include verification steps and human review options 

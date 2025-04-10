@@ -12,10 +12,21 @@ import {
   ListFacesCommand
 } from '@aws-sdk/client-rekognition';
 import { GetItemCommand } from '@aws-sdk/client-dynamodb';
-import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, rekognitionClient, dynamoClient, s3Client, COLLECTION_ID as AWS_COLLECTION_ID } from '../lib/awsClient';
+import { 
+  AWS_REGION, 
+  AWS_ACCESS_KEY_ID, 
+  AWS_SECRET_ACCESS_KEY, 
+  rekognitionClient, 
+  dynamoClient, 
+  s3Client, 
+  docClient, 
+  COLLECTION_ID as AWS_COLLECTION_ID, 
+  PHOTOS_TABLE 
+} from '../lib/awsClient';
 import * as FaceStorageService from './FaceStorageService';
 import { storeFaceMatch } from './database-utils';
 import { Buffer } from 'buffer';
+import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 
 // Configure Rekognition constants
 const COLLECTION_ID = AWS_COLLECTION_ID || 'shmong-faces';
@@ -184,7 +195,7 @@ export const indexUserFace = async (imageData, userId) => {
       Image: {
         Bytes: imageBytes
       },
-      ExternalImageId: userId,
+      ExternalImageId: `user_${userId}`,
       MaxFaces: 1,
       DetectionAttributes: ['ALL']
     });
@@ -287,7 +298,7 @@ export const indexFace = async (userId, imageBlob) => {
       Image: {
         Bytes: buffer
       },
-      ExternalImageId: userId,
+      ExternalImageId: `user_${userId}`,
       DetectionAttributes: ['ALL'],
       MaxFaces: 1,
     };
@@ -310,62 +321,180 @@ export const indexFace = async (userId, imageBlob) => {
         CollectionId: COLLECTION_ID,
         FaceId: faceId,
         MaxFaces: 10,
-        FaceMatchThreshold: 90.0 // Higher threshold for higher confidence
+        FaceMatchThreshold: 85.0 // Changed from 99.0 to require more reasonable confidence matches
       };
       
+      console.log('[FaceIndexing] Searching for historical matches with threshold: 85.0%');
       const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
       
       if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
         console.log('[FaceIndexing] Found matches in user photos:', searchResponse.FaceMatches.length);
+        console.log('[FaceIndexing] Match details:');
+        searchResponse.FaceMatches.forEach((match, idx) => {
+          console.log(`  Match #${idx+1}: ID: ${match.Face.ExternalImageId}, Similarity: ${match.Similarity.toFixed(2)}%`);
+        });
         
-        // Fetch details for each match
-        historicalMatches = await Promise.all(searchResponse.FaceMatches.map(async (match) => {
-          // Get photo details from DynamoDB
-          const photoId = match.Face.ExternalImageId;
-          const similarityScore = match.Similarity;
-          
-          console.log(`[FaceIndexing] Match found - Photo ID: ${photoId}, Similarity: ${similarityScore}%`);
-          
-          try {
-            // Fetch photo details from shmong-photos table instead of user_photos
-            const { dynamoClient } = await getAWSClients();
-            const params = {
-              TableName: 'shmong-photos',
-              Key: {
-                id: { S: photoId }
+        // Process each match without randomization
+        historicalMatches = await Promise.all(searchResponse.FaceMatches
+          // Filter out matches with user_ prefix - we only want matches with actual photos
+          .filter(match => match.Face.ExternalImageId && match.Face.ExternalImageId.startsWith('photo_'))
+          .map(async (match) => {
+            // Extract the actual photo ID by removing the "photo_" prefix
+            const externalId = match.Face.ExternalImageId;
+            const photoId = externalId.startsWith('photo_') ? externalId.substring(6) : externalId;
+            const similarityScore = match.Similarity;
+            
+            // Skip exact 100% self-matches
+            if (similarityScore === 100 && match.Face.FaceId === faceId) {
+              console.log(`[FaceIndexing] Skipping exact self-match with FaceId: ${match.Face.FaceId}`);
+              return null;
+            }
+            
+            try {
+              // Fetch photo details from shmong-photos table using the actual photo ID
+              const { docClient } = await getAWSClients();
+              const params = {
+                TableName: PHOTOS_TABLE,
+                Key: {
+                  id: { S: photoId }
+                }
+              };
+              
+              const photoData = await docClient.send(new GetItemCommand(params));
+              
+              if (photoData && photoData.Item) {
+                const photoDetails = photoData.Item;
+                return {
+                  id: photoId,
+                  similarity: similarityScore, // No more randomization, just use the original score
+                  imageUrl: photoDetails.imageUrl?.S || photoDetails.public_url?.S || null,
+                  owner: photoDetails.userId?.S || photoDetails.user_id?.S || null,
+                  eventId: photoDetails.eventId?.S || photoDetails.event_id?.S || null,
+                  createdAt: photoDetails.createdAt?.S || photoDetails.created_at?.S || null
+                };
               }
-            };
-            
-            const photoData = await dynamoClient.send(new GetItemCommand(params));
-            
-            if (photoData && photoData.Item) {
-              const photoDetails = photoData.Item;
+              
+              // If no photo found, still return basic match info
+              return {
+                id: photoId,
+                similarity: similarityScore
+              };
+            } catch (matchError) {
+              console.error(`[FaceIndexing] Error fetching details for match ${photoId}:`, matchError);
               return {
                 id: photoId,
                 similarity: similarityScore,
-                imageUrl: photoDetails.imageUrl?.S || photoDetails.public_url?.S || null,
-                owner: photoDetails.userId?.S || photoDetails.user_id?.S || null,
-                eventId: photoDetails.eventId?.S || photoDetails.event_id?.S || null,
-                createdAt: photoDetails.createdAt?.S || photoDetails.created_at?.S || null
+                error: matchError.message
               };
             }
-            
-            // If no photo found, still return basic match info
-            return {
-              id: photoId,
-              similarity: similarityScore
-            };
-          } catch (matchError) {
-            console.error(`[FaceIndexing] Error fetching details for match ${photoId}:`, matchError);
-            return {
-              id: photoId,
-              similarity: similarityScore,
-              error: matchError.message
-            };
-          }
-        }));
+          }));
         
+        // After processing all matches, filter out null values 
+        // and photos we couldn't find in the database
+        historicalMatches = historicalMatches
+          .filter(match => match !== null)
+          .filter(match => match && match.id && match.similarity);
+            
         console.log('[FaceIndexing] Processed historical matches:', historicalMatches);
+        
+        // Step 5.5: Update the shmong-photos table to add this user to matched_users
+        // for each photo that was matched
+        console.log('[FaceIndexing] Updating matched photos to include current user...');
+        if (historicalMatches.length > 0) {
+          const photoIdsToUpdate = [...new Set(historicalMatches.map(match => match.id))];
+          console.log(`[FaceIndexing] Found ${photoIdsToUpdate.length} unique photos to update with user ID: ${userId}`);
+          
+          for (const photoId of photoIdsToUpdate) {
+            try {
+              // Get the current photo metadata
+              const getPhotoCommand = new GetCommand({
+                TableName: PHOTOS_TABLE,
+                Key: { id: photoId }
+              });
+              
+              console.log(`[FaceIndexing] Getting photo ${photoId} to update with user ${userId}...`);
+              const photoData = await docClient.send(getPhotoCommand);
+              
+              if (!photoData || !photoData.Item) {
+                console.log(`[FaceIndexing] Photo ${photoId} not found in database, skipping update`);
+                continue;
+              }
+              
+              console.log(`[FaceIndexing] Processing photo ${photoId}, current matched_users:`, 
+                JSON.stringify(photoData.Item.matched_users || []));
+              
+              // Get the current matched_users array or initialize if not exists
+              let matchedUsers = photoData.Item.matched_users || [];
+              
+              // Handle string format if needed (some older entries might have serialized JSON)
+              if (typeof matchedUsers === 'string') {
+                try {
+                  matchedUsers = JSON.parse(matchedUsers);
+                } catch (e) {
+                  console.error(`[FaceIndexing] Invalid JSON in matched_users for photo ${photoId}:`, e);
+                  matchedUsers = [];
+                }
+              }
+              
+              if (!Array.isArray(matchedUsers)) {
+                console.log(`[FaceIndexing] matched_users is not an array, resetting to empty array`);
+                matchedUsers = [];
+              }
+              
+              // Check if user is already in matched_users (case insensitive)
+              const alreadyMatched = matchedUsers.some(match => {
+                if (typeof match === 'object' && match !== null) {
+                  const matchUserId = match.userId || match.user_id || '';
+                  return matchUserId.toLowerCase() === userId.toLowerCase();
+                } else if (typeof match === 'string') {
+                  return match.toLowerCase() === userId.toLowerCase();
+                }
+                return false;
+              });
+              
+              if (alreadyMatched) {
+                console.log(`[FaceIndexing] User ${userId} already in matched_users for photo ${photoId}`);
+                continue;
+              }
+              
+              // Get the match details for this photo
+              const matchInfo = historicalMatches.find(match => match.id === photoId);
+              
+              // Add the current user to matched_users
+              const newMatchEntry = {
+                userId: userId,
+                faceId: faceId,
+                similarity: matchInfo.similarity,
+                matchedAt: new Date().toISOString()
+              };
+              
+              console.log(`[FaceIndexing] Adding user ${userId} to matched_users for photo ${photoId}:`, 
+                JSON.stringify(newMatchEntry));
+                
+              matchedUsers.push(newMatchEntry);
+              
+              // Update the photo record
+              console.log(`[FaceIndexing] Updating photo ${photoId} with modified matched_users array (${matchedUsers.length} entries)`);
+              
+              const updatePhotoCommand = new PutCommand({
+                TableName: PHOTOS_TABLE,
+                Item: {
+                  ...photoData.Item,
+                  matched_users: matchedUsers,
+                  updated_at: new Date().toISOString()
+                }
+              });
+              
+              await docClient.send(updatePhotoCommand);
+              console.log(`[FaceIndexing] ✅ Successfully updated matched_users for photo ${photoId}`);
+            } catch (error) {
+              console.error(`[FaceIndexing] Error updating matched_users for photo ${photoId}:`, error);
+              console.error(`[FaceIndexing] Error details:`, error.stack);
+              // Continue with other photos even if one fails
+            }
+          }
+          console.log('[FaceIndexing] Finished updating all matched photos with current user ID');
+        }
       } else {
         console.log('[FaceIndexing] No historical matches found');
       }
@@ -586,7 +715,8 @@ const getAWSClients = async () => {
     return {
       rekognitionClient,
       dynamoClient,
-      s3Client
+      s3Client,
+      docClient
     };
   } catch (error) {
     console.error('[FaceIndexing] Error getting AWS clients:', error);

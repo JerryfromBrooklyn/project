@@ -1,8 +1,12 @@
 import { PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
-import { PutCommand, GetCommand, DeleteCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, GetCommand, DeleteCommand, QueryCommand, ScanCommand, BatchGetCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
-import { s3Client, docClient, rekognitionClient, PHOTO_BUCKET, PHOTOS_TABLE, COLLECTION_ID, AWS_REGION } from '../lib/awsClient';
-import { IndexFacesCommand, SearchFacesCommand } from '@aws-sdk/client-rekognition';
+import { s3Client, docClient, rekognitionClient, PHOTO_BUCKET, PHOTOS_TABLE, COLLECTION_ID, AWS_REGION, FACE_DATA_BUCKET } from '../lib/awsClient';
+import { IndexFacesCommand, CompareFacesCommand, SearchFacesCommand } from '@aws-sdk/client-rekognition';
+import { getFaceDataForUser } from './FaceStorageService';
+import { marshall } from '@aws-sdk/util-dynamodb';
+import { PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 /**
  * Service for handling photo operations with AWS S3 and DynamoDB
  */
@@ -57,7 +61,7 @@ export const awsPhotoService = {
             console.log(`🔗 [Upload ${uploadId}] Generated Public URL: ${publicUrl}`);
 
             const photoMetadata = {
-                id: fileId, 
+                id: fileId,
                 user_id: userId,
                 storage_path: path,
                 url: publicUrl,
@@ -70,9 +74,9 @@ export const awsPhotoService = {
                 fileType: file.type,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
-                faces: [], // Will be populated after Rekognition
-                matched_users: [], // Will be populated after Rekognition
-                face_ids: [], // Will be populated after Rekognition
+                faces: [],
+                matched_users: [],
+                face_ids: [],
                 location: metadata.location || { lat: null, lng: null, name: null },
                 venue: metadata.venue || { id: null, name: null },
                 event_details: metadata.event_details || { date: null, name: null, type: null },
@@ -84,142 +88,299 @@ export const awsPhotoService = {
             console.log(`📝 [Upload ${uploadId}] Prepared initial metadata for DynamoDB.`);
             progressCallback(60);
 
-            // --- Rekognition Face Detection & Indexing --- 
-            console.groupCollapsed(`🧠 [Upload ${uploadId}] Running Rekognition...`);
-            console.log(`   Entering Rekognition processing block...`); 
+            // --- Rekognition Face Indexing & Comparison --- 
+            console.groupCollapsed(`�� [Upload ${uploadId}] Running Rekognition Face Indexing & Comparison...`);
+            let detectedFaceId = null; // Store detected face ID
             try {
-                // Use the globally imported client
                 console.log(`   Using global Rekognition Client: ${!!rekognitionClient}`); 
-                console.log(`   IndexFacesCommand available: ${!!IndexFacesCommand}`); // Verify command exists
-                console.log(`   Action: Indexing faces using image bytes`); // Log new action
+                console.log(`   IndexFacesCommand available: ${!!IndexFacesCommand}`); 
+                console.log(`   Action: Indexing faces from image bytes`); 
                 
-                // Ensure fileBuffer is available from the S3 upload part
-                if (!fileArrayBuffer) {
-                    throw new Error("File buffer is missing, cannot send bytes to Rekognition.");
+                if (!fileUint8Array) {
+                    throw new Error("File buffer (Uint8Array) is missing");
                 }
 
                 const indexParams = {
                     CollectionId: COLLECTION_ID || 'shmong-faces',
-                    Image: {
-                        Bytes: fileUint8Array // *** Use Uint8Array for Rekognition ***
-                    },
-                    ExternalImageId: fileId, 
-                    MaxFaces: 10
+                    Image: { Bytes: fileUint8Array },
+                    ExternalImageId: `photo_${fileId}`, // Add prefix to identify this as a photo face, not a user
+                    MaxFaces: 10, 
+                    DetectionAttributes: ['DEFAULT'] 
                 };
-                // Note: Logging the full buffer in params will flood the console, so skip it.
-                console.log(`   IndexFaces Params Prepared (Bytes omitted for brevity):`, { ...indexParams, Image: { Bytes: `Uint8Array length: ${fileUint8Array.byteLength}` } }); 
+                console.log(`   IndexFaces Params Prepared (Bytes omitted):`, { ...indexParams, Image: { Bytes: `Uint8Array length: ${fileUint8Array.byteLength}` } }); 
                 console.log(`   Sending IndexFaces command...`);
-                rekognitionCallCount++; // Increment counter
-                const indexResponse = await rekognitionClient.send(new IndexFacesCommand(indexParams)); // Use global client
+                rekognitionCallCount++; 
+                const indexResponse = await rekognitionClient.send(new IndexFacesCommand(indexParams)); 
                 console.log(`   Rekognition IndexFaces response received successfully.`);
                 
                 if (indexResponse.FaceRecords && indexResponse.FaceRecords.length > 0) {
-                   console.log(`   ✅ Detected ${indexResponse.FaceRecords.length} faces.`);
+                    console.log(`   ✅ Detected and Indexed ${indexResponse.FaceRecords.length} faces.`);
+                    // Store basic face info
                     photoMetadata.faces = indexResponse.FaceRecords.map(record => {
-                        // Keep logging collapsed for individual faces
-                        console.groupCollapsed(`      👤 Face ID: ${record.Face.FaceId}`); 
-                        console.log(`         Confidence: ${record.Face.Confidence?.toFixed(2)}%`);
-                        console.log(`         Bounding Box:`, record.Face.BoundingBox);
-                        // Attributes might not be returned by IndexFaces, check if FaceDetail exists
-                        console.log(`         Attributes:`, record.FaceDetail || 'N/A'); 
-                        console.groupEnd();
+                        console.log(`      👤 Indexed Face ID: ${record.Face.FaceId} (Linked to Photo ${fileId})`); 
                         return {
                             faceId: record.Face.FaceId,
                             boundingBox: record.Face.BoundingBox,
-                            confidence: record.Face.Confidence,
-                            // Attributes are often NOT returned by IndexFaces, store only basic info
-                            // attributes: record.FaceDetail 
+                            confidence: record.Face.Confidence
                         };
                     });
                     photoMetadata.face_ids = indexResponse.FaceRecords.map(r => r.Face.FaceId);
-                                        
-                    // --- Future Matching (Re-enabled) --- 
-                    console.groupCollapsed(`   🔄 Searching for matches against registered users...`);
-                    for (const faceRecord of indexResponse.FaceRecords) {
-                        const detectedFaceId = faceRecord.Face.FaceId;
-                        console.log(`      Searching for matches for detected Face ID: ${detectedFaceId}`);
-                        try {
-                            const searchParams = {
-                                CollectionId: COLLECTION_ID || 'shmong-faces', 
-                                FaceId: detectedFaceId,
-                                MaxFaces: 5, 
-                                FaceMatchThreshold: 85 
-                            };
-                            rekognitionCallCount++; // Increment counter
-                            const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
-                            
-                            if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
-                                console.log(`      ✅ Found ${searchResponse.FaceMatches.length} potential user matches for detected face ${detectedFaceId}.`);
-                                for (const match of searchResponse.FaceMatches) {
-                                    // IMPORTANT: The ExternalImageId on the *matched face* is the userId if it came from registration.
-                                    const matchedUserId = match.Face.ExternalImageId; 
-                                    const matchedRegisteredFaceId = match.Face.FaceId; // The FaceId of the matched registered user
-                                    const similarity = match.Similarity;
-                                    
-                                    // Ensure we have a userId and it's not the photo ID itself, and not the exact same detected face
-                                    if (!matchedUserId || matchedUserId === fileId || matchedRegisteredFaceId === detectedFaceId) {
-                                        console.log(`      ❓ Skipping match: Same face or missing/invalid ExternalImageId (${matchedUserId})`);
-                                        continue; 
-                                    }
-                                    
-                                    // Check if this user is already matched for this photo
-                                    if (!photoMetadata.matched_users.some(u => u.userId === matchedUserId)) {
-                                        console.log(`         -> Matched User ID: ${matchedUserId} (Similarity: ${similarity.toFixed(2)}%), Matched Face ID: ${matchedRegisteredFaceId}`); // Log both IDs
-                                        photoMetadata.matched_users.push({
-                                            userId: matchedUserId,           // CORRECT: Use the ExternalImageId from the matched Face object
-                                            faceId: matchedRegisteredFaceId, // The FaceId of the matched Face object
-                                            similarity: similarity
-                                        });
-                                        // TODO: Optionally, fetch user details (name) from shmong-users table here
-                                        // TODO: Trigger a notification for the matched user
-                                    }
-                                }
-                            } else {
-                                console.log(`      ❌ No registered users matched this detected face.`);
-                            }
-                        } catch (searchError) {
-                            console.error(`      ⚠️ Error searching for matches for Face ID ${detectedFaceId}:`, searchError);
-                        }
-                    }
-                    console.groupEnd(); 
-                    
+                    detectedFaceId = photoMetadata.face_ids[0]; // Get the ID of the first detected face
                 } else {
                     console.log(`   ⚠️ No faces detected/indexed in the photo.`);
                 }
-                // --- End of Re-enabled Future Matching --- 
 
-            } catch (rekognitionError) {
-                console.error(`   ❌ Rekognition processing failed inside the 'try' block:`);
-                console.error('Full Error Object:', rekognitionError);
-                if (rekognitionError.name) console.error(`      Error Name: ${rekognitionError.name}`);
-                if (rekognitionError.message) console.error(`      Error Message: ${rekognitionError.message}`);
-                if (rekognitionError.$metadata) console.error(`      Error Metadata:`, rekognitionError.$metadata);
+                // Compare the detected face with this user's registered face if available
+                if (detectedFaceId) {
+                    console.log(`   🔄 Comparing detected face with registered uploader...`);
+                    const uploaderFaceData = await getFaceDataForUser(userId); 
+                    if (uploaderFaceData && uploaderFaceData.faceId) {
+                        const registeredFaceId = uploaderFaceData.faceId;
+                        console.log(`      Comparing PhotoFaceID: ${detectedFaceId} with RegisteredFaceID: ${registeredFaceId}`);
+                        try {
+                            // Use SearchFaces to find matches for the detected face instead of direct comparison
+                            const searchParams = {
+                                CollectionId: COLLECTION_ID,
+                                FaceId: detectedFaceId,  // Search with the detected face ID
+                                MaxFaces: 10, 
+                                FaceMatchThreshold: 70.0, // Reduced from 90.0 to allow more potential matches
+                            };
+                            
+                            console.log(`      Using SearchFaces to find matches for the detected face instead of direct comparison`);
+                            console.log(`      This avoids CORS errors and S3 permission issues`);
+                            
+                            rekognitionCallCount++;
+                            const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
+                            
+                            if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
+                                let uploaderFound = false;
+                                
+                                // Log all matches and their similarity scores for debugging
+                                console.log(`      Found ${searchResponse.FaceMatches.length} face matches:`);
+                                searchResponse.FaceMatches.forEach((match, idx) => {
+                                  console.log(`        Match #${idx+1}: Face ID: ${match.Face.FaceId}, External ID: ${match.Face.ExternalImageId}, Similarity: ${match.Similarity.toFixed(2)}%`);
+                                });
+                                
+                                for (const match of searchResponse.FaceMatches) {
+                                    const matchedExternalId = match.Face.ExternalImageId;
+                                    const matchedFaceId = match.Face.FaceId;
+                                    let similarity = match.Similarity;
+                                    
+                                    // Skip exact self-matches (same face ID with 100% similarity or matching photo ID)
+                                    if ((matchedFaceId === detectedFaceId || `photo_${fileId}` === matchedExternalId) && similarity >= 99.9) {
+                                        console.log(`      ⚠️ Skipping self-match: FaceId=${matchedFaceId}, ExternalId=${matchedExternalId}`);
+                                        continue;
+                                    }
+
+                                    // We're looking for a match with the user's registered face ID, not the ExternalImageId
+                                    if (matchedFaceId === registeredFaceId) {
+                                        console.log(`      ✅ Uploader face match found! Similarity: ${similarity.toFixed(2)}%`);
+                                        
+                                        // Skip suspiciously perfect matches 
+                                        if (similarity === 100) {
+                                            console.log(`      ⚠️ Skipping suspicious perfect 100% match with uploader`);
+                                            continue;
+                                        }
+                                        
+                                        // More permissive threshold for user recognition (70%)
+                                        if (similarity >= 70) {
+                                            // Add the uploader to matched_users
+                                            console.log(`         -> Adding Uploader (${userId}) to matched_users list.`);
+                                            photoMetadata.matched_users.push({
+                                                userId: userId,
+                                                faceId: registeredFaceId,
+                                                similarity: parseFloat(similarity.toFixed(4)), // Store with 4 decimal places
+                                                matchedAt: new Date().toISOString()
+                                            });
+                                            uploaderFound = true;
+                                        } else {
+                                            console.log(`      ⚠️ Match below confidence threshold (${similarity.toFixed(2)}%)`);
+                                        }
+                                        break;
+                                    }
+                                }
+                                
+                                if (!uploaderFound) {
+                                    console.log(`      ❌ Uploader face not found among matches.`);
+                                }
+                            } else {
+                                console.log(`      ❌ No matches found for the detected face.`);
+                            }
+                        } catch (compareError) {
+                            console.error(`      ⚠️ Error comparing faces:`, compareError);
+                            // Continue with the upload even if face comparison fails
+                        }
+                    } else {
+                        console.log(`   Uploader ${userId} is not registered, skipping comparison.`);
+                    }
+                } // end if(detectedFaceId)
+
+                // If faces were detected, check if they match any registered users
+                if (photoMetadata.face_ids && photoMetadata.face_ids.length > 0) {
+                    console.log(`   🔄 Checking if detected faces match any registered users...`);
+                    
+                    // Get all registered user face IDs from shmong-face-data table
+                    for (const detectedFaceId of photoMetadata.face_ids) {
+                        try {
+                            // Search for this face ID in our face collection
+                            const searchParams = {
+                                CollectionId: COLLECTION_ID,
+                                FaceId: detectedFaceId,
+                                MaxFaces: 10,
+                                FaceMatchThreshold: 80.0  // Using 80% threshold for matching against other users
+                            };
+                            
+                            const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
+                            
+                            if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
+                                console.log(`   ✅ Found ${searchResponse.FaceMatches.length} potential matching users for face ${detectedFaceId}`);
+                                console.log(`   Similarity score breakdown:`);
+                                searchResponse.FaceMatches.forEach((match, idx) => {
+                                  console.log(`      Match #${idx+1}: ID: ${match.Face.ExternalImageId}, Similarity: ${match.Similarity.toFixed(2)}%`);
+                                });
+                                
+                                // Process each match
+                                for (const match of searchResponse.FaceMatches) {
+                                    const matchedExternalId = match.Face.ExternalImageId;
+                                    const matchedFaceId = match.Face.FaceId;
+                                    let similarity = match.Similarity;
+                                    
+                                    // Skip exact self-matches (same face ID with 100% similarity or matching photo ID)
+                                    if ((matchedFaceId === detectedFaceId || `photo_${fileId}` === matchedExternalId) && similarity >= 99.9) {
+                                        console.log(`      ⚠️ Skipping self-match: FaceId=${matchedFaceId}, ExternalId=${matchedExternalId}`);
+                                        continue;
+                                    }
+                                    
+                                    // Skip matches with user registration faces (they have user_ prefix)
+                                    if (matchedExternalId && matchedExternalId.startsWith('user_')) {
+                                        console.log(`      ⚠️ Skipping match with user registration face: ${matchedExternalId}`);
+                                        continue;
+                                    }
+                                    
+                                    // Reject suspicious 100% matches as these are likely duplicates or errors
+                                    if (similarity === 100) {
+                                        console.log(`      ⚠️ Rejecting suspicious perfect 100% match for ID: ${matchedExternalId}`);
+                                        continue;
+                                    }
+                                    
+                                    // If the external ID looks like a UUID, it's likely a user ID (not a photo ID)
+                                    if (matchedExternalId && matchedExternalId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+                                        // Verify this is a real user ID, not a photo ID
+                                        // We need to check if this ID exists in our known user database
+                                        // Known photo IDs shouldn't be treated as users
+
+                                        // Check if this is a user registration face (with user_ prefix)
+                                        if (matchedExternalId.startsWith('user_')) {
+                                            // Extract the actual user ID by removing the prefix
+                                            const actualUserId = matchedExternalId.substring(5);
+                                            console.log(`      👤 Matched with user registration face: ${actualUserId}`);
+                                            
+                                            // Skip if this is the current user's ID
+                                            if (actualUserId === userId) {
+                                                console.log(`      ⚠️ Skipping self-match with user ${userId}`);
+                                                continue;
+                                            }
+                                            
+                                            console.log(`      👤 Matched with user ${actualUserId} (${similarity.toFixed(2)}% similarity)`);
+                                            
+                                            // Validate that this is a realistic match by checking similarity
+                                            if (similarity < 80) {
+                                                console.log(`      ⚠️ Skipping match with ${actualUserId} due to low similarity (${similarity.toFixed(2)}%)`);
+                                                continue;
+                                            }
+                                            
+                                            // Add this user to matched_users if not already there
+                                            const existingMatch = photoMetadata.matched_users.find(m => 
+                                                (m.userId && m.userId === actualUserId) || 
+                                                (m.user_id && m.user_id === actualUserId) ||
+                                                (typeof m === 'string' && m === actualUserId)
+                                            );
+                                            
+                                            if (!existingMatch) {
+                                                // Always use the same object structure for consistency
+                                                const matchEntry = {
+                                                    userId: actualUserId,
+                                                    faceId: matchedFaceId,
+                                                    similarity: parseFloat(similarity.toFixed(4)), // Store with 4 decimal places
+                                                    matchedAt: new Date().toISOString()
+                                                };
+                                                photoMetadata.matched_users.push(matchEntry);
+                                                console.log(`      ✅ Added ${actualUserId} to matched_users list with similarity ${matchEntry.similarity}%`);
+                                            } else {
+                                                console.log(`      ⚠️ User ${actualUserId} already in matched_users list`);
+                                            }
+                                            continue;
+                                        }
+                                        
+                                        // This is a photo ID (with photo_ prefix)
+                                        if (matchedExternalId.startsWith('photo_')) {
+                                            console.log(`      ℹ️ Matched with photo: ${matchedExternalId}`);
+                                            continue;
+                                        }
+                                    }
+                                }
+                            } else {
+                                console.log(`   ℹ️ No matching users found for face ${detectedFaceId}`);
+                            }
+                        } catch (searchError) {
+                            console.error(`   ❌ Error searching for matching faces:`, searchError);
+                            // Continue processing other faces
+                        }
+                    }
+                }
+
+            } catch (rekognitionError) { 
+                console.error(`   ❌ Rekognition IndexFaces failed:`, rekognitionError);
+                // Decide if we still save metadata even if Rekognition fails?
+                // For now, we continue and save metadata without face info.
             }
             console.groupEnd(); // End Rekognition group
-            progressCallback(90);
+            progressCallback(90); // Assuming indexing takes bulk of time
 
+            // Save metadata (including faces/face_ids if successful, empty matched_users)
             console.log(`💾 [Upload ${uploadId}] Saving final metadata to DynamoDB Table: ${PHOTOS_TABLE}`);
+            console.log(`   Final photoMetadata object (before marshall):`, JSON.stringify(photoMetadata, null, 2)); 
+            
+            // Manually marshal the data for the base client
+            let marshalledItem;
+            try {
+                marshalledItem = marshall(photoMetadata, {
+                    convertEmptyValues: true, // Convert empty strings/sets to NULL
+                    removeUndefinedValues: true, // Remove keys with undefined values
+                    convertClassInstanceToMap: true // Convert class instances to maps
+                });
+                console.log('   Successfully marshalled data for DynamoDB.');
+            } catch (marshallError) {
+                console.error('   ❌ Marshalling failed:', marshallError);
+                throw new Error('Failed to prepare data for DynamoDB'); // Fail fast if marshalling breaks
+            }
+
             const putParams = {
                 TableName: PHOTOS_TABLE,
-                Item: photoMetadata 
+                Item: marshalledItem 
             };
-            await docClient.send(new PutCommand(putParams));
-            console.log(`✅ [Upload ${uploadId}] DynamoDB save successful.`);
+            console.log('   PutItem Params (Marshalled): ', JSON.stringify(putParams));
+            
+            // Use the base dynamoClient, not docClient
+            const { dynamoClient } = await import('../lib/awsClient'); 
+            await dynamoClient.send(new PutItemCommand(putParams));
+            console.log(`✅ [Upload ${uploadId}] DynamoDB save successful (using base client).`);
             progressCallback(100);
             
-            console.log(`🎉 [Upload ${uploadId}] SUCCESS! Photo upload and processing complete.`);
+            console.log(`🎉 [Upload ${uploadId}] SUCCESS! Photo upload & indexing complete.`);
             console.log(`   Photo ID: ${fileId}`);
             console.log(`   S3 URL: ${publicUrl}`);
-            console.log(`   Detected Faces: ${photoMetadata.faces.length}`);
-            console.log(`   Matched Users: ${photoMetadata.matched_users.length}`);
-            console.log(`   📞 AWS Rekognition Calls Made: ${rekognitionCallCount}`); // Log the total count
+            console.log(`   Detected Faces Indexed: ${photoMetadata.face_ids.length}`);
+            // Matched users is now 0 because we don't do it here
+            console.log(`   Matched Users (During Upload): ${photoMetadata.matched_users.length}`); 
+            console.log(`   📞 AWS Rekognition Calls Made: ${rekognitionCallCount}`);
 
             return {
                 success: true,
                 photoId: fileId,
                 photoMetadata,
-                s3Url: publicUrl, // Add S3 URL to the final result
-                externalId: fileId // Add External ID (photo ID) to the final result
+                s3Url: publicUrl, 
+                externalId: fileId 
             };
         } catch (error) {
             console.error(`❌ [Upload ${uploadId}] Upload process failed:`, error);
@@ -241,44 +402,102 @@ export const awsPhotoService = {
             return [];
         }
         try {
-            // Scan the table and filter for items where matched_users list contains the userId
-            const scanParams = {
-                TableName: PHOTOS_TABLE,
-                FilterExpression: "contains(matched_users, :userMatch)", // Check if the list contains an object with the userId
-                ExpressionAttributeValues: {
-                    // We need to check for an object within the list that has a matching userId
-                    // DynamoDB `contains` on a list checks for top-level elements.
-                    // A more robust query might require schema changes or more complex filtering.
-                    // Let's try filtering client-side after scanning for now, as contains(list, map) is tricky.
-                    // ':userMatch': { userId: userId } // This syntax might not work directly in FilterExpression `contains`
-                }
-            };
-
+            // 1. Get the user's registered face IDs first
+            const faceData = await getFaceDataForUser(userId);
+            const userFaceIds = faceData ? [faceData.faceId] : [];
+            
+            console.log(`[PhotoService] User ${userId} has registered face IDs:`, userFaceIds);
+            
+            // 2. Scan the table to find all photos
             console.log(`[PhotoService] Scanning ${PHOTOS_TABLE} to find matches for ${userId}...`);
-            // Scan the entire table (less efficient, but necessary without a proper index)
-            // We will filter client-side
             const scanCommand = new ScanCommand({ TableName: PHOTOS_TABLE });
             const response = await docClient.send(scanCommand);
 
             if (!response.Items || response.Items.length === 0) {
-                console.log(`[PhotoService] No photos found in scan for user ${userId}.`);
+                console.log(`[PhotoService] No photos found in scan.`);
                 return [];
             }
-            
-            console.log(`[PhotoService] Scanned ${response.Items.length} total photos. Filtering for matches...`);
 
-            // Filter client-side for photos where the matched_users array contains the current userId
-            const matchedPhotos = response.Items.filter(item => 
-                item.matched_users && Array.isArray(item.matched_users) &&
-                item.matched_users.some(match => match && match.userId === userId)
-            );
+            console.log(`[PhotoService] Scanned ${response.Items.length} total photos.`);
+            
+            // 3. Find matches in two ways:
+            // a) Photos where the user ID is in matched_users (direct)
+            // b) Photos where the user's face matches (reverse)
+            const matchedPhotos = [];
+            
+            for (const photo of response.Items) {
+                let isMatch = false;
+                let matchReason = '';
+                
+                // Case 1: Check if this photo has current user in matched_users
+                if (photo.matched_users) {
+                    let matchedUsers = photo.matched_users;
+                    if (typeof matchedUsers === 'string') {
+                        try {
+                            matchedUsers = JSON.parse(matchedUsers);
+                        } catch (e) {
+                            console.log(`[PhotoService] Invalid JSON in matched_users for photo ${photo.id}`);
+                        }
+                    }
+                    
+                    if (Array.isArray(matchedUsers)) {
+                        // Check for matches in different formats
+                        for (const match of matchedUsers) {
+                            // Direct string match
+                            if (typeof match === 'string' && match === userId) {
+                                isMatch = true;
+                                matchReason = 'string-match';
+                                break;
+                            }
+                            
+                            // Object match with userId field
+                            if (typeof match === 'object' && match !== null) {
+                                const matchUserId = match.userId || match.user_id || '';
+                                if (matchUserId === userId) {
+                                    isMatch = true;
+                                    matchReason = 'object-userId-match';
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Case 3: Check for reverse matches - if photo contains faces that match user's face IDs
+                if (!isMatch && userFaceIds.length > 0 && photo.faces) {
+                    let faces = photo.faces;
+                    
+                    // If matches exist and photo's face is in our list
+                    if (Array.isArray(faces)) {
+                        for (const face of faces) {
+                            const faceId = typeof face === 'object' ? face.faceId : face;
+                            if (faceId && userFaceIds.includes(faceId)) {
+                                isMatch = true;
+                                matchReason = 'face-match';
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Case 4: Check if matched through historical matches in your face data
+                if (!isMatch && faceData && faceData.historicalMatches && Array.isArray(faceData.historicalMatches)) {
+                    const matchingHistorical = faceData.historicalMatches.find(match => match.id === photo.id);
+                    if (matchingHistorical) {
+                        isMatch = true;
+                        matchReason = 'historical-match';
+                    }
+                }
+                
+                if (isMatch) {
+                    console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: ${matchReason}`);
+                    matchedPhotos.push(photo);
+                }
+            }
             
             console.log(`[PhotoService] Found ${matchedPhotos.length} matched photos for user ${userId}.`);
-            
-            // Items are already unmarshalled with docClient
             return matchedPhotos;
-        }
-        catch (error) {
+        } catch (error) {
             console.error('Error fetching matched photos:', error);
             return [];
         }

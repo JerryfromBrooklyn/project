@@ -1,5 +1,7 @@
 import { RekognitionClient, IndexFacesCommand, SearchFacesCommand } from "@aws-sdk/client-rekognition";
-import { fromEnv } from "@aws-sdk/credential-providers"; // To load credentials from environment variables
+import { ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { docClient, PHOTOS_TABLE, rekognitionClient as globalRekognitionClient } from '../lib/awsClient';
+import { getFaceDataForUser } from './FaceStorageService';
 // --- Configuration ---
 // Best practice: Load these from environment variables or a config service
 const AWS_REGION = process.env.AWS_REGION || "us-east-1"; // Replace with your desired AWS region
@@ -9,16 +11,22 @@ const FACE_MATCH_THRESHOLD = 99; // Confidence threshold for matching faces
 let rekognitionClient;
 /**
  * Initializes and returns the Rekognition client.
- * Uses credentials from environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY).
- * Make sure these variables are set in your backend environment.
+ * Uses the global client from awsClient.js if available.
  */
 const initializeRekognitionClient = () => {
     if (!rekognitionClient) {
         console.log(`Initializing Rekognition client for region: ${AWS_REGION}`);
-        rekognitionClient = new RekognitionClient({
-            region: AWS_REGION,
-            credentials: fromEnv(), // Load credentials from environment variables
-        });
+        // Try to use the global client first
+        if (globalRekognitionClient) {
+            console.log('Using global Rekognition client');
+            rekognitionClient = globalRekognitionClient;
+        } else {
+            // Fallback to creating a new client with default config
+            console.log('Creating new Rekognition client');
+            rekognitionClient = new RekognitionClient({
+                region: AWS_REGION
+            });
+        }
     }
     return rekognitionClient;
 };
@@ -203,4 +211,197 @@ export const processUploadedPhotoForIndexingAndMatching = async (photoId, imageB
 //   // 1. Find userId associated with matchedCanonicalFaceId in Users table
 //   // 2. Update DetectedFaces table SET userId = foundUserId WHERE anonymousRekognitionFaceId = anonymousFaceId
 //   // ... database update logic ...
-// } 
+// }
+
+/**
+ * FaceMatchingService - Handles bidirectional face matching functionality
+ */
+const FaceMatchingService = {
+  /**
+   * Updates face matches bidirectionally in the database
+   * This ensures that if person A is in person B's photo, person B is also in person A's matched photos
+   * @param {string} userId - The user ID to update matches for
+   * @returns {Promise<{success: boolean, updated: number}>} - Number of photos updated
+   */
+  updateBidirectionalMatches: async (userId) => {
+    console.log(`🔄 [FaceMatchingService] Running bidirectional match update for user ${userId}`);
+    
+    if (!userId) {
+      console.error('[FaceMatchingService] Cannot update bidirectional matches - missing userId');
+      return { success: false, updated: 0 };
+    }
+    
+    try {
+      // 1. Get the user's registered face IDs
+      const faceData = await getFaceDataForUser(userId);
+      
+      if (!faceData || !faceData.faceId) {
+        console.log(`[FaceMatchingService] No face data found for user ${userId}`);
+        return { success: false, updated: 0 };
+      }
+      
+      const userFaceIds = [faceData.faceId];
+      console.log(`[FaceMatchingService] User ${userId} has registered face IDs:`, userFaceIds);
+      
+      // 2. Scan the photos table to find all photos
+      console.log(`[FaceMatchingService] Scanning ${PHOTOS_TABLE} to find all photos...`);
+      const scanCommand = new ScanCommand({ TableName: PHOTOS_TABLE });
+      const response = await docClient.send(scanCommand);
+      
+      if (!response.Items || response.Items.length === 0) {
+        console.log(`[FaceMatchingService] No photos found in scan.`);
+        return { success: false, updated: 0 };
+      }
+      
+      console.log(`[FaceMatchingService] Found ${response.Items.length} total photos in the database.`);
+      
+      // 3. For each photo where user's face is detected, ensure bidirectional match
+      let updatedCount = 0;
+      const timestamp = new Date().toISOString();
+      
+      for (const photo of response.Items) {
+        // Skip photos uploaded by the user themselves (they already have access)
+        if (photo.uploaded_by === userId || photo.user_id === userId) {
+          continue;
+        }
+        
+        let needsUpdate = false;
+        let matchedUsers = photo.matched_users || [];
+        
+        // Standardize the matched_users format
+        if (typeof matchedUsers === 'string') {
+          try {
+            matchedUsers = JSON.parse(matchedUsers);
+          } catch (e) {
+            console.error(`[FaceMatchingService] Invalid JSON in matched_users for photo ${photo.id}:`, e);
+            continue;
+          }
+        }
+        
+        if (!Array.isArray(matchedUsers)) {
+          matchedUsers = [];
+        }
+        
+        // Check if our user's face matches any faces in this photo
+        if (photo.faces && Array.isArray(photo.faces)) {
+          const matchedFace = photo.faces.find(face => {
+            const faceId = typeof face === 'object' ? face.faceId : face;
+            // If this photo contains a face with 100% similarity to user's face
+            return faceId && userFaceIds.includes(faceId);
+          });
+          
+          if (matchedFace) {
+            // Check if user is already in the matched_users array
+            const userIndex = matchedUsers.findIndex(match => {
+              if (typeof match === 'object' && match !== null) {
+                return match.userId === userId || match.user_id === userId;
+              } else if (typeof match === 'string') {
+                return match === userId;
+              }
+              return false;
+            });
+            
+            if (userIndex === -1) {
+              // User not found in matched_users, add them
+              console.log(`[FaceMatchingService] Adding user ${userId} to matched_users for photo ${photo.id}`);
+              
+              // Get the actual confidence value from the matched face if available
+              let similarity = 90; // Default fallback value
+              if (typeof matchedFace === 'object' && matchedFace.confidence) {
+                similarity = matchedFace.confidence;
+              }
+              
+              // Use the standardized object format
+              matchedUsers.push({
+                userId: userId,
+                faceId: userFaceIds[0],
+                similarity: similarity, // Using actual confidence when available
+                matchedAt: timestamp
+              });
+              
+              needsUpdate = true;
+            }
+          }
+        }
+        
+        // If a face with the user's face ID is found in the photo and the user ID
+        // is not yet in the matched_users array, update the database
+        if (needsUpdate) {
+          try {
+            const updateParams = {
+              TableName: PHOTOS_TABLE,
+              Key: { id: photo.id },
+              UpdateExpression: 'SET matched_users = :matchedUsers',
+              ExpressionAttributeValues: {
+                ':matchedUsers': matchedUsers
+              },
+              ReturnValues: 'UPDATED_NEW'
+            };
+            
+            console.log(`[FaceMatchingService] Updating photo ${photo.id} with new matched_users list`);
+            await docClient.send(new UpdateCommand(updateParams));
+            updatedCount++;
+          } catch (updateError) {
+            console.error(`[FaceMatchingService] Error updating photo ${photo.id}:`, updateError);
+          }
+        }
+      }
+      
+      console.log(`[FaceMatchingService] Bidirectional match update complete. Updated ${updatedCount} photos.`);
+      return { success: true, updated: updatedCount };
+    } catch (error) {
+      console.error('[FaceMatchingService] Error updating bidirectional matches:', error);
+      return { success: false, updated: 0, error };
+    }
+  },
+  
+  /**
+   * Processes matches for all users in the system
+   * This is a heavy operation and should be run as a background job
+   * @returns {Promise<{success: boolean, results: Array}>}
+   */
+  updateAllUserMatches: async () => {
+    console.log(`🔄 [FaceMatchingService] Starting match update for all users...`);
+    
+    try {
+      // 1. Get all unique users who have uploaded photos
+      console.log(`[FaceMatchingService] Scanning ${PHOTOS_TABLE} to find all users...`);
+      const scanCommand = new ScanCommand({ 
+        TableName: PHOTOS_TABLE,
+        ProjectionExpression: "uploaded_by, user_id"
+      });
+      
+      const response = await docClient.send(scanCommand);
+      
+      if (!response.Items || response.Items.length === 0) {
+        console.log(`[FaceMatchingService] No photos found to extract users.`);
+        return { success: false, results: [] };
+      }
+      
+      // Extract all unique user IDs
+      const userIds = new Set();
+      response.Items.forEach(item => {
+        if (item.uploaded_by) userIds.add(item.uploaded_by);
+        if (item.user_id) userIds.add(item.user_id);
+      });
+      
+      console.log(`[FaceMatchingService] Found ${userIds.size} unique users with photos.`);
+      
+      // 2. Update matches for each user
+      const results = [];
+      for (const userId of userIds) {
+        console.log(`[FaceMatchingService] Processing matches for user: ${userId}`);
+        const result = await FaceMatchingService.updateBidirectionalMatches(userId);
+        results.push({ userId, ...result });
+      }
+      
+      console.log(`[FaceMatchingService] All user matches updated.`, results);
+      return { success: true, results };
+    } catch (error) {
+      console.error('[FaceMatchingService] Error updating all user matches:', error);
+      return { success: false, results: [], error };
+    }
+  }
+};
+
+export default FaceMatchingService; 

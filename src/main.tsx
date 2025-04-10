@@ -19,6 +19,7 @@ import './index.css'
 import { testRekognitionConnectivity } from './lib/awsClient';
 import { logVersion } from './utils/version';
 import './utils/debugBanner'; // Import debug utility
+import BackgroundJobService from './services/BackgroundJobService'; // Import background job service
 
 // Log application version
 logVersion();
@@ -61,6 +62,13 @@ window.addEventListener('load', () => {
     if (window.diagnoseBannerIssues) {
       window.diagnoseBannerIssues();
     }
+    
+    // Start face matching background job after page load
+    if (import.meta.env.DEV) {
+      console.log('[STARTUP] 🔄 Starting face matching background job (dev mode)...');
+      BackgroundJobService.runOneTimeFaceMatchingJob()
+        .then(result => console.log('[STARTUP] Initial face matching job completed:', result));
+    }
   }, 2000);
 });
 
@@ -100,8 +108,15 @@ Check your .env file or environment configuration.
 declare global {
   interface Window {
     diagnoseBannerIssues?: () => void;
+    runFaceMatching?: () => Promise<any>; // Add global method to trigger face matching
   }
 }
+
+// Add a global method to run the face matching job on demand
+window.runFaceMatching = async () => {
+  console.log('[GLOBAL] 🔄 Running face matching job on demand...');
+  return await BackgroundJobService.runOneTimeFaceMatchingJob();
+};
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

@@ -36,18 +36,26 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         if (!user)
             return;
         console.log(`🔄 [PhotoManager ${mode}] Setting up AWS photo polling...`);
-        // Fetch photos immediately on mount based on mode
-        fetchPhotos();
-        // Set up polling - ALSO based on mode?
-        // For now, let's assume polling always fetches based on the current mode.
-        // A more robust solution might pass the mode to fetchPhotos.
+        
+        let initialFetchTimeoutId = null;
+
+        // Fetch photos immediately on mount for all modes
+        fetchPhotos(); // Fetch immediately for all modes
+        
+        // Set up polling 
         const pollingInterval = setInterval(() => {
+            console.log(`   Polling interval triggered for mode: ${mode}`);
             fetchPhotos();
         }, 30000); // Poll every 30 seconds
+        
         return () => {
             console.log(`🔄 [PhotoManager ${mode}] Cleaning up AWS photo polling`);
+            if (initialFetchTimeoutId) {
+                clearTimeout(initialFetchTimeoutId);
+            }
             clearInterval(pollingInterval);
         };
+    // Depend on user.id AND mode, so fetch runs when mode changes
     }, [user?.id, mode]);
     const fetchPhotos = async () => {
         try {
