@@ -17,6 +17,7 @@ export const awsPhotoService = {
      */
     uploadPhoto: async (file, eventId, folderPath, metadata = {}, progressCallback = () => { }) => {
         const uploadId = uuidv4().substring(0, 8);
+        let rekognitionCallCount = 0; // Initialize Rekognition call counter
         console.groupCollapsed(`📸 [Upload ${uploadId}] Starting upload for: ${file.name}`);
         console.log(`   File Size: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
         console.log(`   Target Folder: ${folderPath || 'root'}`);
@@ -107,7 +108,8 @@ export const awsPhotoService = {
                 };
                 // Note: Logging the full buffer in params will flood the console, so skip it.
                 console.log(`   IndexFaces Params Prepared (Bytes omitted for brevity):`, { ...indexParams, Image: { Bytes: `Uint8Array length: ${fileUint8Array.byteLength}` } }); 
-                console.log(`   Sending IndexFaces command with image bytes...`);
+                console.log(`   Sending IndexFaces command...`);
+                rekognitionCallCount++; // Increment counter
                 const indexResponse = await rekognitionClient.send(new IndexFacesCommand(indexParams)); // Use global client
                 console.log(`   Rekognition IndexFaces response received successfully.`);
                 
@@ -140,6 +142,7 @@ export const awsPhotoService = {
                                 MaxFaces: 5, 
                                 FaceMatchThreshold: 85 
                             };
+                            rekognitionCallCount++; // Increment counter
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
                             
                             if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
@@ -198,6 +201,7 @@ export const awsPhotoService = {
             console.log(`   S3 URL: ${publicUrl}`);
             console.log(`   Detected Faces: ${photoMetadata.faces.length}`);
             console.log(`   Matched Users: ${photoMetadata.matched_users.length}`);
+            console.log(`   📞 AWS Rekognition Calls Made: ${rekognitionCallCount}`); // Log the total count
 
             return {
                 success: true,
