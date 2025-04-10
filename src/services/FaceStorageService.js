@@ -3,10 +3,11 @@ import { s3Client } from '../lib/awsClient';
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { PutItemCommand, QueryCommand, GetItemCommand, DeleteItemCommand } from '@aws-sdk/client-dynamodb';
-import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, dynamoClient } from '../lib/awsClient';
+import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, dynamoClient, docClient } from '../lib/awsClient';
 import { normalizeToS3Url, convertCloudFrontToS3Url } from '../utils/s3Utils';
-import { docClient } from '../lib/awsClient';
 import { marshall } from '@aws-sdk/util-dynamodb';
+// Use DocumentClient commands for simplified interaction
+import { PutCommand as DocPutCommand, QueryCommand as DocQueryCommand, GetCommand as DocGetCommand, DeleteCommand as DocDeleteCommand } from '@aws-sdk/lib-dynamodb';
 
 // S3 Bucket name for face data
 const FACE_BUCKET_NAME = 'shmong';
@@ -18,10 +19,11 @@ const hasBuffer = typeof Buffer !== 'undefined';
 // Log the environment for debugging
 console.log(`🔧 [FaceStorage] Environment detection: Browser=${isBrowser}, HasBuffer=${hasBuffer}`);
 
-// Access AWS Clients
+// Access AWS Clients - Now includes docClient
 const getAWSClients = async () => {
   return {
-    dynamoClient: dynamoClient,
+    dynamoClient: dynamoClient, // Keep base client if needed elsewhere
+    docClient: docClient,       // Add docClient
     s3Client
   };
 };
@@ -445,59 +447,66 @@ export const getFaceDataForUser = async (userId) => {
     return null;
   }
   
-  console.log('[FaceStorage] Fetching face data for user:', userId);
+  console.log('[FaceStorage] Fetching face data for user (using docClient & BASE TABLE query):', userId);
   
   try {
-    const { dynamoClient } = await getAWSClients();
+    const { docClient } = await getAWSClients(); // Use docClient
     
-    // Query using the secondary index to get the most recent face record by created_at
+    // Query the base table directly using only the HASH key (userId)
     const params = {
-      TableName: 'shmong-face-data',
-      IndexName: 'UserIdCreatedAtIndex',
-      KeyConditionExpression: 'userId = :userId',
-      ExpressionAttributeValues: {
-        ':userId': { S: userId }
-      },
-      Limit: 5,
-      ScanIndexForward: false // Get the most recent entries first
+        TableName: 'shmong-face-data',
+        // IndexName: 'UserIdCreatedAtIndex', // REMOVED - Querying base table
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: {
+        ':userId': userId // No need for { S: ... } with docClient
+        },
+        // Limit: 5, // Can't Limit easily without sort key, get all and sort below
+        // ScanIndexForward: false // Sorting done manually below
     };
     
-    console.log('[FaceStorage] Querying DynamoDB for face data with params:', JSON.stringify(params, null, 2));
-    const response = await dynamoClient.send(new QueryCommand(params));
+    console.log('[FaceStorage] Querying DynamoDB BASE TABLE with docClient params:', JSON.stringify(params, null, 2));
+    const response = await docClient.send(new DocQueryCommand(params)); // Use DocQueryCommand
     
     if (response.Items && response.Items.length > 0) {
-      // Log all results for debugging
-      console.log(`[FaceStorage] Found ${response.Items.length} face records for user ${userId}`);
-      response.Items.forEach((item, index) => {
-        console.log(`[FaceStorage] Face record ${index + 1}:`, 
-          JSON.stringify({
-            faceId: item.faceId?.S,
-            createdAt: item.createdAt?.S || item.created_at?.S,
-            imageUrl: item.imageUrl?.S,
-            status: item.status?.S
-          }, null, 2));
-      });
-      
-      // Get the most recent "active" record if available
-      const activeRecord = response.Items.find(item => item.status?.S === 'active');
-      
-      // Otherwise, use the most recent record
-      const faceData = activeRecord || response.Items[0];
-      console.log('[FaceStorage] Selected face data:', JSON.stringify(faceData, null, 2));
-      
-      // Format and return the face data
-      return {
-        faceId: faceData.faceId?.S,
-        faceAttributes: faceData.faceAttributes?.S ? JSON.parse(faceData.faceAttributes.S) 
-          : faceData.face_attributes?.S ? JSON.parse(faceData.face_attributes.S) : null,
-        imageUrl: faceData.imageUrl?.S || faceData.public_url?.S,
-        imagePath: faceData.imagePath?.S,
-        historicalMatches: faceData.historicalMatches?.L || [],
-        createdAt: faceData.createdAt?.S || faceData.created_at?.S
-      };
+        // Log all results for debugging (Items are plain JS objects now)
+        console.log(`[FaceStorage] Found ${response.Items.length} face records for user ${userId} in base table.`);
+        
+        // MANUAL SORTING: Sort by createdAt timestamp descending (newest first)
+        const sortedItems = response.Items.sort((a, b) => {
+            const dateA = new Date(a.createdAt || a.created_at || 0);
+            const dateB = new Date(b.createdAt || b.created_at || 0);
+            return dateB - dateA; // Descending order
+        });
+
+        console.log(`[FaceStorage] Sorted Items (newest first):`, sortedItems.map(i => ({faceId: i.faceId, createdAt: i.createdAt || i.created_at})));
+
+        // Get the most recent "active" record if available from the sorted list
+        const activeRecord = sortedItems.find(item => item.status === 'active');
+        
+        // Otherwise, use the most recent record (which is now sortedItems[0])
+        const faceData = activeRecord || sortedItems[0];
+        console.log('[FaceStorage] Selected face data (plain JS object):', faceData);
+
+        // Format and return the face data (access properties directly)
+        let attributes = null;
+        if (faceData.faceAttributes && typeof faceData.faceAttributes === 'string') {
+            try { attributes = JSON.parse(faceData.faceAttributes); } catch(e) { console.error('Failed to parse faceAttributes'); }
+        } else if (faceData.face_attributes && typeof faceData.face_attributes === 'string') {
+            try { attributes = JSON.parse(faceData.face_attributes); } catch(e) { console.error('Failed to parse face_attributes'); }
+        }
+
+        return {
+            faceId: faceData.faceId,
+            faceAttributes: attributes,
+            imageUrl: faceData.imageUrl || faceData.public_url,
+            imagePath: faceData.imagePath,
+            // Historical matches might need parsing if stored complexly, adjust if needed
+            historicalMatches: faceData.historicalMatches || [], 
+            createdAt: faceData.createdAt || faceData.created_at
+        };
     } else {
-      console.log('[FaceStorage] No face data found for user:', userId);
-      return null;
+        console.log('[FaceStorage] No face data found for user:', userId);
+        return null;
     }
   } catch (error) {
     console.error('[FaceStorage] Error fetching face data from DynamoDB:', error);
