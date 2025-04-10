@@ -33,7 +33,10 @@ export const Dashboard = () => {
 
   useEffect(() => {
     const fetchFaceData = async () => {
-      if (!user) return;
+      if (!user || !user.id) {
+        console.warn('[Dashboard] fetchFaceData called, but user or user.id is not yet available. User:', user);
+        return;
+      }
       
       setIsLoadingFaceData(true);
       console.log('[Dashboard] Fetching face data for user:', user.id);
@@ -44,6 +47,7 @@ export const Dashboard = () => {
         const data = await getFaceDataForUser(user.id);
         
         if (data) {
+          console.log('🟢 [Dashboard] getFaceDataForUser returned data, setting state...');
           console.log('[Dashboard] Face data found:', data);
           setFaceRegistered(true);
           

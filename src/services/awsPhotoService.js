@@ -116,21 +116,24 @@ export const awsPhotoService = {
                 if (indexResponse.FaceRecords && indexResponse.FaceRecords.length > 0) {
                    console.log(`   ✅ Detected ${indexResponse.FaceRecords.length} faces.`);
                     photoMetadata.faces = indexResponse.FaceRecords.map(record => {
-                        console.groupCollapsed(`      👤 Face ID: ${record.Face.FaceId}`);
+                        // Keep logging collapsed for individual faces
+                        console.groupCollapsed(`      👤 Face ID: ${record.Face.FaceId}`); 
                         console.log(`         Confidence: ${record.Face.Confidence?.toFixed(2)}%`);
                         console.log(`         Bounding Box:`, record.Face.BoundingBox);
-                        console.log(`         Attributes:`, record.FaceDetail);
+                        // Attributes might not be returned by IndexFaces, check if FaceDetail exists
+                        console.log(`         Attributes:`, record.FaceDetail || 'N/A'); 
                         console.groupEnd();
                         return {
                             faceId: record.Face.FaceId,
                             boundingBox: record.Face.BoundingBox,
                             confidence: record.Face.Confidence,
-                            attributes: record.FaceDetail
+                            // Attributes are often NOT returned by IndexFaces, store only basic info
+                            // attributes: record.FaceDetail 
                         };
                     });
                     photoMetadata.face_ids = indexResponse.FaceRecords.map(r => r.Face.FaceId);
-                    
-                    // --- Future Matching --- 
+                                        
+                    // --- Future Matching (Re-enabled) --- 
                     console.groupCollapsed(`   🔄 Searching for matches against registered users...`);
                     for (const faceRecord of indexResponse.FaceRecords) {
                         const detectedFaceId = faceRecord.Face.FaceId;
@@ -146,21 +149,29 @@ export const awsPhotoService = {
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
                             
                             if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
-                                console.log(`      ✅ Found ${searchResponse.FaceMatches.length} potential user matches.`);
+                                console.log(`      ✅ Found ${searchResponse.FaceMatches.length} potential user matches for detected face ${detectedFaceId}.`);
                                 for (const match of searchResponse.FaceMatches) {
-                                    const matchedUserId = match.Face.ExternalImageId;
-                                    const matchedFaceId = match.Face.FaceId;
+                                    // IMPORTANT: The ExternalImageId on the *matched face* is the userId if it came from registration.
+                                    const matchedUserId = match.Face.ExternalImageId; 
+                                    const matchedRegisteredFaceId = match.Face.FaceId; // The FaceId of the matched registered user
                                     const similarity = match.Similarity;
                                     
-                                    if (matchedFaceId === detectedFaceId) continue; 
+                                    // Ensure we have a userId and it's not the photo ID itself, and not the exact same detected face
+                                    if (!matchedUserId || matchedUserId === fileId || matchedRegisteredFaceId === detectedFaceId) {
+                                        console.log(`      ❓ Skipping match: Same face or missing/invalid ExternalImageId (${matchedUserId})`);
+                                        continue; 
+                                    }
                                     
+                                    // Check if this user is already matched for this photo
                                     if (!photoMetadata.matched_users.some(u => u.userId === matchedUserId)) {
-                                        console.log(`         -> Matched User ID: ${matchedUserId} (Similarity: ${similarity.toFixed(2)}%)`);
+                                        console.log(`         -> Matched User ID: ${matchedUserId} (Similarity: ${similarity.toFixed(2)}%), Matched Face ID: ${matchedRegisteredFaceId}`); // Log both IDs
                                         photoMetadata.matched_users.push({
-                                            userId: matchedUserId,
-                                            faceId: matchedFaceId, 
+                                            userId: matchedUserId,           // CORRECT: Use the ExternalImageId from the matched Face object
+                                            faceId: matchedRegisteredFaceId, // The FaceId of the matched Face object
                                             similarity: similarity
                                         });
+                                        // TODO: Optionally, fetch user details (name) from shmong-users table here
+                                        // TODO: Trigger a notification for the matched user
                                     }
                                 }
                             } else {
@@ -175,7 +186,7 @@ export const awsPhotoService = {
                 } else {
                     console.log(`   ⚠️ No faces detected/indexed in the photo.`);
                 }
-                // --- End of IndexFaces Code ---
+                // --- End of Re-enabled Future Matching --- 
 
             } catch (rekognitionError) {
                 console.error(`   ❌ Rekognition processing failed inside the 'try' block:`);
@@ -219,30 +230,56 @@ export const awsPhotoService = {
         }
     },
     /**
-     * Fetch photos for a user from DynamoDB
-     * @param {string} userId - User ID
-     * @returns {Promise<PhotoMetadata[]>} Array of photo metadata
+     * Fetch photos WHERE THE CURRENT USER IS MATCHED from DynamoDB
+     * @param {string} userId - The ID of the user viewing their matches
+     * @returns {Promise<PhotoMetadata[]>} Array of photo metadata where the user is matched
      */
     fetchPhotos: async (userId) => {
+        console.log(`📥 [PhotoService] Fetching matched photos for user: ${userId}`);
+        if (!userId) {
+            console.error('[PhotoService] Cannot fetch matched photos without userId');
+            return [];
+        }
         try {
-            // Query DynamoDB for user's photos using docClient
-            const queryParams = {
+            // Scan the table and filter for items where matched_users list contains the userId
+            const scanParams = {
                 TableName: PHOTOS_TABLE,
-                IndexName: 'UserIdIndex', // Using the GSI we confirmed exists
-                KeyConditionExpression: 'user_id = :userId',
+                FilterExpression: "contains(matched_users, :userMatch)", // Check if the list contains an object with the userId
                 ExpressionAttributeValues: {
-                    ':userId': userId // No need to specify { S: userId } with docClient
+                    // We need to check for an object within the list that has a matching userId
+                    // DynamoDB `contains` on a list checks for top-level elements.
+                    // A more robust query might require schema changes or more complex filtering.
+                    // Let's try filtering client-side after scanning for now, as contains(list, map) is tricky.
+                    // ':userMatch': { userId: userId } // This syntax might not work directly in FilterExpression `contains`
                 }
             };
-            const response = await docClient.send(new QueryCommand(queryParams));
+
+            console.log(`[PhotoService] Scanning ${PHOTOS_TABLE} to find matches for ${userId}...`);
+            // Scan the entire table (less efficient, but necessary without a proper index)
+            // We will filter client-side
+            const scanCommand = new ScanCommand({ TableName: PHOTOS_TABLE });
+            const response = await docClient.send(scanCommand);
+
             if (!response.Items || response.Items.length === 0) {
+                console.log(`[PhotoService] No photos found in scan for user ${userId}.`);
                 return [];
             }
+            
+            console.log(`[PhotoService] Scanned ${response.Items.length} total photos. Filtering for matches...`);
+
+            // Filter client-side for photos where the matched_users array contains the current userId
+            const matchedPhotos = response.Items.filter(item => 
+                item.matched_users && Array.isArray(item.matched_users) &&
+                item.matched_users.some(match => match && match.userId === userId)
+            );
+            
+            console.log(`[PhotoService] Found ${matchedPhotos.length} matched photos for user ${userId}.`);
+            
             // Items are already unmarshalled with docClient
-            return response.Items;
+            return matchedPhotos;
         }
         catch (error) {
-            console.error('Error fetching photos:', error);
+            console.error('Error fetching matched photos:', error);
             return [];
         }
     },
@@ -342,6 +379,37 @@ export const awsPhotoService = {
         catch (error) {
             console.error('Error renaming folder:', error);
             return false;
+        }
+    },
+    /**
+     * Fetch photos UPLOADED BY a specific user from DynamoDB
+     * @param {string} userId - The ID of the user whose uploads to fetch
+     * @returns {Promise<PhotoMetadata[]>} Array of photo metadata uploaded by the user
+     */
+    fetchUploadedPhotos: async (userId) => {
+        console.log(`📥 [PhotoService] Fetching photos uploaded by user: ${userId}`);
+        if (!userId) {
+            console.error('[PhotoService] Cannot fetch uploaded photos without userId');
+            return [];
+        }
+        try {
+            // Query DynamoDB using the UserIdIndex GSI
+            const queryParams = {
+                TableName: PHOTOS_TABLE,
+                IndexName: 'UserIdIndex', 
+                KeyConditionExpression: 'user_id = :userId',
+                ExpressionAttributeValues: {
+                    ':userId': userId 
+                },
+                ScanIndexForward: false // Optional: Sort by upload time descending
+            };
+            const response = await docClient.send(new QueryCommand(queryParams));
+            
+            console.log(`[PhotoService] Found ${response.Items?.length || 0} photos uploaded by user ${userId}.`);
+            return response.Items || [];
+        } catch (error) {
+            console.error('Error fetching uploaded photos:', error);
+            return [];
         }
     }
 };

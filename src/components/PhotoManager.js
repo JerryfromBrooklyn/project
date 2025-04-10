@@ -35,27 +35,34 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
     useEffect(() => {
         if (!user)
             return;
-        console.log('🔄 [PhotoManager] Setting up AWS photo polling...');
-        // Fetch photos immediately on mount
+        console.log(`🔄 [PhotoManager ${mode}] Setting up AWS photo polling...`);
+        // Fetch photos immediately on mount based on mode
         fetchPhotos();
-        // Set up polling for AWS DynamoDB/S3 data
+        // Set up polling - ALSO based on mode?
+        // For now, let's assume polling always fetches based on the current mode.
+        // A more robust solution might pass the mode to fetchPhotos.
         const pollingInterval = setInterval(() => {
             fetchPhotos();
         }, 30000); // Poll every 30 seconds
         return () => {
-            console.log('🔄 [PhotoManager] Cleaning up AWS photo polling');
+            console.log(`🔄 [PhotoManager ${mode}] Cleaning up AWS photo polling`);
             clearInterval(pollingInterval);
         };
-    }, [user?.id]); // Only depend on user ID, not the entire user object or mode
+    }, [user?.id, mode]);
     const fetchPhotos = async () => {
         try {
             setLoading(true);
             setError(null);
             if (!user)
                 return;
-            console.log('📥 [PhotoManager] Fetching photos from AWS DynamoDB...');
-            // Get photos from DynamoDB via awsPhotoService
-            const fetchedPhotos = await awsPhotoService.fetchPhotos(user.id);
+            let fetchedPhotos = [];
+            if (mode === 'matches') {
+                console.log(`📥 [PhotoManager ${mode}] Fetching MATCHED photos from AWS DynamoDB...`);
+                fetchedPhotos = await awsPhotoService.fetchPhotos(user.id);
+            } else {
+                console.log(`📥 [PhotoManager ${mode}] Fetching UPLOADED photos from AWS DynamoDB...`);
+                fetchedPhotos = await awsPhotoService.fetchUploadedPhotos(user.id);
+            }
             // Apply filters if needed
             let filteredPhotos = [...fetchedPhotos];
             // Apply date range filter
