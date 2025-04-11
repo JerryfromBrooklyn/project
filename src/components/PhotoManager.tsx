@@ -65,16 +65,26 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
     // Fetch photos immediately on mount
     fetchPhotos();
     
-    // Set up polling for AWS DynamoDB/S3 data
-    const pollingInterval = setInterval(() => {
-      fetchPhotos();
-    }, 30000); // Poll every 30 seconds
+    let pollingInterval: NodeJS.Timeout | null = null;
+
+    // Set up polling ONLY IF mode is not 'upload'
+    if (mode !== 'upload') {
+      console.log(`[PhotoManager] Mode is '${mode}', enabling polling.`);
+      pollingInterval = setInterval(() => {
+        console.log(`[PhotoManager] Polling interval triggered for mode: ${mode}`);
+        fetchPhotos();
+      }, 30000); // Poll every 30 seconds
+    } else {
+      console.log(`[PhotoManager] Mode is 'upload', polling disabled.`);
+    }
     
     return () => {
       console.log('🔄 [PhotoManager] Cleaning up AWS photo polling');
-      clearInterval(pollingInterval);
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
     };
-  }, [user?.id]); // Only depend on user ID, not the entire user object or mode
+  }, [user?.id, mode]); // Add 'mode' to the dependency array
 
   const fetchPhotos = async () => {
     try {
@@ -137,6 +147,13 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
         });
       }
       
+      // Sort photos by date descending (newest first)
+      filteredPhotos.sort((a, b) => {
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
+        return dateB - dateA; 
+      });
+      
       setPhotos(filteredPhotos);
     } catch (err) {
       console.error('Error fetching photos:', err);
@@ -157,6 +174,10 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
       
       if (success) {
         setPhotos(photos.filter(p => p.id !== photoId));
+        // Manually trigger fetch for the 'matches' mode if needed, though polling should handle it.
+        if (mode === 'matches') {
+          fetchPhotos(); 
+        }
       } else {
         throw new Error('Failed to delete photo');
       }
@@ -216,181 +237,17 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
       )}
 
       <div className="mt-8 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="relative flex-1 max-w-lg">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-apple-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search photos..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 ios-input"
-              aria-label="Search photos"
-              title="Search photos by title, description, location or tags"
-            />
-          </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={cn(
-              "ios-button-secondary ml-4 flex items-center",
-              showFilters && "bg-apple-blue-500 text-white hover:bg-apple-blue-600"
-            )}
-          >
-            <Filter className="w-4 h-4 mr-2" />
-            Filters
-            <ChevronDown className={cn(
-              "w-4 h-4 ml-2 transition-transform duration-200",
-              showFilters && "transform rotate-180"
-            )} />
-          </button>
-        </div>
+        {/* Search and Filter UI Removed */}
+      </div>
 
-        <AnimatePresence>
-          {showFilters && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="overflow-hidden"
-            >
-              <div className="p-4 bg-white rounded-apple-xl border border-apple-gray-200 mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <label className="ios-label flex items-center">
-                      <Calendar className="w-4 h-4 mr-2" />
-                      Date Range
-                    </label>
-                    <div className="space-y-2">
-                      <input
-                        type="date"
-                        value={filters.dateRange.start}
-                        onChange={(e) => setFilters({
-                          ...filters,
-                          dateRange: { ...filters.dateRange, start: e.target.value }
-                        })}
-                        className="ios-input"
-                        aria-label="Start date"
-                        title="Filter start date"
-                      />
-                      <input
-                        type="date"
-                        value={filters.dateRange.end}
-                        onChange={(e) => setFilters({
-                          ...filters,
-                          dateRange: { ...filters.dateRange, end: e.target.value }
-                        })}
-                        className="ios-input"
-                        aria-label="End date"
-                        title="Filter end date"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="ios-label flex items-center">
-                      <MapPin className="w-4 h-4 mr-2" />
-                      Location
-                    </label>
-                    <GoogleMaps
-                      location={filters.location}
-                      onLocationChange={(location) => setFilters({
-                        ...filters,
-                        location
-                      })}
-                      height="200px"
-                      className="rounded-apple overflow-hidden"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="ios-label flex items-center">
-                      <Tag className="w-4 h-4 mr-2" />
-                      Tags
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Add tags..."
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && e.currentTarget.value) {
-                          setFilters({
-                            ...filters,
-                            tags: [...filters.tags, e.currentTarget.value]
-                          });
-                          e.currentTarget.value = '';
-                        }
-                      }}
-                      className="ios-input"
-                      aria-label="Add tags"
-                      title="Type a tag and press Enter to add it"
-                    />
-                    {filters.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {filters.tags.map((tag, index) => (
-                          <span
-                            key={index}
-                            className="bg-apple-blue-100 text-apple-blue-700 px-2 py-1 rounded-full text-sm flex items-center"
-                          >
-                            {tag}
-                            <button
-                              onClick={() => setFilters({
-                                ...filters,
-                                tags: filters.tags.filter((_, i) => i !== index)
-                              })}
-                              className="ml-1 hover:text-apple-blue-900"
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="ios-label flex items-center">
-                      <Clock className="w-4 h-4 mr-2" />
-                      Time Range
-                    </label>
-                    <div className="space-y-2">
-                      <input
-                        type="time"
-                        value={filters.timeRange.start}
-                        onChange={(e) => setFilters({
-                          ...filters,
-                          timeRange: { ...filters.timeRange, start: e.target.value }
-                        })}
-                        className="ios-input"
-                        aria-label="Start time"
-                        title="Filter start time"
-                      />
-                      <input
-                        type="time"
-                        value={filters.timeRange.end}
-                        onChange={(e) => setFilters({
-                          ...filters,
-                          timeRange: { ...filters.timeRange, end: e.target.value }
-                        })}
-                        className="ios-input"
-                        aria-label="End time"
-                        title="Filter end time"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end mt-4">
-                  <button
-                    onClick={clearFilters}
-                    className="ios-button-secondary"
-                  >
-                    Clear Filters
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      {/* Photo Count Display */}
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-apple-gray-800">
+          {/* Corrected fetch logic in Dashboard, count display might need separate fetch here if desired */}
+          {mode === 'upload' 
+            ? `My Uploads (${photos.length})`
+            : `My Photo Matches (${photos.length})`}
+        </h2>
       </div>
 
       <motion.div

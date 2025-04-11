@@ -8,8 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node test-lambda-functions.js",
-    "deploy": "npm run build && aws s3 sync dist/ s3://shmong",
-    "deploy:win": "npm run build && aws s3 sync dist/ s3://shmong"
+    "s3-sync": "aws s3 sync dist/ s3://shmong --delete --exclude \"photos/*\" --exclude \"face-images/*\"",
+    "invalidate-cf": "aws cloudfront create-invalidation --distribution-id E3OEKXFISG92UV --paths \"/*\"",
+    "deploy": "npm run build && npm run s3-sync && npm run invalidate-cf"
   },
   "author": "",
   "license": "ISC",

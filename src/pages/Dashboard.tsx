@@ -6,6 +6,7 @@ import { cn } from '../utils/cn';
 import FaceRegistration from '../components/FaceRegistration';
 import { PhotoManager } from '../components/PhotoManager';
 import { getFaceDataForUser } from '../services/FaceStorageService';
+import { awsPhotoService } from '../services/awsPhotoService';
 
 interface FaceAttributes {
   age: { low: number; high: number };
@@ -30,6 +31,8 @@ export const Dashboard = () => {
   const [faceId, setFaceId] = useState<string | null>(null);
   const [historicalMatches, setHistoricalMatches] = useState<any[]>([]);
   const [isLoadingFaceData, setIsLoadingFaceData] = useState(true);
+  const [uploadedCount, setUploadedCount] = useState(0);
+  const [matchedCount, setMatchedCount] = useState(0);
 
   useEffect(() => {
     const fetchFaceData = async () => {
@@ -104,6 +107,30 @@ export const Dashboard = () => {
 
     fetchFaceData();
   }, [user]);
+
+  // New useEffect to fetch photo counts
+  useEffect(() => {
+    const fetchCounts = async () => {
+      if (!user || !user.id) return;
+
+      try {
+        console.log('[Dashboard] Fetching photo counts...');
+        // Use the functions from awsPhotoService
+        const uploadedPhotos = await awsPhotoService.fetchUploadedPhotos(user.id);
+        const matchedPhotos = await awsPhotoService.fetchPhotos(user.id);
+
+        console.log(`[Dashboard] Fetched counts: Uploaded=${uploadedPhotos.length}, Matched=${matchedPhotos.length}`);
+        setUploadedCount(uploadedPhotos.length);
+        setMatchedCount(matchedPhotos.length);
+      } catch (error) {
+        console.error('[Dashboard] Error fetching photo counts:', error);
+        setUploadedCount(0);
+        setMatchedCount(0);
+      }
+    };
+
+    fetchCounts();
+  }, [user]); // Re-run when user changes
 
   const handleRegistrationSuccess = (result: any) => {
     console.log('[Dashboard] Face registration successful:', { 
@@ -292,7 +319,7 @@ export const Dashboard = () => {
         <h4 className="text-sm font-medium text-apple-gray-700 mb-2">Historical Matches</h4>
         <div className="bg-green-50 p-3 rounded-apple border border-green-200">
           <p className="text-sm text-green-800">
-            <span className="font-medium">Found you in {historicalMatches.length} existing photo{historicalMatches.length !== 1 ? 's' : ''}!</span>
+            <span className="font-medium">We found {historicalMatches.length} photos from the past!</span>
           </p>
           <p className="text-xs text-green-600 mt-1">
             These photos are viewable in the "My Photos" tab.
@@ -326,7 +353,7 @@ export const Dashboard = () => {
             {faceImageUrl ? (
               <div className="relative aspect-square rounded-apple-xl overflow-hidden border-2 border-apple-blue-200 shadow-md">
                 <img 
-                  src={faceImageUrl} 
+                  src={encodeURI(faceImageUrl || '')}
                   alt="Registered face" 
                   className="w-full h-full object-cover"
                   onError={(e) => {
@@ -434,7 +461,7 @@ export const Dashboard = () => {
                 </div>
                 <div>
                   <h1 className="text-2xl font-semibold text-apple-gray-900">
-                    Welcome back{user?.full_name ? `, ${user.full_name}` : ''}
+                    Hey{user?.full_name ? `, ${user.full_name}` : ''}
                   </h1>
                   <p className="text-apple-gray-500">
                     {faceRegistered ? 'Your face is registered' : 'Complete your profile by registering your face'}
@@ -444,9 +471,21 @@ export const Dashboard = () => {
               
               <p className="text-apple-gray-600 mb-6 border-l-4 border-apple-blue-500 pl-4 py-2 bg-apple-blue-50 rounded-r-apple">
                 {faceRegistered 
-                  ? "Your face has been registered. You can now use the facial recognition feature for quick authentication."
+                  ? "Your face has been registered. You can now use the facial recognition feature to get your images!"
                   : "Get started by registering your face to enable quick authentication and find your photos at events."}
               </p>
+
+              {/* Summary Counts */}
+              <div className="mt-6 grid grid-cols-2 gap-4 border-t border-apple-gray-200 pt-6">
+                <div className="text-center bg-apple-gray-50 p-4 rounded-apple border border-apple-gray-100">
+                  <p className="text-2xl font-semibold text-apple-blue-600">{uploadedCount}</p>
+                  <p className="text-xs text-apple-gray-500 mt-1">Photos Uploaded</p>
+                </div>
+                <div className="text-center bg-apple-gray-50 p-4 rounded-apple border border-apple-gray-100">
+                  <p className="text-2xl font-semibold text-apple-green-600">{matchedCount}</p>
+                  <p className="text-xs text-apple-gray-500 mt-1">Photos Matched</p>
+                </div>
+              </div>
 
               {renderFaceImageWithAttributes()}
               

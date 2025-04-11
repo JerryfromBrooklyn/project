@@ -164,7 +164,7 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
               !imageLoaded && "opacity-0"
             )}>
               <img 
-                src={safePhoto.url} 
+                src={encodeURI(safePhoto.url || '')}
                 alt={safePhoto.title} 
                 className="max-w-full max-h-full object-contain"
                 onLoad={handleImageLoad}

@@ -11,7 +11,8 @@ The Shmong face matching system is a powerful AWS-based facial recognition platf
 * **Face Indexing:** System detects and indexes faces in uploaded photos
 * **Historical Matching:** When users register, the system searches all existing photos for matches
 * **Future Matching:** New photo uploads are automatically matched against registered users
-* **Dashboard View:** Users can see all photos they appear in
+* **Dashboard View:** Users can see all photos they appear in, *as well as a summary count of their uploaded photos and matched photos.*
+* **Photo Manager View:** Users see a count of photos relevant to the current view (uploaded or matched).
 
 ### 1.2 Key Technical Components
 
@@ -78,14 +79,13 @@ This prefix system solves several critical problems:
 #### User Registration & Historical Matching:
 
 1. User registers via frontend with email, password, and face scan
-2. System captures face image and sends to AWS Lambda function
-3. Lambda indexes the face with `user_[userId]` prefix in Rekognition collection
-4. Lambda stores user's face ID in DynamoDB `shmong-face-data` table
+2. System captures face image and sends to AWS Lambda function or directly processes in frontend service
+3. Face is indexed with `user_[userId]` prefix in Rekognition collection
+4. User's face ID is stored in DynamoDB `shmong-face-data` table
 5. System performs immediate historical matching:
-   - Searches Rekognition for all previously indexed faces matching the new user's face
-   - Filters matches to only include faces with `photo_` prefix (actual photos)
+   - Searches Rekognition for faces matching the new user's face (`user_` prefix searching for `photo_` prefix)
    - Updates each matching photo's `matched_users` array to include the new user
-   - Stores match information in `historicalMatches` array for the user
+   - Stores match information in `historicalMatches` array for the user (in `shmong-face-data`)
 
 #### Photo Upload & Future Matching:
 
@@ -95,10 +95,10 @@ This prefix system solves several critical problems:
 4. AWS Rekognition detects faces in the photo
 5. Each detected face is indexed with `photo_[photoId]` prefix
 6. System performs immediate matching:
-   - For each detected face, searches Rekognition for matching registered faces
-   - Filters matches to only include faces with `user_` prefix (user identities)
-   - Updates the photo's `matched_users` array with matching users
-   - Matched users will see this photo in their "My Photos" view
+   - For each detected face (`photo_` prefix), searches Rekognition (`MaxFaces: 1000`, Threshold: 99%) for matching faces
+   - Filters search results to find faces with `user_` prefix
+   - Updates the *new photo's* `matched_users` array with the `userId` of each valid match
+7. *Matched users will see this photo in their "My Photos" view (which calls `awsPhotoService.fetchPhotos`).*
 
 #### Bidirectional Matching Updates:
 
@@ -823,6 +823,8 @@ compareMatchedUsers('photoId1', 'photoId2');
 ## 8. Conclusion
 
 The Shmong Face Matching System provides a robust and scalable architecture for facial recognition and matching. By following the setup instructions and understanding the core matching principles outlined in this document, developers can deploy this system on a new AWS account and extend its functionality as needed.
+
+*The system now displays photo counts on the Dashboard and relevant manager views.*
 
 Remember that the key to successful face matching is the prefix system (`user_` and `photo_`) and proper handling of the `matched_users` arrays in the DynamoDB photos table.
 
