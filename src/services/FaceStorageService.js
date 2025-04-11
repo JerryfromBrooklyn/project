@@ -447,7 +447,7 @@ export const getFaceDataForUser = async (userId) => {
     return null;
   }
   
-  console.log('[FaceStorage] Fetching face data for user (using docClient & BASE TABLE query):', userId);
+  console.log(`🔍🔍🔍 [FaceStorage] Fetching face data for user: ${userId}`);
   
   try {
     const { docClient } = await getAWSClients(); // Use docClient
@@ -469,7 +469,13 @@ export const getFaceDataForUser = async (userId) => {
     
     if (response.Items && response.Items.length > 0) {
         // Log all results for debugging (Items are plain JS objects now)
-        console.log(`[FaceStorage] Found ${response.Items.length} face records for user ${userId} in base table.`);
+        console.log(`✅ [FaceStorage] Found ${response.Items.length} face records for user ${userId} in base table.`);
+        
+        // Log keys of first item to understand schema
+        console.log(`🔑 [FaceStorage] Face data record keys:`, Object.keys(response.Items[0]));
+        console.log(`🔑 [FaceStorage] User ID: ${userId}`);
+        console.log(`🔑 [FaceStorage] Image Path:`, response.Items[0].imagePath);
+        console.log(`🔑 [FaceStorage] Has imagePath:`, !!response.Items[0].imagePath);
         
         // MANUAL SORTING: Sort by createdAt timestamp descending (newest first)
         const sortedItems = response.Items.sort((a, b) => {
@@ -485,7 +491,7 @@ export const getFaceDataForUser = async (userId) => {
         
         // Otherwise, use the most recent record (which is now sortedItems[0])
         const faceData = activeRecord || sortedItems[0];
-        console.log('[FaceStorage] Selected face data (plain JS object):', faceData);
+        console.log('🟢 [FaceStorage] Selected face data (record structure):', JSON.stringify(faceData, null, 2));
 
         // Format and return the face data (access properties directly)
         let attributes = null;
@@ -505,11 +511,11 @@ export const getFaceDataForUser = async (userId) => {
             createdAt: faceData.createdAt || faceData.created_at
         };
     } else {
-        console.log('[FaceStorage] No face data found for user:', userId);
+        console.log('⚠️ [FaceStorage] No face data found for user:', userId);
         return null;
     }
   } catch (error) {
-    console.error('[FaceStorage] Error fetching face data from DynamoDB:', error);
+    console.error('❌ [FaceStorage] Error fetching face data from DynamoDB:', error);
     return null;
   }
 };

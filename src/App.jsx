@@ -1,15 +1,15 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './auth/AuthContext';
-import Login from './auth/Login';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Login from './pages/Login';
 import SignUp from './auth/SignUp';
 import VerifyEmail from './auth/VerifyEmail';
 import SimpleApp from './SimpleApp';
-import Dashboard from './components/Dashboard';
+import Dashboard from './pages/Dashboard';
 import FaceRegistration from './components/FaceRegistration';
-import MyPhotos from './components/MyPhotos';
+import MyPhotos from './pages/MyPhotos';
 import PhotoUploader from './components/PhotoUploader';
-import PrivateRoute from './components/PrivateRoute';
+import Notifications from './pages/Notifications';
 import BuildInfoBanner from './components/BuildInfoBanner';
 
 // AWS Configuration for Rekognition
@@ -51,10 +51,10 @@ const App = () => {
   return (
     <>
       <BuildInfoBanner />
-      <Router>
-        {console.log('[APP] Router rendered')}
-        <AuthProvider>
-          {console.log('[APP] AuthProvider rendered')}
+      <AuthProvider>
+        {console.log('[APP] AuthProvider rendered')}
+        <Router>
+          {console.log('[APP] Router rendered')}
           <div className="pt-6"> {/* Small padding to accommodate the thin banner */}
             <Routes>
               {console.log('[APP] Setting up routes')}
@@ -70,15 +70,33 @@ const App = () => {
               <Route path="/register-face" element={<PrivateRoute><FaceRegistration /></PrivateRoute>} />
               <Route path="/my-photos" element={<PrivateRoute><MyPhotos /></PrivateRoute>} />
               <Route path="/upload" element={<PrivateRoute><PhotoUploader /></PrivateRoute>} />
+              <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
               
               {/* Redirect all other routes to home */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
-        </AuthProvider>
-      </Router>
+        </Router>
+      </AuthProvider>
     </>
   );
+};
+
+// Protected route wrapper
+const PrivateRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return <div className="flex h-screen items-center justify-center">
+      <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+    </div>;
+  }
+  
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+  
+  return children;
 };
 
 export default App; 

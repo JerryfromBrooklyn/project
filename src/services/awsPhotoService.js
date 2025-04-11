@@ -161,6 +161,7 @@ export const awsPhotoService = {
                                   console.log(`        Match #${idx+1}: Face ID: ${match.Face.FaceId}, External ID: ${match.Face.ExternalImageId}, Similarity: ${match.Similarity.toFixed(2)}%`);
                                 });
                                 
+                                // Method 1: Check if user's registered faceId is directly in the matches
                                 for (const match of searchResponse.FaceMatches) {
                                     const matchedExternalId = match.Face.ExternalImageId;
                                     const matchedFaceId = match.Face.FaceId;
@@ -172,9 +173,9 @@ export const awsPhotoService = {
                                         continue;
                                     }
 
-                                    // We're looking for a match with the user's registered face ID, not the ExternalImageId
+                                    // Method 1: Check for direct face ID match (rarely works because of how Rekognition works)
                                     if (matchedFaceId === registeredFaceId) {
-                                        console.log(`      ✅ Uploader face match found! Similarity: ${similarity.toFixed(2)}%`);
+                                        console.log(`      ✅ Exact uploader face match found! Similarity: ${similarity.toFixed(2)}%`);
                                         
                                         // Skip suspiciously perfect matches 
                                         if (similarity === 100) {
@@ -189,6 +190,33 @@ export const awsPhotoService = {
                                             photoMetadata.matched_users.push({
                                                 userId: userId,
                                                 faceId: registeredFaceId,
+                                                similarity: parseFloat(similarity.toFixed(4)), // Store with 4 decimal places
+                                                matchedAt: new Date().toISOString()
+                                            });
+                                            uploaderFound = true;
+                                        } else {
+                                            console.log(`      ⚠️ Match below confidence threshold (${similarity.toFixed(2)}%)`);
+                                        }
+                                        break;
+                                    }
+                                    
+                                    // Method 2: Check for user ID in external image ID (more reliable)
+                                    if (matchedExternalId && matchedExternalId === `user_${userId}`) {
+                                        console.log(`      ✅ Uploader match found by ExternalImageId! Similarity: ${similarity.toFixed(2)}%`);
+                                        
+                                        // Skip suspiciously perfect matches 
+                                        if (similarity === 100) {
+                                            console.log(`      ⚠️ Skipping suspicious perfect 100% match with uploader by ExternalImageId`);
+                                            continue;
+                                        }
+                                        
+                                        // More permissive threshold for user recognition (70%)
+                                        if (similarity >= 70) {
+                                            // Add the uploader to matched_users
+                                            console.log(`         -> Adding Uploader (${userId}) to matched_users list via ExternalImageId.`);
+                                            photoMetadata.matched_users.push({
+                                                userId: userId,
+                                                faceId: matchedFaceId, // Use the matched face ID
                                                 similarity: parseFloat(similarity.toFixed(4)), // Store with 4 decimal places
                                                 matchedAt: new Date().toISOString()
                                             });
@@ -253,13 +281,19 @@ export const awsPhotoService = {
                                     
                                     // Skip matches with user registration faces (they have user_ prefix)
                                     if (matchedExternalId && matchedExternalId.startsWith('user_')) {
-                                        console.log(`      ⚠️ Skipping match with user registration face: ${matchedExternalId}`);
-                                        continue;
+                                        // Only skip the uploading user's registration face
+                                        const userIdFromExternalId = matchedExternalId.substring(5); // Remove 'user_' prefix
+                                        if (userIdFromExternalId === userId) {
+                                            console.log(`      ⚠️ Skipping match with uploader's registration face: ${matchedExternalId}`);
+                                            continue;
+                                        }
+                                        // Allow matches with other users' registration faces
+                                        console.log(`      ✅ Allowing match with other user's registration face: ${matchedExternalId}`);
                                     }
                                     
                                     // Reject suspicious 100% matches as these are likely duplicates or errors
-                                    if (similarity === 100) {
-                                        console.log(`      ⚠️ Rejecting suspicious perfect 100% match for ID: ${matchedExternalId}`);
+                                    if (similarity >= 99.999) { // Only reject if it's absolutely perfect
+                                        console.log(`      ⚠️ Rejecting suspicious perfect match for ID: ${matchedExternalId} (${similarity}%)`);
                                         continue;
                                     }
                                     

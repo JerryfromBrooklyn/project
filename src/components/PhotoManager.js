@@ -5,7 +5,7 @@ import { PhotoUploader } from './PhotoUploader';
 import { PhotoGrid } from './PhotoGrid';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, RefreshCw, Filter, ChevronDown, Calendar, MapPin, Tag, Clock, Search } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Filter, ChevronDown, Calendar, MapPin, Tag, Clock, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
 import { awsPhotoService } from '../services/awsPhotoService';
@@ -15,6 +15,8 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
     const [error, setError] = useState(null);
     const [showFilters, setShowFilters] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const photosPerPage = 48; // 12 rows of 4 images
     const [filters, setFilters] = useState({
         dateRange: {
             start: '',
@@ -186,7 +188,48 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
                                                                 }), className: "ios-input", "aria-label": "Start time", title: "Filter start time" }), _jsx("input", { type: "time", value: filters.timeRange.end, onChange: (e) => setFilters({
                                                                     ...filters,
                                                                     timeRange: { ...filters.timeRange, end: e.target.value }
-                                                                }), className: "ios-input", "aria-label": "End time", title: "Filter end time" })] })] })] }), _jsx("div", { className: "flex justify-end mt-4", children: _jsx("button", { onClick: clearFilters, className: "ios-button-secondary", children: "Clear Filters" }) })] }) })) })] }), _jsx(motion.div, { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, children: photos.length > 0 ? (_jsx(PhotoGrid, { photos: photos, onDelete: mode === 'upload' ? handlePhotoDelete : undefined, onShare: handleShare })) : (_jsx("div", { className: "text-center py-12 bg-apple-gray-50 rounded-apple-xl border-2 border-dashed border-apple-gray-200", children: _jsx("p", { className: "text-apple-gray-500", children: mode === 'upload'
+                                                                }), className: "ios-input", "aria-label": "End time", title: "Filter end time" })] })] })] }), _jsx("div", { className: "flex justify-end mt-4", children: _jsx("button", { onClick: clearFilters, className: "ios-button-secondary", children: "Clear Filters" }) })] }) })) })] }), _jsx(motion.div, { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, children: photos.length > 0 ? (
+        _jsxs("div", { children: [
+            _jsx(PhotoGrid, { 
+                photos: photos.slice((currentPage - 1) * photosPerPage, currentPage * photosPerPage), 
+                onDelete: mode === 'upload' ? handlePhotoDelete : undefined, 
+                onShare: handleShare 
+            }),
+            // Pagination controls
+            photos.length > photosPerPage && (
+                _jsx("div", { className: "mt-8 flex justify-center", children: 
+                    _jsxs("nav", { className: "flex items-center", children: [
+                        _jsx("button", { 
+                            onClick: () => setCurrentPage(prev => Math.max(prev - 1, 1)),
+                            disabled: currentPage === 1,
+                            className: "p-2 mr-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed",
+                            children: _jsx(ChevronLeft, { size: 18 })
+                        }),
+                        _jsx("div", { className: "flex space-x-1", children:
+                            [...Array(Math.ceil(photos.length / photosPerPage))].map((_, i) => (
+                                _jsx("button", {
+                                    onClick: () => setCurrentPage(i + 1),
+                                    className: `px-3 py-1 rounded-md ${
+                                        currentPage === i + 1
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-gray-100 hover:bg-gray-200'
+                                    }`,
+                                    children: i + 1
+                                }, i)
+                            ))
+                        }),
+                        _jsx("button", { 
+                            onClick: () => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(photos.length / photosPerPage))),
+                            disabled: currentPage === Math.ceil(photos.length / photosPerPage),
+                            className: "p-2 ml-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed",
+                            children: _jsx(ChevronRight, { size: 18 })
+                        })
+                    ]})
+                })
+            )
+        ]})
+    ) : (
+        _jsx("div", { className: "text-center py-12 bg-apple-gray-50 rounded-apple-xl border-2 border-dashed border-apple-gray-200", children: _jsx("p", { className: "text-apple-gray-500", children: mode === 'upload'
                             ? "No photos uploaded yet"
                             : "No photos found with your face" }) })) })] }));
 };

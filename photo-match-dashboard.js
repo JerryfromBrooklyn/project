@@ -156,3 +156,16 @@ const PhotoMatchStats = ({ userId, className = '' }) => {
 };
 
 export default PhotoMatchStats; 
+                Updated: {new Date(stats.timestamp).toLocaleTimeString()}
+              </div>
+            )}
+          </>
+        ) : (
+          <p>No match data available</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default PhotoMatchStats; 

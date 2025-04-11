@@ -118,12 +118,6 @@ window.runFaceMatching = async () => {
   return await BackgroundJobService.runOneTimeFaceMatchingJob();
 };
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)
-
 // Example: Call only if it exists
 if (typeof window.diagnoseBannerIssues === 'function') {
   console.log('Diagnosing banner issues...');
@@ -131,3 +125,9 @@ if (typeof window.diagnoseBannerIssues === 'function') {
 } else {
   console.log('diagnoseBannerIssues function not found on window.');
 }
+
+ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)

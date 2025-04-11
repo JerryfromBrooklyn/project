@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test-lambda-functions.js"
+    "test": "node test-lambda-functions.js",
+    "deploy": "npm run build && aws s3 sync dist/ s3://shmong",
+    "deploy:win": "npm run build && aws s3 sync dist/ s3://shmong"
   },
   "author": "",
   "license": "ISC",

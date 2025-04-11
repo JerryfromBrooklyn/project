@@ -1,217 +1,38 @@
 import { RekognitionClient, IndexFacesCommand, SearchFacesCommand } from "@aws-sdk/client-rekognition";
-import { ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { ScanCommand, UpdateCommand, QueryCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, PHOTOS_TABLE, rekognitionClient as globalRekognitionClient } from '../lib/awsClient';
 import { getFaceDataForUser } from './FaceStorageService';
+
 // --- Configuration ---
 // Best practice: Load these from environment variables or a config service
-const AWS_REGION = process.env.AWS_REGION || "us-east-1"; // Replace with your desired AWS region
-const REKOGNITION_COLLECTION_ID = process.env.REKOGNITION_COLLECTION_ID || "shmong-faces"; // Replace with your Rekognition Collection ID
+const AWS_REGION = process.env.AWS_REGION || "us-east-1"; 
+const REKOGNITION_COLLECTION_ID = process.env.REKOGNITION_COLLECTION_ID || "shmong-faces"; 
 const FACE_MATCH_THRESHOLD = 99; // Confidence threshold for matching faces
+
 // --- AWS SDK Client Initialization ---
 let rekognitionClient;
+
 /**
  * Initializes and returns the Rekognition client.
  * Uses the global client from awsClient.js if available.
  */
 const initializeRekognitionClient = () => {
-    if (!rekognitionClient) {
-        console.log(`Initializing Rekognition client for region: ${AWS_REGION}`);
-        // Try to use the global client first
-        if (globalRekognitionClient) {
-            console.log('Using global Rekognition client');
-            rekognitionClient = globalRekognitionClient;
-        } else {
-            // Fallback to creating a new client with default config
-            console.log('Creating new Rekognition client');
-            rekognitionClient = new RekognitionClient({
-                region: AWS_REGION
-            });
-        }
+  if (!rekognitionClient) {
+    console.log(`Initializing Rekognition client for region: ${AWS_REGION}`);
+    // Try to use the global client first
+    if (globalRekognitionClient) {
+      console.log('Using global Rekognition client');
+      rekognitionClient = globalRekognitionClient;
+    } else {
+      // Fallback to creating a new client with default config
+      console.log('Creating new Rekognition client');
+      rekognitionClient = new RekognitionClient({
+        region: AWS_REGION
+      });
     }
-    return rekognitionClient;
+  }
+  return rekognitionClient;
 };
-// --- Service Functions ---
-/**
- * Indexes the primary face from user registration (e.g., webcam capture)
- * into the Rekognition collection.
- * @param imageBytes - The image data as a Uint8Array or Buffer.
- * @param userId - The unique ID of the user registering.
- * @returns The canonical FaceId assigned by Rekognition, or null on failure.
- */
-export const indexFaceForRegistration = async (imageBytes, userId) => {
-    const client = initializeRekognitionClient();
-    const command = new IndexFacesCommand({
-        CollectionId: REKOGNITION_COLLECTION_ID,
-        Image: { Bytes: imageBytes },
-        ExternalImageId: `user-${userId}-profile`, // Example ExternalImageId
-        MaxFaces: 1, // We only want to index the single best face for the user's canonical record
-        QualityFilter: "AUTO", // Use Rekognition's default quality filtering
-        DetectionAttributes: ["DEFAULT"],
-    });
-    try {
-        console.log(`Indexing face for user: ${userId}`);
-        const response = await client.send(command);
-        if (response.FaceRecords && response.FaceRecords.length > 0 && response.FaceRecords[0].Face?.FaceId) {
-            const faceId = response.FaceRecords[0].Face.FaceId;
-            console.log(`Successfully indexed face for user ${userId}. Canonical FaceId: ${faceId}`);
-            return faceId;
-        }
-        else {
-            console.warn(`No face record found in IndexFaces response for user ${userId}. Unindexed faces:`, response.UnindexedFaces);
-            return null;
-        }
-    }
-    catch (error) {
-        console.error(`Error indexing face for user ${userId}:`, error);
-        // Consider more specific error handling based on AWS error types
-        return null;
-    }
-};
-/**
- * Searches the collection for faces matching the user's canonical FaceId.
- * Used for historical matching right after registration.
- * @param faceId - The user's canonical FaceId obtained from indexFaceForRegistration.
- * @returns An array of matching anonymous FaceIds from the collection, or null on failure.
- */
-export const searchFacesByFaceId = async (faceId) => {
-    const client = initializeRekognitionClient();
-    const command = new SearchFacesCommand({
-        CollectionId: REKOGNITION_COLLECTION_ID,
-        FaceId: faceId,
-        FaceMatchThreshold: FACE_MATCH_THRESHOLD,
-        MaxFaces: 1000, // Adjust as needed, limits the number of matches returned *per call*
-    });
-    try {
-        console.log(`Searching for matches for FaceId: ${faceId}`);
-        const response = await client.send(command);
-        if (response.FaceMatches && response.FaceMatches.length > 0) {
-            const matchedFaceIds = response.FaceMatches
-                .filter(match => match.Face?.FaceId) // Ensure FaceId exists
-                .map(match => match.Face.FaceId); // Extract the IDs
-            console.log(`Found ${matchedFaceIds.length} matches for FaceId ${faceId}`);
-            return matchedFaceIds;
-        }
-        else {
-            console.log(`No matches found for FaceId ${faceId}`);
-            return []; // Return empty array if no matches
-        }
-    }
-    catch (error) {
-        console.error(`Error searching faces for FaceId ${faceId}:`, error);
-        return null;
-    }
-};
-/**
- * Processes a newly uploaded photo: detects faces, indexes them anonymously,
- * stores metadata (requires backend DB logic), and attempts real-time matching.
- * @param photoId - The unique ID assigned to the photo in your database.
- * @param imageBytes - The image data as a Uint8Array or Buffer.
- * @returns {Promise<void>}
- */
-export const processUploadedPhotoForIndexingAndMatching = async (photoId, imageBytes) => {
-    const client = initializeRekognitionClient();
-    // --- 1. Detect Faces (Optional but Recommended for Quality Check) ---
-    // You might want to detect first to check quality before indexing.
-    // For simplicity here, we'll combine detection implicitly within IndexFaces below,
-    // but a separate DetectFaces call allows pre-filtering.
-    // const detectCommand = new DetectFacesCommand({ ... });
-    // const detectedFaces = await client.send(detectCommand);
-    // Filter detectedFaces based on quality, size etc. before proceeding...
-    // --- 2. Index Detected Faces Anonymously ---
-    const indexCommand = new IndexFacesCommand({
-        CollectionId: REKOGNITION_COLLECTION_ID,
-        Image: { Bytes: imageBytes },
-        ExternalImageId: `photo-${photoId}`, // Link face records back to the photo
-        MaxFaces: 100, // Index up to 100 largest faces found in the photo
-        QualityFilter: "AUTO",
-        DetectionAttributes: ["DEFAULT"], // Or "ALL" if you need more attributes like landmarks, emotions
-    });
-    let indexedFaces = []; // Store successfully indexed faces for searching
-    try {
-        console.log(`Indexing faces for photo: ${photoId}`);
-        const indexResponse = await client.send(indexCommand);
-        if (indexResponse.FaceRecords && indexResponse.FaceRecords.length > 0) {
-            indexedFaces = indexResponse.FaceRecords
-                .filter(record => record.Face?.FaceId)
-                .map(record => ({
-                faceId: record.Face.FaceId,
-                boundingBox: record.Face.BoundingBox // Store bounding box too
-            }));
-            console.log(`Successfully indexed ${indexedFaces.length} faces for photo ${photoId}.`);
-            // --- 3. Store Anonymous Face Data (Backend Logic Needed) ---
-            // TODO: Implement database logic here
-            // For each face in indexedFaces:
-            //  - Save the anonymous faceId (indexedFaces[i].faceId)
-            //  - Save the associated photoId
-            //  - Save the boundingBox (indexedFaces[i].boundingBox)
-            //  - Initially, set the associated userId to NULL
-            // Example placeholder: await saveDetectedFaceToDB(photoId, indexedFaces[i].faceId, indexedFaces[i].boundingBox);
-            console.log(`Placeholder: Would now save ${indexedFaces.length} detected faces to DB for photo ${photoId}`);
-        }
-        else {
-            console.log(`No faces were indexed for photo ${photoId}. Unindexed:`, indexResponse.UnindexedFaces);
-            return; // Nothing more to do if no faces were indexed
-        }
-        if (indexResponse.UnindexedFaces && indexResponse.UnindexedFaces.length > 0) {
-            console.log(`Photo ${photoId} had ${indexResponse.UnindexedFaces.length} faces not indexed due to quality/size/etc.`);
-            // You might want to log details about why faces were unindexed
-        }
-    }
-    catch (error) {
-        console.error(`Error indexing faces for photo ${photoId}:`, error);
-        return; // Stop processing this photo if indexing fails
-    }
-    // --- 4. Search for Matches for Each Newly Indexed Face (Real-time Matching) ---
-    if (indexedFaces.length > 0) {
-        console.log(`Performing real-time search for ${indexedFaces.length} newly indexed faces from photo ${photoId}...`);
-        for (const indexedFace of indexedFaces) {
-            const searchCommand = new SearchFacesCommand({
-                CollectionId: REKOGNITION_COLLECTION_ID,
-                FaceId: indexedFace.faceId, // Search using the *anonymous* ID just indexed
-                FaceMatchThreshold: FACE_MATCH_THRESHOLD,
-                MaxFaces: 5, // Usually expect only 0 or 1 match against registered users' canonical faces
-            });
-            try {
-                const searchResponse = await client.send(searchCommand);
-                if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
-                    // We found potential matches in the collection for this anonymous face
-                    for (const match of searchResponse.FaceMatches) {
-                        if (match.Face?.FaceId && match.Similarity) {
-                            const matchedCanonicalFaceId = match.Face.FaceId;
-                            const similarity = match.Similarity;
-                            console.log(`Real-time match found for anonymous face ${indexedFace.faceId} (Photo: ${photoId})! Matched Canonical FaceId: ${matchedCanonicalFaceId} with similarity ${similarity}%`);
-                            // --- 5. Link to User (Backend Logic Needed) ---
-                            // TODO: Implement database logic here
-                            //  - Look up which userId corresponds to the matchedCanonicalFaceId in your Users table
-                            //  - If found, update the specific DetectedFaces record (for photoId and indexedFace.faceId)
-                            //    to set its userId field.
-                            // Example placeholder: await linkDetectedFaceToUser(indexedFace.faceId, matchedCanonicalFaceId);
-                            console.log(`Placeholder: Would now link anonymous face ${indexedFace.faceId} to user via canonical ID ${matchedCanonicalFaceId} in DB.`);
-                        }
-                    }
-                }
-                // else { console.log(`No registered user match found for anonymous face ${indexedFace.faceId}`); }
-            }
-            catch (searchError) {
-                console.error(`Error searching for matches for anonymous face ${indexedFace.faceId} (Photo: ${photoId}):`, searchError);
-                // Continue processing other faces even if one search fails
-            }
-        }
-        console.log(`Finished real-time search for photo ${photoId}.`);
-    }
-};
-// --- Helper Functions (Example) ---
-// TODO: Implement these functions in your backend data access layer
-// async function saveDetectedFaceToDB(photoId: string, anonymousFaceId: string, boundingBox: any): Promise<void> {
-//   console.log(`DB: Saving detected face ${anonymousFaceId} for photo ${photoId}`);
-//   // ... database insertion logic ...
-// }
-// async function linkDetectedFaceToUser(anonymousFaceId: string, matchedCanonicalFaceId: string): Promise<void> {
-//   console.log(`DB: Linking anonymous face ${anonymousFaceId} to user with canonical face ${matchedCanonicalFaceId}`);
-//   // 1. Find userId associated with matchedCanonicalFaceId in Users table
-//   // 2. Update DetectedFaces table SET userId = foundUserId WHERE anonymousRekognitionFaceId = anonymousFaceId
-//   // ... database update logic ...
-// }
 
 /**
  * Updates a user's matches by directly calling Rekognition's searchFaces API
@@ -229,254 +50,238 @@ export const updateUserMatchesWithRekognition = async (userId) => {
     const faceData = await getFaceDataForUser(userId);
     
     if (!faceData || !faceData.faceId) {
-      console.log(`❌ [FaceMatchingService] No face data found for user ${userId}`);
-      return { success: false, updatedCount: 0 };
+      console.error(`❌ [FaceMatchingService] No face data or faceId found for user ${userId}`);
+      return { success: false, error: "No face data found for user" };
     }
     
-    const userFaceId = faceData.faceId;
-    console.log(`✅ [FaceMatchingService] Found user's face ID: ${userFaceId}`);
+    console.log(`✅ [FaceMatchingService] Found faceId for user ${userId}: ${faceData.faceId}`);
     
-    // 2. Call Rekognition SearchFaces API directly
-    const client = initializeRekognitionClient();
-    const searchCommand = new SearchFacesCommand({
-      CollectionId: REKOGNITION_COLLECTION_ID,
-      FaceId: userFaceId,
-      FaceMatchThreshold: 80.0, // Lower threshold to catch more potential matches
-      MaxFaces: 1000  // Get as many matches as possible
-    });
+    // 2. Call Rekognition to get matches
+    const matches = await searchFacesByFaceId(faceData.faceId);
     
-    console.log(`🔍 [FaceMatchingService] Searching for matches in Rekognition...`);
-    const searchResponse = await client.send(searchCommand);
-    
-    if (!searchResponse.FaceMatches || searchResponse.FaceMatches.length === 0) {
-      console.log(`❌ [FaceMatchingService] No matches found for user's face in Rekognition!`);
-      return { success: false, updatedCount: 0 };
+    // Note that searchFacesByFaceId now always returns an array (empty if there's an error)
+    if (!matches.length) {
+      console.log(`ℹ️ [FaceMatchingService] No matches found for user ${userId} with faceId ${faceData.faceId}`);
+      return { success: true, updatedCount: 0 };
     }
     
-    console.log(`✅ [FaceMatchingService] Found ${searchResponse.FaceMatches.length} potential matches in Rekognition`);
+    console.log(`✅ [FaceMatchingService] Found ${matches.length} potential matches for user ${userId}`);
     
-    // 3. Extract photo matches (filters out user_ prefixes)
-    const photoMatches = [];
-    const timestamp = new Date().toISOString();
+    let updatedCount = 0;
+    const matchedPhotoIds = [];
+    const matchedPhotos = [];
     
-    for (const match of searchResponse.FaceMatches) {
-      if (!match.Face || !match.Face.ExternalImageId) continue;
+    // 3. Process each match
+    for (const match of matches) {
+      // Extract photo ID from ExternalImageId
+      console.log(`[FaceMatchingService] Processing match with ExternalImageId: ${match.Face?.ExternalImageId}`);
       
-      const externalId = match.Face.ExternalImageId;
-      const similarity = match.Similarity;
+      // The ExternalImageId should be the photo ID or contain it
+      const photoId = match.Face?.ExternalImageId;
       
-      // Improved ExternalImageId handling - extract the correct photoId format
-      // Handle various formats: "photo-{id}", "photo_{id}", "user-{id}", "user_{id}", or just the raw id
-      let photoId = externalId;
-      
-      // Handle user IDs - we want to skip these but with proper prefix detection
-      if (externalId.startsWith('user-') || externalId.startsWith('user_')) {
+      if (!photoId) {
+        console.log(`⚠️ [FaceMatchingService] No photoId extracted from match: ${JSON.stringify(match)}`);
         continue;
       }
       
-      // Extract photo ID from different formats
-      if (externalId.startsWith('photo-')) {
-        photoId = externalId.substring(6); // Remove "photo-" prefix
-      } else if (externalId.startsWith('photo_')) {
-        photoId = externalId.substring(6); // Remove "photo_" prefix
-      }
-      
-      console.log(`🔍 [FaceMatchingService] Processing match with ExternalImageId=${externalId}, extracted photoId=${photoId}`);
-      
-      photoMatches.push({
-        photoId,
-        externalId, // Keep the original ID for debugging
-        similarity: parseFloat(similarity.toFixed(2))
-      });
-    }
-    
-    console.log(`✅ [FaceMatchingService] Filtered to ${photoMatches.length} valid photo matches`);
-    
-    // 4. Query the photos table to get full photo data
-    if (photoMatches.length === 0) {
-      console.log(`❌ [FaceMatchingService] No valid photo matches found`);
-      return { success: false, updatedCount: 0 };
-    }
-    
-    const matchedPhotos = [];
-    const updatedPhotos = [];
-    
-    // 5. Process each matched photo - update matched_users and collect data for historicalMatches
-    for (const match of photoMatches) {
       try {
-        // Get original externalId for more flexible searching
-        const originalId = match.externalId;
-        const extractedId = match.photoId;
-        
-        // Try multiple search strategies to find the photo in the database
-        let photo = null;
-        
-        // First try direct ID match
-        const directScanCommand = new ScanCommand({
+        // Get the photo from DynamoDB
+        const getParams = {
           TableName: PHOTOS_TABLE,
-          FilterExpression: "id = :photoId",
-          ExpressionAttributeValues: {
-            ":photoId": extractedId
-          }
-        });
+          Key: { id: photoId }
+        };
         
-        let scanResult = await docClient.send(directScanCommand);
-        photo = scanResult.Items && scanResult.Items.length > 0 ? scanResult.Items[0] : null;
-        
-        // If not found, try with the original external ID
-        if (!photo && originalId !== extractedId) {
-          const originalScanCommand = new ScanCommand({
-            TableName: PHOTOS_TABLE,
-            FilterExpression: "id = :photoId",
-            ExpressionAttributeValues: {
-              ":photoId": originalId
-            }
-          });
-          
-          scanResult = await docClient.send(originalScanCommand);
-          photo = scanResult.Items && scanResult.Items.length > 0 ? scanResult.Items[0] : null;
-        }
-        
-        // If still not found, try looking in external_id or externalId fields
-        if (!photo) {
-          // Try external_id field
-          const externalIdScanCommand = new ScanCommand({
-            TableName: PHOTOS_TABLE,
-            FilterExpression: "external_id = :externalId OR externalId = :externalId",
-            ExpressionAttributeValues: {
-              ":externalId": originalId
-            }
-          });
-          
-          scanResult = await docClient.send(externalIdScanCommand);
-          photo = scanResult.Items && scanResult.Items.length > 0 ? scanResult.Items[0] : null;
-        }
+        const photoResponse = await docClient.send(new GetCommand(getParams));
+        const photo = photoResponse.Item;
         
         if (!photo) {
-          console.log(`❌ [FaceMatchingService] Photo ${match.photoId} (ExternalId: ${originalId}) not found in database!`);
+          console.log(`⚠️ [FaceMatchingService] Photo ${photoId} not found in database`);
           continue;
         }
         
-        console.log(`✅ [FaceMatchingService] Found photo match in database: ${photo.id}`);
-        
-        // Add to matchedPhotos for historicalMatches update
+        console.log(`✅ [FaceMatchingService] Found photo match in database: ${photoId}`);
+        matchedPhotoIds.push(photoId);
         matchedPhotos.push({
-          id: photo.id,
-          uploadedBy: photo.uploaded_by || photo.user_id,
-          uploadedAt: photo.uploaded_at || photo.created_at || timestamp,
-          url: photo.url || photo.photo_url,
-          thumbnailUrl: photo.thumbnail_url || photo.url,
-          similarity: match.similarity,
-          matchedAt: timestamp
+          id: photoId,
+          url: photo.public_url || photo.url,
+          confidence: match.Similarity,
+          timestamp: new Date().toISOString()
         });
         
-        // Process matched_users array in the photo
-        let matchedUsers = photo.matched_users || [];
+        // Update matched_users array if it doesn't already include this user
+        const matched_users = photo.matched_users || [];
+        const userExists = matched_users.some(user => user.id === userId);
         
-        // Convert to array if it's a string
-        if (typeof matchedUsers === 'string') {
-          try {
-            matchedUsers = JSON.parse(matchedUsers);
-          } catch (e) {
-            console.log(`❌ [FaceMatchingService] Invalid JSON in matched_users for photo ${photo.id}`);
-            matchedUsers = [];
-          }
-        }
-        
-        // Ensure it's an array
-        if (!Array.isArray(matchedUsers)) {
-          matchedUsers = [];
-        }
-        
-        // Skip photos uploaded by the user themselves (they already have access)
-        if (photo.uploaded_by === userId || photo.user_id === userId) {
-          continue;
-        }
-        
-        // Check if user is already in matched_users
-        const userIndex = matchedUsers.findIndex(m => {
-          if (typeof m === 'string') return m === userId;
-          if (m && typeof m === 'object') {
-            return m.userId === userId || m.user_id === userId;
-          }
-          return false;
-        });
-        
-        // If user is not already in matched_users, add them
-        if (userIndex === -1) {
-          // Add user to matched_users
-          matchedUsers.push({
-            userId: userId,
-            faceId: userFaceId,
-            similarity: match.similarity,
-            matchedAt: timestamp
+        if (!userExists) {
+          // Add user to matched_users array
+          matched_users.push({
+            id: userId,
+            timestamp: new Date().toISOString(),
+            confidence: match.Similarity
           });
           
           // Update the photo record
           const updateParams = {
             TableName: PHOTOS_TABLE,
-            Key: { id: photo.id },
-            UpdateExpression: 'SET matched_users = :matchedUsers, updated_at = :updatedAt',
+            Key: { id: photoId },
+            UpdateExpression: 'SET matched_users = :matched_users',
             ExpressionAttributeValues: {
-              ':matchedUsers': matchedUsers,
-              ':updatedAt': timestamp
+              ':matched_users': matched_users
+            }
+          };
+          
+          console.log(`✅ [FaceMatchingService] Added user to matched_users for photo ${photoId}`);
+          await docClient.send(new UpdateCommand(updateParams));
+          updatedCount++;
+        } else {
+          console.log(`ℹ️ [FaceMatchingService] User ${userId} already in matched_users for photo ${photoId}`);
+        }
+      } catch (error) {
+        console.error(`❌ [FaceMatchingService] Error processing photo ${photoId}:`, error);
+      }
+    }
+    
+    // 4. Update the user's historicalMatches in their face data record
+    if (matchedPhotoIds.length > 0) {
+      try {
+        console.log(`[FaceMatchingService] Updating user ${userId} historical matches with ${matchedPhotoIds.length} photos`);
+        
+        // Get current historicalMatches
+        let historicalMatches = faceData?.historicalMatches || [];
+        
+        // Filter out matches that already exist
+        const newMatches = matchedPhotos.filter(newMatch => 
+          !historicalMatches.some(existingMatch => existingMatch.id === newMatch.id)
+        );
+        
+        if (newMatches.length > 0) {
+          // Add new matches
+          historicalMatches = [...historicalMatches, ...newMatches];
+          
+          // IMPORTANT: We need the correct key structure from the user's face data record
+          // Check if the required fields for the database key are present in faceData
+          if (!faceData.imagePath) {
+            console.error(`❌ [FaceMatchingService] Missing imagePath in face data for user ${userId}, cannot update historicalMatches`);
+            return { success: false, updatedCount, error: "Missing imagePath in face data" };
+          }
+          
+          // Build the correct composite key based on the actual table structure
+          const keyObject = { 
+            userId: userId,
+            imagePath: faceData.imagePath  // This is the required RANGE key
+          };
+          
+          console.log(`🔑 [FaceMatchingService] Using key for historicalMatches update:`, keyObject);
+          
+          const updateParams = {
+            TableName: 'shmong-face-data',
+            Key: keyObject,
+            UpdateExpression: 'SET historicalMatches = :historicalMatches',
+            ExpressionAttributeValues: {
+              ':historicalMatches': historicalMatches
             },
             ReturnValues: 'UPDATED_NEW'
           };
           
-          await docClient.send(new UpdateCommand(updateParams));
-          updatedPhotos.push(photo.id);
-          console.log(`✅ [FaceMatchingService] Added user to matched_users for photo ${photo.id} (Similarity: ${match.similarity}%)`);
+          const updateResult = await docClient.send(new UpdateCommand(updateParams));
+          console.log(`✅ [FaceMatchingService] Successfully updated historicalMatches for user ${userId}:`, updateResult);
+          console.log(`✅ [FaceMatchingService] Added ${newMatches.length} new matches to user history`);
+        } else {
+          console.log(`[FaceMatchingService] No new historical matches to add for user ${userId}`);
         }
-      } catch (error) {
-        console.error(`❌ [FaceMatchingService] Error processing photo match:`, error);
+      } catch (historyUpdateError) {
+        console.error(`❌ [FaceMatchingService] Error updating historicalMatches for user ${userId}:`, historyUpdateError);
+        return { success: false, updatedCount, error: historyUpdateError.message };
       }
     }
     
-    // 6. Update the user's historicalMatches
-    console.log(`[FaceMatchingService] Updating user's historicalMatches with ${matchedPhotos.length} photos`);
-    
-    // Get current historicalMatches
-    const currentFaceData = await getFaceDataForUser(userId);
-    let historicalMatches = currentFaceData?.historicalMatches || [];
-    
-    // Filter out matches that already exist
-    const newMatches = matchedPhotos.filter(newMatch => 
-      !historicalMatches.some(existingMatch => existingMatch.id === newMatch.id)
-    );
-    
-    if (newMatches.length > 0) {
-      // Add new matches
-      historicalMatches = [...historicalMatches, ...newMatches];
-      
-      // Update the face data record
-      const updateParams = {
-        TableName: 'shmong-face-data',
-        Key: { userId: userId },
-        UpdateExpression: 'SET historicalMatches = :historicalMatches',
-        ExpressionAttributeValues: {
-          ':historicalMatches': historicalMatches
-        },
-        ReturnValues: 'UPDATED_NEW'
-      };
-      
-      await docClient.send(new UpdateCommand(updateParams));
-      console.log(`✅ [FaceMatchingService] Updated user's historicalMatches, now has ${historicalMatches.length} total matches`);
-    } else {
-      console.log(`⚠️ [FaceMatchingService] No new historical matches to add for user ${userId}`);
+    console.log(`✅ [FaceMatchingService] Direct Rekognition update complete. Updated ${updatedCount} photos.`);
+    return { success: true, updatedCount };
+  } catch (error) {
+    console.error('❌ [FaceMatchingService] Error in direct Rekognition update:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Indexes the primary face from user registration (e.g., webcam capture)
+ * into the Rekognition collection.
+ * @param imageBytes - The image data as a Uint8Array or Buffer.
+ * @param userId - The unique ID of the user registering.
+ * @returns The canonical FaceId assigned by Rekognition, or null on failure.
+ */
+export const indexFaceForRegistration = async (imageBytes, userId) => {
+  const client = initializeRekognitionClient();
+  const command = new IndexFacesCommand({
+    CollectionId: REKOGNITION_COLLECTION_ID,
+    Image: { Bytes: imageBytes },
+    ExternalImageId: `user-${userId}-profile`, // Example ExternalImageId
+    MaxFaces: 1, // We only want to index the single best face for the user's canonical record
+    QualityFilter: "AUTO", // Use Rekognition's default quality filtering
+    DetectionAttributes: ["DEFAULT"],
+  });
+  try {
+    console.log(`Indexing face for user: ${userId}`);
+    const response = await client.send(command);
+    if (response.FaceRecords && response.FaceRecords.length > 0 && response.FaceRecords[0].Face?.FaceId) {
+      const faceId = response.FaceRecords[0].Face.FaceId;
+      console.log(`Successfully indexed face for user ${userId}. Canonical FaceId: ${faceId}`);
+      return faceId;
+    }
+    else {
+      console.warn(`No face record found in IndexFaces response for user ${userId}. Unindexed faces:`, response.UnindexedFaces);
+      return null;
+    }
+  }
+  catch (error) {
+    console.error(`Error indexing face for user ${userId}:`, error);
+    // Consider more specific error handling based on AWS error types
+    return null;
+  }
+};
+
+/**
+ * Searches the collection for faces matching the user's canonical FaceId.
+ * Used for historical matching right after registration.
+ * @param faceId - The user's canonical FaceId obtained from indexFaceForRegistration.
+ * @returns An array of matching FaceMatches from the collection, or empty array on failure.
+ */
+export const searchFacesByFaceId = async (faceId) => {
+  if (!faceId) {
+    console.log('No faceId provided to searchFacesByFaceId');
+    return [];
+  }
+  
+  const client = initializeRekognitionClient();
+  const command = new SearchFacesCommand({
+    CollectionId: REKOGNITION_COLLECTION_ID,
+    FaceId: faceId,
+    FaceMatchThreshold: FACE_MATCH_THRESHOLD,
+    MaxFaces: 1000, // Adjust as needed, limits the number of matches returned *per call*
+  });
+  
+  try {
+    console.log(`Searching for matches for FaceId: ${faceId}`);
+    const response = await client.send(command);
+    if (response.FaceMatches && response.FaceMatches.length > 0) {
+      console.log(`Found ${response.FaceMatches.length} matches for FaceId ${faceId}`);
+      return response.FaceMatches; // Return the full FaceMatches array with Face objects
+    }
+    else {
+      console.log(`No matches found for FaceId ${faceId}`);
+      return []; // Return empty array if no matches
+    }
+  }
+  catch (error) {
+    // Check specifically for "face not found" errors
+    if (error.name === 'InvalidParameterException' && error.message.includes('not found in the collection')) {
+      console.warn(`FaceId ${faceId} no longer exists in the collection. This may be due to face deletion or collection changes.`);
+      // Consider flagging this face ID for cleanup in your database
+      return [];
     }
     
-    console.log(`🎉 [FaceMatchingService] Direct Rekognition update complete! Added user to ${updatedPhotos.length} photos, historical matches: ${historicalMatches.length}`);
-    
-    return { 
-      success: true, 
-      updatedCount: updatedPhotos.length,
-      totalHistoricalMatches: historicalMatches.length 
-    };
-    
-  } catch (error) {
-    console.error(`❌ [FaceMatchingService] Error in direct Rekognition update:`, error);
-    return { success: false, updatedCount: 0, error };
+    console.error(`Error searching faces for FaceId ${faceId}:`, error);
+    return []; // Return empty array instead of null to make error handling easier
   }
 };
 
@@ -621,11 +426,11 @@ const FaceMatchingService = {
               ReturnValues: 'UPDATED_NEW'
             };
             
-            console.log(`[FaceMatchingService] Updating photo ${photo.id} with new matched_users list`);
+            console.log(`✅ [FaceMatchingService] Added user to matched_users for photo ${photo.id}`);
             await docClient.send(new UpdateCommand(updateParams));
             updatedCount++;
-          } catch (updateError) {
-            console.error(`[FaceMatchingService] Error updating photo ${photo.id}:`, updateError);
+          } catch (error) {
+            console.error(`❌ [FaceMatchingService] Error processing photo ${photo.id}:`, error);
           }
         }
       }
@@ -636,8 +441,7 @@ const FaceMatchingService = {
           console.log(`[FaceMatchingService] Updating user ${userId} historical matches with ${matchedPhotoIds.length} photos`);
           
           // Get current historicalMatches
-          const currentFaceData = await getFaceDataForUser(userId);
-          let historicalMatches = currentFaceData?.historicalMatches || [];
+          let historicalMatches = faceData?.historicalMatches || [];
           
           // Filter out matches that already exist
           const newMatches = matchedPhotos.filter(newMatch => 
@@ -648,10 +452,24 @@ const FaceMatchingService = {
             // Add new matches
             historicalMatches = [...historicalMatches, ...newMatches];
             
-            // Update the face data record
+            // IMPORTANT: We need the correct key structure from the user's face data record
+            // Check if the required fields for the database key are present in faceData
+            if (!faceData.imagePath) {
+              console.error(`❌ [FaceMatchingService] Missing imagePath in face data for user ${userId}, cannot update historicalMatches`);
+              return { success: false, updatedCount, error: "Missing imagePath in face data" };
+            }
+            
+            // Build the correct composite key based on the actual table structure
+            const keyObject = { 
+              userId: userId,
+              imagePath: faceData.imagePath  // This is the required RANGE key
+            };
+            
+            console.log(`🔑 [FaceMatchingService] Using key for historicalMatches update:`, keyObject);
+            
             const updateParams = {
               TableName: 'shmong-face-data',
-              Key: { userId: userId },
+              Key: keyObject,
               UpdateExpression: 'SET historicalMatches = :historicalMatches',
               ExpressionAttributeValues: {
                 ':historicalMatches': historicalMatches
@@ -659,21 +477,23 @@ const FaceMatchingService = {
               ReturnValues: 'UPDATED_NEW'
             };
             
-            await docClient.send(new UpdateCommand(updateParams));
-            console.log(`[FaceMatchingService] Updated user ${userId} historicalMatches, added ${newMatches.length} new matches`);
+            const updateResult = await docClient.send(new UpdateCommand(updateParams));
+            console.log(`✅ [FaceMatchingService] Successfully updated historicalMatches for user ${userId}:`, updateResult);
+            console.log(`✅ [FaceMatchingService] Added ${newMatches.length} new matches to user history`);
           } else {
             console.log(`[FaceMatchingService] No new historical matches to add for user ${userId}`);
           }
         } catch (historyUpdateError) {
-          console.error(`[FaceMatchingService] Error updating historicalMatches for user ${userId}:`, historyUpdateError);
+          console.error(`❌ [FaceMatchingService] Error updating historicalMatches for user ${userId}:`, historyUpdateError);
+          return { success: false, updatedCount, error: historyUpdateError.message };
         }
       }
       
-      console.log(`[FaceMatchingService] Bidirectional match update complete. Updated ${updatedCount} photos.`);
-      return { success: true, updated: updatedCount };
+      console.log(`✅ [FaceMatchingService] Direct Rekognition update complete. Updated ${updatedCount} photos.`);
+      return { success: true, updatedCount };
     } catch (error) {
-      console.error('[FaceMatchingService] Error updating bidirectional matches:', error);
-      return { success: false, updated: 0, error };
+      console.error('❌ [FaceMatchingService] Error in direct Rekognition update:', error);
+      return { success: false, error: error.message };
     }
   },
   
@@ -721,19 +541,31 @@ const FaceMatchingService = {
       
       // 2. Update matches for each user using the direct Rekognition method
       const results = [];
+      const errors = [];
+      
       for (const userId of userIds) {
-        console.log(`[FaceMatchingService] Processing matches for user: ${userId}`);
-        const result = await FaceMatchingService.updateUserMatchesWithRekognition(userId);
-        results.push({ userId, ...result });
+        try {
+          console.log(`[FaceMatchingService] Processing matches for user: ${userId}`);
+          const result = await FaceMatchingService.updateUserMatchesWithRekognition(userId);
+          results.push({ userId, ...result });
+        } catch (userError) {
+          console.error(`[FaceMatchingService] Error processing user ${userId}:`, userError);
+          errors.push({ userId, error: userError.message });
+          // Continue with next user instead of breaking the entire process
+        }
       }
       
-      console.log(`[FaceMatchingService] All user matches updated.`, results);
-      return { success: true, results };
+      console.log(`[FaceMatchingService] All user matches updated. Success: ${results.length}, Errors: ${errors.length}`);
+      return { 
+        success: true, 
+        results,
+        errors: errors.length > 0 ? errors : undefined
+      };
     } catch (error) {
       console.error('[FaceMatchingService] Error updating all user matches:', error);
-      return { success: false, results: [], error };
+      return { success: false, results: [], error: error.message };
     }
   }
 };
 
-export default FaceMatchingService; 
+export default FaceMatchingService;

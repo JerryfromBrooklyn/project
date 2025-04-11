@@ -20,7 +20,7 @@ const MyPhotos = () => {
 
   // Add pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const photosPerPage = 20;
+  const photosPerPage = 48; // 12 rows of 4 images
   
   // Get total matches count
   const totalMatchesCount = photos.reduce((total, photo) => {

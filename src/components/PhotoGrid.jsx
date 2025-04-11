@@ -85,3 +85,41 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload }) => {
                             })()}
                             _jsx("div", { className: "absolute inset-0 bg-black/50 rounded-apple-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300", children: _jsxs("div", { className: "absolute bottom-0 inset-x-0 p-4 flex justify-between items-center", children: [_jsxs("div", { className: "flex space-x-2", children: [_jsx("button", { onClick: () => handleDownload(photo), className: "p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300", disabled: loading[photo.id], "aria-label": "Download photo", children: _jsx(Download, { className: "w-5 h-5" }) }), _jsx("button", { onClick: () => setSelectedPhoto(photo), className: "p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300", "aria-label": "View photo details", children: _jsx(Info, { className: "w-5 h-5" }) })] }), onDelete && (_jsx("button", { onClick: () => onDelete(photo.id), className: "p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300", "aria-label": "Delete photo", children: _jsx(Trash2, { className: "w-5 h-5" }) }))] }) })] }, `${photo.id}-${index}`))) }), _jsx(AnimatePresence, { children: selectedPhoto && (_jsx(SimplePhotoInfoModal, { photo: selectedPhoto, onClose: () => setSelectedPhoto(null) })) })] }));
 };
+
+                                    if (Array.isArray(photo.face_ids)) {
+                                        return photo.face_ids.length;
+                                    }
+                                    
+                                    // If it's an object but we can count its keys
+                                    if (typeof photo.faces === 'object') {
+                                        return Object.keys(photo.faces).length;
+                                    }
+                                    
+                                    // Default fallback
+                                    return 0;
+                                };
+                                
+                                // Get the face count
+                                const faceCount = getFaceCount(photo);
+                                
+                                // Get the match count
+                                const matchCount = photo.matched_users && Array.isArray(photo.matched_users) 
+                                    ? photo.matched_users.length 
+                                    : 0;
+                                
+                                // Only render badge if there are faces or matches
+                                return (faceCount > 0 || matchCount > 0) && (
+                                    <div className={cn(
+                                        "absolute top-2 right-2 px-2 py-1 rounded-full text-sm flex items-center gap-1", 
+                                        "bg-apple-blue-500/80 text-white backdrop-blur-sm"
+                                    )}>
+                                        <Users className="w-4 h-4" />
+                                        {matchCount > 0
+                                            ? `${matchCount} ${matchCount === 1 ? "Match" : "Matches"}`
+                                            : `${faceCount} ${faceCount === 1 ? "Face" : "Faces"}`
+                                        }
+                                    </div>
+                                );
+                            })()}
+                            _jsx("div", { className: "absolute inset-0 bg-black/50 rounded-apple-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300", children: _jsxs("div", { className: "absolute bottom-0 inset-x-0 p-4 flex justify-between items-center", children: [_jsxs("div", { className: "flex space-x-2", children: [_jsx("button", { onClick: () => handleDownload(photo), className: "p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300", disabled: loading[photo.id], "aria-label": "Download photo", children: _jsx(Download, { className: "w-5 h-5" }) }), _jsx("button", { onClick: () => setSelectedPhoto(photo), className: "p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300", "aria-label": "View photo details", children: _jsx(Info, { className: "w-5 h-5" }) })] }), onDelete && (_jsx("button", { onClick: () => onDelete(photo.id), className: "p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300", "aria-label": "Delete photo", children: _jsx(Trash2, { className: "w-5 h-5" }) }))] }) })] }, `${photo.id}-${index}`))) }), _jsx(AnimatePresence, { children: selectedPhoto && (_jsx(SimplePhotoInfoModal, { photo: selectedPhoto, onClose: () => setSelectedPhoto(null) })) })] }));
+};
