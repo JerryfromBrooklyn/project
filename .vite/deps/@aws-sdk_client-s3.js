@@ -16,7 +16,7 @@ import {
   getValidateBucketNamePlugin,
   resolveS3Config,
   signatureV4CrtContainer
-} from "./chunk-DAFZ5B7I.js";
+} from "./chunk-XAMNCCZR.js";
 import {
   WaiterState,
   checkExceptions,
@@ -54,13 +54,13 @@ import {
   resolveUserAgentConfig,
   supportsWebCrypto,
   uint32ArrayFrom
-} from "./chunk-THSADROD.js";
-import "./chunk-3TAN77E7.js";
+} from "./chunk-HNCKUWWD.js";
 import {
   __awaiter,
   __generator,
   __values
 } from "./chunk-W2ANHD2T.js";
+import "./chunk-3TAN77E7.js";
 import {
   AwsSdkSigV4ASigner,
   AwsSdkSigV4Signer,
@@ -127,7 +127,7 @@ import {
   toUint8Array,
   toUtf8,
   withBaseException
-} from "./chunk-VSJWH2EA.js";
+} from "./chunk-WLALPDKA.js";
 import {
   __publicField,
   __toESM,

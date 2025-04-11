@@ -215,7 +215,7 @@ export const indexFaceForRegistration = async (imageBytes, userId) => {
   const command = new IndexFacesCommand({
     CollectionId: REKOGNITION_COLLECTION_ID,
     Image: { Bytes: imageBytes },
-    ExternalImageId: `user-${userId}-profile`, // Example ExternalImageId
+    ExternalImageId: `user_${userId}`, // Consistent prefix
     MaxFaces: 1, // We only want to index the single best face for the user's canonical record
     QualityFilter: "AUTO", // Use Rekognition's default quality filtering
     DetectionAttributes: ["DEFAULT"],

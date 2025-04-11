@@ -36,11 +36,11 @@ import {
   resolveRegionConfig,
   resolveRetryConfig,
   resolveUserAgentConfig
-} from "./chunk-THSADROD.js";
+} from "./chunk-HNCKUWWD.js";
+import "./chunk-W2ANHD2T.js";
 import {
   v4_default
 } from "./chunk-3TAN77E7.js";
-import "./chunk-W2ANHD2T.js";
 import {
   AwsSdkSigV4Signer,
   Client,
@@ -89,7 +89,7 @@ import {
   toBase64,
   toUtf8,
   withBaseException
-} from "./chunk-VSJWH2EA.js";
+} from "./chunk-WLALPDKA.js";
 import {
   __publicField,
   __toESM,

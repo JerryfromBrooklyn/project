@@ -64,11 +64,11 @@ window.addEventListener('load', () => {
     }
     
     // Start face matching background job after page load
-    if (import.meta.env.DEV) {
-      console.log('[STARTUP] 🔄 Starting face matching background job (dev mode)...');
-      BackgroundJobService.runOneTimeFaceMatchingJob()
-        .then(result => console.log('[STARTUP] Initial face matching job completed:', result));
-    }
+    // if (import.meta.env.DEV) {
+    //   console.log('[STARTUP] 🔄 Starting face matching background job (dev mode)...');
+    //   BackgroundJobService.runOneTimeFaceMatchingJob()
+    //     .then(result => console.log('[STARTUP] Initial face matching job completed:', result));
+    // }
   }, 2000);
 });
 

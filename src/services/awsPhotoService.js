@@ -89,7 +89,7 @@ export const awsPhotoService = {
             progressCallback(60);
 
             // --- Rekognition Face Indexing & Comparison --- 
-            console.groupCollapsed(`�� [Upload ${uploadId}] Running Rekognition Face Indexing & Comparison...`);
+            console.groupCollapsed(`🔄 [Upload ${uploadId}] Running Rekognition Face Indexing & Comparison...`);
             let detectedFaceId = null; // Store detected face ID
             try {
                 console.log(`   Using global Rekognition Client: ${!!rekognitionClient}`); 
@@ -141,13 +141,10 @@ export const awsPhotoService = {
                             // Use SearchFaces to find matches for the detected face instead of direct comparison
                             const searchParams = {
                                 CollectionId: COLLECTION_ID,
-                                FaceId: detectedFaceId,  // Search with the detected face ID
-                                MaxFaces: 10, 
-                                FaceMatchThreshold: 70.0, // Reduced from 90.0 to allow more potential matches
+                                FaceId: detectedFaceId,
+                                MaxFaces: 1000,
+                                FaceMatchThreshold: 99.0  // Set threshold back to 99
                             };
-                            
-                            console.log(`      Using SearchFaces to find matches for the detected face instead of direct comparison`);
-                            console.log(`      This avoids CORS errors and S3 permission issues`);
                             
                             rekognitionCallCount++;
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
@@ -155,8 +152,7 @@ export const awsPhotoService = {
                             if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
                                 let uploaderFound = false;
                                 
-                                // Log all matches and their similarity scores for debugging
-                                console.log(`      Found ${searchResponse.FaceMatches.length} face matches:`);
+                                console.log(`      Found ${searchResponse.FaceMatches.length} face matches for ${detectedFaceId}:`); 
                                 searchResponse.FaceMatches.forEach((match, idx) => {
                                   console.log(`        Match #${idx+1}: Face ID: ${match.Face.FaceId}, External ID: ${match.Face.ExternalImageId}, Similarity: ${match.Similarity.toFixed(2)}%`);
                                 });
@@ -229,13 +225,13 @@ export const awsPhotoService = {
                                 }
                                 
                                 if (!uploaderFound) {
-                                    console.log(`      ❌ Uploader face not found among matches.`);
+                                    console.log(`      ❌ Uploader face (${registeredFaceId}) not found among matches for ${detectedFaceId}.`); 
                                 }
                             } else {
-                                console.log(`      ❌ No matches found for the detected face.`);
+                                console.log(`      ❌ No matches found for the detected face ${detectedFaceId}.`); 
                             }
                         } catch (compareError) {
-                            console.error(`      ⚠️ Error comparing faces:`, compareError);
+                            console.error(`      ⚠️ Error comparing faces for ${detectedFaceId}:`, compareError); 
                             // Continue with the upload even if face comparison fails
                         }
                     } else {
@@ -245,26 +241,27 @@ export const awsPhotoService = {
 
                 // If faces were detected, check if they match any registered users
                 if (photoMetadata.face_ids && photoMetadata.face_ids.length > 0) {
-                    console.log(`   🔄 Checking if detected faces match any registered users...`);
+                    console.log(`   🔄 Checking if ${photoMetadata.face_ids.length} detected faces match any registered users...`);
                     
                     // Get all registered user face IDs from shmong-face-data table
                     for (const detectedFaceId of photoMetadata.face_ids) {
+                        console.log(`      Processing detected face: ${detectedFaceId}`);
                         try {
                             // Search for this face ID in our face collection
                             const searchParams = {
                                 CollectionId: COLLECTION_ID,
                                 FaceId: detectedFaceId,
-                                MaxFaces: 10,
-                                FaceMatchThreshold: 80.0  // Using 80% threshold for matching against other users
+                                MaxFaces: 1000,
+                                FaceMatchThreshold: 99.0  // Set threshold back to 99
                             };
                             
+                            rekognitionCallCount++; // Count this call too
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
                             
                             if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
-                                console.log(`   ✅ Found ${searchResponse.FaceMatches.length} potential matching users for face ${detectedFaceId}`);
-                                console.log(`   Similarity score breakdown:`);
+                                console.log(`      ✅ Found ${searchResponse.FaceMatches.length} potential matches for face ${detectedFaceId}`);
                                 searchResponse.FaceMatches.forEach((match, idx) => {
-                                  console.log(`      Match #${idx+1}: ID: ${match.Face.ExternalImageId}, Similarity: ${match.Similarity.toFixed(2)}%`);
+                                  console.log(`        Match #${idx+1}: Face ID: ${match.Face.FaceId}, External ID: ${match.Face.ExternalImageId}, Similarity: ${match.Similarity.toFixed(2)}%`);
                                 });
                                 
                                 // Process each match
@@ -291,80 +288,75 @@ export const awsPhotoService = {
                                         console.log(`      ✅ Allowing match with other user's registration face: ${matchedExternalId}`);
                                     }
                                     
-                                    // Reject suspicious 100% matches as these are likely duplicates or errors
-                                    if (similarity >= 99.999) { // Only reject if it's absolutely perfect
-                                        console.log(`      ⚠️ Rejecting suspicious perfect match for ID: ${matchedExternalId} (${similarity}%)`);
+                                    // Skip if the matched FaceId is the exact same as the one we are searching with
+                                    if (matchedFaceId === detectedFaceId) {
+                                        console.log(`      ⚠️ Skipping exact self-match for FaceId: ${detectedFaceId}`);
                                         continue;
                                     }
                                     
-                                    // If the external ID looks like a UUID, it's likely a user ID (not a photo ID)
-                                    if (matchedExternalId && matchedExternalId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-                                        // Verify this is a real user ID, not a photo ID
-                                        // We need to check if this ID exists in our known user database
-                                        // Known photo IDs shouldn't be treated as users
-
-                                        // Check if this is a user registration face (with user_ prefix)
-                                        if (matchedExternalId.startsWith('user_')) {
-                                            // Extract the actual user ID by removing the prefix
-                                            const actualUserId = matchedExternalId.substring(5);
-                                            console.log(`      👤 Matched with user registration face: ${actualUserId}`);
-                                            
-                                            // Skip if this is the current user's ID
-                                            if (actualUserId === userId) {
-                                                console.log(`      ⚠️ Skipping self-match with user ${userId}`);
-                                                continue;
-                                            }
-                                            
-                                            console.log(`      👤 Matched with user ${actualUserId} (${similarity.toFixed(2)}% similarity)`);
-                                            
-                                            // Validate that this is a realistic match by checking similarity
-                                            if (similarity < 80) {
-                                                console.log(`      ⚠️ Skipping match with ${actualUserId} due to low similarity (${similarity.toFixed(2)}%)`);
-                                                continue;
-                                            }
-                                            
-                                            // Add this user to matched_users if not already there
-                                            const existingMatch = photoMetadata.matched_users.find(m => 
-                                                (m.userId && m.userId === actualUserId) || 
-                                                (m.user_id && m.user_id === actualUserId) ||
-                                                (typeof m === 'string' && m === actualUserId)
-                                            );
-                                            
-                                            if (!existingMatch) {
-                                                // Always use the same object structure for consistency
-                                                const matchEntry = {
-                                                    userId: actualUserId,
-                                                    faceId: matchedFaceId,
-                                                    similarity: parseFloat(similarity.toFixed(4)), // Store with 4 decimal places
-                                                    matchedAt: new Date().toISOString()
-                                                };
-                                                photoMetadata.matched_users.push(matchEntry);
-                                                console.log(`      ✅ Added ${actualUserId} to matched_users list with similarity ${matchEntry.similarity}%`);
-                                            } else {
-                                                console.log(`      ⚠️ User ${actualUserId} already in matched_users list`);
-                                            }
+                                    // If the external ID looks like a user ID (user_ prefix), process it
+                                    // Check if this is a user registration face (with user_ prefix)
+                                    if (matchedExternalId.startsWith('user_')) {
+                                        // Extract the actual user ID by removing the prefix
+                                        const actualUserId = matchedExternalId.substring(5);
+                                        console.log(`      👤 Matched with user registration face: ${actualUserId}`);
+                                        
+                                        // Skip if this is the current user's ID
+                                        if (actualUserId === userId) {
+                                            console.log(`      ⚠️ Skipping self-match with user ${userId}`);
                                             continue;
                                         }
                                         
-                                        // This is a photo ID (with photo_ prefix)
-                                        if (matchedExternalId.startsWith('photo_')) {
-                                            console.log(`      ℹ️ Matched with photo: ${matchedExternalId}`);
+                                        console.log(`      👤 Matched with user ${actualUserId} (${similarity.toFixed(2)}% similarity)`);
+                                        
+                                        // Validate that this is a realistic match by checking similarity
+                                        if (similarity < 99) { // Check against 99% threshold
+                                            console.log(`      ⚠️ Skipping match with ${actualUserId} due to similarity (${similarity.toFixed(2)}%) being below threshold (99%)`);
                                             continue;
                                         }
+                                        
+                                        // Add this user to matched_users if not already there
+                                        const existingMatch = photoMetadata.matched_users.find(m => 
+                                            (m.userId && m.userId === actualUserId) || 
+                                            (m.user_id && m.user_id === actualUserId) ||
+                                            (typeof m === 'string' && m === actualUserId)
+                                        );
+                                        
+                                        if (!existingMatch) {
+                                            // Always use the same object structure for consistency
+                                            const matchEntry = {
+                                                userId: actualUserId,
+                                                faceId: matchedFaceId,
+                                                similarity: parseFloat(similarity.toFixed(4)), // Store with 4 decimal places
+                                                matchedAt: new Date().toISOString()
+                                            };
+                                            photoMetadata.matched_users.push(matchEntry);
+                                            console.log(`      ✅ Added ${actualUserId} to matched_users list with similarity ${matchEntry.similarity}%`);
+                                        } else {
+                                            console.log(`      ⚠️ User ${actualUserId} already in matched_users list`);
+                                        }
+                                        continue;
+                                    }
+                                    
+                                    // This is a photo ID (with photo_ prefix)
+                                    if (matchedExternalId.startsWith('photo_')) {
+                                        console.log(`      ℹ️ Matched with photo: ${matchedExternalId} (Skipping as it's not a user registration face)`);
+                                        continue;
                                     }
                                 }
                             } else {
-                                console.log(`   ℹ️ No matching users found for face ${detectedFaceId}`);
+                                console.log(`      ℹ️ No matching users found for face ${detectedFaceId}`);
                             }
                         } catch (searchError) {
-                            console.error(`   ❌ Error searching for matching faces:`, searchError);
+                            console.error(`      ❌ Error searching for matching faces:`, searchError);
                             // Continue processing other faces
                         }
                     }
                 }
 
             } catch (rekognitionError) { 
-                console.error(`   ❌ Rekognition IndexFaces failed:`, rekognitionError);
+                console.error(`  ❌❌❌ CRITICAL ERROR during Rekognition processing:`, rekognitionError);
+                console.error(`  ❌❌❌ Matching process aborted for Photo ID: ${fileId}. Metadata will be saved without matches.`);
                 // Decide if we still save metadata even if Rekognition fails?
                 // For now, we continue and save metadata without face info.
             }
@@ -378,6 +370,7 @@ export const awsPhotoService = {
             // Manually marshal the data for the base client
             let marshalledItem;
             try {
+                console.log(`   Final matched_users before marshalling:`, JSON.stringify(photoMetadata.matched_users)); 
                 marshalledItem = marshall(photoMetadata, {
                     convertEmptyValues: true, // Convert empty strings/sets to NULL
                     removeUndefinedValues: true, // Remove keys with undefined values
@@ -460,6 +453,8 @@ export const awsPhotoService = {
             const matchedPhotos = [];
             
             for (const photo of response.Items) {
+                console.log(`[fetchPhotos DEBUG] Checking photo.id: ${photo.id}`);
+                console.log(`[fetchPhotos DEBUG]   photo.matched_users:`, JSON.stringify(photo.matched_users));
                 let isMatch = false;
                 let matchReason = '';
                 
@@ -490,6 +485,7 @@ export const awsPhotoService = {
                                 if (matchUserId === userId) {
                                     isMatch = true;
                                     matchReason = 'object-userId-match';
+                                    console.log(`[fetchPhotos DEBUG]   ✅ Match found! Reason: ${matchReason}`);
                                     break;
                                 }
                             }
