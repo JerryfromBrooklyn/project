@@ -106,6 +106,9 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
                     console.log('No historical matches found');
                 }
                 
+                // Update the success message
+                result.message = "Your face has been registered. You will now match with images of you.";
+                
                 onSuccess(result);
             }
             else {

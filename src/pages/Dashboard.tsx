@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos } from 'lucide-react';
+import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos, Scale, Heart, PersonStanding } from 'lucide-react';
 import { cn } from '../utils/cn';
 import FaceRegistration from '../components/FaceRegistration';
 import { PhotoManager } from '../components/PhotoManager';
@@ -226,31 +226,31 @@ export const Dashboard = () => {
     // Create attributes list - this will work with either normalized format or our converted format
     const attributes = [
       {
-        icon: <Smile className="w-4 h-4" />,
+        icon: <span className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-100 text-amber-600"><Smile className="w-5 h-5" /></span>,
         label: "Smile",
         value: parsedAttributes.smile?.value ? "Yes" : "No",
         confidence: parsedAttributes.smile?.confidence || 0
       },
       {
-        icon: <Eye className="w-4 h-4" />,
+        icon: <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-600"><Eye className="w-5 h-5" /></span>,
         label: "Eyes Open",
         value: parsedAttributes.eyesOpen?.value ? "Yes" : "No",
         confidence: parsedAttributes.eyesOpen?.confidence || 0
       },
       {
-        icon: <Ruler className="w-4 h-4" />,
+        icon: <span className="flex items-center justify-center w-8 h-8 rounded-full bg-purple-100 text-purple-600"><Scale className="w-5 h-5" /></span>,
         label: "Age Range",
         value: `${parsedAttributes.age?.low || 0}-${parsedAttributes.age?.high || 0}`,
         confidence: 100
       },
       {
-        icon: <Smile className="w-4 h-4" />,
+        icon: <span className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600"><Heart className="w-5 h-5" /></span>,
         label: "Emotion",
         value: primaryEmotion ? primaryEmotion.type : "None",
         confidence: primaryEmotion ? primaryEmotion.confidence : 0
       },
       {
-        icon: <User className="w-4 h-4" />,
+        icon: <span className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-100 text-indigo-600"><PersonStanding className="w-5 h-5" /></span>,
         label: "Gender",
         value: parsedAttributes.gender?.value || "Unknown",
         confidence: parsedAttributes.gender?.confidence || 0
@@ -260,13 +260,13 @@ export const Dashboard = () => {
     return (
       <div className="mt-4 space-y-2">
         <h4 className="text-sm font-medium text-apple-gray-700">Face Attributes</h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {attributes.map((attr, index) => (
             <div 
               key={index}
-              className="flex items-center p-2 bg-apple-gray-50 rounded-apple"
+              className="flex items-center p-3 bg-apple-gray-50 rounded-apple-xl border border-apple-gray-100 shadow-sm"
             >
-              <div className="mr-2 text-apple-gray-500">
+              <div className="mr-3">
                 {attr.icon}
               </div>
               <div>
@@ -434,7 +434,7 @@ export const Dashboard = () => {
                 </div>
                 <div>
                   <h1 className="text-2xl font-semibold text-apple-gray-900">
-                    Welcome back{user?.full_name ? `, ${user.full_name}` : ''}
+                    Welcome{user?.full_name ? `, ${user.full_name}` : ''}
                   </h1>
                   <p className="text-apple-gray-500">
                     {faceRegistered ? 'Your face is registered' : 'Complete your profile by registering your face'}
@@ -444,7 +444,7 @@ export const Dashboard = () => {
               
               <p className="text-apple-gray-600 mb-6 border-l-4 border-apple-blue-500 pl-4 py-2 bg-apple-blue-50 rounded-r-apple">
                 {faceRegistered 
-                  ? "Your face has been registered. You can now use the facial recognition feature for quick authentication."
+                  ? "Your face has been registered. You will now match with images of you."
                   : "Get started by registering your face to enable quick authentication and find your photos at events."}
               </p>
 

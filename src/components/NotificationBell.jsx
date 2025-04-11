@@ -1,55 +1,189 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell } from 'lucide-react';
+import { Bell, Check, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getDocClient } from '../services/awsClient';
 import { QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// Improved time formatting function
+const formatTime = (timestamp) => {
+  if (!timestamp) return '';
+  
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHours = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  
+  // Just now: less than 1 minute ago
+  if (diffMin < 1) {
+    return 'Just now';
+  }
+  
+  // Minutes: 1-59 minutes ago
+  if (diffMin < 60) {
+    return `${diffMin}m ago`;
+  }
+  
+  // Today: same day, show hours ago or time
+  if (date.toDateString() === now.toDateString()) {
+    if (diffHours < 6) {
+      return `${diffHours}h ago`;
+    } else {
+      return `Today, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+  }
+  
+  // Yesterday: show "Yesterday, HH:MM"
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `Yesterday, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }
+  
+  // This week (less than 7 days): show day of week, HH:MM
+  if (diffDays < 7) {
+    return `${date.toLocaleDateString([], { weekday: 'short' })}, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }
+  
+  // Earlier: show date in MMM DD format
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
+
 const NotificationBell = ({ userId }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
   
   // Fetch notifications
-  useEffect(() => {
-    const fetchNotifications = async () => {
-      if (!userId) return;
+  const fetchNotifications = async () => {
+    if (!userId) return;
+    
+    try {
+      setLoading(true);
+      const docClient = getDocClient();
+      const { Items = [] } = await docClient.send(new QueryCommand({
+        TableName: 'shmong-notifications',
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: {
+          ':userId': userId
+        },
+        ScanIndexForward: false, // Get most recent first
+        Limit: 10
+      }));
       
-      try {
-        const docClient = getDocClient();
-        const { Items = [] } = await docClient.send(new QueryCommand({
+      setNotifications(Items);
+      setUnreadCount(Items.filter(item => !item.isRead).length);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Mark notification as read
+  const markAsRead = async (notificationId) => {
+    if (!userId || !notificationId) return;
+    
+    try {
+      const docClient = getDocClient();
+      await docClient.send(new UpdateCommand({
+        TableName: 'shmong-notifications',
+        Key: {
+          userId,
+          id: notificationId
+        },
+        UpdateExpression: 'SET isRead = :isRead',
+        ExpressionAttributeValues: {
+          ':isRead': true
+        }
+      }));
+      
+      // Update local state
+      setNotifications(prev => 
+        prev.map(item => 
+          item.id === notificationId 
+            ? { ...item, isRead: true } 
+            : item
+        )
+      );
+      
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+  
+  // Mark all notifications as read
+  const markAllAsRead = async () => {
+    if (!userId || notifications.length === 0) return;
+    
+    const unreadNotifications = notifications.filter(item => !item.isRead);
+    if (unreadNotifications.length === 0) return;
+    
+    try {
+      const docClient = getDocClient();
+      
+      // Process in batches if necessary (AWS limits)
+      for (const notification of unreadNotifications) {
+        await docClient.send(new UpdateCommand({
           TableName: 'shmong-notifications',
-          IndexName: 'UserIdIndex',
-          KeyConditionExpression: 'user_id = :userId',
-          ExpressionAttributeValues: {
-            ':userId': userId
+          Key: {
+            userId,
+            id: notification.id
           },
-          ScanIndexForward: false, // Most recent first
-          Limit: 5
+          UpdateExpression: 'SET isRead = :isRead',
+          ExpressionAttributeValues: {
+            ':isRead': true
+          }
         }));
-        
-        const notifs = Items.map(item => ({
-          ...item,
-          createdAt: new Date(item.created_at).toLocaleString()
-        }));
-        
-        setNotifications(notifs);
-        setUnreadCount(notifs.filter(n => !n.read).length);
-      } catch (error) {
-        console.error("Error fetching notifications:", error);
       }
-    };
+      
+      // Update local state
+      setNotifications(prev => 
+        prev.map(item => ({ ...item, isRead: true }))
+      );
+      
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+  
+  // Handle notification click
+  const handleNotificationClick = async (notification) => {
+    // Mark as read
+    if (!notification.isRead) {
+      await markAsRead(notification.id);
+    }
     
-    fetchNotifications();
+    // Navigate based on notification type
+    if (notification.type === 'FACE_MATCH') {
+      navigate(`/my-photos?photo=${notification.photoId}`);
+    } else if (notification.type === 'NEW_PHOTO') {
+      navigate(`/my-photos`);
+    }
     
-    // Poll for new notifications every minute
-    const interval = setInterval(fetchNotifications, 60000);
-    return () => clearInterval(interval);
+    setIsOpen(false);
+  };
+  
+  // Setup polling and handle outside clicks
+  useEffect(() => {
+    if (userId) {
+      fetchNotifications();
+      
+      // Poll for notifications every minute
+      const interval = setInterval(fetchNotifications, 60000);
+      
+      return () => clearInterval(interval);
+    }
   }, [userId]);
   
-  // Handle click outside to close dropdown
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -61,118 +195,133 @@ const NotificationBell = ({ userId }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
   
-  // Mark notification as read
-  const markAsRead = async (notificationId) => {
-    if (!userId) return;
-    
-    try {
-      const docClient = getDocClient();
-      await docClient.send(new UpdateCommand({
-        TableName: 'shmong-notifications',
-        Key: { id: notificationId },
-        UpdateExpression: 'SET #read = :read',
-        ExpressionAttributeNames: { '#read': 'read' },
-        ExpressionAttributeValues: { ':read': true }
-      }));
-      
-      setNotifications(prev => 
-        prev.map(n => n.id === notificationId ? {...n, read: true} : n)
-      );
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (error) {
-      console.error("Error marking notification as read:", error);
+  // Animation variants
+  const dropdownVariants = {
+    hidden: { opacity: 0, y: -10, scale: 0.95 },
+    visible: { 
+      opacity: 1, 
+      y: 0, 
+      scale: 1,
+      transition: { 
+        type: "spring", 
+        stiffness: 400, 
+        damping: 30,
+        staggerChildren: 0.05
+      }
+    },
+    exit: { 
+      opacity: 0, 
+      y: -10, 
+      scale: 0.95,
+      transition: { 
+        duration: 0.2
+      }
     }
   };
   
-  // Handle notification click
-  const handleNotificationClick = (notification) => {
-    markAsRead(notification.id);
-    
-    // Navigate based on notification type
-    if (notification.type === 'HISTORICAL_MATCH' || notification.type === 'NEW_MATCH') {
-      navigate('/my-photos');
+  const itemVariants = {
+    hidden: { opacity: 0, y: -10 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { type: "spring", stiffness: 300, damping: 24 }
     }
-    
-    setIsOpen(false);
   };
   
   return (
-    <div className="relative" ref={dropdownRef}>
-      <button 
-        className="relative p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+    <div className="relative inline-block text-left" ref={dropdownRef}>
+      {/* Bell icon with badge */}
+      <button
+        className="relative p-2 text-gray-600 hover:text-gray-800 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200"
         onClick={() => setIsOpen(!isOpen)}
-        aria-label="Notifications"
+        aria-expanded={isOpen}
+        aria-haspopup="true"
+        tabIndex="0"
       >
-        <Bell className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+        <Bell className="h-6 w-6" />
         
-        {unreadCount > 0 && (
-          <span className="absolute top-0 right-0 inline-flex items-center justify-center w-4 h-4 text-xs font-bold text-white bg-red-500 rounded-full">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
-        )}
+        {/* Notification badge with animation */}
+        <AnimatePresence>
+          {unreadCount > 0 && (
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              className="absolute -top-1 -right-1 flex items-center justify-center bg-red-500 text-white text-xs font-bold rounded-full h-5 min-w-[20px] px-1"
+            >
+              {unreadCount}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </button>
       
+      {/* Notification dropdown */}
       <AnimatePresence>
         {isOpen && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 z-50"
+          <motion.div
+            variants={dropdownVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="absolute right-0 mt-2 w-80 max-h-[80vh] bg-white rounded-lg shadow-xl overflow-hidden z-50 border border-gray-200"
+            style={{ marginRight: '-10px' }}
           >
-            <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Notifications</h3>
+            {/* Header */}
+            <div className="py-3 px-4 flex items-center justify-between bg-gray-50 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-800">Notifications</h3>
               {unreadCount > 0 && (
                 <button 
-                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                  onClick={async () => {
-                    // Mark all as read logic
-                    for (const notification of notifications.filter(n => !n.read)) {
-                      await markAsRead(notification.id);
-                    }
-                  }}
+                  onClick={markAllAsRead}
+                  className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
                 >
-                  Mark all as read
+                  <Check className="h-3 w-3" />
+                  <span>Mark all as read</span>
                 </button>
               )}
             </div>
             
-            <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {notifications.length === 0 ? (
-                <div className="py-4 px-3 text-center text-sm text-gray-500 dark:text-gray-400">
-                  No notifications
+            {/* Notification list */}
+            <div className="overflow-y-auto max-h-[60vh]">
+              {loading && notifications.length === 0 ? (
+                <div className="flex justify-center items-center py-8">
+                  <div className="w-5 h-5 border-t-2 border-blue-500 border-solid rounded-full animate-spin"></div>
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="py-8 px-4 text-center text-gray-500">
+                  <p>No notifications yet</p>
                 </div>
               ) : (
-                notifications.map(notification => (
-                  <div 
-                    key={notification.id}
-                    className={`p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors ${!notification.read ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
-                    onClick={() => handleNotificationClick(notification)}
-                  >
-                    <div className="flex justify-between items-start">
-                      <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {notification.title}
-                      </h4>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {notification.createdAt}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                      {notification.message}
-                    </p>
-                  </div>
-                ))
+                <ul className="divide-y divide-gray-100">
+                  {notifications.map((notification) => (
+                    <motion.li
+                      key={notification.id}
+                      variants={itemVariants}
+                      className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${!notification.isRead ? 'bg-blue-50' : ''}`}
+                      onClick={() => handleNotificationClick(notification)}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm ${!notification.isRead ? 'font-semibold text-gray-900' : 'text-gray-800'}`}>
+                            {notification.message}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {formatTime(notification.createdAt)}
+                          </p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-gray-400 mt-1" />
+                      </div>
+                    </motion.li>
+                  ))}
+                </ul>
               )}
             </div>
             
-            <div className="p-2 border-t border-gray-200 dark:border-gray-700">
+            {/* Footer */}
+            <div className="border-t border-gray-200 bg-gray-50">
               <button 
-                className="w-full text-center text-xs text-blue-600 dark:text-blue-400 hover:underline p-2"
-                onClick={() => {
-                  navigate('/notifications');
-                  setIsOpen(false);
-                }}
+                onClick={() => { navigate('/notifications'); setIsOpen(false); }}
+                className="w-full text-sm text-blue-600 hover:text-blue-800 py-2 text-center transition-colors"
               >
                 View all notifications
               </button>
