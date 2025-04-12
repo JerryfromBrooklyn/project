@@ -1,169 +1,169 @@
 {
-  "hash": "e8c0a4e3",
+  "hash": "519f9eac",
   "configHash": "38949537",
-  "lockfileHash": "4272294e",
-  "browserHash": "94c46eff",
+  "lockfileHash": "5aae909e",
+  "browserHash": "ad134da2",
   "optimized": {
     "react": {
       "src": "../../node_modules/react/index.js",
       "file": "react.js",
-      "fileHash": "74a7e608",
+      "fileHash": "ef223b1b",
       "needsInterop": true
     },
     "react-dom": {
       "src": "../../node_modules/react-dom/index.js",
       "file": "react-dom.js",
-      "fileHash": "618948fc",
+      "fileHash": "f6165b85",
       "needsInterop": true
     },
     "react/jsx-dev-runtime": {
       "src": "../../node_modules/react/jsx-dev-runtime.js",
       "file": "react_jsx-dev-runtime.js",
-      "fileHash": "e28e632d",
+      "fileHash": "57c6966b",
       "needsInterop": true
     },
     "react/jsx-runtime": {
       "src": "../../node_modules/react/jsx-runtime.js",
       "file": "react_jsx-runtime.js",
-      "fileHash": "5ed80e2f",
+      "fileHash": "aa7cf067",
       "needsInterop": true
     },
     "@aws-sdk/client-cognito-identity-provider": {
       "src": "../../node_modules/@aws-sdk/client-cognito-identity-provider/dist-es/index.js",
       "file": "@aws-sdk_client-cognito-identity-provider.js",
-      "fileHash": "f75ab8a2",
+      "fileHash": "be223815",
       "needsInterop": false
     },
     "@aws-sdk/client-dynamodb": {
       "src": "../../node_modules/@aws-sdk/client-dynamodb/dist-es/index.js",
       "file": "@aws-sdk_client-dynamodb.js",
-      "fileHash": "83985979",
+      "fileHash": "fe33c08a",
       "needsInterop": false
     },
     "@aws-sdk/client-rekognition": {
       "src": "../../node_modules/@aws-sdk/client-rekognition/dist-es/index.js",
       "file": "@aws-sdk_client-rekognition.js",
-      "fileHash": "94d0af5f",
+      "fileHash": "b30a1289",
       "needsInterop": false
     },
     "@aws-sdk/client-s3": {
       "src": "../../node_modules/@aws-sdk/client-s3/dist-es/index.js",
       "file": "@aws-sdk_client-s3.js",
-      "fileHash": "891f9bb0",
+      "fileHash": "44ee06da",
       "needsInterop": false
     },
     "@aws-sdk/lib-dynamodb": {
       "src": "../../node_modules/@aws-sdk/lib-dynamodb/dist-es/index.js",
       "file": "@aws-sdk_lib-dynamodb.js",
-      "fileHash": "b1712128",
+      "fileHash": "fc0f66d1",
       "needsInterop": false
     },
     "@aws-sdk/s3-request-presigner": {
       "src": "../../node_modules/@aws-sdk/s3-request-presigner/dist-es/index.js",
       "file": "@aws-sdk_s3-request-presigner.js",
-      "fileHash": "6dc368da",
+      "fileHash": "21848f64",
       "needsInterop": false
     },
     "@aws-sdk/util-dynamodb": {
       "src": "../../node_modules/@aws-sdk/util-dynamodb/dist-es/index.js",
       "file": "@aws-sdk_util-dynamodb.js",
-      "fileHash": "c079d779",
+      "fileHash": "9b1c7eaf",
       "needsInterop": false
     },
     "@radix-ui/react-slot": {
       "src": "../../node_modules/@radix-ui/react-slot/dist/index.mjs",
       "file": "@radix-ui_react-slot.js",
-      "fileHash": "a70d92e6",
+      "fileHash": "252ca1f3",
       "needsInterop": false
     },
     "@react-google-maps/api": {
       "src": "../../node_modules/@react-google-maps/api/dist/esm.js",
       "file": "@react-google-maps_api.js",
-      "fileHash": "eb8d8ac6",
+      "fileHash": "2ba3df51",
       "needsInterop": false
     },
     "clsx": {
       "src": "../../node_modules/clsx/dist/clsx.mjs",
       "file": "clsx.js",
-      "fileHash": "c3c434df",
+      "fileHash": "13150610",
       "needsInterop": false
     },
     "cross-fetch": {
       "src": "../../node_modules/cross-fetch/dist/browser-ponyfill.js",
       "file": "cross-fetch.js",
-      "fileHash": "4fbdad46",
+      "fileHash": "063a260c",
       "needsInterop": true
     },
     "dotenv": {
       "src": "../../node_modules/dotenv/lib/main.js",
       "file": "dotenv.js",
-      "fileHash": "c1c61e16",
+      "fileHash": "2766375c",
       "needsInterop": true
     },
     "framer-motion": {
       "src": "../../node_modules/framer-motion/dist/es/index.mjs",
       "file": "framer-motion.js",
-      "fileHash": "74e299f5",
+      "fileHash": "acc03455",
       "needsInterop": false
     },
     "lucide-react": {
       "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
       "file": "lucide-react.js",
-      "fileHash": "abb27d62",
+      "fileHash": "ff7da43d",
       "needsInterop": false
     },
     "react-dom/client": {
       "src": "../../node_modules/react-dom/client.js",
       "file": "react-dom_client.js",
-      "fileHash": "4b2f4b2f",
+      "fileHash": "f43ede42",
       "needsInterop": true
     },
     "react-dropzone": {
       "src": "../../node_modules/react-dropzone/dist/es/index.js",
       "file": "react-dropzone.js",
-      "fileHash": "ec3d058f",
+      "fileHash": "cafbc488",
       "needsInterop": false
     },
     "react-router-dom": {
       "src": "../../node_modules/react-router-dom/dist/index.mjs",
       "file": "react-router-dom.js",
-      "fileHash": "955220ae",
+      "fileHash": "9ce5c135",
       "needsInterop": false
     },
     "react-webcam": {
       "src": "../../node_modules/react-webcam/dist/react-webcam.js",
       "file": "react-webcam.js",
-      "fileHash": "63a1532b",
+      "fileHash": "95083231",
       "needsInterop": true
     },
     "tailwind-merge": {
       "src": "../../node_modules/tailwind-merge/dist/bundle-mjs.mjs",
       "file": "tailwind-merge.js",
-      "fileHash": "4b4f22b5",
+      "fileHash": "2a4df4f1",
       "needsInterop": false
     },
     "uuid": {
       "src": "../../node_modules/uuid/dist/esm-browser/index.js",
       "file": "uuid.js",
-      "fileHash": "e7ae05ad",
+      "fileHash": "83682322",
       "needsInterop": false
     },
     "vite-plugin-node-polyfills/shims/buffer": {
       "src": "../../node_modules/vite-plugin-node-polyfills/shims/buffer/dist/index.js",
       "file": "vite-plugin-node-polyfills_shims_buffer.js",
-      "fileHash": "eb519d2c",
+      "fileHash": "e9c35966",
       "needsInterop": false
     },
     "vite-plugin-node-polyfills/shims/global": {
       "src": "../../node_modules/vite-plugin-node-polyfills/shims/global/dist/index.js",
       "file": "vite-plugin-node-polyfills_shims_global.js",
-      "fileHash": "370dc5f4",
+      "fileHash": "4fcb97ca",
       "needsInterop": false
     },
     "vite-plugin-node-polyfills/shims/process": {
       "src": "../../node_modules/vite-plugin-node-polyfills/shims/process/dist/index.js",
       "file": "vite-plugin-node-polyfills_shims_process.js",
-      "fileHash": "e810602d",
+      "fileHash": "22cb65a6",
       "needsInterop": false
     }
   },
@@ -171,38 +171,35 @@
     "chunk-BP2VP2DT": {
       "file": "chunk-BP2VP2DT.js"
     },
-    "chunk-WOZX6X2B": {
-      "file": "chunk-WOZX6X2B.js"
-    },
-    "chunk-R5UGORFP": {
-      "file": "chunk-R5UGORFP.js"
-    },
     "chunk-HUCHNPY6": {
       "file": "chunk-HUCHNPY6.js"
-    },
-    "chunk-KMLDHAXH": {
-      "file": "chunk-KMLDHAXH.js"
-    },
-    "chunk-XO6BODHA": {
-      "file": "chunk-XO6BODHA.js"
     },
     "chunk-XAMNCCZR": {
       "file": "chunk-XAMNCCZR.js"
     },
+    "chunk-WOZX6X2B": {
+      "file": "chunk-WOZX6X2B.js"
+    },
+    "chunk-VIHPYIVT": {
+      "file": "chunk-VIHPYIVT.js"
+    },
     "chunk-ZCIX2HLB": {
       "file": "chunk-ZCIX2HLB.js"
     },
-    "chunk-HNCKUWWD": {
-      "file": "chunk-HNCKUWWD.js"
+    "chunk-7WMZKJIT": {
+      "file": "chunk-7WMZKJIT.js"
     },
     "chunk-W2ANHD2T": {
       "file": "chunk-W2ANHD2T.js"
     },
-    "chunk-3TAN77E7": {
-      "file": "chunk-3TAN77E7.js"
-    },
     "chunk-WLALPDKA": {
       "file": "chunk-WLALPDKA.js"
+    },
+    "chunk-R5UGORFP": {
+      "file": "chunk-R5UGORFP.js"
+    },
+    "chunk-KMLDHAXH": {
+      "file": "chunk-KMLDHAXH.js"
     },
     "chunk-GJFZQ5ET": {
       "file": "chunk-GJFZQ5ET.js"

@@ -17,12 +17,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 import { testRekognitionConnectivity } from './lib/awsClient';
-import { logVersion } from './utils/version';
-import './utils/debugBanner'; // Import debug utility
 import BackgroundJobService from './services/BackgroundJobService'; // Import background job service
-
-// Log application version
-logVersion();
 
 // Log environment information (non-sensitive)
 const awsEnvStatus = {
@@ -54,23 +49,6 @@ if (missingVars.length > 0) {
 // Browser capabilities check
 console.log('[STARTUP] Browser online status:', navigator.onLine);
 console.log('[STARTUP] Browser user agent:', navigator.userAgent);
-
-// Create a global function to run diagnostics after full page load
-window.addEventListener('load', () => {
-  console.log('[STARTUP] Page fully loaded, running banner diagnostics in 2 seconds...');
-  setTimeout(() => {
-    if (window.diagnoseBannerIssues) {
-      window.diagnoseBannerIssues();
-    }
-    
-    // Start face matching background job after page load
-    // if (import.meta.env.DEV) {
-    //   console.log('[STARTUP] 🔄 Starting face matching background job (dev mode)...');
-    //   BackgroundJobService.runOneTimeFaceMatchingJob()
-    //     .then(result => console.log('[STARTUP] Initial face matching job completed:', result));
-    // }
-  }, 2000);
-});
 
 // Verify AWS configuration
 testRekognitionConnectivity().then(result => {
@@ -107,7 +85,6 @@ Check your .env file or environment configuration.
 // Add type definition for the custom property if you intend to use it
 declare global {
   interface Window {
-    diagnoseBannerIssues?: () => void;
     runFaceMatching?: () => Promise<any>; // Add global method to trigger face matching
   }
 }
@@ -117,14 +94,6 @@ window.runFaceMatching = async () => {
   console.log('[GLOBAL] 🔄 Running face matching job on demand...');
   return await BackgroundJobService.runOneTimeFaceMatchingJob();
 };
-
-// Example: Call only if it exists
-if (typeof window.diagnoseBannerIssues === 'function') {
-  console.log('Diagnosing banner issues...');
-  window.diagnoseBannerIssues();
-} else {
-  console.log('diagnoseBannerIssues function not found on window.');
-}
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

@@ -67,6 +67,7 @@ export const LandingPage: React.FC = () => {
   const [isVisible, setIsVisible] = useState<boolean>(false);
   const [activeSection, setActiveSection] = useState<string>('');
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [authModalView, setAuthModalView] = useState<'signin' | 'signup'>('signin');
   const [currentSlide, setCurrentSlide] = useState(0);
   
   const { user } = useAuth();
@@ -234,9 +235,16 @@ export const LandingPage: React.FC = () => {
     }
   };
 
+  const handleLoginSignupClick = (e: React.MouseEvent<HTMLButtonElement>, view: 'signin' | 'signup'): void => {
+    e.preventDefault();
+    setAuthModalView(view);
+    setShowAuthModal(true);
+  };
+
   const handleDashboardClick = (e: React.MouseEvent<HTMLButtonElement>): void => {
     if (!user) {
       e.preventDefault();
+      setAuthModalView('signup');
       setShowAuthModal(true);
     } else {
       navigate('/dashboard');
@@ -284,10 +292,21 @@ export const LandingPage: React.FC = () => {
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
                   <img src="https://www.shmong.tv/wp-content/uploads/2023/05/logo-white.png" alt="SHMONG" className="w-[126px] mb-8" />
                   <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center mb-4">
-                    <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-white" />
+                    <div className="w-10 h-10 flex items-center justify-center">
+                      {/* Modern loading spinner with pulsing effect */}
+                      <div className="relative w-10 h-10">
+                        <div className="absolute inset-0 rounded-full border-4 border-white/30"></div>
+                        <div className="absolute inset-0 rounded-full border-4 border-t-white animate-spin"></div>
+                        <div className="absolute inset-0 rounded-full border-b-2 border-white/60 animate-pulse"></div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-white/80 text-sm mb-2">Processing your photos...</p>
-                  <div className="w-[3px] h-2 bg-white/10 rounded-full" />
+                  <p className="text-white/80 text-sm mb-4">Processing your photos...</p>
+                  {/* Modern progress bar with animation */}
+                  <div className="w-48 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full animate-pulse" 
+                         style={{ width: '75%', boxShadow: '0 0 8px rgba(99, 179, 237, 0.6)' }}></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -311,7 +330,7 @@ export const LandingPage: React.FC = () => {
                   <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mb-4">
                     <Check className="w-12 h-12 text-white" />
                   </div>
-                  <p className="text-white/90 text-lg font-medium mb-2">5 Photos Found!</p>
+                  <p className="text-white/90 text-lg font-medium mb-2">54 Photos Found!</p>
                   <p className="text-white/60 text-sm">Ready to view and download</p>
                 </div>
               </div>
@@ -329,7 +348,7 @@ export const LandingPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center">
-              <img src="https://www.shmong.tv/wp-content/uploads/2023/05/main-logo.png" alt="SHMONG" className="h-8" />
+              <img src="https://www.shmong.tv/wp-content/uploads/2023/05/main-logo.png" alt="SHMONG" className="h-10" />
             </div>
             
             <nav className="hidden md:flex space-x-6">
@@ -346,10 +365,10 @@ export const LandingPage: React.FC = () => {
 
             <div className="flex items-center space-x-2">
               <button
-                onClick={handleDashboardClick}
-                className="ios-button-primary"
+                onClick={(e) => handleLoginSignupClick(e, 'signin')}
+                className="ios-button-primary bg-amber-500 hover:bg-amber-600"
               >
-                {user ? 'Go to Dashboard' : 'Get Started'}
+                Log In / Sign Up
               </button>
             </div>
           </div>
@@ -446,43 +465,53 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* How It Works Section */}
-      <section id="how-it-works" className="py-24">
+      {/* Process Section */}
+      <section id="how-it-works" className="py-24 bg-apple-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">How SHMONG Works</h2>
-            <p className="text-xl text-apple-gray-600">
-              Three simple steps to never miss another photo of yourself
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">How It Works</h2>
+            <p className="text-lg text-apple-gray-600 max-w-3xl mx-auto">
+              Our simple process makes finding your photos effortless
             </p>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
             {processSteps.map((step, index) => (
               <motion.div
-                key={step.title}
+                key={step.number}
                 initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
+                whileInView={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: step.delay }}
-                className="text-center"
+                viewport={{ once: true }}
+                className="relative"
               >
-                <div className="relative mb-6">
-                  <div className="w-20 h-20 mx-auto rounded-full bg-apple-blue-500 flex items-center justify-center text-white">
-                    {step.icon}
+                <div className="flex flex-col items-center text-center">
+                  <div className="flex items-center justify-center w-20 h-20 rounded-full bg-white shadow-apple-button mb-6">
+                    <div className="w-14 h-14 rounded-full bg-apple-gray-900 flex items-center justify-center text-white">
+                      {step.icon}
+                    </div>
                   </div>
-                  <div className="absolute -left-[3px] -right-[3px] top-[90px] h-[40px] pointer-events-none">
-                    {index < processSteps.length - 1 && (
-                      <div className="relative h-[30px]">
-                        <div className="absolute top-1/2 -translate-y-1/2 w-full">
-                          <div className="h-[3px] bg-apple-blue-500" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  
+                  <h3 className="text-xl font-semibold mb-3">{step.title}</h3>
+                  <p className="text-apple-gray-600">{step.description}</p>
                 </div>
-                <h3 className="text-xl font-semibold mb-3">{step.title}</h3>
-                <p className="text-apple-gray-600">{step.description}</p>
+                
+                {index < processSteps.length - 1 && (
+                  <div className="hidden md:block absolute top-10 left-full w-full h-px transform -translate-x-8 pointer-events-none">
+                    {/* Removed the blue line here */}
+                  </div>
+                )}
               </motion.div>
             ))}
+          </div>
+          
+          <div className="text-center mt-16">
+            <button
+              onClick={handleDashboardClick}
+              className="ios-button-primary"
+            >
+              Get Started
+            </button>
           </div>
         </div>
       </section>
@@ -627,17 +656,19 @@ export const LandingPage: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/25 backdrop-blur-sm z-50 flex items-center justify-center"
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           >
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="relative mx-4"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="w-full max-w-md"
             >
-              <AuthForms
-                isModal
-                onClose={() => setShowAuthModal(false)}
+              <AuthForms 
+                defaultView={authModalView} 
+                isModal={true} 
+                onClose={() => setShowAuthModal(false)} 
               />
             </motion.div>
           </motion.div>

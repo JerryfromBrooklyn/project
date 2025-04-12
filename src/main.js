@@ -4,10 +4,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { testRekognitionConnectivity } from './lib/awsClient';
-import { logVersion } from './utils/version';
-import './utils/debugBanner'; // Import debug utility
-// Log application version
-logVersion();
+
 // Log environment information (non-sensitive)
 const awsEnvStatus = {
     region: import.meta.env.VITE_AWS_REGION ? 'SET' : 'MISSING',
@@ -39,15 +36,7 @@ if (missingVars.length > 0) {
 // Browser capabilities check
 console.log('[STARTUP] Browser online status:', navigator.onLine);
 console.log('[STARTUP] Browser user agent:', navigator.userAgent);
-// Create a global function to run diagnostics after full page load
-window.addEventListener('load', () => {
-    console.log('[STARTUP] Page fully loaded, running banner diagnostics in 2 seconds...');
-    setTimeout(() => {
-        if (window.diagnoseBannerIssues) {
-            window.diagnoseBannerIssues();
-        }
-    }, 2000);
-});
+
 // Verify AWS configuration
 testRekognitionConnectivity().then(result => {
     if (result) {

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
@@ -10,7 +10,6 @@ import FaceRegistration from './components/FaceRegistration';
 import MyPhotos from './pages/MyPhotos';
 import PhotoUploader from './components/PhotoUploader';
 import Notifications from './pages/Notifications';
-import BuildInfoBanner from './components/BuildInfoBanner';
 
 // AWS Configuration for Rekognition
 // These would typically be in .env files and injected during build
@@ -35,27 +34,13 @@ console.log('[APP] Initializing App component');
 const App = () => {
   console.log('[APP] Rendering App component');
   
-  useEffect(() => {
-    // Force add banner if component approach doesn't work
-    console.log('[APP] Component mounted, forcing banner as backup');
-    const existingBanner = document.getElementById('force-banner');
-    if (!existingBanner) {
-      const forceBanner = document.createElement('div');
-      forceBanner.id = 'force-banner';
-      forceBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:red;color:white;z-index:999999;height:22px;text-align:center;font-size:12px;padding:2px;font-weight:bold;';
-      forceBanner.innerHTML = 'VERSION BANNER (FORCED)';
-      document.body.prepend(forceBanner);
-    }
-  }, []);
-  
   return (
     <>
-      <BuildInfoBanner />
       <AuthProvider>
         {console.log('[APP] AuthProvider rendered')}
         <Router>
           {console.log('[APP] Router rendered')}
-          <div className="pt-6"> {/* Small padding to accommodate the thin banner */}
+          <div>
             <Routes>
               {console.log('[APP] Setting up routes')}
               {/* Public routes */}
