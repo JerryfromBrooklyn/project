@@ -832,3 +832,80 @@ For detailed code implementation, refer to:
 1. `src/services/faceMatchingService.js` - Core face matching logic
 2. `src/services/awsPhotoService.js` - Photo upload and processing
 3. `src/services/FaceStorageService.js` - Face data storage and retrieval 
+
+## 9. Project Structure and Dependencies
+
+### 9.1 Key Directory Structure
+
+The application is organized with the following directory structure:
+
+```
+src/
+├── components/           # UI components including the Dashboard
+│   ├── Dashboard.jsx     # Main dashboard component for user interface
+│   ├── AppleDashboard.tsx # Apple-styled dashboard alternative
+│   ├── MyPhotos.jsx      # User's photo gallery component
+│   ├── Navigation.jsx    # Navigation component
+│   └── ui/               # Reusable UI components
+├── services/             # Core business logic services
+│   ├── FaceIndexingService.js  # AWS Rekognition integration for face indexing
+│   ├── faceMatchingService.js  # Face matching logic
+│   ├── awsPhotoService.js      # Photo upload and processing
+│   ├── FaceStorageService.js   # Face data storage and retrieval
+│   └── BackgroundJobService.js # Background processing tasks
+├── lib/                  # Shared utilities and configurations
+│   ├── awsClient.js      # AWS SDK client configuration
+│   └── setupDatabase.js  # Database initialization
+├── utils/                # Helper utilities
+├── pages/                # Route-based page components
+└── auth/                 # Authentication-related code
+```
+
+### 9.2 Key Component Dependencies
+
+The Dashboard component, located in `src/components/Dashboard.jsx`, is the central user interface for the application. It has the following key dependencies:
+
+```
+Dashboard.jsx
+├── depends on services:
+│   ├── FaceIndexingService.js
+│   ├── awsPhotoService.js
+│   └── FaceStorageService.js
+├── renders components:
+│   ├── MyPhotos.jsx
+│   ├── Navigation.jsx
+│   └── various UI components from ui/
+```
+
+The system also offers an alternative Apple-styled dashboard in `src/components/AppleDashboard.tsx`, which provides a different visual design while maintaining the same core functionality.
+
+### 9.3 Service Dependencies
+
+Core services and their dependencies:
+
+```
+FaceIndexingService.js
+├── AWS Rekognition
+├── AWS DynamoDB
+└── FaceStorageService.js
+
+awsPhotoService.js
+├── AWS S3
+├── AWS DynamoDB
+└── FaceIndexingService.js
+
+faceMatchingService.js
+├── FaceIndexingService.js
+└── FaceStorageService.js
+```
+
+### 9.4 Dashboard-Specific Information
+
+The user interface is primarily driven by the Dashboard component located in `src/components/Dashboard.jsx`. This component:
+
+1. Displays a summary of user statistics (photos uploaded, matches found)
+2. Provides access to the user's photo gallery
+3. Offers face registration functionality
+4. Shows notifications of new matches
+
+The Dashboard relies heavily on the face matching infrastructure described earlier in this document. All UI interactions with the facial recognition system are coordinated through this component. 

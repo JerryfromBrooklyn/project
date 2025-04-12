@@ -1,11 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { RekognitionClient, SearchFacesByImageCommand } from '@aws-sdk/client-rekognition';
-import { docClient, rekognitionClient, COLLECTION_ID } from '../lib/awsClient';
-import { QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
-import { Camera, Upload, User, Sparkles, Bell, Image, Search, LogOut } from 'lucide-react';
+import { Camera, Upload, User, Sparkles, Bell, Image, Search, LogOut, Home, Users, Settings, Trash } from 'lucide-react';
 import FaceRegistration from '../components/FaceRegistration';
 import {
   Card,
@@ -14,6 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "./ui/card.jsx";
+import TrashBin from './TrashBin';
+import MyPhotos from './MyPhotos';
 
 const Dashboard = () => {
     console.log('[DASHBOARD] Rendering Dashboard component');
@@ -26,34 +24,23 @@ const Dashboard = () => {
     const [errorMessage, setErrorMessage] = useState(null);
     const [videoRef, setVideoRef] = useState(null);
     const [canvasRef, setCanvasRef] = useState(null);
-    const [matches, setMatches] = useState([]);
     const [notifications, setNotifications] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('home');
     const [registeredFace, setRegisteredFace] = useState(null);
     const [showRegistrationModal, setShowRegistrationModal] = useState(false);
 
-    // Fetch user's face data, matched photos and notifications on load
-    useEffect(() => {
-        if (user?.id) {
-            fetchUserData();
+    // Fetch user's face data and notifications on load
+    const fetchUserData = useCallback(async () => {
+        setLoading(true);
+        console.log('[DASHBOARD] Fetching user data (Face & Notifications)...');
+        if (!user || !user.id) {
+            console.error('[DASHBOARD] Cannot fetch data: User ID is missing.');
+            setLoading(false);
+            return; 
         }
-    }, [user?.id]);
-    
-    const fetchUserData = async () => {
         try {
-            setLoading(true);
-            console.log('[DASHBOARD] Fetching user data...');
-            
-            if (!user || !user.id) {
-                console.error('[DASHBOARD] Cannot fetch data: User ID is missing.');
-                setLoading(false);
-                return; 
-            }
-            
             console.log('[DASHBOARD] Querying shmong-face-data with user ID:', user.id);
-            
-            // 1. Get user's face data
             const { Items: faceItems } = await docClient.send(new QueryCommand({
                 TableName: 'shmong-face-data',
                 KeyConditionExpression: 'user_id = :userId',
@@ -65,44 +52,13 @@ const Dashboard = () => {
             
             if (faceItems && faceItems.length > 0) {
                 console.log('[DASHBOARD] Face data found');
-                setRegisteredFace(unmarshall(faceItems[0]));
+                setRegisteredFace(faceItems[0]);
+            } else {
+                console.log('[DASHBOARD] No registered face found.');
+                setRegisteredFace(null);
             }
             
-            // 2. Get user's matched photos
-            console.log('[DASHBOARD] Querying shmong-face-matches GSI with user ID:', user.id);
-            const { Items: matchItems } = await docClient.send(new QueryCommand({
-                TableName: 'shmong-face-matches',
-                IndexName: 'UserIdCreatedAtIndex',
-                KeyConditionExpression: 'user_id = :userId',
-                ExpressionAttributeValues: {
-                    ':userId': user.id
-                },
-                ScanIndexForward: false // Latest first
-            }));
-            
-            if (matchItems && matchItems.length > 0) {
-                console.log(`[DASHBOARD] Found ${matchItems.length} matches`);
-                const processedMatches = matchItems.map(item => unmarshall(item));
-                setMatches(processedMatches);
-            }
-            
-            // 3. Get user's notifications
             console.log('[DASHBOARD] Querying shmong-notifications GSI with user ID:', user.id);
-            const { Items: notifItems } = await docClient.send(new QueryCommand({
-                TableName: 'shmong-notifications',
-                IndexName: 'UserIdIndex',
-                KeyConditionExpression: 'user_id = :userId',
-                ExpressionAttributeValues: {
-                    ':userId': user.id
-                },
-                ScanIndexForward: false // Latest first
-            }));
-            
-            if (notifItems && notifItems.length > 0) {
-                console.log(`[DASHBOARD] Found ${notifItems.length} notifications`);
-                const processedNotifications = notifItems.map(item => unmarshall(item));
-                setNotifications(processedNotifications);
-            }
         } catch (error) {
             console.error('[DASHBOARD] Error fetching user data:', error);
             if (error.name === 'ValidationException') {
@@ -111,11 +67,14 @@ const Dashboard = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [user?.id]);
 
     useEffect(() => {
         console.log('[Dashboard.jsx] Mounted');
-    }, []);
+        if (user?.id) {
+            fetchUserData();
+        }
+    }, [user?.id, fetchUserData]);
 
     console.log('[DASHBOARD] User data:', user);
 
@@ -137,7 +96,6 @@ const Dashboard = () => {
             console.log('[DASHBOARD] Face registration successful:', {
                 faceId: registeredFace?.face_id,
                 attributesCount: registeredFace?.faceAttributes ? Object.keys(registeredFace.faceAttributes).length : 0,
-                matchesCount: matches?.length || 0
             });
             console.log('[DASHBOARD] Raw face attributes received:', registeredFace?.faceAttributes);
         });
@@ -325,7 +283,7 @@ const Dashboard = () => {
                                     </div>
                                     <div>
                                         <p className="text-sm text-gray-600">Matches Found</p>
-                                        <p className="font-medium">{matches.length}</p>
+                                        <p className="font-medium">--</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-gray-600">Status</p>
@@ -444,95 +402,6 @@ const Dashboard = () => {
         </div>
     );
 
-    const renderMatchesTab = () => (
-        <div className="bg-white shadow-md rounded-lg overflow-hidden">
-            <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4">
-                <h2 className="text-lg font-semibold text-white flex items-center">
-                    <Image className="h-5 w-5 mr-2" />
-                    My Matched Photos ({matches.length})
-                </h2>
-            </div>
-            
-            <div className="p-6">
-                {matches.length > 0 ? (
-                    <div className="space-y-6">
-                        {matches.map((match, index) => (
-                            <div key={match.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                                <div className="flex flex-col md:flex-row">
-                                    <div className="bg-gray-100 md:w-1/3 p-4">
-                                        <img 
-                                            src={`https://shmong.s3.amazonaws.com/${match.photo_id}`} 
-                                            alt={`Match ${index + 1}`}
-                                            className="w-full h-48 object-cover rounded-md" 
-                                            onError={(e) => {
-                                                e.target.onerror = null;
-                                                e.target.src = 'https://via.placeholder.com/300x200?text=Photo+Not+Available';
-                                            }}
-                                        />
-                                    </div>
-                                    <div className="p-4 md:w-2/3">
-                                        <h3 className="font-semibold text-lg text-gray-800">Match #{index + 1}</h3>
-                                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                            <div>
-                                                <p className="text-sm text-gray-600">Photo ID</p>
-                                                <p className="font-medium text-xs text-gray-500">{match.photo_id}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm text-gray-600">Match Date</p>
-                                                <p className="font-medium">{new Date(match.created_at).toLocaleDateString()}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm text-gray-600">Similarity</p>
-                                                <p className="font-medium">{Math.round(match.similarity)}%</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm text-gray-600">Confidence</p>
-                                                <p className="font-medium">{Math.round(match.confidence || 0)}%</p>
-                                            </div>
-                                        </div>
-                                        <div className="mt-4">
-                                            <a 
-                                                href={`https://shmong.s3.amazonaws.com/${match.photo_id}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center text-emerald-600 hover:text-emerald-700"
-                                            >
-                                                <span>View Full Size</span>
-                                                <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-                                                </svg>
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="text-center py-12">
-                        <div className="w-20 h-20 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                            <Search className="h-10 w-10 text-gray-400" />
-                        </div>
-                        <h3 className="text-lg font-medium text-gray-800 mb-2">No Matches Found</h3>
-                        <p className="text-gray-600 mb-6">
-                            {registeredFace 
-                                ? "We haven't found you in any festival photos yet." 
-                                : "Register your face first to find matches."}
-                        </p>
-                        {!registeredFace && (
-                            <button 
-                                onClick={navigateToFaceRegistration}
-                                className="bg-emerald-600 text-white px-6 py-2 rounded-md font-medium hover:bg-emerald-700 transition"
-                            >
-                                Register Face
-                            </button>
-                        )}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-
     const renderUploadTab = () => (
         <div className="space-y-6">
             <div className="bg-white shadow-md rounded-lg overflow-hidden">
@@ -564,11 +433,6 @@ const Dashboard = () => {
             <div className="bg-white shadow-md rounded-lg p-6 mb-6 flex flex-col md:flex-row md:items-center md:justify-between">
                 <div className="mb-4 md:mb-0">
                     <h1 className="text-2xl font-bold text-gray-800">Welcome, {user?.name || user?.email || 'User'}!</h1>
-                    {registeredFace && matches.length > 0 && (
-                        <p className="text-green-600 font-medium">
-                            We found you in {matches.length} photo{matches.length === 1 ? '' : 's'}!
-                        </p>
-                    )}
                 </div>
                 <button 
                     onClick={handleSignOut}
@@ -595,11 +459,6 @@ const Dashboard = () => {
                     >
                         <Image className={`h-5 w-5 mr-2 ${activeTab === 'matches' ? 'text-emerald-700' : 'text-gray-500'}`} />
                         Matches
-                        {matches.length > 0 && (
-                            <span className="ml-2 px-2 py-0.5 bg-emerald-600 text-white text-xs rounded-full">
-                                {matches.length}
-                            </span>
-                        )}
                     </button>
                     <button 
                         className={`flex items-center px-6 py-3 font-medium ${activeTab === 'upload' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
@@ -607,6 +466,13 @@ const Dashboard = () => {
                     >
                         <Upload className={`h-5 w-5 mr-2 ${activeTab === 'upload' ? 'text-blue-700' : 'text-gray-500'}`} />
                         Upload
+                    </button>
+                    <button 
+                        className={`flex items-center px-6 py-3 font-medium ${activeTab === 'trash' ? 'bg-red-100 text-red-700 border-b-2 border-red-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                        onClick={() => setActiveTab('trash')}
+                    >
+                        <Trash className={`h-5 w-5 mr-2 ${activeTab === 'trash' ? 'text-red-700' : 'text-gray-500'}`} />
+                        Trash
                     </button>
                 </div>
             </div>
@@ -623,8 +489,11 @@ const Dashboard = () => {
             {!loading && (
                 <>
                     {activeTab === 'home' && renderHomeTab()}
-                    {activeTab === 'matches' && renderMatchesTab()}
+                    {activeTab === 'matches' && <MyPhotos />}
                     {activeTab === 'upload' && renderUploadTab()}
+                    {activeTab === 'trash' && (
+                        <TrashBin userId={user?.id} />
+                    )}
                 </>
             )}
 

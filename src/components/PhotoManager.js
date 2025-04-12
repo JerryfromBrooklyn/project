@@ -9,6 +9,7 @@ import { AlertTriangle, RefreshCw, Filter, ChevronDown, Calendar, MapPin, Tag, C
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
 import { awsPhotoService } from '../services/awsPhotoService';
+import { movePhotosToTrash } from '../services/userVisibilityService';
 export const PhotoManager = ({ eventId, mode = 'upload' }) => {
     const [photos, setPhotos] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -44,18 +45,26 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         // Fetch photos immediately on mount for all modes
         fetchPhotos(); // Fetch immediately for all modes
         
-        // Set up polling 
-        const pollingInterval = setInterval(() => {
-            console.log(`   Polling interval triggered for mode: ${mode}`);
-            fetchPhotos();
-        }, 30000); // Poll every 30 seconds
+        // Only set up polling for non-upload modes like 'matches'
+        let pollingInterval = null;
+        if (mode !== 'upload') {
+            console.log(`   Setting up polling interval for '${mode}' mode`);
+            pollingInterval = setInterval(() => {
+                console.log(`   Polling interval triggered for mode: ${mode}`);
+                fetchPhotos();
+            }, 30000); // Poll every 30 seconds
+        } else {
+            console.log(`   Polling disabled for '${mode}' mode`);
+        }
         
         return () => {
             console.log(`🔄 [PhotoManager ${mode}] Cleaning up AWS photo polling`);
             if (initialFetchTimeoutId) {
                 clearTimeout(initialFetchTimeoutId);
             }
-            clearInterval(pollingInterval);
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+            }
         };
     // Depend on user.id AND mode, so fetch runs when mode changes
     }, [user?.id, mode]);
@@ -123,18 +132,44 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
     };
     const handlePhotoDelete = async (photoId) => {
         try {
-            // Use AWS S3/DynamoDB to delete the photo
-            const success = await awsPhotoService.deletePhoto(photoId);
-            if (success) {
+            // Use userVisibilityService to move the photo to trash instead of deleting it
+            const result = await movePhotosToTrash(user.id, [photoId]);
+            if (result.success) {
                 setPhotos(photos.filter(p => p.id !== photoId));
             }
             else {
-                throw new Error('Failed to delete photo');
+                throw new Error('Failed to move photo to trash');
             }
         }
         catch (err) {
-            console.error('Error deleting photo:', err);
-            setError('Failed to delete photo. Please try again.');
+            console.error('Error moving photo to trash:', err);
+            setError('Failed to move photo to trash. Please try again.');
+        }
+    };
+    const handleTrashSinglePhoto = async (photoId, event) => {
+        event.stopPropagation(); // Prevent card selection/other actions
+        if (!user?.id || !photoId) return;
+
+        const confirmTrash = window.confirm("Are you sure you want to move this photo to the trash?");
+        if (!confirmTrash) return;
+
+        try {
+            console.log(`[PhotoManager] Trashing single photo: ${photoId} for user: ${user.id}`);
+            const result = await movePhotosToTrash(user.id, [photoId]);
+            
+            if (result.success) {
+                console.log(`[PhotoManager] Successfully trashed photo: ${photoId}`);
+                // Remove the trashed photo from the current view
+                setPhotos(prevPhotos => prevPhotos.filter(photo => photo.id !== photoId));
+                // Consider if you need to clear selection state if applicable here
+                // setSelectedPhotos(prevSelected => prevSelected.filter(id => id !== photoId));
+            } else {
+                setError(`Failed to move photo to trash: ${result.error}`);
+                console.error(`[PhotoManager] Error trashing photo ${photoId}:`, result.error);
+            }
+        } catch (err) {
+            console.error(`[PhotoManager] Exception trashing photo ${photoId}:`, err);
+            setError('Failed to move photo to trash. Please try again later.');
         }
     };
     const handleShare = async (photoId) => {
@@ -192,7 +227,8 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         _jsxs("div", { children: [
             _jsx(PhotoGrid, { 
                 photos: photos.slice((currentPage - 1) * photosPerPage, currentPage * photosPerPage), 
-                onDelete: mode === 'upload' ? handlePhotoDelete : undefined, 
+                onDelete: mode === 'upload' ? handlePhotoDelete : undefined,
+                onTrash: handleTrashSinglePhoto,
                 onShare: handleShare 
             }),
             // Pagination controls

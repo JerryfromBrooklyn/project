@@ -36,7 +36,10 @@ import {
   resolveRegionConfig,
   resolveRetryConfig,
   resolveUserAgentConfig
-} from "./chunk-7WMZKJIT.js";
+} from "./chunk-V333OXM4.js";
+import {
+  v4_default
+} from "./chunk-3TAN77E7.js";
 import "./chunk-W2ANHD2T.js";
 import {
   AwsSdkSigV4Signer,
@@ -96,9 +99,9 @@ import {
 } from "./chunk-GJFZQ5ET.js";
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/index.js
-var import_dist391 = __toESM(require_dist());
-var import_dist392 = __toESM(require_dist2());
-var import_dist393 = __toESM(require_dist3());
+var import_dist343 = __toESM(require_dist());
+var import_dist344 = __toESM(require_dist2());
+var import_dist345 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/RekognitionClient.js
 var import_dist25 = __toESM(require_dist());
@@ -464,452 +467,29 @@ var RekognitionClient = class extends Client {
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/Rekognition.js
-var import_dist313 = __toESM(require_dist());
-var import_dist314 = __toESM(require_dist2());
-var import_dist315 = __toESM(require_dist3());
+var import_dist265 = __toESM(require_dist());
+var import_dist266 = __toESM(require_dist2());
+var import_dist267 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/AssociateFacesCommand.js
-var import_dist88 = __toESM(require_dist());
-var import_dist89 = __toESM(require_dist2());
-var import_dist90 = __toESM(require_dist3());
-
-// node_modules/@aws-sdk/client-rekognition/dist-es/protocols/Aws_json1_1.js
-var import_dist85 = __toESM(require_dist());
-var import_dist86 = __toESM(require_dist2());
-var import_dist87 = __toESM(require_dist3());
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/index.js
-var import_dist73 = __toESM(require_dist());
-var import_dist74 = __toESM(require_dist2());
-var import_dist75 = __toESM(require_dist3());
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/v1.js
 var import_dist40 = __toESM(require_dist());
 var import_dist41 = __toESM(require_dist2());
 var import_dist42 = __toESM(require_dist3());
 
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/rng.js
-var import_dist28 = __toESM(require_dist());
-var import_dist29 = __toESM(require_dist2());
-var import_dist30 = __toESM(require_dist3());
-var getRandomValues;
-var rnds8 = new Uint8Array(16);
-function rng() {
-  if (!getRandomValues) {
-    getRandomValues = typeof crypto !== "undefined" && crypto.getRandomValues && crypto.getRandomValues.bind(crypto);
-    if (!getRandomValues) {
-      throw new Error("crypto.getRandomValues() not supported. See https://github.com/uuidjs/uuid#getrandomvalues-not-supported");
-    }
-  }
-  return getRandomValues(rnds8);
-}
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/stringify.js
+// node_modules/@aws-sdk/client-rekognition/dist-es/protocols/Aws_json1_1.js
 var import_dist37 = __toESM(require_dist());
 var import_dist38 = __toESM(require_dist2());
 var import_dist39 = __toESM(require_dist3());
 
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/validate.js
-var import_dist34 = __toESM(require_dist());
-var import_dist35 = __toESM(require_dist2());
-var import_dist36 = __toESM(require_dist3());
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/regex.js
+// node_modules/@aws-sdk/client-rekognition/dist-es/models/models_0.js
 var import_dist31 = __toESM(require_dist());
 var import_dist32 = __toESM(require_dist2());
 var import_dist33 = __toESM(require_dist3());
-var regex_default = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000)$/i;
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/validate.js
-function validate(uuid) {
-  return typeof uuid === "string" && regex_default.test(uuid);
-}
-var validate_default = validate;
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/stringify.js
-var byteToHex = [];
-for (let i2 = 0; i2 < 256; ++i2) {
-  byteToHex.push((i2 + 256).toString(16).slice(1));
-}
-function unsafeStringify(arr, offset = 0) {
-  return byteToHex[arr[offset + 0]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + "-" + byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + "-" + byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + "-" + byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + "-" + byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]];
-}
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/v3.js
-var import_dist52 = __toESM(require_dist());
-var import_dist53 = __toESM(require_dist2());
-var import_dist54 = __toESM(require_dist3());
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/v35.js
-var import_dist46 = __toESM(require_dist());
-var import_dist47 = __toESM(require_dist2());
-var import_dist48 = __toESM(require_dist3());
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/parse.js
-var import_dist43 = __toESM(require_dist());
-var import_dist44 = __toESM(require_dist2());
-var import_dist45 = __toESM(require_dist3());
-function parse(uuid) {
-  if (!validate_default(uuid)) {
-    throw TypeError("Invalid UUID");
-  }
-  let v2;
-  const arr = new Uint8Array(16);
-  arr[0] = (v2 = parseInt(uuid.slice(0, 8), 16)) >>> 24;
-  arr[1] = v2 >>> 16 & 255;
-  arr[2] = v2 >>> 8 & 255;
-  arr[3] = v2 & 255;
-  arr[4] = (v2 = parseInt(uuid.slice(9, 13), 16)) >>> 8;
-  arr[5] = v2 & 255;
-  arr[6] = (v2 = parseInt(uuid.slice(14, 18), 16)) >>> 8;
-  arr[7] = v2 & 255;
-  arr[8] = (v2 = parseInt(uuid.slice(19, 23), 16)) >>> 8;
-  arr[9] = v2 & 255;
-  arr[10] = (v2 = parseInt(uuid.slice(24, 36), 16)) / 1099511627776 & 255;
-  arr[11] = v2 / 4294967296 & 255;
-  arr[12] = v2 >>> 24 & 255;
-  arr[13] = v2 >>> 16 & 255;
-  arr[14] = v2 >>> 8 & 255;
-  arr[15] = v2 & 255;
-  return arr;
-}
-var parse_default = parse;
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/v35.js
-function stringToBytes(str) {
-  str = unescape(encodeURIComponent(str));
-  const bytes = [];
-  for (let i2 = 0; i2 < str.length; ++i2) {
-    bytes.push(str.charCodeAt(i2));
-  }
-  return bytes;
-}
-var DNS = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
-var URL = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
-function v35(name, version, hashfunc) {
-  function generateUUID(value, namespace, buf, offset) {
-    var _namespace;
-    if (typeof value === "string") {
-      value = stringToBytes(value);
-    }
-    if (typeof namespace === "string") {
-      namespace = parse_default(namespace);
-    }
-    if (((_namespace = namespace) === null || _namespace === void 0 ? void 0 : _namespace.length) !== 16) {
-      throw TypeError("Namespace must be array-like (16 iterable integer values, 0-255)");
-    }
-    let bytes = new Uint8Array(16 + value.length);
-    bytes.set(namespace);
-    bytes.set(value, namespace.length);
-    bytes = hashfunc(bytes);
-    bytes[6] = bytes[6] & 15 | version;
-    bytes[8] = bytes[8] & 63 | 128;
-    if (buf) {
-      offset = offset || 0;
-      for (let i2 = 0; i2 < 16; ++i2) {
-        buf[offset + i2] = bytes[i2];
-      }
-      return buf;
-    }
-    return unsafeStringify(bytes);
-  }
-  try {
-    generateUUID.name = name;
-  } catch (err) {
-  }
-  generateUUID.DNS = DNS;
-  generateUUID.URL = URL;
-  return generateUUID;
-}
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/md5.js
-var import_dist49 = __toESM(require_dist());
-var import_dist50 = __toESM(require_dist2());
-var import_dist51 = __toESM(require_dist3());
-function md5(bytes) {
-  if (typeof bytes === "string") {
-    const msg = unescape(encodeURIComponent(bytes));
-    bytes = new Uint8Array(msg.length);
-    for (let i2 = 0; i2 < msg.length; ++i2) {
-      bytes[i2] = msg.charCodeAt(i2);
-    }
-  }
-  return md5ToHexEncodedArray(wordsToMd5(bytesToWords(bytes), bytes.length * 8));
-}
-function md5ToHexEncodedArray(input) {
-  const output = [];
-  const length32 = input.length * 32;
-  const hexTab = "0123456789abcdef";
-  for (let i2 = 0; i2 < length32; i2 += 8) {
-    const x = input[i2 >> 5] >>> i2 % 32 & 255;
-    const hex = parseInt(hexTab.charAt(x >>> 4 & 15) + hexTab.charAt(x & 15), 16);
-    output.push(hex);
-  }
-  return output;
-}
-function getOutputLength(inputLength8) {
-  return (inputLength8 + 64 >>> 9 << 4) + 14 + 1;
-}
-function wordsToMd5(x, len) {
-  x[len >> 5] |= 128 << len % 32;
-  x[getOutputLength(len) - 1] = len;
-  let a2 = 1732584193;
-  let b2 = -271733879;
-  let c2 = -1732584194;
-  let d2 = 271733878;
-  for (let i2 = 0; i2 < x.length; i2 += 16) {
-    const olda = a2;
-    const oldb = b2;
-    const oldc = c2;
-    const oldd = d2;
-    a2 = md5ff(a2, b2, c2, d2, x[i2], 7, -680876936);
-    d2 = md5ff(d2, a2, b2, c2, x[i2 + 1], 12, -389564586);
-    c2 = md5ff(c2, d2, a2, b2, x[i2 + 2], 17, 606105819);
-    b2 = md5ff(b2, c2, d2, a2, x[i2 + 3], 22, -1044525330);
-    a2 = md5ff(a2, b2, c2, d2, x[i2 + 4], 7, -176418897);
-    d2 = md5ff(d2, a2, b2, c2, x[i2 + 5], 12, 1200080426);
-    c2 = md5ff(c2, d2, a2, b2, x[i2 + 6], 17, -1473231341);
-    b2 = md5ff(b2, c2, d2, a2, x[i2 + 7], 22, -45705983);
-    a2 = md5ff(a2, b2, c2, d2, x[i2 + 8], 7, 1770035416);
-    d2 = md5ff(d2, a2, b2, c2, x[i2 + 9], 12, -1958414417);
-    c2 = md5ff(c2, d2, a2, b2, x[i2 + 10], 17, -42063);
-    b2 = md5ff(b2, c2, d2, a2, x[i2 + 11], 22, -1990404162);
-    a2 = md5ff(a2, b2, c2, d2, x[i2 + 12], 7, 1804603682);
-    d2 = md5ff(d2, a2, b2, c2, x[i2 + 13], 12, -40341101);
-    c2 = md5ff(c2, d2, a2, b2, x[i2 + 14], 17, -1502002290);
-    b2 = md5ff(b2, c2, d2, a2, x[i2 + 15], 22, 1236535329);
-    a2 = md5gg(a2, b2, c2, d2, x[i2 + 1], 5, -165796510);
-    d2 = md5gg(d2, a2, b2, c2, x[i2 + 6], 9, -1069501632);
-    c2 = md5gg(c2, d2, a2, b2, x[i2 + 11], 14, 643717713);
-    b2 = md5gg(b2, c2, d2, a2, x[i2], 20, -373897302);
-    a2 = md5gg(a2, b2, c2, d2, x[i2 + 5], 5, -701558691);
-    d2 = md5gg(d2, a2, b2, c2, x[i2 + 10], 9, 38016083);
-    c2 = md5gg(c2, d2, a2, b2, x[i2 + 15], 14, -660478335);
-    b2 = md5gg(b2, c2, d2, a2, x[i2 + 4], 20, -405537848);
-    a2 = md5gg(a2, b2, c2, d2, x[i2 + 9], 5, 568446438);
-    d2 = md5gg(d2, a2, b2, c2, x[i2 + 14], 9, -1019803690);
-    c2 = md5gg(c2, d2, a2, b2, x[i2 + 3], 14, -187363961);
-    b2 = md5gg(b2, c2, d2, a2, x[i2 + 8], 20, 1163531501);
-    a2 = md5gg(a2, b2, c2, d2, x[i2 + 13], 5, -1444681467);
-    d2 = md5gg(d2, a2, b2, c2, x[i2 + 2], 9, -51403784);
-    c2 = md5gg(c2, d2, a2, b2, x[i2 + 7], 14, 1735328473);
-    b2 = md5gg(b2, c2, d2, a2, x[i2 + 12], 20, -1926607734);
-    a2 = md5hh(a2, b2, c2, d2, x[i2 + 5], 4, -378558);
-    d2 = md5hh(d2, a2, b2, c2, x[i2 + 8], 11, -2022574463);
-    c2 = md5hh(c2, d2, a2, b2, x[i2 + 11], 16, 1839030562);
-    b2 = md5hh(b2, c2, d2, a2, x[i2 + 14], 23, -35309556);
-    a2 = md5hh(a2, b2, c2, d2, x[i2 + 1], 4, -1530992060);
-    d2 = md5hh(d2, a2, b2, c2, x[i2 + 4], 11, 1272893353);
-    c2 = md5hh(c2, d2, a2, b2, x[i2 + 7], 16, -155497632);
-    b2 = md5hh(b2, c2, d2, a2, x[i2 + 10], 23, -1094730640);
-    a2 = md5hh(a2, b2, c2, d2, x[i2 + 13], 4, 681279174);
-    d2 = md5hh(d2, a2, b2, c2, x[i2], 11, -358537222);
-    c2 = md5hh(c2, d2, a2, b2, x[i2 + 3], 16, -722521979);
-    b2 = md5hh(b2, c2, d2, a2, x[i2 + 6], 23, 76029189);
-    a2 = md5hh(a2, b2, c2, d2, x[i2 + 9], 4, -640364487);
-    d2 = md5hh(d2, a2, b2, c2, x[i2 + 12], 11, -421815835);
-    c2 = md5hh(c2, d2, a2, b2, x[i2 + 15], 16, 530742520);
-    b2 = md5hh(b2, c2, d2, a2, x[i2 + 2], 23, -995338651);
-    a2 = md5ii(a2, b2, c2, d2, x[i2], 6, -198630844);
-    d2 = md5ii(d2, a2, b2, c2, x[i2 + 7], 10, 1126891415);
-    c2 = md5ii(c2, d2, a2, b2, x[i2 + 14], 15, -1416354905);
-    b2 = md5ii(b2, c2, d2, a2, x[i2 + 5], 21, -57434055);
-    a2 = md5ii(a2, b2, c2, d2, x[i2 + 12], 6, 1700485571);
-    d2 = md5ii(d2, a2, b2, c2, x[i2 + 3], 10, -1894986606);
-    c2 = md5ii(c2, d2, a2, b2, x[i2 + 10], 15, -1051523);
-    b2 = md5ii(b2, c2, d2, a2, x[i2 + 1], 21, -2054922799);
-    a2 = md5ii(a2, b2, c2, d2, x[i2 + 8], 6, 1873313359);
-    d2 = md5ii(d2, a2, b2, c2, x[i2 + 15], 10, -30611744);
-    c2 = md5ii(c2, d2, a2, b2, x[i2 + 6], 15, -1560198380);
-    b2 = md5ii(b2, c2, d2, a2, x[i2 + 13], 21, 1309151649);
-    a2 = md5ii(a2, b2, c2, d2, x[i2 + 4], 6, -145523070);
-    d2 = md5ii(d2, a2, b2, c2, x[i2 + 11], 10, -1120210379);
-    c2 = md5ii(c2, d2, a2, b2, x[i2 + 2], 15, 718787259);
-    b2 = md5ii(b2, c2, d2, a2, x[i2 + 9], 21, -343485551);
-    a2 = safeAdd(a2, olda);
-    b2 = safeAdd(b2, oldb);
-    c2 = safeAdd(c2, oldc);
-    d2 = safeAdd(d2, oldd);
-  }
-  return [a2, b2, c2, d2];
-}
-function bytesToWords(input) {
-  if (input.length === 0) {
-    return [];
-  }
-  const length8 = input.length * 8;
-  const output = new Uint32Array(getOutputLength(length8));
-  for (let i2 = 0; i2 < length8; i2 += 8) {
-    output[i2 >> 5] |= (input[i2 / 8] & 255) << i2 % 32;
-  }
-  return output;
-}
-function safeAdd(x, y) {
-  const lsw = (x & 65535) + (y & 65535);
-  const msw = (x >> 16) + (y >> 16) + (lsw >> 16);
-  return msw << 16 | lsw & 65535;
-}
-function bitRotateLeft(num, cnt) {
-  return num << cnt | num >>> 32 - cnt;
-}
-function md5cmn(q2, a2, b2, x, s2, t2) {
-  return safeAdd(bitRotateLeft(safeAdd(safeAdd(a2, q2), safeAdd(x, t2)), s2), b2);
-}
-function md5ff(a2, b2, c2, d2, x, s2, t2) {
-  return md5cmn(b2 & c2 | ~b2 & d2, a2, b2, x, s2, t2);
-}
-function md5gg(a2, b2, c2, d2, x, s2, t2) {
-  return md5cmn(b2 & d2 | c2 & ~d2, a2, b2, x, s2, t2);
-}
-function md5hh(a2, b2, c2, d2, x, s2, t2) {
-  return md5cmn(b2 ^ c2 ^ d2, a2, b2, x, s2, t2);
-}
-function md5ii(a2, b2, c2, d2, x, s2, t2) {
-  return md5cmn(c2 ^ (b2 | ~d2), a2, b2, x, s2, t2);
-}
-var md5_default = md5;
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/v3.js
-var v3 = v35("v3", 48, md5_default);
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/v4.js
-var import_dist58 = __toESM(require_dist());
-var import_dist59 = __toESM(require_dist2());
-var import_dist60 = __toESM(require_dist3());
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/native.js
-var import_dist55 = __toESM(require_dist());
-var import_dist56 = __toESM(require_dist2());
-var import_dist57 = __toESM(require_dist3());
-var randomUUID = typeof crypto !== "undefined" && crypto.randomUUID && crypto.randomUUID.bind(crypto);
-var native_default = {
-  randomUUID
-};
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/v4.js
-function v4(options, buf, offset) {
-  if (native_default.randomUUID && !buf && !options) {
-    return native_default.randomUUID();
-  }
-  options = options || {};
-  const rnds = options.random || (options.rng || rng)();
-  rnds[6] = rnds[6] & 15 | 64;
-  rnds[8] = rnds[8] & 63 | 128;
-  if (buf) {
-    offset = offset || 0;
-    for (let i2 = 0; i2 < 16; ++i2) {
-      buf[offset + i2] = rnds[i2];
-    }
-    return buf;
-  }
-  return unsafeStringify(rnds);
-}
-var v4_default = v4;
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/v5.js
-var import_dist64 = __toESM(require_dist());
-var import_dist65 = __toESM(require_dist2());
-var import_dist66 = __toESM(require_dist3());
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/sha1.js
-var import_dist61 = __toESM(require_dist());
-var import_dist62 = __toESM(require_dist2());
-var import_dist63 = __toESM(require_dist3());
-function f2(s2, x, y, z) {
-  switch (s2) {
-    case 0:
-      return x & y ^ ~x & z;
-    case 1:
-      return x ^ y ^ z;
-    case 2:
-      return x & y ^ x & z ^ y & z;
-    case 3:
-      return x ^ y ^ z;
-  }
-}
-function ROTL(x, n2) {
-  return x << n2 | x >>> 32 - n2;
-}
-function sha1(bytes) {
-  const K = [1518500249, 1859775393, 2400959708, 3395469782];
-  const H = [1732584193, 4023233417, 2562383102, 271733878, 3285377520];
-  if (typeof bytes === "string") {
-    const msg = unescape(encodeURIComponent(bytes));
-    bytes = [];
-    for (let i2 = 0; i2 < msg.length; ++i2) {
-      bytes.push(msg.charCodeAt(i2));
-    }
-  } else if (!Array.isArray(bytes)) {
-    bytes = Array.prototype.slice.call(bytes);
-  }
-  bytes.push(128);
-  const l2 = bytes.length / 4 + 2;
-  const N = Math.ceil(l2 / 16);
-  const M = new Array(N);
-  for (let i2 = 0; i2 < N; ++i2) {
-    const arr = new Uint32Array(16);
-    for (let j2 = 0; j2 < 16; ++j2) {
-      arr[j2] = bytes[i2 * 64 + j2 * 4] << 24 | bytes[i2 * 64 + j2 * 4 + 1] << 16 | bytes[i2 * 64 + j2 * 4 + 2] << 8 | bytes[i2 * 64 + j2 * 4 + 3];
-    }
-    M[i2] = arr;
-  }
-  M[N - 1][14] = (bytes.length - 1) * 8 / Math.pow(2, 32);
-  M[N - 1][14] = Math.floor(M[N - 1][14]);
-  M[N - 1][15] = (bytes.length - 1) * 8 & 4294967295;
-  for (let i2 = 0; i2 < N; ++i2) {
-    const W = new Uint32Array(80);
-    for (let t2 = 0; t2 < 16; ++t2) {
-      W[t2] = M[i2][t2];
-    }
-    for (let t2 = 16; t2 < 80; ++t2) {
-      W[t2] = ROTL(W[t2 - 3] ^ W[t2 - 8] ^ W[t2 - 14] ^ W[t2 - 16], 1);
-    }
-    let a2 = H[0];
-    let b2 = H[1];
-    let c2 = H[2];
-    let d2 = H[3];
-    let e2 = H[4];
-    for (let t2 = 0; t2 < 80; ++t2) {
-      const s2 = Math.floor(t2 / 20);
-      const T = ROTL(a2, 5) + f2(s2, b2, c2, d2) + e2 + K[s2] + W[t2] >>> 0;
-      e2 = d2;
-      d2 = c2;
-      c2 = ROTL(b2, 30) >>> 0;
-      b2 = a2;
-      a2 = T;
-    }
-    H[0] = H[0] + a2 >>> 0;
-    H[1] = H[1] + b2 >>> 0;
-    H[2] = H[2] + c2 >>> 0;
-    H[3] = H[3] + d2 >>> 0;
-    H[4] = H[4] + e2 >>> 0;
-  }
-  return [H[0] >> 24 & 255, H[0] >> 16 & 255, H[0] >> 8 & 255, H[0] & 255, H[1] >> 24 & 255, H[1] >> 16 & 255, H[1] >> 8 & 255, H[1] & 255, H[2] >> 24 & 255, H[2] >> 16 & 255, H[2] >> 8 & 255, H[2] & 255, H[3] >> 24 & 255, H[3] >> 16 & 255, H[3] >> 8 & 255, H[3] & 255, H[4] >> 24 & 255, H[4] >> 16 & 255, H[4] >> 8 & 255, H[4] & 255];
-}
-var sha1_default = sha1;
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/v5.js
-var v5 = v35("v5", 80, sha1_default);
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/nil.js
-var import_dist67 = __toESM(require_dist());
-var import_dist68 = __toESM(require_dist2());
-var import_dist69 = __toESM(require_dist3());
-
-// node_modules/@aws-sdk/client-rekognition/node_modules/uuid/dist/esm-browser/version.js
-var import_dist70 = __toESM(require_dist());
-var import_dist71 = __toESM(require_dist2());
-var import_dist72 = __toESM(require_dist3());
-
-// node_modules/@aws-sdk/client-rekognition/dist-es/models/models_0.js
-var import_dist79 = __toESM(require_dist());
-var import_dist80 = __toESM(require_dist2());
-var import_dist81 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/models/RekognitionServiceException.js
-var import_dist76 = __toESM(require_dist());
-var import_dist77 = __toESM(require_dist2());
-var import_dist78 = __toESM(require_dist3());
+var import_dist28 = __toESM(require_dist());
+var import_dist29 = __toESM(require_dist2());
+var import_dist30 = __toESM(require_dist3());
 var RekognitionServiceException = class _RekognitionServiceException extends ServiceException {
   constructor(options) {
     super(options);
@@ -1601,9 +1181,9 @@ var GetFaceLivenessSessionResultsResponseFilterSensitiveLog = (obj) => ({
 });
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/models/models_1.js
-var import_dist82 = __toESM(require_dist());
-var import_dist83 = __toESM(require_dist2());
-var import_dist84 = __toESM(require_dist3());
+var import_dist34 = __toESM(require_dist());
+var import_dist35 = __toESM(require_dist2());
+var import_dist36 = __toESM(require_dist3());
 var UnsearchedFaceReason = {
   EXCEEDS_MAX_FACES: "EXCEEDS_MAX_FACES",
   EXTREME_POSE: "EXTREME_POSE",
@@ -4890,9 +4470,9 @@ var AssociateFacesCommand = class extends Command.classBuilder().ep(commonParams
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/CompareFacesCommand.js
-var import_dist91 = __toESM(require_dist());
-var import_dist92 = __toESM(require_dist2());
-var import_dist93 = __toESM(require_dist3());
+var import_dist43 = __toESM(require_dist());
+var import_dist44 = __toESM(require_dist2());
+var import_dist45 = __toESM(require_dist3());
 var CompareFacesCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -4902,9 +4482,9 @@ var CompareFacesCommand = class extends Command.classBuilder().ep(commonParams).
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/CopyProjectVersionCommand.js
-var import_dist94 = __toESM(require_dist());
-var import_dist95 = __toESM(require_dist2());
-var import_dist96 = __toESM(require_dist3());
+var import_dist46 = __toESM(require_dist());
+var import_dist47 = __toESM(require_dist2());
+var import_dist48 = __toESM(require_dist3());
 var CopyProjectVersionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -4914,9 +4494,9 @@ var CopyProjectVersionCommand = class extends Command.classBuilder().ep(commonPa
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/CreateCollectionCommand.js
-var import_dist97 = __toESM(require_dist());
-var import_dist98 = __toESM(require_dist2());
-var import_dist99 = __toESM(require_dist3());
+var import_dist49 = __toESM(require_dist());
+var import_dist50 = __toESM(require_dist2());
+var import_dist51 = __toESM(require_dist3());
 var CreateCollectionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -4926,9 +4506,9 @@ var CreateCollectionCommand = class extends Command.classBuilder().ep(commonPara
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/CreateDatasetCommand.js
-var import_dist100 = __toESM(require_dist());
-var import_dist101 = __toESM(require_dist2());
-var import_dist102 = __toESM(require_dist3());
+var import_dist52 = __toESM(require_dist());
+var import_dist53 = __toESM(require_dist2());
+var import_dist54 = __toESM(require_dist3());
 var CreateDatasetCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -4938,9 +4518,9 @@ var CreateDatasetCommand = class extends Command.classBuilder().ep(commonParams)
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/CreateFaceLivenessSessionCommand.js
-var import_dist103 = __toESM(require_dist());
-var import_dist104 = __toESM(require_dist2());
-var import_dist105 = __toESM(require_dist3());
+var import_dist55 = __toESM(require_dist());
+var import_dist56 = __toESM(require_dist2());
+var import_dist57 = __toESM(require_dist3());
 var CreateFaceLivenessSessionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -4950,9 +4530,9 @@ var CreateFaceLivenessSessionCommand = class extends Command.classBuilder().ep(c
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/CreateProjectCommand.js
-var import_dist106 = __toESM(require_dist());
-var import_dist107 = __toESM(require_dist2());
-var import_dist108 = __toESM(require_dist3());
+var import_dist58 = __toESM(require_dist());
+var import_dist59 = __toESM(require_dist2());
+var import_dist60 = __toESM(require_dist3());
 var CreateProjectCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -4962,9 +4542,9 @@ var CreateProjectCommand = class extends Command.classBuilder().ep(commonParams)
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/CreateProjectVersionCommand.js
-var import_dist109 = __toESM(require_dist());
-var import_dist110 = __toESM(require_dist2());
-var import_dist111 = __toESM(require_dist3());
+var import_dist61 = __toESM(require_dist());
+var import_dist62 = __toESM(require_dist2());
+var import_dist63 = __toESM(require_dist3());
 var CreateProjectVersionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -4974,9 +4554,9 @@ var CreateProjectVersionCommand = class extends Command.classBuilder().ep(common
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/CreateStreamProcessorCommand.js
-var import_dist112 = __toESM(require_dist());
-var import_dist113 = __toESM(require_dist2());
-var import_dist114 = __toESM(require_dist3());
+var import_dist64 = __toESM(require_dist());
+var import_dist65 = __toESM(require_dist2());
+var import_dist66 = __toESM(require_dist3());
 var CreateStreamProcessorCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -4986,9 +4566,9 @@ var CreateStreamProcessorCommand = class extends Command.classBuilder().ep(commo
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/CreateUserCommand.js
-var import_dist115 = __toESM(require_dist());
-var import_dist116 = __toESM(require_dist2());
-var import_dist117 = __toESM(require_dist3());
+var import_dist67 = __toESM(require_dist());
+var import_dist68 = __toESM(require_dist2());
+var import_dist69 = __toESM(require_dist3());
 var CreateUserCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -4998,9 +4578,9 @@ var CreateUserCommand = class extends Command.classBuilder().ep(commonParams).m(
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DeleteCollectionCommand.js
-var import_dist118 = __toESM(require_dist());
-var import_dist119 = __toESM(require_dist2());
-var import_dist120 = __toESM(require_dist3());
+var import_dist70 = __toESM(require_dist());
+var import_dist71 = __toESM(require_dist2());
+var import_dist72 = __toESM(require_dist3());
 var DeleteCollectionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5010,9 +4590,9 @@ var DeleteCollectionCommand = class extends Command.classBuilder().ep(commonPara
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DeleteDatasetCommand.js
-var import_dist121 = __toESM(require_dist());
-var import_dist122 = __toESM(require_dist2());
-var import_dist123 = __toESM(require_dist3());
+var import_dist73 = __toESM(require_dist());
+var import_dist74 = __toESM(require_dist2());
+var import_dist75 = __toESM(require_dist3());
 var DeleteDatasetCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5022,9 +4602,9 @@ var DeleteDatasetCommand = class extends Command.classBuilder().ep(commonParams)
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DeleteFacesCommand.js
-var import_dist124 = __toESM(require_dist());
-var import_dist125 = __toESM(require_dist2());
-var import_dist126 = __toESM(require_dist3());
+var import_dist76 = __toESM(require_dist());
+var import_dist77 = __toESM(require_dist2());
+var import_dist78 = __toESM(require_dist3());
 var DeleteFacesCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5034,9 +4614,9 @@ var DeleteFacesCommand = class extends Command.classBuilder().ep(commonParams).m
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DeleteProjectCommand.js
-var import_dist127 = __toESM(require_dist());
-var import_dist128 = __toESM(require_dist2());
-var import_dist129 = __toESM(require_dist3());
+var import_dist79 = __toESM(require_dist());
+var import_dist80 = __toESM(require_dist2());
+var import_dist81 = __toESM(require_dist3());
 var DeleteProjectCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5046,9 +4626,9 @@ var DeleteProjectCommand = class extends Command.classBuilder().ep(commonParams)
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DeleteProjectPolicyCommand.js
-var import_dist130 = __toESM(require_dist());
-var import_dist131 = __toESM(require_dist2());
-var import_dist132 = __toESM(require_dist3());
+var import_dist82 = __toESM(require_dist());
+var import_dist83 = __toESM(require_dist2());
+var import_dist84 = __toESM(require_dist3());
 var DeleteProjectPolicyCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5058,9 +4638,9 @@ var DeleteProjectPolicyCommand = class extends Command.classBuilder().ep(commonP
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DeleteProjectVersionCommand.js
-var import_dist133 = __toESM(require_dist());
-var import_dist134 = __toESM(require_dist2());
-var import_dist135 = __toESM(require_dist3());
+var import_dist85 = __toESM(require_dist());
+var import_dist86 = __toESM(require_dist2());
+var import_dist87 = __toESM(require_dist3());
 var DeleteProjectVersionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5070,9 +4650,9 @@ var DeleteProjectVersionCommand = class extends Command.classBuilder().ep(common
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DeleteStreamProcessorCommand.js
-var import_dist136 = __toESM(require_dist());
-var import_dist137 = __toESM(require_dist2());
-var import_dist138 = __toESM(require_dist3());
+var import_dist88 = __toESM(require_dist());
+var import_dist89 = __toESM(require_dist2());
+var import_dist90 = __toESM(require_dist3());
 var DeleteStreamProcessorCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5082,9 +4662,9 @@ var DeleteStreamProcessorCommand = class extends Command.classBuilder().ep(commo
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DeleteUserCommand.js
-var import_dist139 = __toESM(require_dist());
-var import_dist140 = __toESM(require_dist2());
-var import_dist141 = __toESM(require_dist3());
+var import_dist91 = __toESM(require_dist());
+var import_dist92 = __toESM(require_dist2());
+var import_dist93 = __toESM(require_dist3());
 var DeleteUserCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5094,9 +4674,9 @@ var DeleteUserCommand = class extends Command.classBuilder().ep(commonParams).m(
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DescribeCollectionCommand.js
-var import_dist142 = __toESM(require_dist());
-var import_dist143 = __toESM(require_dist2());
-var import_dist144 = __toESM(require_dist3());
+var import_dist94 = __toESM(require_dist());
+var import_dist95 = __toESM(require_dist2());
+var import_dist96 = __toESM(require_dist3());
 var DescribeCollectionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5106,9 +4686,9 @@ var DescribeCollectionCommand = class extends Command.classBuilder().ep(commonPa
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DescribeDatasetCommand.js
-var import_dist145 = __toESM(require_dist());
-var import_dist146 = __toESM(require_dist2());
-var import_dist147 = __toESM(require_dist3());
+var import_dist97 = __toESM(require_dist());
+var import_dist98 = __toESM(require_dist2());
+var import_dist99 = __toESM(require_dist3());
 var DescribeDatasetCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5118,9 +4698,9 @@ var DescribeDatasetCommand = class extends Command.classBuilder().ep(commonParam
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DescribeProjectsCommand.js
-var import_dist148 = __toESM(require_dist());
-var import_dist149 = __toESM(require_dist2());
-var import_dist150 = __toESM(require_dist3());
+var import_dist100 = __toESM(require_dist());
+var import_dist101 = __toESM(require_dist2());
+var import_dist102 = __toESM(require_dist3());
 var DescribeProjectsCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5130,9 +4710,9 @@ var DescribeProjectsCommand = class extends Command.classBuilder().ep(commonPara
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DescribeProjectVersionsCommand.js
-var import_dist151 = __toESM(require_dist());
-var import_dist152 = __toESM(require_dist2());
-var import_dist153 = __toESM(require_dist3());
+var import_dist103 = __toESM(require_dist());
+var import_dist104 = __toESM(require_dist2());
+var import_dist105 = __toESM(require_dist3());
 var DescribeProjectVersionsCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5142,9 +4722,9 @@ var DescribeProjectVersionsCommand = class extends Command.classBuilder().ep(com
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DescribeStreamProcessorCommand.js
-var import_dist154 = __toESM(require_dist());
-var import_dist155 = __toESM(require_dist2());
-var import_dist156 = __toESM(require_dist3());
+var import_dist106 = __toESM(require_dist());
+var import_dist107 = __toESM(require_dist2());
+var import_dist108 = __toESM(require_dist3());
 var DescribeStreamProcessorCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5154,9 +4734,9 @@ var DescribeStreamProcessorCommand = class extends Command.classBuilder().ep(com
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DetectCustomLabelsCommand.js
-var import_dist157 = __toESM(require_dist());
-var import_dist158 = __toESM(require_dist2());
-var import_dist159 = __toESM(require_dist3());
+var import_dist109 = __toESM(require_dist());
+var import_dist110 = __toESM(require_dist2());
+var import_dist111 = __toESM(require_dist3());
 var DetectCustomLabelsCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5166,9 +4746,9 @@ var DetectCustomLabelsCommand = class extends Command.classBuilder().ep(commonPa
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DetectFacesCommand.js
-var import_dist160 = __toESM(require_dist());
-var import_dist161 = __toESM(require_dist2());
-var import_dist162 = __toESM(require_dist3());
+var import_dist112 = __toESM(require_dist());
+var import_dist113 = __toESM(require_dist2());
+var import_dist114 = __toESM(require_dist3());
 var DetectFacesCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5178,9 +4758,9 @@ var DetectFacesCommand = class extends Command.classBuilder().ep(commonParams).m
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DetectLabelsCommand.js
-var import_dist163 = __toESM(require_dist());
-var import_dist164 = __toESM(require_dist2());
-var import_dist165 = __toESM(require_dist3());
+var import_dist115 = __toESM(require_dist());
+var import_dist116 = __toESM(require_dist2());
+var import_dist117 = __toESM(require_dist3());
 var DetectLabelsCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5190,9 +4770,9 @@ var DetectLabelsCommand = class extends Command.classBuilder().ep(commonParams).
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DetectModerationLabelsCommand.js
-var import_dist166 = __toESM(require_dist());
-var import_dist167 = __toESM(require_dist2());
-var import_dist168 = __toESM(require_dist3());
+var import_dist118 = __toESM(require_dist());
+var import_dist119 = __toESM(require_dist2());
+var import_dist120 = __toESM(require_dist3());
 var DetectModerationLabelsCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5202,9 +4782,9 @@ var DetectModerationLabelsCommand = class extends Command.classBuilder().ep(comm
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DetectProtectiveEquipmentCommand.js
-var import_dist169 = __toESM(require_dist());
-var import_dist170 = __toESM(require_dist2());
-var import_dist171 = __toESM(require_dist3());
+var import_dist121 = __toESM(require_dist());
+var import_dist122 = __toESM(require_dist2());
+var import_dist123 = __toESM(require_dist3());
 var DetectProtectiveEquipmentCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5214,9 +4794,9 @@ var DetectProtectiveEquipmentCommand = class extends Command.classBuilder().ep(c
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DetectTextCommand.js
-var import_dist172 = __toESM(require_dist());
-var import_dist173 = __toESM(require_dist2());
-var import_dist174 = __toESM(require_dist3());
+var import_dist124 = __toESM(require_dist());
+var import_dist125 = __toESM(require_dist2());
+var import_dist126 = __toESM(require_dist3());
 var DetectTextCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5226,9 +4806,9 @@ var DetectTextCommand = class extends Command.classBuilder().ep(commonParams).m(
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DisassociateFacesCommand.js
-var import_dist175 = __toESM(require_dist());
-var import_dist176 = __toESM(require_dist2());
-var import_dist177 = __toESM(require_dist3());
+var import_dist127 = __toESM(require_dist());
+var import_dist128 = __toESM(require_dist2());
+var import_dist129 = __toESM(require_dist3());
 var DisassociateFacesCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5238,9 +4818,9 @@ var DisassociateFacesCommand = class extends Command.classBuilder().ep(commonPar
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/DistributeDatasetEntriesCommand.js
-var import_dist178 = __toESM(require_dist());
-var import_dist179 = __toESM(require_dist2());
-var import_dist180 = __toESM(require_dist3());
+var import_dist130 = __toESM(require_dist());
+var import_dist131 = __toESM(require_dist2());
+var import_dist132 = __toESM(require_dist3());
 var DistributeDatasetEntriesCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5250,9 +4830,9 @@ var DistributeDatasetEntriesCommand = class extends Command.classBuilder().ep(co
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/GetCelebrityInfoCommand.js
-var import_dist181 = __toESM(require_dist());
-var import_dist182 = __toESM(require_dist2());
-var import_dist183 = __toESM(require_dist3());
+var import_dist133 = __toESM(require_dist());
+var import_dist134 = __toESM(require_dist2());
+var import_dist135 = __toESM(require_dist3());
 var GetCelebrityInfoCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5262,9 +4842,9 @@ var GetCelebrityInfoCommand = class extends Command.classBuilder().ep(commonPara
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/GetCelebrityRecognitionCommand.js
-var import_dist184 = __toESM(require_dist());
-var import_dist185 = __toESM(require_dist2());
-var import_dist186 = __toESM(require_dist3());
+var import_dist136 = __toESM(require_dist());
+var import_dist137 = __toESM(require_dist2());
+var import_dist138 = __toESM(require_dist3());
 var GetCelebrityRecognitionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5274,9 +4854,9 @@ var GetCelebrityRecognitionCommand = class extends Command.classBuilder().ep(com
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/GetContentModerationCommand.js
-var import_dist187 = __toESM(require_dist());
-var import_dist188 = __toESM(require_dist2());
-var import_dist189 = __toESM(require_dist3());
+var import_dist139 = __toESM(require_dist());
+var import_dist140 = __toESM(require_dist2());
+var import_dist141 = __toESM(require_dist3());
 var GetContentModerationCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5286,9 +4866,9 @@ var GetContentModerationCommand = class extends Command.classBuilder().ep(common
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/GetFaceDetectionCommand.js
-var import_dist190 = __toESM(require_dist());
-var import_dist191 = __toESM(require_dist2());
-var import_dist192 = __toESM(require_dist3());
+var import_dist142 = __toESM(require_dist());
+var import_dist143 = __toESM(require_dist2());
+var import_dist144 = __toESM(require_dist3());
 var GetFaceDetectionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5298,9 +4878,9 @@ var GetFaceDetectionCommand = class extends Command.classBuilder().ep(commonPara
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/GetFaceLivenessSessionResultsCommand.js
-var import_dist193 = __toESM(require_dist());
-var import_dist194 = __toESM(require_dist2());
-var import_dist195 = __toESM(require_dist3());
+var import_dist145 = __toESM(require_dist());
+var import_dist146 = __toESM(require_dist2());
+var import_dist147 = __toESM(require_dist3());
 var GetFaceLivenessSessionResultsCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5310,9 +4890,9 @@ var GetFaceLivenessSessionResultsCommand = class extends Command.classBuilder().
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/GetFaceSearchCommand.js
-var import_dist196 = __toESM(require_dist());
-var import_dist197 = __toESM(require_dist2());
-var import_dist198 = __toESM(require_dist3());
+var import_dist148 = __toESM(require_dist());
+var import_dist149 = __toESM(require_dist2());
+var import_dist150 = __toESM(require_dist3());
 var GetFaceSearchCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5322,9 +4902,9 @@ var GetFaceSearchCommand = class extends Command.classBuilder().ep(commonParams)
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/GetLabelDetectionCommand.js
-var import_dist199 = __toESM(require_dist());
-var import_dist200 = __toESM(require_dist2());
-var import_dist201 = __toESM(require_dist3());
+var import_dist151 = __toESM(require_dist());
+var import_dist152 = __toESM(require_dist2());
+var import_dist153 = __toESM(require_dist3());
 var GetLabelDetectionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5334,9 +4914,9 @@ var GetLabelDetectionCommand = class extends Command.classBuilder().ep(commonPar
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/GetMediaAnalysisJobCommand.js
-var import_dist202 = __toESM(require_dist());
-var import_dist203 = __toESM(require_dist2());
-var import_dist204 = __toESM(require_dist3());
+var import_dist154 = __toESM(require_dist());
+var import_dist155 = __toESM(require_dist2());
+var import_dist156 = __toESM(require_dist3());
 var GetMediaAnalysisJobCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5346,9 +4926,9 @@ var GetMediaAnalysisJobCommand = class extends Command.classBuilder().ep(commonP
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/GetPersonTrackingCommand.js
-var import_dist205 = __toESM(require_dist());
-var import_dist206 = __toESM(require_dist2());
-var import_dist207 = __toESM(require_dist3());
+var import_dist157 = __toESM(require_dist());
+var import_dist158 = __toESM(require_dist2());
+var import_dist159 = __toESM(require_dist3());
 var GetPersonTrackingCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5358,9 +4938,9 @@ var GetPersonTrackingCommand = class extends Command.classBuilder().ep(commonPar
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/GetSegmentDetectionCommand.js
-var import_dist208 = __toESM(require_dist());
-var import_dist209 = __toESM(require_dist2());
-var import_dist210 = __toESM(require_dist3());
+var import_dist160 = __toESM(require_dist());
+var import_dist161 = __toESM(require_dist2());
+var import_dist162 = __toESM(require_dist3());
 var GetSegmentDetectionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5370,9 +4950,9 @@ var GetSegmentDetectionCommand = class extends Command.classBuilder().ep(commonP
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/GetTextDetectionCommand.js
-var import_dist211 = __toESM(require_dist());
-var import_dist212 = __toESM(require_dist2());
-var import_dist213 = __toESM(require_dist3());
+var import_dist163 = __toESM(require_dist());
+var import_dist164 = __toESM(require_dist2());
+var import_dist165 = __toESM(require_dist3());
 var GetTextDetectionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5382,9 +4962,9 @@ var GetTextDetectionCommand = class extends Command.classBuilder().ep(commonPara
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/IndexFacesCommand.js
-var import_dist214 = __toESM(require_dist());
-var import_dist215 = __toESM(require_dist2());
-var import_dist216 = __toESM(require_dist3());
+var import_dist166 = __toESM(require_dist());
+var import_dist167 = __toESM(require_dist2());
+var import_dist168 = __toESM(require_dist3());
 var IndexFacesCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5394,9 +4974,9 @@ var IndexFacesCommand = class extends Command.classBuilder().ep(commonParams).m(
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/ListCollectionsCommand.js
-var import_dist217 = __toESM(require_dist());
-var import_dist218 = __toESM(require_dist2());
-var import_dist219 = __toESM(require_dist3());
+var import_dist169 = __toESM(require_dist());
+var import_dist170 = __toESM(require_dist2());
+var import_dist171 = __toESM(require_dist3());
 var ListCollectionsCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5406,9 +4986,9 @@ var ListCollectionsCommand = class extends Command.classBuilder().ep(commonParam
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/ListDatasetEntriesCommand.js
-var import_dist220 = __toESM(require_dist());
-var import_dist221 = __toESM(require_dist2());
-var import_dist222 = __toESM(require_dist3());
+var import_dist172 = __toESM(require_dist());
+var import_dist173 = __toESM(require_dist2());
+var import_dist174 = __toESM(require_dist3());
 var ListDatasetEntriesCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5418,9 +4998,9 @@ var ListDatasetEntriesCommand = class extends Command.classBuilder().ep(commonPa
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/ListDatasetLabelsCommand.js
-var import_dist223 = __toESM(require_dist());
-var import_dist224 = __toESM(require_dist2());
-var import_dist225 = __toESM(require_dist3());
+var import_dist175 = __toESM(require_dist());
+var import_dist176 = __toESM(require_dist2());
+var import_dist177 = __toESM(require_dist3());
 var ListDatasetLabelsCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5430,9 +5010,9 @@ var ListDatasetLabelsCommand = class extends Command.classBuilder().ep(commonPar
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/ListFacesCommand.js
-var import_dist226 = __toESM(require_dist());
-var import_dist227 = __toESM(require_dist2());
-var import_dist228 = __toESM(require_dist3());
+var import_dist178 = __toESM(require_dist());
+var import_dist179 = __toESM(require_dist2());
+var import_dist180 = __toESM(require_dist3());
 var ListFacesCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5442,9 +5022,9 @@ var ListFacesCommand = class extends Command.classBuilder().ep(commonParams).m(f
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/ListMediaAnalysisJobsCommand.js
-var import_dist229 = __toESM(require_dist());
-var import_dist230 = __toESM(require_dist2());
-var import_dist231 = __toESM(require_dist3());
+var import_dist181 = __toESM(require_dist());
+var import_dist182 = __toESM(require_dist2());
+var import_dist183 = __toESM(require_dist3());
 var ListMediaAnalysisJobsCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5454,9 +5034,9 @@ var ListMediaAnalysisJobsCommand = class extends Command.classBuilder().ep(commo
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/ListProjectPoliciesCommand.js
-var import_dist232 = __toESM(require_dist());
-var import_dist233 = __toESM(require_dist2());
-var import_dist234 = __toESM(require_dist3());
+var import_dist184 = __toESM(require_dist());
+var import_dist185 = __toESM(require_dist2());
+var import_dist186 = __toESM(require_dist3());
 var ListProjectPoliciesCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5466,9 +5046,9 @@ var ListProjectPoliciesCommand = class extends Command.classBuilder().ep(commonP
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/ListStreamProcessorsCommand.js
-var import_dist235 = __toESM(require_dist());
-var import_dist236 = __toESM(require_dist2());
-var import_dist237 = __toESM(require_dist3());
+var import_dist187 = __toESM(require_dist());
+var import_dist188 = __toESM(require_dist2());
+var import_dist189 = __toESM(require_dist3());
 var ListStreamProcessorsCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5478,9 +5058,9 @@ var ListStreamProcessorsCommand = class extends Command.classBuilder().ep(common
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/ListTagsForResourceCommand.js
-var import_dist238 = __toESM(require_dist());
-var import_dist239 = __toESM(require_dist2());
-var import_dist240 = __toESM(require_dist3());
+var import_dist190 = __toESM(require_dist());
+var import_dist191 = __toESM(require_dist2());
+var import_dist192 = __toESM(require_dist3());
 var ListTagsForResourceCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5490,9 +5070,9 @@ var ListTagsForResourceCommand = class extends Command.classBuilder().ep(commonP
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/ListUsersCommand.js
-var import_dist241 = __toESM(require_dist());
-var import_dist242 = __toESM(require_dist2());
-var import_dist243 = __toESM(require_dist3());
+var import_dist193 = __toESM(require_dist());
+var import_dist194 = __toESM(require_dist2());
+var import_dist195 = __toESM(require_dist3());
 var ListUsersCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5502,9 +5082,9 @@ var ListUsersCommand = class extends Command.classBuilder().ep(commonParams).m(f
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/PutProjectPolicyCommand.js
-var import_dist244 = __toESM(require_dist());
-var import_dist245 = __toESM(require_dist2());
-var import_dist246 = __toESM(require_dist3());
+var import_dist196 = __toESM(require_dist());
+var import_dist197 = __toESM(require_dist2());
+var import_dist198 = __toESM(require_dist3());
 var PutProjectPolicyCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5514,9 +5094,9 @@ var PutProjectPolicyCommand = class extends Command.classBuilder().ep(commonPara
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/RecognizeCelebritiesCommand.js
-var import_dist247 = __toESM(require_dist());
-var import_dist248 = __toESM(require_dist2());
-var import_dist249 = __toESM(require_dist3());
+var import_dist199 = __toESM(require_dist());
+var import_dist200 = __toESM(require_dist2());
+var import_dist201 = __toESM(require_dist3());
 var RecognizeCelebritiesCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5526,9 +5106,9 @@ var RecognizeCelebritiesCommand = class extends Command.classBuilder().ep(common
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/SearchFacesByImageCommand.js
-var import_dist250 = __toESM(require_dist());
-var import_dist251 = __toESM(require_dist2());
-var import_dist252 = __toESM(require_dist3());
+var import_dist202 = __toESM(require_dist());
+var import_dist203 = __toESM(require_dist2());
+var import_dist204 = __toESM(require_dist3());
 var SearchFacesByImageCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5538,9 +5118,9 @@ var SearchFacesByImageCommand = class extends Command.classBuilder().ep(commonPa
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/SearchFacesCommand.js
-var import_dist253 = __toESM(require_dist());
-var import_dist254 = __toESM(require_dist2());
-var import_dist255 = __toESM(require_dist3());
+var import_dist205 = __toESM(require_dist());
+var import_dist206 = __toESM(require_dist2());
+var import_dist207 = __toESM(require_dist3());
 var SearchFacesCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5550,9 +5130,9 @@ var SearchFacesCommand = class extends Command.classBuilder().ep(commonParams).m
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/SearchUsersByImageCommand.js
-var import_dist256 = __toESM(require_dist());
-var import_dist257 = __toESM(require_dist2());
-var import_dist258 = __toESM(require_dist3());
+var import_dist208 = __toESM(require_dist());
+var import_dist209 = __toESM(require_dist2());
+var import_dist210 = __toESM(require_dist3());
 var SearchUsersByImageCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5562,9 +5142,9 @@ var SearchUsersByImageCommand = class extends Command.classBuilder().ep(commonPa
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/SearchUsersCommand.js
-var import_dist259 = __toESM(require_dist());
-var import_dist260 = __toESM(require_dist2());
-var import_dist261 = __toESM(require_dist3());
+var import_dist211 = __toESM(require_dist());
+var import_dist212 = __toESM(require_dist2());
+var import_dist213 = __toESM(require_dist3());
 var SearchUsersCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5574,9 +5154,9 @@ var SearchUsersCommand = class extends Command.classBuilder().ep(commonParams).m
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StartCelebrityRecognitionCommand.js
-var import_dist262 = __toESM(require_dist());
-var import_dist263 = __toESM(require_dist2());
-var import_dist264 = __toESM(require_dist3());
+var import_dist214 = __toESM(require_dist());
+var import_dist215 = __toESM(require_dist2());
+var import_dist216 = __toESM(require_dist3());
 var StartCelebrityRecognitionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5586,9 +5166,9 @@ var StartCelebrityRecognitionCommand = class extends Command.classBuilder().ep(c
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StartContentModerationCommand.js
-var import_dist265 = __toESM(require_dist());
-var import_dist266 = __toESM(require_dist2());
-var import_dist267 = __toESM(require_dist3());
+var import_dist217 = __toESM(require_dist());
+var import_dist218 = __toESM(require_dist2());
+var import_dist219 = __toESM(require_dist3());
 var StartContentModerationCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5598,9 +5178,9 @@ var StartContentModerationCommand = class extends Command.classBuilder().ep(comm
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StartFaceDetectionCommand.js
-var import_dist268 = __toESM(require_dist());
-var import_dist269 = __toESM(require_dist2());
-var import_dist270 = __toESM(require_dist3());
+var import_dist220 = __toESM(require_dist());
+var import_dist221 = __toESM(require_dist2());
+var import_dist222 = __toESM(require_dist3());
 var StartFaceDetectionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5610,9 +5190,9 @@ var StartFaceDetectionCommand = class extends Command.classBuilder().ep(commonPa
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StartFaceSearchCommand.js
-var import_dist271 = __toESM(require_dist());
-var import_dist272 = __toESM(require_dist2());
-var import_dist273 = __toESM(require_dist3());
+var import_dist223 = __toESM(require_dist());
+var import_dist224 = __toESM(require_dist2());
+var import_dist225 = __toESM(require_dist3());
 var StartFaceSearchCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5622,9 +5202,9 @@ var StartFaceSearchCommand = class extends Command.classBuilder().ep(commonParam
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StartLabelDetectionCommand.js
-var import_dist274 = __toESM(require_dist());
-var import_dist275 = __toESM(require_dist2());
-var import_dist276 = __toESM(require_dist3());
+var import_dist226 = __toESM(require_dist());
+var import_dist227 = __toESM(require_dist2());
+var import_dist228 = __toESM(require_dist3());
 var StartLabelDetectionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5634,9 +5214,9 @@ var StartLabelDetectionCommand = class extends Command.classBuilder().ep(commonP
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StartMediaAnalysisJobCommand.js
-var import_dist277 = __toESM(require_dist());
-var import_dist278 = __toESM(require_dist2());
-var import_dist279 = __toESM(require_dist3());
+var import_dist229 = __toESM(require_dist());
+var import_dist230 = __toESM(require_dist2());
+var import_dist231 = __toESM(require_dist3());
 var StartMediaAnalysisJobCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5646,9 +5226,9 @@ var StartMediaAnalysisJobCommand = class extends Command.classBuilder().ep(commo
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StartPersonTrackingCommand.js
-var import_dist280 = __toESM(require_dist());
-var import_dist281 = __toESM(require_dist2());
-var import_dist282 = __toESM(require_dist3());
+var import_dist232 = __toESM(require_dist());
+var import_dist233 = __toESM(require_dist2());
+var import_dist234 = __toESM(require_dist3());
 var StartPersonTrackingCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5658,9 +5238,9 @@ var StartPersonTrackingCommand = class extends Command.classBuilder().ep(commonP
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StartProjectVersionCommand.js
-var import_dist283 = __toESM(require_dist());
-var import_dist284 = __toESM(require_dist2());
-var import_dist285 = __toESM(require_dist3());
+var import_dist235 = __toESM(require_dist());
+var import_dist236 = __toESM(require_dist2());
+var import_dist237 = __toESM(require_dist3());
 var StartProjectVersionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5670,9 +5250,9 @@ var StartProjectVersionCommand = class extends Command.classBuilder().ep(commonP
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StartSegmentDetectionCommand.js
-var import_dist286 = __toESM(require_dist());
-var import_dist287 = __toESM(require_dist2());
-var import_dist288 = __toESM(require_dist3());
+var import_dist238 = __toESM(require_dist());
+var import_dist239 = __toESM(require_dist2());
+var import_dist240 = __toESM(require_dist3());
 var StartSegmentDetectionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5682,9 +5262,9 @@ var StartSegmentDetectionCommand = class extends Command.classBuilder().ep(commo
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StartStreamProcessorCommand.js
-var import_dist289 = __toESM(require_dist());
-var import_dist290 = __toESM(require_dist2());
-var import_dist291 = __toESM(require_dist3());
+var import_dist241 = __toESM(require_dist());
+var import_dist242 = __toESM(require_dist2());
+var import_dist243 = __toESM(require_dist3());
 var StartStreamProcessorCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5694,9 +5274,9 @@ var StartStreamProcessorCommand = class extends Command.classBuilder().ep(common
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StartTextDetectionCommand.js
-var import_dist292 = __toESM(require_dist());
-var import_dist293 = __toESM(require_dist2());
-var import_dist294 = __toESM(require_dist3());
+var import_dist244 = __toESM(require_dist());
+var import_dist245 = __toESM(require_dist2());
+var import_dist246 = __toESM(require_dist3());
 var StartTextDetectionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5706,9 +5286,9 @@ var StartTextDetectionCommand = class extends Command.classBuilder().ep(commonPa
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StopProjectVersionCommand.js
-var import_dist295 = __toESM(require_dist());
-var import_dist296 = __toESM(require_dist2());
-var import_dist297 = __toESM(require_dist3());
+var import_dist247 = __toESM(require_dist());
+var import_dist248 = __toESM(require_dist2());
+var import_dist249 = __toESM(require_dist3());
 var StopProjectVersionCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5718,9 +5298,9 @@ var StopProjectVersionCommand = class extends Command.classBuilder().ep(commonPa
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/StopStreamProcessorCommand.js
-var import_dist298 = __toESM(require_dist());
-var import_dist299 = __toESM(require_dist2());
-var import_dist300 = __toESM(require_dist3());
+var import_dist250 = __toESM(require_dist());
+var import_dist251 = __toESM(require_dist2());
+var import_dist252 = __toESM(require_dist3());
 var StopStreamProcessorCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5730,9 +5310,9 @@ var StopStreamProcessorCommand = class extends Command.classBuilder().ep(commonP
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/TagResourceCommand.js
-var import_dist301 = __toESM(require_dist());
-var import_dist302 = __toESM(require_dist2());
-var import_dist303 = __toESM(require_dist3());
+var import_dist253 = __toESM(require_dist());
+var import_dist254 = __toESM(require_dist2());
+var import_dist255 = __toESM(require_dist3());
 var TagResourceCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5742,9 +5322,9 @@ var TagResourceCommand = class extends Command.classBuilder().ep(commonParams).m
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/UntagResourceCommand.js
-var import_dist304 = __toESM(require_dist());
-var import_dist305 = __toESM(require_dist2());
-var import_dist306 = __toESM(require_dist3());
+var import_dist256 = __toESM(require_dist());
+var import_dist257 = __toESM(require_dist2());
+var import_dist258 = __toESM(require_dist3());
 var UntagResourceCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5754,9 +5334,9 @@ var UntagResourceCommand = class extends Command.classBuilder().ep(commonParams)
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/UpdateDatasetEntriesCommand.js
-var import_dist307 = __toESM(require_dist());
-var import_dist308 = __toESM(require_dist2());
-var import_dist309 = __toESM(require_dist3());
+var import_dist259 = __toESM(require_dist());
+var import_dist260 = __toESM(require_dist2());
+var import_dist261 = __toESM(require_dist3());
 var UpdateDatasetEntriesCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5766,9 +5346,9 @@ var UpdateDatasetEntriesCommand = class extends Command.classBuilder().ep(common
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/UpdateStreamProcessorCommand.js
-var import_dist310 = __toESM(require_dist());
-var import_dist311 = __toESM(require_dist2());
-var import_dist312 = __toESM(require_dist3());
+var import_dist262 = __toESM(require_dist());
+var import_dist263 = __toESM(require_dist2());
+var import_dist264 = __toESM(require_dist3());
 var UpdateStreamProcessorCommand = class extends Command.classBuilder().ep(commonParams).m(function(Command2, cs, config, o2) {
   return [
     getSerdePlugin(config, this.serialize, this.deserialize),
@@ -5860,137 +5440,137 @@ var Rekognition = class extends RekognitionClient {
 createAggregatedClient(commands, Rekognition);
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/commands/index.js
-var import_dist316 = __toESM(require_dist());
-var import_dist317 = __toESM(require_dist2());
-var import_dist318 = __toESM(require_dist3());
+var import_dist268 = __toESM(require_dist());
+var import_dist269 = __toESM(require_dist2());
+var import_dist270 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/index.js
-var import_dist376 = __toESM(require_dist());
-var import_dist377 = __toESM(require_dist2());
-var import_dist378 = __toESM(require_dist3());
-
-// node_modules/@aws-sdk/client-rekognition/dist-es/pagination/DescribeProjectVersionsPaginator.js
-var import_dist319 = __toESM(require_dist());
-var import_dist320 = __toESM(require_dist2());
-var import_dist321 = __toESM(require_dist3());
-var paginateDescribeProjectVersions = createPaginator(RekognitionClient, DescribeProjectVersionsCommand, "NextToken", "NextToken", "MaxResults");
-
-// node_modules/@aws-sdk/client-rekognition/dist-es/pagination/DescribeProjectsPaginator.js
-var import_dist322 = __toESM(require_dist());
-var import_dist323 = __toESM(require_dist2());
-var import_dist324 = __toESM(require_dist3());
-var paginateDescribeProjects = createPaginator(RekognitionClient, DescribeProjectsCommand, "NextToken", "NextToken", "MaxResults");
-
-// node_modules/@aws-sdk/client-rekognition/dist-es/pagination/GetCelebrityRecognitionPaginator.js
-var import_dist325 = __toESM(require_dist());
-var import_dist326 = __toESM(require_dist2());
-var import_dist327 = __toESM(require_dist3());
-var paginateGetCelebrityRecognition = createPaginator(RekognitionClient, GetCelebrityRecognitionCommand, "NextToken", "NextToken", "MaxResults");
-
-// node_modules/@aws-sdk/client-rekognition/dist-es/pagination/GetContentModerationPaginator.js
 var import_dist328 = __toESM(require_dist());
 var import_dist329 = __toESM(require_dist2());
 var import_dist330 = __toESM(require_dist3());
+
+// node_modules/@aws-sdk/client-rekognition/dist-es/pagination/DescribeProjectVersionsPaginator.js
+var import_dist271 = __toESM(require_dist());
+var import_dist272 = __toESM(require_dist2());
+var import_dist273 = __toESM(require_dist3());
+var paginateDescribeProjectVersions = createPaginator(RekognitionClient, DescribeProjectVersionsCommand, "NextToken", "NextToken", "MaxResults");
+
+// node_modules/@aws-sdk/client-rekognition/dist-es/pagination/DescribeProjectsPaginator.js
+var import_dist274 = __toESM(require_dist());
+var import_dist275 = __toESM(require_dist2());
+var import_dist276 = __toESM(require_dist3());
+var paginateDescribeProjects = createPaginator(RekognitionClient, DescribeProjectsCommand, "NextToken", "NextToken", "MaxResults");
+
+// node_modules/@aws-sdk/client-rekognition/dist-es/pagination/GetCelebrityRecognitionPaginator.js
+var import_dist277 = __toESM(require_dist());
+var import_dist278 = __toESM(require_dist2());
+var import_dist279 = __toESM(require_dist3());
+var paginateGetCelebrityRecognition = createPaginator(RekognitionClient, GetCelebrityRecognitionCommand, "NextToken", "NextToken", "MaxResults");
+
+// node_modules/@aws-sdk/client-rekognition/dist-es/pagination/GetContentModerationPaginator.js
+var import_dist280 = __toESM(require_dist());
+var import_dist281 = __toESM(require_dist2());
+var import_dist282 = __toESM(require_dist3());
 var paginateGetContentModeration = createPaginator(RekognitionClient, GetContentModerationCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/GetFaceDetectionPaginator.js
-var import_dist331 = __toESM(require_dist());
-var import_dist332 = __toESM(require_dist2());
-var import_dist333 = __toESM(require_dist3());
+var import_dist283 = __toESM(require_dist());
+var import_dist284 = __toESM(require_dist2());
+var import_dist285 = __toESM(require_dist3());
 var paginateGetFaceDetection = createPaginator(RekognitionClient, GetFaceDetectionCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/GetFaceSearchPaginator.js
-var import_dist334 = __toESM(require_dist());
-var import_dist335 = __toESM(require_dist2());
-var import_dist336 = __toESM(require_dist3());
+var import_dist286 = __toESM(require_dist());
+var import_dist287 = __toESM(require_dist2());
+var import_dist288 = __toESM(require_dist3());
 var paginateGetFaceSearch = createPaginator(RekognitionClient, GetFaceSearchCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/GetLabelDetectionPaginator.js
-var import_dist337 = __toESM(require_dist());
-var import_dist338 = __toESM(require_dist2());
-var import_dist339 = __toESM(require_dist3());
+var import_dist289 = __toESM(require_dist());
+var import_dist290 = __toESM(require_dist2());
+var import_dist291 = __toESM(require_dist3());
 var paginateGetLabelDetection = createPaginator(RekognitionClient, GetLabelDetectionCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/GetPersonTrackingPaginator.js
-var import_dist340 = __toESM(require_dist());
-var import_dist341 = __toESM(require_dist2());
-var import_dist342 = __toESM(require_dist3());
+var import_dist292 = __toESM(require_dist());
+var import_dist293 = __toESM(require_dist2());
+var import_dist294 = __toESM(require_dist3());
 var paginateGetPersonTracking = createPaginator(RekognitionClient, GetPersonTrackingCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/GetSegmentDetectionPaginator.js
-var import_dist343 = __toESM(require_dist());
-var import_dist344 = __toESM(require_dist2());
-var import_dist345 = __toESM(require_dist3());
+var import_dist295 = __toESM(require_dist());
+var import_dist296 = __toESM(require_dist2());
+var import_dist297 = __toESM(require_dist3());
 var paginateGetSegmentDetection = createPaginator(RekognitionClient, GetSegmentDetectionCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/GetTextDetectionPaginator.js
-var import_dist346 = __toESM(require_dist());
-var import_dist347 = __toESM(require_dist2());
-var import_dist348 = __toESM(require_dist3());
+var import_dist298 = __toESM(require_dist());
+var import_dist299 = __toESM(require_dist2());
+var import_dist300 = __toESM(require_dist3());
 var paginateGetTextDetection = createPaginator(RekognitionClient, GetTextDetectionCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/Interfaces.js
-var import_dist349 = __toESM(require_dist());
-var import_dist350 = __toESM(require_dist2());
-var import_dist351 = __toESM(require_dist3());
+var import_dist301 = __toESM(require_dist());
+var import_dist302 = __toESM(require_dist2());
+var import_dist303 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/ListCollectionsPaginator.js
-var import_dist352 = __toESM(require_dist());
-var import_dist353 = __toESM(require_dist2());
-var import_dist354 = __toESM(require_dist3());
+var import_dist304 = __toESM(require_dist());
+var import_dist305 = __toESM(require_dist2());
+var import_dist306 = __toESM(require_dist3());
 var paginateListCollections = createPaginator(RekognitionClient, ListCollectionsCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/ListDatasetEntriesPaginator.js
-var import_dist355 = __toESM(require_dist());
-var import_dist356 = __toESM(require_dist2());
-var import_dist357 = __toESM(require_dist3());
+var import_dist307 = __toESM(require_dist());
+var import_dist308 = __toESM(require_dist2());
+var import_dist309 = __toESM(require_dist3());
 var paginateListDatasetEntries = createPaginator(RekognitionClient, ListDatasetEntriesCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/ListDatasetLabelsPaginator.js
-var import_dist358 = __toESM(require_dist());
-var import_dist359 = __toESM(require_dist2());
-var import_dist360 = __toESM(require_dist3());
+var import_dist310 = __toESM(require_dist());
+var import_dist311 = __toESM(require_dist2());
+var import_dist312 = __toESM(require_dist3());
 var paginateListDatasetLabels = createPaginator(RekognitionClient, ListDatasetLabelsCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/ListFacesPaginator.js
-var import_dist361 = __toESM(require_dist());
-var import_dist362 = __toESM(require_dist2());
-var import_dist363 = __toESM(require_dist3());
+var import_dist313 = __toESM(require_dist());
+var import_dist314 = __toESM(require_dist2());
+var import_dist315 = __toESM(require_dist3());
 var paginateListFaces = createPaginator(RekognitionClient, ListFacesCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/ListMediaAnalysisJobsPaginator.js
-var import_dist364 = __toESM(require_dist());
-var import_dist365 = __toESM(require_dist2());
-var import_dist366 = __toESM(require_dist3());
+var import_dist316 = __toESM(require_dist());
+var import_dist317 = __toESM(require_dist2());
+var import_dist318 = __toESM(require_dist3());
 var paginateListMediaAnalysisJobs = createPaginator(RekognitionClient, ListMediaAnalysisJobsCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/ListProjectPoliciesPaginator.js
-var import_dist367 = __toESM(require_dist());
-var import_dist368 = __toESM(require_dist2());
-var import_dist369 = __toESM(require_dist3());
+var import_dist319 = __toESM(require_dist());
+var import_dist320 = __toESM(require_dist2());
+var import_dist321 = __toESM(require_dist3());
 var paginateListProjectPolicies = createPaginator(RekognitionClient, ListProjectPoliciesCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/ListStreamProcessorsPaginator.js
-var import_dist370 = __toESM(require_dist());
-var import_dist371 = __toESM(require_dist2());
-var import_dist372 = __toESM(require_dist3());
+var import_dist322 = __toESM(require_dist());
+var import_dist323 = __toESM(require_dist2());
+var import_dist324 = __toESM(require_dist3());
 var paginateListStreamProcessors = createPaginator(RekognitionClient, ListStreamProcessorsCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/pagination/ListUsersPaginator.js
-var import_dist373 = __toESM(require_dist());
-var import_dist374 = __toESM(require_dist2());
-var import_dist375 = __toESM(require_dist3());
+var import_dist325 = __toESM(require_dist());
+var import_dist326 = __toESM(require_dist2());
+var import_dist327 = __toESM(require_dist3());
 var paginateListUsers = createPaginator(RekognitionClient, ListUsersCommand, "NextToken", "NextToken", "MaxResults");
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/waiters/index.js
-var import_dist385 = __toESM(require_dist());
-var import_dist386 = __toESM(require_dist2());
-var import_dist387 = __toESM(require_dist3());
+var import_dist337 = __toESM(require_dist());
+var import_dist338 = __toESM(require_dist2());
+var import_dist339 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/waiters/waitForProjectVersionRunning.js
-var import_dist379 = __toESM(require_dist());
-var import_dist380 = __toESM(require_dist2());
-var import_dist381 = __toESM(require_dist3());
+var import_dist331 = __toESM(require_dist());
+var import_dist332 = __toESM(require_dist2());
+var import_dist333 = __toESM(require_dist3());
 var checkState = async (client, input) => {
   let reason;
   try {
@@ -6044,9 +5624,9 @@ var waitUntilProjectVersionRunning = async (params, input) => {
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/waiters/waitForProjectVersionTrainingCompleted.js
-var import_dist382 = __toESM(require_dist());
-var import_dist383 = __toESM(require_dist2());
-var import_dist384 = __toESM(require_dist3());
+var import_dist334 = __toESM(require_dist());
+var import_dist335 = __toESM(require_dist2());
+var import_dist336 = __toESM(require_dist3());
 var checkState2 = async (client, input) => {
   let reason;
   try {
@@ -6100,9 +5680,9 @@ var waitUntilProjectVersionTrainingCompleted = async (params, input) => {
 };
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/models/index.js
-var import_dist388 = __toESM(require_dist());
-var import_dist389 = __toESM(require_dist2());
-var import_dist390 = __toESM(require_dist3());
+var import_dist340 = __toESM(require_dist());
+var import_dist341 = __toESM(require_dist2());
+var import_dist342 = __toESM(require_dist3());
 export {
   Command as $Command,
   AccessDeniedException,

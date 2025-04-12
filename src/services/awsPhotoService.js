@@ -7,6 +7,7 @@ import { getFaceDataForUser } from './FaceStorageService';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import { PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { filterPhotosByVisibility } from './userVisibilityService';
 /**
  * Service for handling photo operations with AWS S3 and DynamoDB
  */
@@ -89,7 +90,7 @@ export const awsPhotoService = {
             progressCallback(60);
 
             // --- Rekognition Face Indexing & Comparison --- 
-            console.groupCollapsed(`🔄 [Upload ${uploadId}] Running Rekognition Face Indexing & Comparison...`);
+            console.groupCollapsed(`�� [Upload ${uploadId}] Running Rekognition Face Indexing & Comparison...`);
             let detectedFaceId = null; // Store detected face ID
             try {
                 console.log(`   Using global Rekognition Client: ${!!rekognitionClient}`); 
@@ -525,8 +526,13 @@ export const awsPhotoService = {
                 }
             }
             
-            console.log(`[PhotoService] Found ${matchedPhotos.length} matched photos for user ${userId}.`);
-            return matchedPhotos;
+            console.log(`[PhotoService] Found ${matchedPhotos.length} potentially matched photos for user ${userId} (before visibility filter).`);
+
+            // Apply client-side filtering for visibility before returning
+            const visibleMatchedPhotos = await filterPhotosByVisibility(userId, matchedPhotos, 'VISIBLE');
+            console.log(`[PhotoService] Returning ${visibleMatchedPhotos.length} matched photos visible to user ${userId}.`);
+
+            return visibleMatchedPhotos; // Return only visible matched photos
         } catch (error) {
             console.error('Error fetching matched photos:', error);
             return [];
@@ -654,12 +660,84 @@ export const awsPhotoService = {
             };
             const response = await docClient.send(new QueryCommand(queryParams));
             
-            console.log(`[PhotoService] Found ${response.Items?.length || 0} photos uploaded by user ${userId}.`);
-            return response.Items || [];
+            const items = response.Items || [];
+            console.log(`[PhotoService] Found ${items.length} photos uploaded by user ${userId} (before visibility filter).`);
+            
+            // Apply client-side filtering for visibility
+            const visibleItems = await filterPhotosByVisibility(userId, items, 'VISIBLE');
+            console.log(`[PhotoService] Returning ${visibleItems.length} visible photos uploaded by user ${userId}.`);
+
+            return visibleItems; // Return only visible items
         } catch (error) {
             console.error('Error fetching uploaded photos:', error);
             return [];
         }
+    },
+    /**
+     * Fetch photos filtered by visibility status
+     * @param {string} userId - User ID
+     * @param {string} type - Photo type ('uploaded', 'matched', or 'all')
+     * @param {string} visibilityStatus - Visibility status ('VISIBLE', 'TRASH', 'HIDDEN')
+     * @returns {Promise<Array>} Filtered photos
+     */
+    fetchPhotosByVisibility: async (userId, type = 'all', visibilityStatus = 'VISIBLE') => {
+        try {
+            // Get all photos of the specified type
+            let allPhotos;
+            
+            if (type === 'uploaded') {
+                allPhotos = await awsPhotoService.fetchUploadedPhotos(userId);
+            } else if (type === 'matched') {
+                allPhotos = await awsPhotoService.fetchPhotos(userId);
+            } else {
+                // Get both types
+                const [uploaded, matched] = await Promise.all([
+                    awsPhotoService.fetchUploadedPhotos(userId),
+                    awsPhotoService.fetchPhotos(userId)
+                ]);
+                
+                allPhotos = [...uploaded, ...matched];
+            }
+            
+            console.log(`[awsPhotoService] fetchPhotosByVisibility: Found ${allPhotos.length} photos for user ${userId} before filtering`);
+            
+            // Filter by visibility
+            const filteredPhotos = await filterPhotosByVisibility(userId, allPhotos, visibilityStatus);
+            
+            console.log(`[awsPhotoService] fetchPhotosByVisibility: After filtering for '${visibilityStatus}' status: ${filteredPhotos.length} photos`);
+            
+            return filteredPhotos;
+        } catch (error) {
+            console.error(`Error fetching ${visibilityStatus} photos:`, error);
+            return [];
+        }
+    },
+    /**
+     * Get visible photos (default view)
+     * @param {string} userId - User ID
+     * @param {string} type - Photo type
+     * @returns {Promise<Array>} Visible photos
+     */
+    getVisiblePhotos: async (userId, type = 'all') => {
+        console.log(`[awsPhotoService] getVisiblePhotos called for user: ${userId}, type: ${type}`);
+        // Revert to simpler implementation - fetchPhotosByVisibility handles fetching and filtering
+        return fetchPhotosByVisibility(userId, type, 'VISIBLE');
+    },
+    /**
+     * Get photos in trash bin
+     * @param {string} userId - User ID
+     * @returns {Promise<Array>} Trashed photos
+     */
+    getTrashedPhotos: async (userId) => {
+        return fetchPhotosByVisibility(userId, 'all', 'TRASH');
+    },
+    /**
+     * Get permanently hidden photos
+     * @param {string} userId - User ID
+     * @returns {Promise<Array>} Hidden photos
+     */
+    getHiddenPhotos: async (userId) => {
+        return fetchPhotosByVisibility(userId, 'all', 'HIDDEN');
     }
 };
 export default awsPhotoService;
