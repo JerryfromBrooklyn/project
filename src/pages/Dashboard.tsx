@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos, Trash2, RotateCcw } from 'lucide-react';
+import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos, Trash2, RotateCcw, CheckCircle } from 'lucide-react';
 import { cn } from '../utils/cn';
 import FaceRegistration from '../components/FaceRegistration';
 import { PhotoManager } from '../components/PhotoManager';
@@ -39,6 +39,7 @@ export const Dashboard = () => {
   // State flags for one-time messages
   const [showRegistrationSuccessMessage, setShowRegistrationSuccessMessage] = useState(false);
   const [showHistoricalMatchesMessage, setShowHistoricalMatchesMessage] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null); // Ref for the dropdown menu
 
   useEffect(() => {
     const fetchFaceData = async () => {
@@ -157,16 +158,35 @@ export const Dashboard = () => {
     }
   }, [user, activeTab]);
 
+  // Effect to handle clicks outside the dropdown menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // Check if the menu is open and the click is outside the menu element
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    // Add listener only when the menu is open
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      // Remove listener if menu is closed
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+
+    // Cleanup function to remove the listener when the component unmounts or menu closes
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen]); // Dependency array ensures this runs when isMenuOpen changes
+
   const handleRegistrationSuccess = (result: any) => {
     console.log('[Dashboard] Face registration successful:', { 
       faceId: result?.faceId, 
       attributesCount: result?.faceAttributes ? Object.keys(result.faceAttributes).length : 0,
       matchesCount: result?.historicalMatches?.length || 0 
     });
-
-    // --- Trigger data refresh IMMEDIATELY --- 
-    console.log('[DASHBOARD] >>> TRIGGERING DASHBOARD DATA REFRESH (EARLY) <<<');
-    fetchUserData(); // Refresh dashboard data
     
     // Debug the raw attribute data
     console.log('[Dashboard] Raw face attributes received:', result?.faceAttributes);
@@ -181,9 +201,8 @@ export const Dashboard = () => {
       console.log('[Dashboard] No historical matches found.');
     }
     
-    // Immediately update the UI with the data we just received
+    // --- 1. UPDATE STATE FIRST --- 
     setFaceRegistered(true);
-    setShowRegistrationModal(false);
     
     if (result?.faceId) {
       console.log('[Dashboard] Setting faceId:', result.faceId);
@@ -206,55 +225,44 @@ export const Dashboard = () => {
       console.log('[Dashboard] Setting face image URL from result:', result.imageUrl);
       setFaceImageUrl(result.imageUrl);
     } else {
-      // If the result didn't contain an image URL (e.g., storage failed),
-      // try the less reliable fallbacks.
+      // Fallback logic for image URL (keep as is)
       console.warn('[Dashboard] No image URL in registration result, attempting fallbacks.');
-      // Fallback to looking for an image element in the face registration modal
       const capturedImage = document.querySelector('.face-registration img[src^="blob:"]');
       if (capturedImage) {
         const img = capturedImage as HTMLImageElement;
         console.log('[Dashboard] Found captured image in DOM, using as fallback');
         setFaceImageUrl(img.src);
       } else if (result?.faceId && user?.id) {
-        // Final fallback - construct URL from what we know (least reliable)
         const fallbackUrl = `https://shmong.s3.amazonaws.com/face-images/${user.id}/${Date.now()}.jpg`;
         console.log('[Dashboard] Using constructed fallback URL:', fallbackUrl);
         setFaceImageUrl(fallbackUrl);
       }
     }
 
-    // --- Set flags to show one-time messages --- 
+    // --- 2. SET FLAGS TO SHOW ONE-TIME MESSAGES --- 
     setShowRegistrationSuccessMessage(true);
     if (result?.historicalMatches?.length > 0) {
       setShowHistoricalMatchesMessage(true);
     }
-  };
 
-  // Add functions to handle photo restoration and permanent deletion
-  const handleRestorePhoto = async (photoId) => {
-    if (!user || !user.id || !photoId) return;
-    
-    try {
-      // Call the correct service function for restoring from userVisibilityService
-      const { restorePhotosFromTrash } = await import('../services/userVisibilityService');
-      const result = await restorePhotosFromTrash(user.id, [photoId]); // Pass photoId as an array
-      
-      if (result.success) {
-         console.log(`[Dashboard] Successfully restored photo: ${photoId}`);
-        // Update the trashed photos list locally
-        setTrashedPhotos(prev => prev.filter(photo => photo.id !== photoId));
-        // Refresh counts (optional, depends if restore changes counts)
-        // fetchCounts(); // Consider if you want to refresh all counts
-      } else {
-          throw new Error(result.error || 'Failed to restore photo from service');
-      }
-    } catch (err) {
-      console.error('[Dashboard] Error restoring photo:', err);
-      // Optionally show an error toast to the user
+    // --- 3. CLOSE MODAL ---
+    setShowRegistrationModal(false);
+
+    // --- 4. TRIGGER REFRESH LAST --- 
+    console.log('[DASHBOARD] >>> TRIGGERING DASHBOARD DATA REFRESH (AFTER STATE UPDATE) <<<');
+    // Make sure fetchUserData exists and is correctly defined elsewhere in the component
+    if (typeof fetchUserData === 'function') {
+        fetchUserData(); // Refresh dashboard data
+    } else {
+        console.error('[Dashboard] fetchUserData function is not defined!');
+        // If fetchUserData is not defined here, perhaps we need to call fetchFaceData instead?
+        // Or maybe fetchCounts? Let's try fetchFaceData as it seems more comprehensive.
+        console.log('[Dashboard] Attempting fetchFaceData as fallback for refresh.');
+        fetchFaceData(); 
     }
   };
   
-  const handlePermanentDelete = async (photoId) => {
+  const handlePermanentDelete = async (photoId: string) => {
     if (!user || !user.id || !photoId) return;
     
     const confirmDelete = window.confirm("Are you sure you want to permanently hide this photo? This action cannot be undone.");
@@ -366,22 +374,22 @@ export const Dashboard = () => {
 
     return (
       <div className="mt-4 space-y-2">
-        <h4 className="text-sm font-medium text-apple-gray-700">Face Attributes</h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <h4 className="text-sm font-medium text-apple-gray-700 mb-2">Face Attributes</h4>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {attributes.map((attr, index) => (
             <div 
               key={index}
-              className="flex items-center p-2 bg-apple-gray-50 rounded-apple"
+              className="flex items-center p-2.5 bg-apple-gray-50 rounded-lg border border-apple-gray-100"
             >
               <div className="mr-2 text-apple-gray-500">
                 {attr.icon}
               </div>
               <div>
-                <div className="text-sm font-medium text-apple-gray-900">
+                <div className="text-xs font-medium text-apple-gray-800">
                   {attr.label}
                 </div>
                 <div className="text-xs text-apple-gray-500">
-                  {attr.value} ({Math.round(attr.confidence)}% confidence)
+                  {attr.value} ({Math.round(attr.confidence)}%)
                 </div>
               </div>
             </div>
@@ -392,20 +400,17 @@ export const Dashboard = () => {
   };
 
   const renderHistoricalMatches = () => {
-    // --- Only render if the flag is true --- 
     if (!showHistoricalMatchesMessage || !historicalMatches || historicalMatches.length === 0) return null;
     
     return (
-      <div className="mt-4">
-        <h4 className="text-sm font-medium text-apple-gray-700 mb-2">Historical Matches</h4>
-        <div className="bg-green-50 p-3 rounded-apple border border-green-200">
-          <p className="text-sm text-green-800">
-            <span className="font-medium">We found {historicalMatches.length} photos from the past!</span>
-          </p>
-          <p className="text-xs text-green-600 mt-1">
-            These photos are viewable in the "My Photos" tab.
-          </p>
-        </div>
+      <div className="mt-4 bg-green-50 border-l-4 border-green-500 p-3 rounded-r-md">
+        <p className="text-sm text-green-800 flex items-center">
+          <CheckCircle className="w-4 h-4 mr-1.5 flex-shrink-0"/>
+          <span className="font-medium">Found you in {historicalMatches.length} existing photo{historicalMatches.length !== 1 ? 's' : ''}!</span>
+        </p>
+        <p className="text-xs text-green-700 mt-1 pl-6">
+          View them in the "My Photos" tab.
+        </p>
       </div>
     );
   };
@@ -413,37 +418,29 @@ export const Dashboard = () => {
   const renderFaceImageWithAttributes = () => {
     if (isLoadingFaceData) {
       return (
-        <div className="flex justify-center items-center py-8">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-apple-blue-500"></div>
+        <div className="flex justify-center items-center py-8 text-apple-gray-400">
+          <motion.div 
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            className="w-6 h-6 border-2 border-apple-gray-200 border-t-apple-blue-500 rounded-full"
+          />
+          <span className="ml-2 text-sm">Loading face data...</span>
         </div>
       );
     }
 
-    // If not loading and not registered, don't show anything
-    if (!faceRegistered && !faceAttributes) {
-      return null;
-    }
-
     return (
-      <div className="mb-8">
-        <h3 className="text-lg font-medium text-apple-gray-800 mb-4 border-b border-apple-gray-200 pb-2">
-          Your Registered Face
-        </h3>
+      <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6 mb-6">
         <div className="flex flex-col md:flex-row gap-6">
-          <div className="md:w-1/3">
+          <div className="md:w-1/3 flex-shrink-0">
             {faceImageUrl ? (
-              <div className="relative aspect-square rounded-apple-xl overflow-hidden border-2 border-apple-blue-200 shadow-md">
+              <div className="relative aspect-square rounded-lg overflow-hidden border border-apple-gray-200 bg-apple-gray-100">
                 <img 
                   src={encodeURI(faceImageUrl || '')}
                   alt="Registered face" 
                   className="w-full h-full object-cover"
                   onError={(e) => {
-                    // Handle image loading errors
-                    console.error('[Dashboard] Error loading face image:', e);
-                    
-                    // Only set fallback if not already set (prevents infinite loop)
                     if (!e.currentTarget.classList.contains('error-image')) {
-                      // Use data URI instead of external placeholder to prevent network errors
                       e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIGZpbGw9IiM4ODg4ODgiPkZhY2UgSW1hZ2UgVW5hdmFpbGFibGU8L3RleHQ+PC9zdmc+';
                       e.currentTarget.classList.add('error-image');
                     }
@@ -451,30 +448,33 @@ export const Dashboard = () => {
                 />
               </div>
             ) : (
-              <div className="relative aspect-square rounded-apple-xl overflow-hidden border-2 border-apple-gray-200 bg-apple-gray-100 shadow-md flex items-center justify-center">
+              <div className="relative aspect-square rounded-lg overflow-hidden border border-apple-gray-200 bg-apple-gray-100 flex items-center justify-center">
                 <div className="text-center p-4">
-                  <User className="w-16 h-16 mx-auto text-apple-gray-400 mb-2" />
-                  <p className="text-sm text-apple-gray-500">Face image not available</p>
+                  <User className="w-12 h-12 mx-auto text-apple-gray-400 mb-2" />
+                  <p className="text-xs text-apple-gray-500">Image not available</p>
                 </div>
               </div>
             )}
+            {(user?.full_name || user?.email) && (
+              <div className="mt-2 text-xs text-apple-gray-500 bg-apple-gray-50 p-2 rounded-md border border-apple-gray-100">
+                <span className="font-medium">Name:</span> {user.full_name || user.email}
+              </div>
+            )}
             {faceId && (
-              <div className="mt-2 text-xs text-apple-gray-500 bg-apple-gray-50 p-2 rounded border border-apple-gray-200">
+              <div className="mt-1 text-xs text-apple-gray-500 bg-apple-gray-50 p-2 rounded-md border border-apple-gray-100">
                 <span className="font-medium">Face ID:</span> {faceId.substring(0, 8)}...
               </div>
             )}
           </div>
-          <div className="md:w-2/3">
+          <div className="flex-1">
             {faceAttributes ? (
               <>
                 {renderFaceAttributes()}
                 {renderHistoricalMatches()}
               </>
             ) : (
-              <div className="p-4 bg-apple-gray-50 rounded-apple border border-apple-gray-200">
-                <p className="text-sm text-apple-gray-500">
-                  Face attributes not available
-                </p>
+              <div className="p-4 bg-apple-gray-50 rounded-lg border border-apple-gray-100 h-full flex items-center justify-center">
+                <p className="text-sm text-apple-gray-500 text-center">Face attributes unavailable.</p>
               </div>
             )}
           </div>
@@ -487,96 +487,101 @@ export const Dashboard = () => {
     switch (activeTab) {
       case 'upload':
         return (
-          <div className="bg-white rounded-apple-2xl shadow-apple p-8 border border-apple-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-apple-gray-900 flex items-center">
-                <Upload className="w-5 h-5 mr-2 text-green-500" />
+          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-apple-gray-100">
+              <h2 className="text-lg font-semibold text-apple-gray-900 flex items-center">
+                <Upload className="w-5 h-5 mr-2 text-apple-gray-500" />
                 Upload Photos
               </h2>
             </div>
-            <p className="text-apple-gray-600 mb-6 border-l-4 border-green-500 pl-4 py-2 bg-green-50 rounded-r-apple">
-              Upload photos to be indexed for facial recognition. Other users will be able to find photos they appear in.
+            <p className="text-sm text-apple-gray-600 mb-6">
+              Upload photos to be indexed. Other users matched in these photos will be able to view them.
             </p>
             <PhotoManager mode="upload" />
           </div>
         );
       case 'photos':
         return (
-          <div className="bg-white rounded-apple-2xl shadow-apple p-8 border border-apple-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-apple-gray-900 flex items-center">
-                <Photos className="w-5 h-5 mr-2 text-amber-500" />
+          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-apple-gray-100">
+              <h2 className="text-lg font-semibold text-apple-gray-900 flex items-center">
+                <Photos className="w-5 h-5 mr-2 text-apple-gray-500" />
                 My Photos
               </h2>
+               <div className="text-center bg-apple-gray-50 px-3 py-1.5 rounded-full border border-apple-gray-200">
+                <span className="text-sm font-medium text-apple-gray-700">{matchedCount}</span>
+                <span className="text-xs text-apple-gray-500 ml-1">found</span>
+              </div>
             </div>
-            <p className="text-apple-gray-600 mb-6 border-l-4 border-amber-500 pl-4 py-2 bg-amber-50 rounded-r-apple">
-              Photos where you have been identified through facial recognition.
+            <p className="text-sm text-apple-gray-600 mb-6">
+              Photos where your registered face has been identified.
             </p>
             <PhotoManager mode="matches" nativeShare={true} />
           </div>
         );
       case 'events':
         return (
-          <div className="bg-white rounded-apple-2xl shadow-apple p-8 border border-apple-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-apple-gray-900 flex items-center">
-                <Calendar className="w-5 h-5 mr-2 text-indigo-500" />
+          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-apple-gray-100">
+              <h2 className="text-lg font-semibold text-apple-gray-900 flex items-center">
+                <Calendar className="w-5 h-5 mr-2 text-apple-gray-500" />
                 Events
               </h2>
             </div>
-            <p className="text-apple-gray-600 mb-6 border-l-4 border-indigo-500 pl-4 py-2 bg-indigo-50 rounded-r-apple">
-              View photos organized by events.
+            <p className="text-sm text-apple-gray-600 mb-6">
+              View photos organized by the events they were uploaded to.
             </p>
-            <p className="text-apple-gray-500 p-4 bg-apple-gray-50 rounded-apple flex items-center justify-center h-32">
-              <span className="text-center">No events found. Event photos will appear here.</span>
-            </p>
+            <div className="text-center p-8 bg-apple-gray-50 rounded-lg border border-apple-gray-100">
+              <Calendar className="w-10 h-10 mx-auto text-apple-gray-400 mb-3" />
+              <p className="text-sm text-apple-gray-500">Event functionality coming soon.</p>
+            </div>
           </div>
         );
       case 'trash':
         return (
-          <div className="bg-white rounded-apple-2xl shadow-apple p-8 border border-apple-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-apple-gray-900 flex items-center">
-                <Trash2 className="w-5 h-5 mr-2 text-gray-500" />
+          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-apple-gray-100">
+              <h2 className="text-lg font-semibold text-apple-gray-900 flex items-center">
+                <Trash2 className="w-5 h-5 mr-2 text-apple-gray-500" />
                 Trash
               </h2>
-              <div className="text-center bg-gray-50 px-3 py-2 rounded-full border border-gray-200">
-                <span className="text-sm font-medium text-gray-700">{trashedPhotos.length}</span>
-                <span className="text-xs text-gray-500 ml-1">items</span>
+              <div className="text-center bg-apple-gray-50 px-3 py-1.5 rounded-full border border-apple-gray-200">
+                <span className="text-sm font-medium text-apple-gray-700">{trashedPhotos.length}</span>
+                <span className="text-xs text-apple-gray-500 ml-1">items</span>
               </div>
             </div>
-            <p className="text-apple-gray-600 mb-6 border-l-4 border-gray-500 pl-4 py-2 bg-gray-50 rounded-r-apple">
-              Items in trash will be hidden from your view. You can restore them or permanently hide them from your account.
+            <p className="text-sm text-apple-gray-600 mb-6">
+              Items you've hidden. They will be permanently removed after 30 days.
             </p>
             {trashedPhotos.length > 0 ? (
               <div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                   {trashedPhotos.map(photo => (
                     <div key={photo.id} className="relative group">
-                      <div className="aspect-square rounded-apple-xl overflow-hidden shadow-md">
+                      <div className="aspect-square rounded-lg overflow-hidden border border-apple-gray-100">
                         <img 
                           src={photo.url} 
                           alt={photo.title || `Photo ${photo.id}`} 
                           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
                         />
                       </div>
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent rounded-apple-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                        <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center">
+                      <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <div className="flex flex-col space-y-2">
                           <button 
                             onClick={() => handleRestorePhoto(photo.id)}
-                            className="p-2.5 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors duration-300 shadow-lg flex items-center"
+                            className="bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold py-2 px-3 rounded-md transition-colors shadow flex items-center justify-center"
                             title="Restore photo"
                           >
-                            <RotateCcw className="w-4 h-4 mr-1" />
-                            <span className="text-xs">Restore</span>
+                            <RotateCcw className="w-3 h-3 mr-1" />
+                            Restore
                           </button>
                           <button 
                             onClick={() => handlePermanentDelete(photo.id)}
-                            className="p-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg flex items-center"
+                            className="bg-red-500 hover:bg-red-600 text-white text-xs font-semibold py-2 px-3 rounded-md transition-colors shadow flex items-center justify-center"
                             title="Permanently hide photo"
                           >
-                            <Trash2 className="w-4 h-4 mr-1" />
-                            <span className="text-xs">DELETE</span>
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Delete
                           </button>
                         </div>
                       </div>
@@ -585,9 +590,10 @@ export const Dashboard = () => {
                 </div>
               </div>
             ) : (
-              <p className="text-apple-gray-500 p-4 bg-apple-gray-50 rounded-apple flex items-center justify-center h-32">
-                <span className="text-center">Trash is empty. Deleted items will appear here.</span>
-              </p>
+              <div className="text-center p-8 bg-apple-gray-50 rounded-lg border border-apple-gray-100">
+                 <Trash2 className="w-10 h-10 mx-auto text-apple-gray-400 mb-3" />
+                <p className="text-sm text-apple-gray-500">Trash is empty.</p>
+              </div>
             )}
           </div>
         );
@@ -595,92 +601,96 @@ export const Dashboard = () => {
         return (
           <>
             <motion.div 
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="lg:col-span-2 bg-white rounded-apple-2xl shadow-apple p-8 border border-apple-gray-100"
+              transition={{ duration: 0.4 }}
+              className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6"
             >
-              <div className="flex items-center mb-6">
-                <div className="w-12 h-12 rounded-full bg-apple-blue-100 text-apple-blue-700 flex items-center justify-center mr-4 text-xl font-semibold">
-                  {(user?.full_name?.charAt(0) || user?.email?.charAt(0) || 'U').toUpperCase()}
-                </div>
-                <div>
-                  <h1 className="text-2xl font-semibold text-apple-gray-900">
-                    Hey{user?.full_name ? `, ${user.full_name}` : ''}
-                  </h1>
-                  <p className="text-apple-gray-500">
-                    {faceRegistered ? 'Your face is registered' : 'Complete your profile by registering your face'}
-                  </p>
-                </div>
-              </div>
               
-              {/* --- Show Registration Success Message based on flag --- */}
               {showRegistrationSuccessMessage && (
-                <p className="text-apple-gray-600 mb-6 border-l-4 border-green-500 pl-4 py-2 bg-green-50 rounded-r-apple">
-                  Your face has been successfully registered! You can now use the facial recognition feature.
-                </p>
+                <div className="mb-5 bg-green-50 border-l-4 border-green-500 p-3 rounded-r-md">
+                  <p className="text-sm text-green-800 flex items-center">
+                    <CheckCircle className="w-4 h-4 mr-1.5 flex-shrink-0"/>
+                    <span className="font-medium">Face registration complete!</span>
+                  </p>
+                 </div>
               )}
               
-              {/* --- Show Default Message if not registered AND success message isn't shown --- */}
-              {!faceRegistered && !showRegistrationSuccessMessage && (
-                 <p className="text-apple-gray-600 mb-6 border-l-4 border-amber-500 pl-4 py-2 bg-amber-50 rounded-r-apple">
-                  Get started by registering your face to enable quick authentication and find your photos at events.
-                 </p>
+              {!faceRegistered && !showRegistrationModal && (
+                 <div className="mb-5 bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-md">
+                   <p className="text-sm text-amber-800 flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-1.5 flex-shrink-0"/>
+                     <span className="font-medium">Register your face to find photos.</span>
+                   </p>
+                 </div>
               )}
 
-              {/* Summary Counts */}
-              <div className="mt-6 grid grid-cols-2 gap-4 border-t border-apple-gray-200 pt-6">
-                <div className="text-center bg-apple-gray-50 p-4 rounded-apple border border-apple-gray-100">
-                  <p className="text-2xl font-semibold text-apple-blue-600">{uploadedCount}</p>
-                  <p className="text-xs text-apple-gray-500 mt-1">Photos Uploaded</p>
-                </div>
-                <div className="text-center bg-apple-gray-50 p-4 rounded-apple border border-apple-gray-100">
-                  <p className="text-2xl font-semibold text-apple-green-600">{matchedCount}</p>
-                  <p className="text-xs text-apple-gray-500 mt-1">Photos Matched</p>
-                </div>
-              </div>
+              {!faceRegistered && showRegistrationModal && (
+                 <div className="mb-6">
+                    <FaceRegistration 
+                        onSuccess={handleRegistrationSuccess} 
+                        onClose={() => setShowRegistrationModal(false)} 
+                     />
+                 </div>
+              )}
 
-              {renderFaceImageWithAttributes()}
+              {faceRegistered && renderFaceImageWithAttributes()}
               
-              <button
-                onClick={() => setShowRegistrationModal(true)}
-                className="ios-button-primary flex items-center"
-              >
-                <Camera className="w-5 h-5 mr-2" />
-                {faceRegistered ? "Re-Register Face" : "Register Your Face"}
-              </button>
+              {!showRegistrationModal && (
+                <button
+                  onClick={() => setShowRegistrationModal(true)}
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors flex items-center justify-center w-full md:w-auto"
+                >
+                  <Camera className="w-4 h-4 mr-2" />
+                  {faceRegistered ? "Update Face Registration" : "Register Your Face"}
+                </button>
+              )}
             </motion.div>
 
             <motion.div 
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="bg-white rounded-apple-2xl shadow-apple p-8 border border-apple-gray-100"
+              transition={{ duration: 0.4, delay: 0.1 }}
+              className="space-y-6"
             >
-              <h2 className="text-lg font-medium text-apple-gray-900 mb-6 flex items-center">
-                <Shield className="w-5 h-5 mr-2 text-apple-blue-500" />
-                Face Recognition Status
-              </h2>
-              <div className="flex items-center p-4 bg-apple-gray-50 rounded-apple mb-4 border border-apple-gray-200">
-                <div className={`w-3 h-3 rounded-full mr-3 ${faceRegistered ? 'bg-apple-green-500' : 'bg-amber-500'}`}></div>
-                <div>
-                  <span className="text-sm font-medium text-apple-gray-900">
-                    {faceRegistered ? 'Registered' : 'Not Registered'}
-                  </span>
-                  <p className="text-xs text-apple-gray-500 mt-1">
-                    {faceRegistered 
-                      ? "Last updated: Today"
-                      : "Register to enhance security"}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-6">
-                <h3 className="text-sm font-medium text-apple-gray-900 mb-2">Privacy information</h3>
-                <div className="flex items-start text-xs text-apple-gray-600">
-                  <AlertCircle className="w-4 h-4 mr-2 text-apple-gray-400 flex-shrink-0 mt-0.5" />
-                  <p>Your face data is encrypted and stored securely. We never share your biometric data with third parties.</p>
-                </div>
-              </div>
+               <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-5">
+                  <h2 className="text-sm font-medium text-apple-gray-500 mb-3 flex items-center">
+                    <Photos className="w-4 h-4 mr-1.5"/> Photo Stats
+                  </h2>
+                  <div className="grid grid-cols-2 gap-4">
+                     <div className="text-center">
+                      <p className="text-2xl font-semibold text-apple-green-600">{matchedCount}</p>
+                      <p className="text-xs text-apple-gray-500 mt-0.5">Photos Matched</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-semibold text-apple-blue-600">{uploadedCount}</p>
+                      <p className="text-xs text-apple-gray-500 mt-0.5">Photos Uploaded</p>
+                    </div>
+                  </div>
+               </div>
+                 <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-5">
+                  <h2 className="text-sm font-medium text-apple-gray-500 mb-3 flex items-center">
+                    <Shield className="w-4 h-4 mr-1.5"/> Account Status
+                  </h2>
+                   <div className="flex items-center p-3 bg-apple-gray-50 rounded-lg mb-3 border border-apple-gray-100">
+                    <div className={`w-2.5 h-2.5 rounded-full mr-2.5 ${faceRegistered ? 'bg-green-500' : 'bg-amber-500'}`}></div>
+                    <div>
+                      <span className="text-sm font-medium text-apple-gray-800">
+                        {faceRegistered ? 'Face Registered' : 'Not Registered'}
+                      </span>
+                      <p className="text-xs text-apple-gray-500">
+                        {faceRegistered ? 'Ready for matching' : 'Complete registration'}
+                      </p>
+                    </div>
+                  </div>
+                   <div className="mt-4">
+                    <h3 className="text-xs font-medium text-apple-gray-500 mb-1">Privacy Information</h3>
+                    <div className="flex items-start text-xs text-apple-gray-500">
+                      <AlertCircle className="w-3 h-3 mr-1.5 text-apple-gray-400 flex-shrink-0 mt-0.5" />
+                      <p>Your face data is encrypted and stored securely. We never share your biometric data.</p>
+                    </div>
+                  </div>
+               </div>
             </motion.div>
           </>
         );
@@ -689,60 +699,62 @@ export const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-apple-gray-50 font-sans">
-      {/* Header/Navigation */}
-      <header className="backdrop-navbar sticky top-0 z-40 pt-ios-safe">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-apple-gray-200 pt-safe">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="font-bold text-xl">
-              <img src="https://www.shmong.tv/wp-content/uploads/2023/05/main-logo.png" alt="SHMONG.tv" className="h-8" />
+          <div className="flex justify-between h-14 items-center">
+            <div className="flex-shrink-0 flex items-center">
+              <img src="https://www.shmong.tv/wp-content/uploads/2023/05/main-logo.png" alt="SHMONG" className="h-7" />
             </div>
             
-            {/* Profile dropdown */}
             <div className="relative">
               <button 
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="flex items-center space-x-2 text-sm text-apple-gray-700 bg-apple-gray-100 px-3 py-2 rounded-apple hover:bg-apple-gray-200 transition-all duration-300"
+                className="flex items-center space-x-2 text-sm font-medium text-apple-gray-700 hover:text-apple-gray-900 focus:outline-none"
               >
-                <div className="w-8 h-8 rounded-full bg-apple-blue-100 text-apple-blue-700 flex items-center justify-center">
-                  {user?.email?.charAt(0).toUpperCase()}
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-apple-blue-400 to-apple-purple-500 text-white flex items-center justify-center text-xs font-semibold">
+                  {(user?.email?.charAt(0) || 'U').toUpperCase()}
                 </div>
-                <span className="hidden md:inline font-medium">{user?.email}</span>
-                <ChevronDown className="h-4 w-4 text-apple-gray-500" />
+                <span className="hidden sm:inline">{user?.email}</span>
+                <ChevronDown className={cn("h-4 w-4 text-apple-gray-400 transition-transform", isMenuOpen && "rotate-180")} />
               </button>
               
-              {isMenuOpen && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute right-0 mt-2 w-56 bg-white rounded-apple-xl shadow-apple-lg py-2 z-10 border border-apple-gray-100"
-                >
-                  <div className="px-4 py-2 border-b border-apple-gray-100">
-                    <p className="text-sm font-medium text-apple-gray-900">
-                      {user?.full_name || 'User'}
-                    </p>
-                    <p className="text-xs text-apple-gray-500 truncate">
-                      {user?.email}
-                    </p>
-                  </div>
-                  <button 
-                    onClick={() => signOut()}
-                    className="flex items-center w-full text-left px-4 py-2 text-sm text-apple-red-500 hover:bg-apple-gray-50"
+              <AnimatePresence>
+                {isMenuOpen && (
+                  <motion.div 
+                    ref={menuRef}
+                    initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.1 } }}
+                    transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+                    className="absolute right-0 mt-2 w-56 origin-top-right bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none py-1 z-10"
                   >
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Sign out
-                  </button>
-                </motion.div>
-              )}
+                    <div className="px-3 py-2 border-b border-apple-gray-100">
+                      <p className="text-sm font-medium text-apple-gray-900 truncate">
+                        {user?.full_name || user?.email}
+                      </p>
+                      {user?.full_name && (
+                      <p className="text-xs text-apple-gray-500 truncate">
+                        {user?.email}
+                      </p>
+                      )}
+                    </div>
+                    <button 
+                      onClick={() => signOut()}
+                      className="flex items-center w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-apple-gray-50"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign out
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-ios-safe">
-        {/* Using the improved TabNavigation component */}
-        <div className="mb-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="mb-6 sm:mb-8 flex justify-center">
           <TabNavigation 
             activeTab={activeTab} 
             onTabChange={setActiveTab}
@@ -750,8 +762,8 @@ export const Dashboard = () => {
         </div>
 
         <div className={cn(
-          "grid gap-8",
-          activeTab === 'home' ? "grid-cols-1 lg:grid-cols-3" : "grid-cols-1"
+          "",
+          activeTab === 'home' ? "grid grid-cols-1 lg:grid-cols-3 gap-6" : ""
         )}>
           {renderContent()}
         </div>
@@ -759,10 +771,25 @@ export const Dashboard = () => {
 
       <AnimatePresence>
         {showRegistrationModal && (
-          <FaceRegistration
-            onSuccess={handleRegistrationSuccess}
-            onClose={() => setShowRegistrationModal(false)}
-          />
+           <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-md z-40 flex items-center justify-center p-4"
+          >
+             <motion.div 
+               initial={{ scale: 0.9, opacity: 0 }}
+               animate={{ scale: 1, opacity: 1 }}
+               exit={{ scale: 0.9, opacity: 0 }}
+               transition={{ type: "spring", damping: 20, stiffness: 200 }}
+               className="relative w-full max-w-2xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden"
+             >
+               <FaceRegistration
+                 onSuccess={handleRegistrationSuccess}
+                 onClose={() => setShowRegistrationModal(false)}
+               />
+             </motion.div>
+           </motion.div>
         )}
       </AnimatePresence>
     </div>
