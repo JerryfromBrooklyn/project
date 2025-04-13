@@ -6,11 +6,6 @@ import __process_polyfill from 'vite-plugin-node-polyfills/shims/process'
 globalThis.process = globalThis.process || __process_polyfill
 
 import {
-  NumberValue,
-  marshall,
-  unmarshall
-} from "./chunk-BP2VP2DT.js";
-import {
   BatchExecuteStatementCommand,
   BatchGetItemCommand,
   BatchWriteItemCommand,
@@ -24,9 +19,14 @@ import {
   TransactGetItemsCommand,
   TransactWriteItemsCommand,
   UpdateItemCommand
-} from "./chunk-WFOSQHNO.js";
+} from "./chunk-GY5FN66G.js";
+import {
+  NumberValue,
+  marshall,
+  unmarshall
+} from "./chunk-BP2VP2DT.js";
 import "./chunk-ZCIX2HLB.js";
-import "./chunk-V333OXM4.js";
+import "./chunk-DIMKL7G7.js";
 import "./chunk-3TAN77E7.js";
 import "./chunk-W2ANHD2T.js";
 import {
@@ -34,7 +34,7 @@ import {
   Command,
   createPaginator,
   setFeature
-} from "./chunk-WLALPDKA.js";
+} from "./chunk-546YFRZM.js";
 import {
   __publicField,
   __toESM,

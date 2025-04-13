@@ -2487,165 +2487,245 @@ var ClassBuilder = class {
   }
 };
 
-// node_modules/@smithy/protocol-http/dist-es/httpRequest.js
-var import_dist190 = __toESM(require_dist());
-var import_dist191 = __toESM(require_dist2());
-var import_dist192 = __toESM(require_dist3());
-var HttpRequest = class _HttpRequest {
-  constructor(options) {
-    this.method = options.method || "GET";
-    this.hostname = options.hostname || "localhost";
-    this.port = options.port;
-    this.query = options.query || {};
-    this.headers = options.headers || {};
-    this.body = options.body;
-    this.protocol = options.protocol ? options.protocol.slice(-1) !== ":" ? `${options.protocol}:` : options.protocol : "https:";
-    this.path = options.path ? options.path.charAt(0) !== "/" ? `/${options.path}` : options.path : "/";
-    this.username = options.username;
-    this.password = options.password;
-    this.fragment = options.fragment;
-  }
-  static clone(request) {
-    const cloned = new _HttpRequest({
-      ...request,
-      headers: { ...request.headers }
-    });
-    if (cloned.query) {
-      cloned.query = cloneQuery(cloned.query);
-    }
-    return cloned;
-  }
-  static isInstance(request) {
-    if (!request) {
-      return false;
-    }
-    const req = request;
-    return "method" in req && "protocol" in req && "hostname" in req && "path" in req && typeof req["query"] === "object" && typeof req["headers"] === "object";
-  }
-  clone() {
-    return _HttpRequest.clone(this);
-  }
-};
-function cloneQuery(query) {
-  return Object.keys(query).reduce((carry, paramName) => {
-    const param = query[paramName];
-    return {
-      ...carry,
-      [paramName]: Array.isArray(param) ? [...param] : param
-    };
-  }, {});
-}
+// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/getEndpointFromInstructions.js
+var import_dist211 = __toESM(require_dist());
+var import_dist212 = __toESM(require_dist2());
+var import_dist213 = __toESM(require_dist3());
 
-// node_modules/@smithy/protocol-http/dist-es/index.js
-var import_dist217 = __toESM(require_dist());
-var import_dist218 = __toESM(require_dist2());
-var import_dist219 = __toESM(require_dist3());
-
-// node_modules/@smithy/protocol-http/dist-es/extensions/index.js
-var import_dist196 = __toESM(require_dist());
-var import_dist197 = __toESM(require_dist2());
-var import_dist198 = __toESM(require_dist3());
-
-// node_modules/@smithy/protocol-http/dist-es/extensions/httpExtensionConfiguration.js
+// node_modules/@smithy/middleware-endpoint/dist-es/service-customizations/index.js
 var import_dist193 = __toESM(require_dist());
 var import_dist194 = __toESM(require_dist2());
 var import_dist195 = __toESM(require_dist3());
-var getHttpHandlerExtensionConfiguration = (runtimeConfig) => {
-  return {
-    setHttpHandler(handler) {
-      runtimeConfig.httpHandler = handler;
-    },
-    httpHandler() {
-      return runtimeConfig.httpHandler;
-    },
-    updateHttpClientConfig(key, value) {
-      var _a;
-      (_a = runtimeConfig.httpHandler) == null ? void 0 : _a.updateHttpClientConfig(key, value);
-    },
-    httpHandlerConfigs() {
-      return runtimeConfig.httpHandler.httpHandlerConfigs();
+
+// node_modules/@smithy/middleware-endpoint/dist-es/service-customizations/s3.js
+var import_dist190 = __toESM(require_dist());
+var import_dist191 = __toESM(require_dist2());
+var import_dist192 = __toESM(require_dist3());
+var resolveParamsForS3 = async (endpointParams) => {
+  const bucket = (endpointParams == null ? void 0 : endpointParams.Bucket) || "";
+  if (typeof endpointParams.Bucket === "string") {
+    endpointParams.Bucket = bucket.replace(/#/g, encodeURIComponent("#")).replace(/\?/g, encodeURIComponent("?"));
+  }
+  if (isArnBucketName(bucket)) {
+    if (endpointParams.ForcePathStyle === true) {
+      throw new Error("Path-style addressing cannot be used with ARN buckets");
     }
-  };
+  } else if (!isDnsCompatibleBucketName(bucket) || bucket.indexOf(".") !== -1 && !String(endpointParams.Endpoint).startsWith("http:") || bucket.toLowerCase() !== bucket || bucket.length < 3) {
+    endpointParams.ForcePathStyle = true;
+  }
+  if (endpointParams.DisableMultiRegionAccessPoints) {
+    endpointParams.disableMultiRegionAccessPoints = true;
+    endpointParams.DisableMRAP = true;
+  }
+  return endpointParams;
 };
-var resolveHttpHandlerRuntimeConfig = (httpHandlerExtensionConfiguration) => {
-  return {
-    httpHandler: httpHandlerExtensionConfiguration.httpHandler()
-  };
+var DOMAIN_PATTERN = /^[a-z0-9][a-z0-9\.\-]{1,61}[a-z0-9]$/;
+var IP_ADDRESS_PATTERN = /(\d+\.){3}\d+/;
+var DOTS_PATTERN = /\.\./;
+var isDnsCompatibleBucketName = (bucketName) => DOMAIN_PATTERN.test(bucketName) && !IP_ADDRESS_PATTERN.test(bucketName) && !DOTS_PATTERN.test(bucketName);
+var isArnBucketName = (bucketName) => {
+  const [arn, partition, service, , , bucket] = bucketName.split(":");
+  const isArn = arn === "arn" && bucketName.split(":").length >= 6;
+  const isValidArn = Boolean(isArn && partition && service && bucket);
+  if (isArn && !isValidArn) {
+    throw new Error(`Invalid ARN: ${bucketName} was an invalid ARN.`);
+  }
+  return isValidArn;
 };
 
-// node_modules/@smithy/protocol-http/dist-es/Field.js
+// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/createConfigValueProvider.js
+var import_dist196 = __toESM(require_dist());
+var import_dist197 = __toESM(require_dist2());
+var import_dist198 = __toESM(require_dist3());
+var createConfigValueProvider = (configKey, canonicalEndpointParamKey, config) => {
+  const configProvider = async () => {
+    const configValue = config[configKey] ?? config[canonicalEndpointParamKey];
+    if (typeof configValue === "function") {
+      return configValue();
+    }
+    return configValue;
+  };
+  if (configKey === "credentialScope" || canonicalEndpointParamKey === "CredentialScope") {
+    return async () => {
+      const credentials = typeof config.credentials === "function" ? await config.credentials() : config.credentials;
+      const configValue = (credentials == null ? void 0 : credentials.credentialScope) ?? (credentials == null ? void 0 : credentials.CredentialScope);
+      return configValue;
+    };
+  }
+  if (configKey === "accountId" || canonicalEndpointParamKey === "AccountId") {
+    return async () => {
+      const credentials = typeof config.credentials === "function" ? await config.credentials() : config.credentials;
+      const configValue = (credentials == null ? void 0 : credentials.accountId) ?? (credentials == null ? void 0 : credentials.AccountId);
+      return configValue;
+    };
+  }
+  if (configKey === "endpoint" || canonicalEndpointParamKey === "endpoint") {
+    return async () => {
+      const endpoint = await configProvider();
+      if (endpoint && typeof endpoint === "object") {
+        if ("url" in endpoint) {
+          return endpoint.url.href;
+        }
+        if ("hostname" in endpoint) {
+          const { protocol, hostname, port, path } = endpoint;
+          return `${protocol}//${hostname}${port ? ":" + port : ""}${path}`;
+        }
+      }
+      return endpoint;
+    };
+  }
+  return configProvider;
+};
+
+// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/getEndpointFromConfig.browser.js
 var import_dist199 = __toESM(require_dist());
 var import_dist200 = __toESM(require_dist2());
 var import_dist201 = __toESM(require_dist3());
+var getEndpointFromConfig = async (serviceId) => void 0;
 
-// node_modules/@smithy/protocol-http/dist-es/Fields.js
-var import_dist202 = __toESM(require_dist());
-var import_dist203 = __toESM(require_dist2());
-var import_dist204 = __toESM(require_dist3());
+// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/toEndpointV1.js
+var import_dist208 = __toESM(require_dist());
+var import_dist209 = __toESM(require_dist2());
+var import_dist210 = __toESM(require_dist3());
 
-// node_modules/@smithy/protocol-http/dist-es/httpHandler.js
+// node_modules/@smithy/url-parser/dist-es/index.js
 var import_dist205 = __toESM(require_dist());
 var import_dist206 = __toESM(require_dist2());
 var import_dist207 = __toESM(require_dist3());
 
-// node_modules/@smithy/protocol-http/dist-es/httpResponse.js
-var import_dist208 = __toESM(require_dist());
-var import_dist209 = __toESM(require_dist2());
-var import_dist210 = __toESM(require_dist3());
-var HttpResponse = class {
-  constructor(options) {
-    this.statusCode = options.statusCode;
-    this.reason = options.reason;
-    this.headers = options.headers || {};
-    this.body = options.body;
+// node_modules/@smithy/querystring-parser/dist-es/index.js
+var import_dist202 = __toESM(require_dist());
+var import_dist203 = __toESM(require_dist2());
+var import_dist204 = __toESM(require_dist3());
+function parseQueryString(querystring) {
+  const query = {};
+  querystring = querystring.replace(/^\?/, "");
+  if (querystring) {
+    for (const pair of querystring.split("&")) {
+      let [key, value = null] = pair.split("=");
+      key = decodeURIComponent(key);
+      if (value) {
+        value = decodeURIComponent(value);
+      }
+      if (!(key in query)) {
+        query[key] = value;
+      } else if (Array.isArray(query[key])) {
+        query[key].push(value);
+      } else {
+        query[key] = [query[key], value];
+      }
+    }
   }
-  static isInstance(response) {
-    if (!response)
-      return false;
-    const resp = response;
-    return typeof resp.statusCode === "number" && typeof resp.headers === "object";
-  }
-};
-
-// node_modules/@smithy/protocol-http/dist-es/isValidHostname.js
-var import_dist211 = __toESM(require_dist());
-var import_dist212 = __toESM(require_dist2());
-var import_dist213 = __toESM(require_dist3());
-function isValidHostname(hostname) {
-  const hostPattern = /^[a-z0-9][a-z0-9\.\-]*[a-z0-9]$/;
-  return hostPattern.test(hostname);
+  return query;
 }
 
-// node_modules/@smithy/protocol-http/dist-es/types.js
-var import_dist214 = __toESM(require_dist());
-var import_dist215 = __toESM(require_dist2());
-var import_dist216 = __toESM(require_dist3());
+// node_modules/@smithy/url-parser/dist-es/index.js
+var parseUrl = (url) => {
+  if (typeof url === "string") {
+    return parseUrl(new URL(url));
+  }
+  const { hostname, pathname, port, protocol, search } = url;
+  let query;
+  if (search) {
+    query = parseQueryString(search);
+  }
+  return {
+    hostname,
+    port: port ? parseInt(port) : void 0,
+    protocol,
+    path: pathname,
+    query
+  };
+};
+
+// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/toEndpointV1.js
+var toEndpointV1 = (endpoint) => {
+  if (typeof endpoint === "object") {
+    if ("url" in endpoint) {
+      return parseUrl(endpoint.url);
+    }
+    return endpoint;
+  }
+  return parseUrl(endpoint);
+};
+
+// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/getEndpointFromInstructions.js
+var getEndpointFromInstructions = async (commandInput, instructionsSupplier, clientConfig, context) => {
+  if (!clientConfig.endpoint) {
+    let endpointFromConfig;
+    if (clientConfig.serviceConfiguredEndpoint) {
+      endpointFromConfig = await clientConfig.serviceConfiguredEndpoint();
+    } else {
+      endpointFromConfig = await getEndpointFromConfig(clientConfig.serviceId);
+    }
+    if (endpointFromConfig) {
+      clientConfig.endpoint = () => Promise.resolve(toEndpointV1(endpointFromConfig));
+    }
+  }
+  const endpointParams = await resolveParams(commandInput, instructionsSupplier, clientConfig);
+  if (typeof clientConfig.endpointProvider !== "function") {
+    throw new Error("config.endpointProvider is not set.");
+  }
+  const endpoint = clientConfig.endpointProvider(endpointParams, context);
+  return endpoint;
+};
+var resolveParams = async (commandInput, instructionsSupplier, clientConfig) => {
+  var _a;
+  const endpointParams = {};
+  const instructions = ((_a = instructionsSupplier == null ? void 0 : instructionsSupplier.getEndpointParameterInstructions) == null ? void 0 : _a.call(instructionsSupplier)) || {};
+  for (const [name, instruction] of Object.entries(instructions)) {
+    switch (instruction.type) {
+      case "staticContextParams":
+        endpointParams[name] = instruction.value;
+        break;
+      case "contextParams":
+        endpointParams[name] = commandInput[instruction.name];
+        break;
+      case "clientContextParams":
+      case "builtInParams":
+        endpointParams[name] = await createConfigValueProvider(instruction.name, name, clientConfig)();
+        break;
+      case "operationContextParams":
+        endpointParams[name] = instruction.get(commandInput);
+        break;
+      default:
+        throw new Error("Unrecognized endpoint parameter instruction: " + JSON.stringify(instruction));
+    }
+  }
+  if (Object.keys(instructions).length === 0) {
+    Object.assign(endpointParams, clientConfig);
+  }
+  if (String(clientConfig.serviceId).toLowerCase() === "s3") {
+    await resolveParamsForS3(endpointParams);
+  }
+  return endpointParams;
+};
 
 // node_modules/@smithy/core/dist-es/middleware-http-auth-scheme/getHttpAuthSchemeEndpointRuleSetPlugin.js
-var import_dist232 = __toESM(require_dist());
-var import_dist233 = __toESM(require_dist2());
-var import_dist234 = __toESM(require_dist3());
-
-// node_modules/@smithy/core/dist-es/middleware-http-auth-scheme/httpAuthSchemeMiddleware.js
-var import_dist229 = __toESM(require_dist());
-var import_dist230 = __toESM(require_dist2());
-var import_dist231 = __toESM(require_dist3());
-
-// node_modules/@smithy/util-middleware/dist-es/index.js
 var import_dist226 = __toESM(require_dist());
 var import_dist227 = __toESM(require_dist2());
 var import_dist228 = __toESM(require_dist3());
 
-// node_modules/@smithy/util-middleware/dist-es/getSmithyContext.js
-var import_dist220 = __toESM(require_dist());
-var import_dist221 = __toESM(require_dist2());
-var import_dist222 = __toESM(require_dist3());
-var getSmithyContext = (context) => context[SMITHY_CONTEXT_KEY] || (context[SMITHY_CONTEXT_KEY] = {});
-
-// node_modules/@smithy/util-middleware/dist-es/normalizeProvider.js
+// node_modules/@smithy/core/dist-es/middleware-http-auth-scheme/httpAuthSchemeMiddleware.js
 var import_dist223 = __toESM(require_dist());
 var import_dist224 = __toESM(require_dist2());
 var import_dist225 = __toESM(require_dist3());
+
+// node_modules/@smithy/util-middleware/dist-es/index.js
+var import_dist220 = __toESM(require_dist());
+var import_dist221 = __toESM(require_dist2());
+var import_dist222 = __toESM(require_dist3());
+
+// node_modules/@smithy/util-middleware/dist-es/getSmithyContext.js
+var import_dist214 = __toESM(require_dist());
+var import_dist215 = __toESM(require_dist2());
+var import_dist216 = __toESM(require_dist3());
+var getSmithyContext = (context) => context[SMITHY_CONTEXT_KEY] || (context[SMITHY_CONTEXT_KEY] = {});
+
+// node_modules/@smithy/util-middleware/dist-es/normalizeProvider.js
+var import_dist217 = __toESM(require_dist());
+var import_dist218 = __toESM(require_dist2());
+var import_dist219 = __toESM(require_dist3());
 var normalizeProvider = (input) => {
   if (typeof input === "function")
     return input;
@@ -2713,14 +2793,14 @@ var getHttpAuthSchemeEndpointRuleSetPlugin = (config, { httpAuthSchemeParameters
 });
 
 // node_modules/@smithy/middleware-serde/dist-es/serdePlugin.js
-var import_dist241 = __toESM(require_dist());
-var import_dist242 = __toESM(require_dist2());
-var import_dist243 = __toESM(require_dist3());
-
-// node_modules/@smithy/middleware-serde/dist-es/deserializerMiddleware.js
 var import_dist235 = __toESM(require_dist());
 var import_dist236 = __toESM(require_dist2());
 var import_dist237 = __toESM(require_dist3());
+
+// node_modules/@smithy/middleware-serde/dist-es/deserializerMiddleware.js
+var import_dist229 = __toESM(require_dist());
+var import_dist230 = __toESM(require_dist2());
+var import_dist231 = __toESM(require_dist3());
 var deserializerMiddleware = (options, deserializer) => (next, context) => async (args) => {
   var _a, _b, _c, _d;
   const { response } = await next(args);
@@ -2756,9 +2836,9 @@ var deserializerMiddleware = (options, deserializer) => (next, context) => async
 };
 
 // node_modules/@smithy/middleware-serde/dist-es/serializerMiddleware.js
-var import_dist238 = __toESM(require_dist());
-var import_dist239 = __toESM(require_dist2());
-var import_dist240 = __toESM(require_dist3());
+var import_dist232 = __toESM(require_dist());
+var import_dist233 = __toESM(require_dist2());
+var import_dist234 = __toESM(require_dist3());
 var serializerMiddleware = (options, serializer) => (next, context) => async (args) => {
   var _a;
   const endpoint = ((_a = context.endpointV2) == null ? void 0 : _a.url) && options.urlParser ? async () => options.urlParser(context.endpointV2.url) : options.endpoint;
@@ -2795,19 +2875,153 @@ function getSerdePlugin(config, serializer, deserializer) {
 }
 
 // node_modules/@smithy/middleware-serde/dist-es/index.js
+var import_dist238 = __toESM(require_dist());
+var import_dist239 = __toESM(require_dist2());
+var import_dist240 = __toESM(require_dist3());
+
+// node_modules/@smithy/protocol-http/dist-es/httpRequest.js
+var import_dist241 = __toESM(require_dist());
+var import_dist242 = __toESM(require_dist2());
+var import_dist243 = __toESM(require_dist3());
+var HttpRequest = class _HttpRequest {
+  constructor(options) {
+    this.method = options.method || "GET";
+    this.hostname = options.hostname || "localhost";
+    this.port = options.port;
+    this.query = options.query || {};
+    this.headers = options.headers || {};
+    this.body = options.body;
+    this.protocol = options.protocol ? options.protocol.slice(-1) !== ":" ? `${options.protocol}:` : options.protocol : "https:";
+    this.path = options.path ? options.path.charAt(0) !== "/" ? `/${options.path}` : options.path : "/";
+    this.username = options.username;
+    this.password = options.password;
+    this.fragment = options.fragment;
+  }
+  static clone(request) {
+    const cloned = new _HttpRequest({
+      ...request,
+      headers: { ...request.headers }
+    });
+    if (cloned.query) {
+      cloned.query = cloneQuery(cloned.query);
+    }
+    return cloned;
+  }
+  static isInstance(request) {
+    if (!request) {
+      return false;
+    }
+    const req = request;
+    return "method" in req && "protocol" in req && "hostname" in req && "path" in req && typeof req["query"] === "object" && typeof req["headers"] === "object";
+  }
+  clone() {
+    return _HttpRequest.clone(this);
+  }
+};
+function cloneQuery(query) {
+  return Object.keys(query).reduce((carry, paramName) => {
+    const param = query[paramName];
+    return {
+      ...carry,
+      [paramName]: Array.isArray(param) ? [...param] : param
+    };
+  }, {});
+}
+
+// node_modules/@smithy/protocol-http/dist-es/index.js
+var import_dist268 = __toESM(require_dist());
+var import_dist269 = __toESM(require_dist2());
+var import_dist270 = __toESM(require_dist3());
+
+// node_modules/@smithy/protocol-http/dist-es/extensions/index.js
+var import_dist247 = __toESM(require_dist());
+var import_dist248 = __toESM(require_dist2());
+var import_dist249 = __toESM(require_dist3());
+
+// node_modules/@smithy/protocol-http/dist-es/extensions/httpExtensionConfiguration.js
 var import_dist244 = __toESM(require_dist());
 var import_dist245 = __toESM(require_dist2());
 var import_dist246 = __toESM(require_dist3());
+var getHttpHandlerExtensionConfiguration = (runtimeConfig) => {
+  return {
+    setHttpHandler(handler) {
+      runtimeConfig.httpHandler = handler;
+    },
+    httpHandler() {
+      return runtimeConfig.httpHandler;
+    },
+    updateHttpClientConfig(key, value) {
+      var _a;
+      (_a = runtimeConfig.httpHandler) == null ? void 0 : _a.updateHttpClientConfig(key, value);
+    },
+    httpHandlerConfigs() {
+      return runtimeConfig.httpHandler.httpHandlerConfigs();
+    }
+  };
+};
+var resolveHttpHandlerRuntimeConfig = (httpHandlerExtensionConfiguration) => {
+  return {
+    httpHandler: httpHandlerExtensionConfiguration.httpHandler()
+  };
+};
 
-// node_modules/@smithy/core/dist-es/middleware-http-signing/getHttpSigningMiddleware.js
+// node_modules/@smithy/protocol-http/dist-es/Field.js
 var import_dist250 = __toESM(require_dist());
 var import_dist251 = __toESM(require_dist2());
 var import_dist252 = __toESM(require_dist3());
 
+// node_modules/@smithy/protocol-http/dist-es/Fields.js
+var import_dist253 = __toESM(require_dist());
+var import_dist254 = __toESM(require_dist2());
+var import_dist255 = __toESM(require_dist3());
+
+// node_modules/@smithy/protocol-http/dist-es/httpHandler.js
+var import_dist256 = __toESM(require_dist());
+var import_dist257 = __toESM(require_dist2());
+var import_dist258 = __toESM(require_dist3());
+
+// node_modules/@smithy/protocol-http/dist-es/httpResponse.js
+var import_dist259 = __toESM(require_dist());
+var import_dist260 = __toESM(require_dist2());
+var import_dist261 = __toESM(require_dist3());
+var HttpResponse = class {
+  constructor(options) {
+    this.statusCode = options.statusCode;
+    this.reason = options.reason;
+    this.headers = options.headers || {};
+    this.body = options.body;
+  }
+  static isInstance(response) {
+    if (!response)
+      return false;
+    const resp = response;
+    return typeof resp.statusCode === "number" && typeof resp.headers === "object";
+  }
+};
+
+// node_modules/@smithy/protocol-http/dist-es/isValidHostname.js
+var import_dist262 = __toESM(require_dist());
+var import_dist263 = __toESM(require_dist2());
+var import_dist264 = __toESM(require_dist3());
+function isValidHostname(hostname) {
+  const hostPattern = /^[a-z0-9][a-z0-9\.\-]*[a-z0-9]$/;
+  return hostPattern.test(hostname);
+}
+
+// node_modules/@smithy/protocol-http/dist-es/types.js
+var import_dist265 = __toESM(require_dist());
+var import_dist266 = __toESM(require_dist2());
+var import_dist267 = __toESM(require_dist3());
+
+// node_modules/@smithy/core/dist-es/middleware-http-signing/getHttpSigningMiddleware.js
+var import_dist274 = __toESM(require_dist());
+var import_dist275 = __toESM(require_dist2());
+var import_dist276 = __toESM(require_dist3());
+
 // node_modules/@smithy/core/dist-es/middleware-http-signing/httpSigningMiddleware.js
-var import_dist247 = __toESM(require_dist());
-var import_dist248 = __toESM(require_dist2());
-var import_dist249 = __toESM(require_dist3());
+var import_dist271 = __toESM(require_dist());
+var import_dist272 = __toESM(require_dist2());
+var import_dist273 = __toESM(require_dist3());
 var defaultErrorHandler = (signingProperties) => (error) => {
   throw error;
 };
@@ -2848,9 +3062,9 @@ var getHttpSigningPlugin = (config) => ({
 });
 
 // node_modules/@smithy/core/dist-es/pagination/createPaginator.js
-var import_dist253 = __toESM(require_dist());
-var import_dist254 = __toESM(require_dist2());
-var import_dist255 = __toESM(require_dist3());
+var import_dist277 = __toESM(require_dist());
+var import_dist278 = __toESM(require_dist2());
+var import_dist279 = __toESM(require_dist3());
 var makePagedClientRequest = async (CommandCtor, client, input, withCommand = (_) => _, ...args) => {
   let command = new CommandCtor(input);
   command = withCommand(command) ?? command;
@@ -2893,9 +3107,9 @@ var get = (fromObject, path) => {
 };
 
 // node_modules/@smithy/core/dist-es/util-identity-and-auth/DefaultIdentityProviderConfig.js
-var import_dist256 = __toESM(require_dist());
-var import_dist257 = __toESM(require_dist2());
-var import_dist258 = __toESM(require_dist3());
+var import_dist280 = __toESM(require_dist());
+var import_dist281 = __toESM(require_dist2());
+var import_dist282 = __toESM(require_dist3());
 var DefaultIdentityProviderConfig = class {
   constructor(config) {
     this.authSchemes = /* @__PURE__ */ new Map();
@@ -2911,24 +3125,24 @@ var DefaultIdentityProviderConfig = class {
 };
 
 // node_modules/@smithy/core/dist-es/index.js
-var import_dist403 = __toESM(require_dist());
-var import_dist404 = __toESM(require_dist2());
-var import_dist405 = __toESM(require_dist3());
+var import_dist427 = __toESM(require_dist());
+var import_dist428 = __toESM(require_dist2());
+var import_dist429 = __toESM(require_dist3());
 
 // node_modules/@smithy/core/dist-es/getSmithyContext.js
-var import_dist259 = __toESM(require_dist());
-var import_dist260 = __toESM(require_dist2());
-var import_dist261 = __toESM(require_dist3());
+var import_dist283 = __toESM(require_dist());
+var import_dist284 = __toESM(require_dist2());
+var import_dist285 = __toESM(require_dist3());
 
 // node_modules/@smithy/core/dist-es/middleware-http-auth-scheme/index.js
-var import_dist265 = __toESM(require_dist());
-var import_dist266 = __toESM(require_dist2());
-var import_dist267 = __toESM(require_dist3());
+var import_dist289 = __toESM(require_dist());
+var import_dist290 = __toESM(require_dist2());
+var import_dist291 = __toESM(require_dist3());
 
 // node_modules/@smithy/core/dist-es/middleware-http-auth-scheme/getHttpAuthSchemePlugin.js
-var import_dist262 = __toESM(require_dist());
-var import_dist263 = __toESM(require_dist2());
-var import_dist264 = __toESM(require_dist3());
+var import_dist286 = __toESM(require_dist());
+var import_dist287 = __toESM(require_dist2());
+var import_dist288 = __toESM(require_dist3());
 var httpAuthSchemeMiddlewareOptions = {
   step: "serialize",
   tags: ["HTTP_AUTH_SCHEME"],
@@ -2939,14 +3153,14 @@ var httpAuthSchemeMiddlewareOptions = {
 };
 
 // node_modules/@smithy/core/dist-es/middleware-http-signing/index.js
-var import_dist268 = __toESM(require_dist());
-var import_dist269 = __toESM(require_dist2());
-var import_dist270 = __toESM(require_dist3());
+var import_dist292 = __toESM(require_dist());
+var import_dist293 = __toESM(require_dist2());
+var import_dist294 = __toESM(require_dist3());
 
 // node_modules/@smithy/core/dist-es/normalizeProvider.js
-var import_dist271 = __toESM(require_dist());
-var import_dist272 = __toESM(require_dist2());
-var import_dist273 = __toESM(require_dist3());
+var import_dist295 = __toESM(require_dist());
+var import_dist296 = __toESM(require_dist2());
+var import_dist297 = __toESM(require_dist3());
 var normalizeProvider2 = (input) => {
   if (typeof input === "function")
     return input;
@@ -2955,49 +3169,49 @@ var normalizeProvider2 = (input) => {
 };
 
 // node_modules/@smithy/core/dist-es/protocols/requestBuilder.js
-var import_dist379 = __toESM(require_dist());
-var import_dist380 = __toESM(require_dist2());
-var import_dist381 = __toESM(require_dist3());
+var import_dist403 = __toESM(require_dist());
+var import_dist404 = __toESM(require_dist2());
+var import_dist405 = __toESM(require_dist3());
 
 // node_modules/@smithy/core/dist-es/submodules/protocols/index.js
-var import_dist376 = __toESM(require_dist());
-var import_dist377 = __toESM(require_dist2());
-var import_dist378 = __toESM(require_dist3());
+var import_dist400 = __toESM(require_dist());
+var import_dist401 = __toESM(require_dist2());
+var import_dist402 = __toESM(require_dist3());
 
 // node_modules/@smithy/core/dist-es/submodules/protocols/collect-stream-body.js
-var import_dist364 = __toESM(require_dist());
-var import_dist365 = __toESM(require_dist2());
-var import_dist366 = __toESM(require_dist3());
+var import_dist388 = __toESM(require_dist());
+var import_dist389 = __toESM(require_dist2());
+var import_dist390 = __toESM(require_dist3());
 
 // node_modules/@smithy/util-stream/dist-es/index.js
-var import_dist361 = __toESM(require_dist());
-var import_dist362 = __toESM(require_dist2());
-var import_dist363 = __toESM(require_dist3());
+var import_dist385 = __toESM(require_dist());
+var import_dist386 = __toESM(require_dist2());
+var import_dist387 = __toESM(require_dist3());
 
 // node_modules/@smithy/util-stream/dist-es/blob/Uint8ArrayBlobAdapter.js
+var import_dist325 = __toESM(require_dist());
+var import_dist326 = __toESM(require_dist2());
+var import_dist327 = __toESM(require_dist3());
+
+// node_modules/@smithy/util-stream/dist-es/blob/transforms.js
+var import_dist322 = __toESM(require_dist());
+var import_dist323 = __toESM(require_dist2());
+var import_dist324 = __toESM(require_dist3());
+
+// node_modules/@smithy/util-base64/dist-es/index.js
+var import_dist319 = __toESM(require_dist());
+var import_dist320 = __toESM(require_dist2());
+var import_dist321 = __toESM(require_dist3());
+
+// node_modules/@smithy/util-base64/dist-es/fromBase64.browser.js
 var import_dist301 = __toESM(require_dist());
 var import_dist302 = __toESM(require_dist2());
 var import_dist303 = __toESM(require_dist3());
 
-// node_modules/@smithy/util-stream/dist-es/blob/transforms.js
+// node_modules/@smithy/util-base64/dist-es/constants.browser.js
 var import_dist298 = __toESM(require_dist());
 var import_dist299 = __toESM(require_dist2());
 var import_dist300 = __toESM(require_dist3());
-
-// node_modules/@smithy/util-base64/dist-es/index.js
-var import_dist295 = __toESM(require_dist());
-var import_dist296 = __toESM(require_dist2());
-var import_dist297 = __toESM(require_dist3());
-
-// node_modules/@smithy/util-base64/dist-es/fromBase64.browser.js
-var import_dist277 = __toESM(require_dist());
-var import_dist278 = __toESM(require_dist2());
-var import_dist279 = __toESM(require_dist3());
-
-// node_modules/@smithy/util-base64/dist-es/constants.browser.js
-var import_dist274 = __toESM(require_dist());
-var import_dist275 = __toESM(require_dist2());
-var import_dist276 = __toESM(require_dist3());
 var alphabetByEncoding = {};
 var alphabetByValue = new Array(64);
 for (let i = 0, start = "A".charCodeAt(0), limit = "Z".charCodeAt(0); i + start <= limit; i++) {
@@ -3062,25 +3276,25 @@ var fromBase64 = (input) => {
 };
 
 // node_modules/@smithy/util-base64/dist-es/toBase64.browser.js
-var import_dist292 = __toESM(require_dist());
-var import_dist293 = __toESM(require_dist2());
-var import_dist294 = __toESM(require_dist3());
+var import_dist316 = __toESM(require_dist());
+var import_dist317 = __toESM(require_dist2());
+var import_dist318 = __toESM(require_dist3());
 
 // node_modules/@smithy/util-utf8/dist-es/index.js
-var import_dist289 = __toESM(require_dist());
-var import_dist290 = __toESM(require_dist2());
-var import_dist291 = __toESM(require_dist3());
+var import_dist313 = __toESM(require_dist());
+var import_dist314 = __toESM(require_dist2());
+var import_dist315 = __toESM(require_dist3());
 
 // node_modules/@smithy/util-utf8/dist-es/fromUtf8.browser.js
-var import_dist280 = __toESM(require_dist());
-var import_dist281 = __toESM(require_dist2());
-var import_dist282 = __toESM(require_dist3());
+var import_dist304 = __toESM(require_dist());
+var import_dist305 = __toESM(require_dist2());
+var import_dist306 = __toESM(require_dist3());
 var fromUtf8 = (input) => new TextEncoder().encode(input);
 
 // node_modules/@smithy/util-utf8/dist-es/toUint8Array.js
-var import_dist283 = __toESM(require_dist());
-var import_dist284 = __toESM(require_dist2());
-var import_dist285 = __toESM(require_dist3());
+var import_dist307 = __toESM(require_dist());
+var import_dist308 = __toESM(require_dist2());
+var import_dist309 = __toESM(require_dist3());
 var toUint8Array = (data) => {
   if (typeof data === "string") {
     return fromUtf8(data);
@@ -3092,9 +3306,9 @@ var toUint8Array = (data) => {
 };
 
 // node_modules/@smithy/util-utf8/dist-es/toUtf8.browser.js
-var import_dist286 = __toESM(require_dist());
-var import_dist287 = __toESM(require_dist2());
-var import_dist288 = __toESM(require_dist3());
+var import_dist310 = __toESM(require_dist());
+var import_dist311 = __toESM(require_dist2());
+var import_dist312 = __toESM(require_dist3());
 var toUtf8 = (input) => {
   if (typeof input === "string") {
     return input;
@@ -3171,23 +3385,23 @@ var Uint8ArrayBlobAdapter = class _Uint8ArrayBlobAdapter extends Uint8Array {
 };
 
 // node_modules/@smithy/util-stream/dist-es/checksum/ChecksumStream.browser.js
-var import_dist304 = __toESM(require_dist());
-var import_dist305 = __toESM(require_dist2());
-var import_dist306 = __toESM(require_dist3());
+var import_dist328 = __toESM(require_dist());
+var import_dist329 = __toESM(require_dist2());
+var import_dist330 = __toESM(require_dist3());
 var ReadableStreamRef = typeof ReadableStream === "function" ? ReadableStream : function() {
 };
 var ChecksumStream = class extends ReadableStreamRef {
 };
 
 // node_modules/@smithy/util-stream/dist-es/checksum/createChecksumStream.browser.js
-var import_dist310 = __toESM(require_dist());
-var import_dist311 = __toESM(require_dist2());
-var import_dist312 = __toESM(require_dist3());
+var import_dist334 = __toESM(require_dist());
+var import_dist335 = __toESM(require_dist2());
+var import_dist336 = __toESM(require_dist3());
 
 // node_modules/@smithy/util-stream/dist-es/stream-type-check.js
-var import_dist307 = __toESM(require_dist());
-var import_dist308 = __toESM(require_dist2());
-var import_dist309 = __toESM(require_dist3());
+var import_dist331 = __toESM(require_dist());
+var import_dist332 = __toESM(require_dist2());
+var import_dist333 = __toESM(require_dist3());
 var isReadableStream = (stream) => {
   var _a;
   return typeof ReadableStream === "function" && (((_a = stream == null ? void 0 : stream.constructor) == null ? void 0 : _a.name) === ReadableStream.name || stream instanceof ReadableStream);
@@ -3228,14 +3442,14 @@ var createChecksumStream = ({ expectedChecksum, checksum, source, checksumSource
 };
 
 // node_modules/@smithy/util-stream/dist-es/createBufferedReadableStream.js
-var import_dist316 = __toESM(require_dist());
-var import_dist317 = __toESM(require_dist2());
-var import_dist318 = __toESM(require_dist3());
+var import_dist340 = __toESM(require_dist());
+var import_dist341 = __toESM(require_dist2());
+var import_dist342 = __toESM(require_dist3());
 
 // node_modules/@smithy/util-stream/dist-es/ByteArrayCollector.js
-var import_dist313 = __toESM(require_dist());
-var import_dist314 = __toESM(require_dist2());
-var import_dist315 = __toESM(require_dist3());
+var import_dist337 = __toESM(require_dist());
+var import_dist338 = __toESM(require_dist2());
+var import_dist339 = __toESM(require_dist3());
 var ByteArrayCollector = class {
   constructor(allocByteArray) {
     this.allocByteArray = allocByteArray;
@@ -3362,9 +3576,9 @@ function modeOf(chunk, allowBuffer = true) {
 }
 
 // node_modules/@smithy/util-stream/dist-es/getAwsChunkedEncodingStream.browser.js
-var import_dist319 = __toESM(require_dist());
-var import_dist320 = __toESM(require_dist2());
-var import_dist321 = __toESM(require_dist3());
+var import_dist343 = __toESM(require_dist());
+var import_dist344 = __toESM(require_dist2());
+var import_dist345 = __toESM(require_dist3());
 var getAwsChunkedEncodingStream = (readableStream, options) => {
   const { base64Encoder, bodyLengthChecker, checksumAlgorithmFn, checksumLocationName, streamHasher } = options;
   const checksumRequired = base64Encoder !== void 0 && bodyLengthChecker !== void 0 && checksumAlgorithmFn !== void 0 && checksumLocationName !== void 0 && streamHasher !== void 0;
@@ -3394,9 +3608,9 @@ ${value}\r
 };
 
 // node_modules/@smithy/util-stream/dist-es/headStream.browser.js
-var import_dist322 = __toESM(require_dist());
-var import_dist323 = __toESM(require_dist2());
-var import_dist324 = __toESM(require_dist3());
+var import_dist346 = __toESM(require_dist());
+var import_dist347 = __toESM(require_dist2());
+var import_dist348 = __toESM(require_dist3());
 async function headStream(stream, bytes) {
   let byteLengthCounter = 0;
   const chunks = [];
@@ -3429,41 +3643,41 @@ async function headStream(stream, bytes) {
 }
 
 // node_modules/@smithy/util-stream/dist-es/sdk-stream-mixin.browser.js
+var import_dist379 = __toESM(require_dist());
+var import_dist380 = __toESM(require_dist2());
+var import_dist381 = __toESM(require_dist3());
+
+// node_modules/@smithy/fetch-http-handler/dist-es/index.js
+var import_dist373 = __toESM(require_dist());
+var import_dist374 = __toESM(require_dist2());
+var import_dist375 = __toESM(require_dist3());
+
+// node_modules/@smithy/fetch-http-handler/dist-es/fetch-http-handler.js
+var import_dist367 = __toESM(require_dist());
+var import_dist368 = __toESM(require_dist2());
+var import_dist369 = __toESM(require_dist3());
+
+// node_modules/@smithy/querystring-builder/dist-es/index.js
+var import_dist358 = __toESM(require_dist());
+var import_dist359 = __toESM(require_dist2());
+var import_dist360 = __toESM(require_dist3());
+
+// node_modules/@smithy/util-uri-escape/dist-es/index.js
 var import_dist355 = __toESM(require_dist());
 var import_dist356 = __toESM(require_dist2());
 var import_dist357 = __toESM(require_dist3());
 
-// node_modules/@smithy/fetch-http-handler/dist-es/index.js
+// node_modules/@smithy/util-uri-escape/dist-es/escape-uri.js
 var import_dist349 = __toESM(require_dist());
 var import_dist350 = __toESM(require_dist2());
 var import_dist351 = __toESM(require_dist3());
-
-// node_modules/@smithy/fetch-http-handler/dist-es/fetch-http-handler.js
-var import_dist343 = __toESM(require_dist());
-var import_dist344 = __toESM(require_dist2());
-var import_dist345 = __toESM(require_dist3());
-
-// node_modules/@smithy/querystring-builder/dist-es/index.js
-var import_dist334 = __toESM(require_dist());
-var import_dist335 = __toESM(require_dist2());
-var import_dist336 = __toESM(require_dist3());
-
-// node_modules/@smithy/util-uri-escape/dist-es/index.js
-var import_dist331 = __toESM(require_dist());
-var import_dist332 = __toESM(require_dist2());
-var import_dist333 = __toESM(require_dist3());
-
-// node_modules/@smithy/util-uri-escape/dist-es/escape-uri.js
-var import_dist325 = __toESM(require_dist());
-var import_dist326 = __toESM(require_dist2());
-var import_dist327 = __toESM(require_dist3());
 var escapeUri = (uri) => encodeURIComponent(uri).replace(/[!'()*]/g, hexEncode);
 var hexEncode = (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`;
 
 // node_modules/@smithy/util-uri-escape/dist-es/escape-uri-path.js
-var import_dist328 = __toESM(require_dist());
-var import_dist329 = __toESM(require_dist2());
-var import_dist330 = __toESM(require_dist3());
+var import_dist352 = __toESM(require_dist());
+var import_dist353 = __toESM(require_dist2());
+var import_dist354 = __toESM(require_dist3());
 
 // node_modules/@smithy/querystring-builder/dist-es/index.js
 function buildQueryString(query) {
@@ -3487,17 +3701,17 @@ function buildQueryString(query) {
 }
 
 // node_modules/@smithy/fetch-http-handler/dist-es/create-request.js
-var import_dist337 = __toESM(require_dist());
-var import_dist338 = __toESM(require_dist2());
-var import_dist339 = __toESM(require_dist3());
+var import_dist361 = __toESM(require_dist());
+var import_dist362 = __toESM(require_dist2());
+var import_dist363 = __toESM(require_dist3());
 function createRequest(url, requestOptions) {
   return new Request(url, requestOptions);
 }
 
 // node_modules/@smithy/fetch-http-handler/dist-es/request-timeout.js
-var import_dist340 = __toESM(require_dist());
-var import_dist341 = __toESM(require_dist2());
-var import_dist342 = __toESM(require_dist3());
+var import_dist364 = __toESM(require_dist());
+var import_dist365 = __toESM(require_dist2());
+var import_dist366 = __toESM(require_dist3());
 function requestTimeout(timeoutInMs = 0) {
   return new Promise((resolve, reject) => {
     if (timeoutInMs) {
@@ -3648,9 +3862,9 @@ var FetchHttpHandler = class _FetchHttpHandler {
 };
 
 // node_modules/@smithy/fetch-http-handler/dist-es/stream-collector.js
-var import_dist346 = __toESM(require_dist());
-var import_dist347 = __toESM(require_dist2());
-var import_dist348 = __toESM(require_dist3());
+var import_dist370 = __toESM(require_dist());
+var import_dist371 = __toESM(require_dist2());
+var import_dist372 = __toESM(require_dist3());
 var streamCollector = async (stream) => {
   var _a;
   if (typeof Blob === "function" && stream instanceof Blob || ((_a = stream.constructor) == null ? void 0 : _a.name) === "Blob") {
@@ -3706,9 +3920,9 @@ function readToBase64(blob) {
 }
 
 // node_modules/@smithy/util-hex-encoding/dist-es/index.js
-var import_dist352 = __toESM(require_dist());
-var import_dist353 = __toESM(require_dist2());
-var import_dist354 = __toESM(require_dist3());
+var import_dist376 = __toESM(require_dist());
+var import_dist377 = __toESM(require_dist2());
+var import_dist378 = __toESM(require_dist3());
 var SHORT_TO_HEX = {};
 var HEX_TO_SHORT = {};
 for (let i = 0; i < 256; i++) {
@@ -3798,9 +4012,9 @@ var sdkStreamMixin = (stream) => {
 var isBlobInstance = (stream) => typeof Blob === "function" && stream instanceof Blob;
 
 // node_modules/@smithy/util-stream/dist-es/splitStream.browser.js
-var import_dist358 = __toESM(require_dist());
-var import_dist359 = __toESM(require_dist2());
-var import_dist360 = __toESM(require_dist3());
+var import_dist382 = __toESM(require_dist());
+var import_dist383 = __toESM(require_dist2());
+var import_dist384 = __toESM(require_dist3());
 async function splitStream(stream) {
   if (typeof stream.stream === "function") {
     stream = stream.stream();
@@ -3822,9 +4036,9 @@ var collectBody = async (streamBody = new Uint8Array(), context) => {
 };
 
 // node_modules/@smithy/core/dist-es/submodules/protocols/extended-encode-uri-component.js
-var import_dist367 = __toESM(require_dist());
-var import_dist368 = __toESM(require_dist2());
-var import_dist369 = __toESM(require_dist3());
+var import_dist391 = __toESM(require_dist());
+var import_dist392 = __toESM(require_dist2());
+var import_dist393 = __toESM(require_dist3());
 function extendedEncodeURIComponent(str) {
   return encodeURIComponent(str).replace(/[!'()*]/g, function(c) {
     return "%" + c.charCodeAt(0).toString(16).toUpperCase();
@@ -3832,14 +4046,14 @@ function extendedEncodeURIComponent(str) {
 }
 
 // node_modules/@smithy/core/dist-es/submodules/protocols/requestBuilder.js
-var import_dist373 = __toESM(require_dist());
-var import_dist374 = __toESM(require_dist2());
-var import_dist375 = __toESM(require_dist3());
+var import_dist397 = __toESM(require_dist());
+var import_dist398 = __toESM(require_dist2());
+var import_dist399 = __toESM(require_dist3());
 
 // node_modules/@smithy/core/dist-es/submodules/protocols/resolve-path.js
-var import_dist370 = __toESM(require_dist());
-var import_dist371 = __toESM(require_dist2());
-var import_dist372 = __toESM(require_dist3());
+var import_dist394 = __toESM(require_dist());
+var import_dist395 = __toESM(require_dist2());
+var import_dist396 = __toESM(require_dist3());
 var resolvedPath = (resolvedPath2, input, memberName, labelValueProvider, uriLabel, isGreedyLabel) => {
   if (input != null && input[memberName] !== void 0) {
     const labelValue = labelValueProvider();
@@ -3921,9 +4135,9 @@ var RequestBuilder = class {
 };
 
 // node_modules/@smithy/core/dist-es/setFeature.js
-var import_dist382 = __toESM(require_dist());
-var import_dist383 = __toESM(require_dist2());
-var import_dist384 = __toESM(require_dist3());
+var import_dist406 = __toESM(require_dist());
+var import_dist407 = __toESM(require_dist2());
+var import_dist408 = __toESM(require_dist3());
 function setFeature(context, feature, value) {
   if (!context.__smithy_context) {
     context.__smithy_context = {
@@ -3936,29 +4150,29 @@ function setFeature(context, feature, value) {
 }
 
 // node_modules/@smithy/core/dist-es/util-identity-and-auth/index.js
-var import_dist400 = __toESM(require_dist());
-var import_dist401 = __toESM(require_dist2());
-var import_dist402 = __toESM(require_dist3());
+var import_dist424 = __toESM(require_dist());
+var import_dist425 = __toESM(require_dist2());
+var import_dist426 = __toESM(require_dist3());
 
 // node_modules/@smithy/core/dist-es/util-identity-and-auth/httpAuthSchemes/index.js
-var import_dist394 = __toESM(require_dist());
-var import_dist395 = __toESM(require_dist2());
-var import_dist396 = __toESM(require_dist3());
+var import_dist418 = __toESM(require_dist());
+var import_dist419 = __toESM(require_dist2());
+var import_dist420 = __toESM(require_dist3());
 
 // node_modules/@smithy/core/dist-es/util-identity-and-auth/httpAuthSchemes/httpApiKeyAuth.js
-var import_dist385 = __toESM(require_dist());
-var import_dist386 = __toESM(require_dist2());
-var import_dist387 = __toESM(require_dist3());
+var import_dist409 = __toESM(require_dist());
+var import_dist410 = __toESM(require_dist2());
+var import_dist411 = __toESM(require_dist3());
 
 // node_modules/@smithy/core/dist-es/util-identity-and-auth/httpAuthSchemes/httpBearerAuth.js
-var import_dist388 = __toESM(require_dist());
-var import_dist389 = __toESM(require_dist2());
-var import_dist390 = __toESM(require_dist3());
+var import_dist412 = __toESM(require_dist());
+var import_dist413 = __toESM(require_dist2());
+var import_dist414 = __toESM(require_dist3());
 
 // node_modules/@smithy/core/dist-es/util-identity-and-auth/httpAuthSchemes/noAuth.js
-var import_dist391 = __toESM(require_dist());
-var import_dist392 = __toESM(require_dist2());
-var import_dist393 = __toESM(require_dist3());
+var import_dist415 = __toESM(require_dist());
+var import_dist416 = __toESM(require_dist2());
+var import_dist417 = __toESM(require_dist3());
 var NoAuthSigner = class {
   async sign(httpRequest, identity, signingProperties) {
     return httpRequest;
@@ -3966,9 +4180,9 @@ var NoAuthSigner = class {
 };
 
 // node_modules/@smithy/core/dist-es/util-identity-and-auth/memoizeIdentityProvider.js
-var import_dist397 = __toESM(require_dist());
-var import_dist398 = __toESM(require_dist2());
-var import_dist399 = __toESM(require_dist3());
+var import_dist421 = __toESM(require_dist());
+var import_dist422 = __toESM(require_dist2());
+var import_dist423 = __toESM(require_dist3());
 var createIsIdentityExpiredFunction = (expirationMs) => (identity) => doesIdentityRequireRefresh(identity) && identity.expiration.getTime() - Date.now() < expirationMs;
 var EXPIRATION_MS = 3e5;
 var isIdentityExpired = createIsIdentityExpiredFunction(EXPIRATION_MS);
@@ -4022,31 +4236,119 @@ var memoizeIdentityProvider = (provider, isExpired, requiresRefresh) => {
   };
 };
 
-// node_modules/@aws-sdk/core/dist-es/submodules/client/setFeature.js
-var import_dist406 = __toESM(require_dist());
-var import_dist407 = __toESM(require_dist2());
-var import_dist408 = __toESM(require_dist3());
-function setFeature2(context, feature, value) {
-  if (!context.__aws_sdk_context) {
-    context.__aws_sdk_context = {
-      features: {}
-    };
-  } else if (!context.__aws_sdk_context.features) {
-    context.__aws_sdk_context.features = {};
+// node_modules/@smithy/middleware-endpoint/dist-es/getEndpointPlugin.js
+var import_dist433 = __toESM(require_dist());
+var import_dist434 = __toESM(require_dist2());
+var import_dist435 = __toESM(require_dist3());
+
+// node_modules/@smithy/middleware-endpoint/dist-es/endpointMiddleware.js
+var import_dist430 = __toESM(require_dist());
+var import_dist431 = __toESM(require_dist2());
+var import_dist432 = __toESM(require_dist3());
+var endpointMiddleware = ({ config, instructions }) => {
+  return (next, context) => async (args) => {
+    var _a, _b, _c;
+    if (config.endpoint) {
+      setFeature(context, "ENDPOINT_OVERRIDE", "N");
+    }
+    const endpoint = await getEndpointFromInstructions(args.input, {
+      getEndpointParameterInstructions() {
+        return instructions;
+      }
+    }, { ...config }, context);
+    context.endpointV2 = endpoint;
+    context.authSchemes = (_a = endpoint.properties) == null ? void 0 : _a.authSchemes;
+    const authScheme = (_b = context.authSchemes) == null ? void 0 : _b[0];
+    if (authScheme) {
+      context["signing_region"] = authScheme.signingRegion;
+      context["signing_service"] = authScheme.signingName;
+      const smithyContext = getSmithyContext(context);
+      const httpAuthOption = (_c = smithyContext == null ? void 0 : smithyContext.selectedHttpAuthScheme) == null ? void 0 : _c.httpAuthOption;
+      if (httpAuthOption) {
+        httpAuthOption.signingProperties = Object.assign(httpAuthOption.signingProperties || {}, {
+          signing_region: authScheme.signingRegion,
+          signingRegion: authScheme.signingRegion,
+          signing_service: authScheme.signingName,
+          signingName: authScheme.signingName,
+          signingRegionSet: authScheme.signingRegionSet
+        }, authScheme.properties);
+      }
+    }
+    return next({
+      ...args
+    });
+  };
+};
+
+// node_modules/@smithy/middleware-endpoint/dist-es/getEndpointPlugin.js
+var endpointMiddlewareOptions = {
+  step: "serialize",
+  tags: ["ENDPOINT_PARAMETERS", "ENDPOINT_V2", "ENDPOINT"],
+  name: "endpointV2Middleware",
+  override: true,
+  relation: "before",
+  toMiddleware: serializerMiddlewareOption.name
+};
+var getEndpointPlugin = (config, instructions) => ({
+  applyToStack: (clientStack) => {
+    clientStack.addRelativeTo(endpointMiddleware({
+      config,
+      instructions
+    }), endpointMiddlewareOptions);
   }
-  context.__aws_sdk_context.features[feature] = value;
-}
+});
+
+// node_modules/@smithy/middleware-endpoint/dist-es/resolveEndpointConfig.js
+var import_dist436 = __toESM(require_dist());
+var import_dist437 = __toESM(require_dist2());
+var import_dist438 = __toESM(require_dist3());
+var resolveEndpointConfig = (input) => {
+  const tls = input.tls ?? true;
+  const { endpoint, useDualstackEndpoint, useFipsEndpoint } = input;
+  const customEndpointProvider = endpoint != null ? async () => toEndpointV1(await normalizeProvider(endpoint)()) : void 0;
+  const isCustomEndpoint = !!endpoint;
+  const resolvedConfig = Object.assign(input, {
+    endpoint: customEndpointProvider,
+    tls,
+    isCustomEndpoint,
+    useDualstackEndpoint: normalizeProvider(useDualstackEndpoint ?? false),
+    useFipsEndpoint: normalizeProvider(useFipsEndpoint ?? false)
+  });
+  let configuredEndpointPromise = void 0;
+  resolvedConfig.serviceConfiguredEndpoint = async () => {
+    if (input.serviceId && !configuredEndpointPromise) {
+      configuredEndpointPromise = getEndpointFromConfig(input.serviceId);
+    }
+    return configuredEndpointPromise;
+  };
+  return resolvedConfig;
+};
+
+// node_modules/@smithy/middleware-endpoint/dist-es/index.js
+var import_dist445 = __toESM(require_dist());
+var import_dist446 = __toESM(require_dist2());
+var import_dist447 = __toESM(require_dist3());
+
+// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/index.js
+var import_dist439 = __toESM(require_dist());
+var import_dist440 = __toESM(require_dist2());
+var import_dist441 = __toESM(require_dist3());
+
+// node_modules/@smithy/middleware-endpoint/dist-es/types.js
+var import_dist442 = __toESM(require_dist());
+var import_dist443 = __toESM(require_dist2());
+var import_dist444 = __toESM(require_dist3());
 
 // node_modules/@smithy/smithy-client/dist-es/constants.js
-var import_dist409 = __toESM(require_dist());
-var import_dist410 = __toESM(require_dist2());
-var import_dist411 = __toESM(require_dist3());
+var import_dist448 = __toESM(require_dist());
+var import_dist449 = __toESM(require_dist2());
+var import_dist450 = __toESM(require_dist3());
 var SENSITIVE_STRING = "***SensitiveInformation***";
 
 // node_modules/@smithy/smithy-client/dist-es/create-aggregated-client.js
-var import_dist412 = __toESM(require_dist());
-var import_dist413 = __toESM(require_dist2());
-var import_dist414 = __toESM(require_dist3());
+var import_dist451 = __toESM(require_dist());
+var import_dist452 = __toESM(require_dist2());
+var import_dist453 = __toESM(require_dist3());
 var createAggregatedClient = (commands, Client2) => {
   for (const command of Object.keys(commands)) {
     const CommandCtor = commands[command];
@@ -4068,9 +4370,9 @@ var createAggregatedClient = (commands, Client2) => {
 };
 
 // node_modules/@smithy/smithy-client/dist-es/exceptions.js
-var import_dist415 = __toESM(require_dist());
-var import_dist416 = __toESM(require_dist2());
-var import_dist417 = __toESM(require_dist3());
+var import_dist454 = __toESM(require_dist());
+var import_dist455 = __toESM(require_dist2());
+var import_dist456 = __toESM(require_dist3());
 var ServiceException = class _ServiceException extends Error {
   constructor(options) {
     super(options.message);
@@ -4114,24 +4416,24 @@ var decorateServiceException = (exception, additions = {}) => {
 };
 
 // node_modules/@smithy/smithy-client/dist-es/index.js
-var import_dist487 = __toESM(require_dist());
-var import_dist488 = __toESM(require_dist2());
-var import_dist489 = __toESM(require_dist3());
+var import_dist526 = __toESM(require_dist());
+var import_dist527 = __toESM(require_dist2());
+var import_dist528 = __toESM(require_dist3());
 
 // node_modules/@smithy/smithy-client/dist-es/collect-stream-body.js
-var import_dist418 = __toESM(require_dist());
-var import_dist419 = __toESM(require_dist2());
-var import_dist420 = __toESM(require_dist3());
+var import_dist457 = __toESM(require_dist());
+var import_dist458 = __toESM(require_dist2());
+var import_dist459 = __toESM(require_dist3());
 
 // node_modules/@smithy/smithy-client/dist-es/date-utils.js
-var import_dist424 = __toESM(require_dist());
-var import_dist425 = __toESM(require_dist2());
-var import_dist426 = __toESM(require_dist3());
+var import_dist463 = __toESM(require_dist());
+var import_dist464 = __toESM(require_dist2());
+var import_dist465 = __toESM(require_dist3());
 
 // node_modules/@smithy/smithy-client/dist-es/parse-utils.js
-var import_dist421 = __toESM(require_dist());
-var import_dist422 = __toESM(require_dist2());
-var import_dist423 = __toESM(require_dist3());
+var import_dist460 = __toESM(require_dist());
+var import_dist461 = __toESM(require_dist2());
+var import_dist462 = __toESM(require_dist3());
 var parseBoolean = (value) => {
   switch (value) {
     case "true":
@@ -4522,9 +4824,9 @@ var stripLeadingZeroes = (value) => {
 };
 
 // node_modules/@smithy/smithy-client/dist-es/default-error-handler.js
-var import_dist427 = __toESM(require_dist());
-var import_dist428 = __toESM(require_dist2());
-var import_dist429 = __toESM(require_dist3());
+var import_dist466 = __toESM(require_dist());
+var import_dist467 = __toESM(require_dist2());
+var import_dist468 = __toESM(require_dist3());
 var throwDefaultError = ({ output, parsedBody, exceptionCtor, errorCode }) => {
   const $metadata = deserializeMetadata(output);
   const statusCode = $metadata.httpStatusCode ? $metadata.httpStatusCode + "" : void 0;
@@ -4548,9 +4850,9 @@ var deserializeMetadata = (output) => ({
 });
 
 // node_modules/@smithy/smithy-client/dist-es/defaults-mode.js
-var import_dist430 = __toESM(require_dist());
-var import_dist431 = __toESM(require_dist2());
-var import_dist432 = __toESM(require_dist3());
+var import_dist469 = __toESM(require_dist());
+var import_dist470 = __toESM(require_dist2());
+var import_dist471 = __toESM(require_dist3());
 var loadConfigsForDefaultMode = (mode) => {
   switch (mode) {
     case "standard":
@@ -4579,29 +4881,29 @@ var loadConfigsForDefaultMode = (mode) => {
 };
 
 // node_modules/@smithy/smithy-client/dist-es/emitWarningIfUnsupportedVersion.js
-var import_dist433 = __toESM(require_dist());
-var import_dist434 = __toESM(require_dist2());
-var import_dist435 = __toESM(require_dist3());
+var import_dist472 = __toESM(require_dist());
+var import_dist473 = __toESM(require_dist2());
+var import_dist474 = __toESM(require_dist3());
 
 // node_modules/@smithy/smithy-client/dist-es/extended-encode-uri-component.js
-var import_dist436 = __toESM(require_dist());
-var import_dist437 = __toESM(require_dist2());
-var import_dist438 = __toESM(require_dist3());
+var import_dist475 = __toESM(require_dist());
+var import_dist476 = __toESM(require_dist2());
+var import_dist477 = __toESM(require_dist3());
 
 // node_modules/@smithy/smithy-client/dist-es/extensions/index.js
-var import_dist448 = __toESM(require_dist());
-var import_dist449 = __toESM(require_dist2());
-var import_dist450 = __toESM(require_dist3());
+var import_dist487 = __toESM(require_dist());
+var import_dist488 = __toESM(require_dist2());
+var import_dist489 = __toESM(require_dist3());
 
 // node_modules/@smithy/smithy-client/dist-es/extensions/defaultExtensionConfiguration.js
-var import_dist445 = __toESM(require_dist());
-var import_dist446 = __toESM(require_dist2());
-var import_dist447 = __toESM(require_dist3());
+var import_dist484 = __toESM(require_dist());
+var import_dist485 = __toESM(require_dist2());
+var import_dist486 = __toESM(require_dist3());
 
 // node_modules/@smithy/smithy-client/dist-es/extensions/checksum.js
-var import_dist439 = __toESM(require_dist());
-var import_dist440 = __toESM(require_dist2());
-var import_dist441 = __toESM(require_dist3());
+var import_dist478 = __toESM(require_dist());
+var import_dist479 = __toESM(require_dist2());
+var import_dist480 = __toESM(require_dist3());
 var getChecksumConfiguration2 = (runtimeConfig) => {
   const checksumAlgorithms = [];
   for (const id in AlgorithmId) {
@@ -4632,9 +4934,9 @@ var resolveChecksumRuntimeConfig2 = (clientConfig) => {
 };
 
 // node_modules/@smithy/smithy-client/dist-es/extensions/retry.js
-var import_dist442 = __toESM(require_dist());
-var import_dist443 = __toESM(require_dist2());
-var import_dist444 = __toESM(require_dist3());
+var import_dist481 = __toESM(require_dist());
+var import_dist482 = __toESM(require_dist2());
+var import_dist483 = __toESM(require_dist3());
 var getRetryConfiguration = (runtimeConfig) => {
   return {
     setRetryStrategy(retryStrategy) {
@@ -4660,15 +4962,15 @@ var resolveDefaultRuntimeConfig = (config) => {
 };
 
 // node_modules/@smithy/smithy-client/dist-es/get-array-if-single-item.js
-var import_dist451 = __toESM(require_dist());
-var import_dist452 = __toESM(require_dist2());
-var import_dist453 = __toESM(require_dist3());
+var import_dist490 = __toESM(require_dist());
+var import_dist491 = __toESM(require_dist2());
+var import_dist492 = __toESM(require_dist3());
 var getArrayIfSingleItem = (mayBeArray) => Array.isArray(mayBeArray) ? mayBeArray : [mayBeArray];
 
 // node_modules/@smithy/smithy-client/dist-es/get-value-from-text-node.js
-var import_dist454 = __toESM(require_dist());
-var import_dist455 = __toESM(require_dist2());
-var import_dist456 = __toESM(require_dist3());
+var import_dist493 = __toESM(require_dist());
+var import_dist494 = __toESM(require_dist2());
+var import_dist495 = __toESM(require_dist3());
 var getValueFromTextNode = (obj) => {
   const textNodeName = "#text";
   for (const key in obj) {
@@ -4682,17 +4984,17 @@ var getValueFromTextNode = (obj) => {
 };
 
 // node_modules/@smithy/smithy-client/dist-es/is-serializable-header-value.js
-var import_dist457 = __toESM(require_dist());
-var import_dist458 = __toESM(require_dist2());
-var import_dist459 = __toESM(require_dist3());
+var import_dist496 = __toESM(require_dist());
+var import_dist497 = __toESM(require_dist2());
+var import_dist498 = __toESM(require_dist3());
 var isSerializableHeaderValue = (value) => {
   return value != null;
 };
 
 // node_modules/@smithy/smithy-client/dist-es/lazy-json.js
-var import_dist460 = __toESM(require_dist());
-var import_dist461 = __toESM(require_dist2());
-var import_dist462 = __toESM(require_dist3());
+var import_dist499 = __toESM(require_dist());
+var import_dist500 = __toESM(require_dist2());
+var import_dist501 = __toESM(require_dist3());
 var LazyJsonString = function LazyJsonString2(val2) {
   const str = Object.assign(new String(val2), {
     deserializeJSON() {
@@ -4718,9 +5020,9 @@ LazyJsonString.from = (object) => {
 LazyJsonString.fromObject = LazyJsonString.from;
 
 // node_modules/@smithy/smithy-client/dist-es/NoOpLogger.js
-var import_dist463 = __toESM(require_dist());
-var import_dist464 = __toESM(require_dist2());
-var import_dist465 = __toESM(require_dist3());
+var import_dist502 = __toESM(require_dist());
+var import_dist503 = __toESM(require_dist2());
+var import_dist504 = __toESM(require_dist3());
 var NoOpLogger = class {
   trace() {
   }
@@ -4735,9 +5037,9 @@ var NoOpLogger = class {
 };
 
 // node_modules/@smithy/smithy-client/dist-es/object-mapping.js
-var import_dist466 = __toESM(require_dist());
-var import_dist467 = __toESM(require_dist2());
-var import_dist468 = __toESM(require_dist3());
+var import_dist505 = __toESM(require_dist());
+var import_dist506 = __toESM(require_dist2());
+var import_dist507 = __toESM(require_dist3());
 function map(arg0, arg1, arg2) {
   let target;
   let filter;
@@ -4819,9 +5121,9 @@ var nonNullish = (_) => _ != null;
 var pass = (_) => _;
 
 // node_modules/@smithy/smithy-client/dist-es/quote-header.js
-var import_dist469 = __toESM(require_dist());
-var import_dist470 = __toESM(require_dist2());
-var import_dist471 = __toESM(require_dist3());
+var import_dist508 = __toESM(require_dist());
+var import_dist509 = __toESM(require_dist2());
+var import_dist510 = __toESM(require_dist3());
 function quoteHeader(part) {
   if (part.includes(",") || part.includes('"')) {
     part = `"${part.replace(/"/g, '\\"')}"`;
@@ -4830,14 +5132,14 @@ function quoteHeader(part) {
 }
 
 // node_modules/@smithy/smithy-client/dist-es/resolve-path.js
-var import_dist472 = __toESM(require_dist());
-var import_dist473 = __toESM(require_dist2());
-var import_dist474 = __toESM(require_dist3());
+var import_dist511 = __toESM(require_dist());
+var import_dist512 = __toESM(require_dist2());
+var import_dist513 = __toESM(require_dist3());
 
 // node_modules/@smithy/smithy-client/dist-es/ser-utils.js
-var import_dist475 = __toESM(require_dist());
-var import_dist476 = __toESM(require_dist2());
-var import_dist477 = __toESM(require_dist3());
+var import_dist514 = __toESM(require_dist());
+var import_dist515 = __toESM(require_dist2());
+var import_dist516 = __toESM(require_dist3());
 var serializeFloat = (value) => {
   if (value !== value) {
     return "NaN";
@@ -4854,9 +5156,9 @@ var serializeFloat = (value) => {
 var serializeDateTime = (date) => date.toISOString().replace(".000Z", "Z");
 
 // node_modules/@smithy/smithy-client/dist-es/serde-json.js
-var import_dist478 = __toESM(require_dist());
-var import_dist479 = __toESM(require_dist2());
-var import_dist480 = __toESM(require_dist3());
+var import_dist517 = __toESM(require_dist());
+var import_dist518 = __toESM(require_dist2());
+var import_dist519 = __toESM(require_dist3());
 var _json = (obj) => {
   if (obj == null) {
     return {};
@@ -4878,34 +5180,49 @@ var _json = (obj) => {
 };
 
 // node_modules/@smithy/smithy-client/dist-es/split-every.js
-var import_dist481 = __toESM(require_dist());
-var import_dist482 = __toESM(require_dist2());
-var import_dist483 = __toESM(require_dist3());
+var import_dist520 = __toESM(require_dist());
+var import_dist521 = __toESM(require_dist2());
+var import_dist522 = __toESM(require_dist3());
 
 // node_modules/@smithy/smithy-client/dist-es/split-header.js
-var import_dist484 = __toESM(require_dist());
-var import_dist485 = __toESM(require_dist2());
-var import_dist486 = __toESM(require_dist3());
+var import_dist523 = __toESM(require_dist());
+var import_dist524 = __toESM(require_dist2());
+var import_dist525 = __toESM(require_dist3());
+
+// node_modules/@aws-sdk/core/dist-es/submodules/client/setFeature.js
+var import_dist529 = __toESM(require_dist());
+var import_dist530 = __toESM(require_dist2());
+var import_dist531 = __toESM(require_dist3());
+function setFeature2(context, feature, value) {
+  if (!context.__aws_sdk_context) {
+    context.__aws_sdk_context = {
+      features: {}
+    };
+  } else if (!context.__aws_sdk_context.features) {
+    context.__aws_sdk_context.features = {};
+  }
+  context.__aws_sdk_context.features[feature] = value;
+}
 
 // node_modules/@aws-sdk/core/dist-es/index.js
-var import_dist610 = __toESM(require_dist());
-var import_dist611 = __toESM(require_dist2());
-var import_dist612 = __toESM(require_dist3());
+var import_dist652 = __toESM(require_dist());
+var import_dist653 = __toESM(require_dist2());
+var import_dist654 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/core/dist-es/submodules/client/index.js
-var import_dist496 = __toESM(require_dist());
-var import_dist497 = __toESM(require_dist2());
-var import_dist498 = __toESM(require_dist3());
+var import_dist538 = __toESM(require_dist());
+var import_dist539 = __toESM(require_dist2());
+var import_dist540 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/core/dist-es/submodules/client/emitWarningIfUnsupportedVersion.js
-var import_dist490 = __toESM(require_dist());
-var import_dist491 = __toESM(require_dist2());
-var import_dist492 = __toESM(require_dist3());
+var import_dist532 = __toESM(require_dist());
+var import_dist533 = __toESM(require_dist2());
+var import_dist534 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/core/dist-es/submodules/client/setCredentialFeature.js
-var import_dist493 = __toESM(require_dist());
-var import_dist494 = __toESM(require_dist2());
-var import_dist495 = __toESM(require_dist3());
+var import_dist535 = __toESM(require_dist());
+var import_dist536 = __toESM(require_dist2());
+var import_dist537 = __toESM(require_dist3());
 function setCredentialFeature(credentials, feature, value) {
   if (!credentials.$source) {
     credentials.$source = {};
@@ -4915,49 +5232,49 @@ function setCredentialFeature(credentials, feature, value) {
 }
 
 // node_modules/@aws-sdk/core/dist-es/submodules/httpAuthSchemes/index.js
-var import_dist589 = __toESM(require_dist());
-var import_dist590 = __toESM(require_dist2());
-var import_dist591 = __toESM(require_dist3());
+var import_dist631 = __toESM(require_dist());
+var import_dist632 = __toESM(require_dist2());
+var import_dist633 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/core/dist-es/submodules/httpAuthSchemes/aws_sdk/index.js
-var import_dist586 = __toESM(require_dist());
-var import_dist587 = __toESM(require_dist2());
-var import_dist588 = __toESM(require_dist3());
+var import_dist628 = __toESM(require_dist());
+var import_dist629 = __toESM(require_dist2());
+var import_dist630 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/core/dist-es/submodules/httpAuthSchemes/aws_sdk/AwsSdkSigV4Signer.js
-var import_dist514 = __toESM(require_dist());
-var import_dist515 = __toESM(require_dist2());
-var import_dist516 = __toESM(require_dist3());
+var import_dist556 = __toESM(require_dist());
+var import_dist557 = __toESM(require_dist2());
+var import_dist558 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/core/dist-es/submodules/httpAuthSchemes/utils/index.js
-var import_dist511 = __toESM(require_dist());
-var import_dist512 = __toESM(require_dist2());
-var import_dist513 = __toESM(require_dist3());
+var import_dist553 = __toESM(require_dist());
+var import_dist554 = __toESM(require_dist2());
+var import_dist555 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/core/dist-es/submodules/httpAuthSchemes/utils/getDateHeader.js
-var import_dist499 = __toESM(require_dist());
-var import_dist500 = __toESM(require_dist2());
-var import_dist501 = __toESM(require_dist3());
+var import_dist541 = __toESM(require_dist());
+var import_dist542 = __toESM(require_dist2());
+var import_dist543 = __toESM(require_dist3());
 var getDateHeader = (response) => {
   var _a, _b;
   return HttpResponse.isInstance(response) ? ((_a = response.headers) == null ? void 0 : _a.date) ?? ((_b = response.headers) == null ? void 0 : _b.Date) : void 0;
 };
 
 // node_modules/@aws-sdk/core/dist-es/submodules/httpAuthSchemes/utils/getSkewCorrectedDate.js
-var import_dist502 = __toESM(require_dist());
-var import_dist503 = __toESM(require_dist2());
-var import_dist504 = __toESM(require_dist3());
+var import_dist544 = __toESM(require_dist());
+var import_dist545 = __toESM(require_dist2());
+var import_dist546 = __toESM(require_dist3());
 var getSkewCorrectedDate = (systemClockOffset) => new Date(Date.now() + systemClockOffset);
 
 // node_modules/@aws-sdk/core/dist-es/submodules/httpAuthSchemes/utils/getUpdatedSystemClockOffset.js
-var import_dist508 = __toESM(require_dist());
-var import_dist509 = __toESM(require_dist2());
-var import_dist510 = __toESM(require_dist3());
+var import_dist550 = __toESM(require_dist());
+var import_dist551 = __toESM(require_dist2());
+var import_dist552 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/core/dist-es/submodules/httpAuthSchemes/utils/isClockSkewed.js
-var import_dist505 = __toESM(require_dist());
-var import_dist506 = __toESM(require_dist2());
-var import_dist507 = __toESM(require_dist3());
+var import_dist547 = __toESM(require_dist());
+var import_dist548 = __toESM(require_dist2());
+var import_dist549 = __toESM(require_dist3());
 var isClockSkewed = (clockTime, systemClockOffset) => Math.abs(getSkewCorrectedDate(systemClockOffset).getTime() - clockTime) >= 3e5;
 
 // node_modules/@aws-sdk/core/dist-es/submodules/httpAuthSchemes/utils/getUpdatedSystemClockOffset.js
@@ -5043,9 +5360,9 @@ var AwsSdkSigV4Signer = class {
 };
 
 // node_modules/@aws-sdk/core/dist-es/submodules/httpAuthSchemes/aws_sdk/AwsSdkSigV4ASigner.js
-var import_dist517 = __toESM(require_dist());
-var import_dist518 = __toESM(require_dist2());
-var import_dist519 = __toESM(require_dist3());
+var import_dist559 = __toESM(require_dist());
+var import_dist560 = __toESM(require_dist2());
+var import_dist561 = __toESM(require_dist3());
 var AwsSdkSigV4ASigner = class extends AwsSdkSigV4Signer {
   async sign(httpRequest, identity, signingProperties) {
     var _a;
@@ -5065,44 +5382,44 @@ var AwsSdkSigV4ASigner = class extends AwsSdkSigV4Signer {
 };
 
 // node_modules/@aws-sdk/core/dist-es/submodules/httpAuthSchemes/aws_sdk/resolveAwsSdkSigV4AConfig.js
-var import_dist541 = __toESM(require_dist());
-var import_dist542 = __toESM(require_dist2());
-var import_dist543 = __toESM(require_dist3());
+var import_dist583 = __toESM(require_dist());
+var import_dist584 = __toESM(require_dist2());
+var import_dist585 = __toESM(require_dist3());
 
 // node_modules/@smithy/property-provider/dist-es/index.js
-var import_dist538 = __toESM(require_dist());
-var import_dist539 = __toESM(require_dist2());
-var import_dist540 = __toESM(require_dist3());
+var import_dist580 = __toESM(require_dist());
+var import_dist581 = __toESM(require_dist2());
+var import_dist582 = __toESM(require_dist3());
 
 // node_modules/@smithy/property-provider/dist-es/CredentialsProviderError.js
-var import_dist523 = __toESM(require_dist());
-var import_dist524 = __toESM(require_dist2());
-var import_dist525 = __toESM(require_dist3());
+var import_dist565 = __toESM(require_dist());
+var import_dist566 = __toESM(require_dist2());
+var import_dist567 = __toESM(require_dist3());
 
 // node_modules/@smithy/property-provider/dist-es/ProviderError.js
-var import_dist520 = __toESM(require_dist());
-var import_dist521 = __toESM(require_dist2());
-var import_dist522 = __toESM(require_dist3());
+var import_dist562 = __toESM(require_dist());
+var import_dist563 = __toESM(require_dist2());
+var import_dist564 = __toESM(require_dist3());
 
 // node_modules/@smithy/property-provider/dist-es/TokenProviderError.js
-var import_dist526 = __toESM(require_dist());
-var import_dist527 = __toESM(require_dist2());
-var import_dist528 = __toESM(require_dist3());
+var import_dist568 = __toESM(require_dist());
+var import_dist569 = __toESM(require_dist2());
+var import_dist570 = __toESM(require_dist3());
 
 // node_modules/@smithy/property-provider/dist-es/chain.js
-var import_dist529 = __toESM(require_dist());
-var import_dist530 = __toESM(require_dist2());
-var import_dist531 = __toESM(require_dist3());
+var import_dist571 = __toESM(require_dist());
+var import_dist572 = __toESM(require_dist2());
+var import_dist573 = __toESM(require_dist3());
 
 // node_modules/@smithy/property-provider/dist-es/fromStatic.js
-var import_dist532 = __toESM(require_dist());
-var import_dist533 = __toESM(require_dist2());
-var import_dist534 = __toESM(require_dist3());
+var import_dist574 = __toESM(require_dist());
+var import_dist575 = __toESM(require_dist2());
+var import_dist576 = __toESM(require_dist3());
 
 // node_modules/@smithy/property-provider/dist-es/memoize.js
-var import_dist535 = __toESM(require_dist());
-var import_dist536 = __toESM(require_dist2());
-var import_dist537 = __toESM(require_dist3());
+var import_dist577 = __toESM(require_dist());
+var import_dist578 = __toESM(require_dist2());
+var import_dist579 = __toESM(require_dist3());
 var memoize = (provider, isExpired, requiresRefresh) => {
   let resolved;
   let pending;
@@ -5155,24 +5472,24 @@ var resolveAwsSdkSigV4AConfig = (config) => {
 };
 
 // node_modules/@aws-sdk/core/dist-es/submodules/httpAuthSchemes/aws_sdk/resolveAwsSdkSigV4Config.js
-var import_dist583 = __toESM(require_dist());
-var import_dist584 = __toESM(require_dist2());
-var import_dist585 = __toESM(require_dist3());
+var import_dist625 = __toESM(require_dist());
+var import_dist626 = __toESM(require_dist2());
+var import_dist627 = __toESM(require_dist3());
 
 // node_modules/@smithy/signature-v4/dist-es/index.js
-var import_dist580 = __toESM(require_dist());
-var import_dist581 = __toESM(require_dist2());
-var import_dist582 = __toESM(require_dist3());
+var import_dist622 = __toESM(require_dist());
+var import_dist623 = __toESM(require_dist2());
+var import_dist624 = __toESM(require_dist3());
 
 // node_modules/@smithy/signature-v4/dist-es/SignatureV4.js
-var import_dist577 = __toESM(require_dist());
-var import_dist578 = __toESM(require_dist2());
-var import_dist579 = __toESM(require_dist3());
+var import_dist619 = __toESM(require_dist());
+var import_dist620 = __toESM(require_dist2());
+var import_dist621 = __toESM(require_dist3());
 
 // node_modules/@smithy/signature-v4/dist-es/constants.js
-var import_dist544 = __toESM(require_dist());
-var import_dist545 = __toESM(require_dist2());
-var import_dist546 = __toESM(require_dist3());
+var import_dist586 = __toESM(require_dist());
+var import_dist587 = __toESM(require_dist2());
+var import_dist588 = __toESM(require_dist3());
 var ALGORITHM_QUERY_PARAM = "X-Amz-Algorithm";
 var CREDENTIAL_QUERY_PARAM = "X-Amz-Credential";
 var AMZ_DATE_QUERY_PARAM = "X-Amz-Date";
@@ -5214,9 +5531,9 @@ var KEY_TYPE_IDENTIFIER = "aws4_request";
 var MAX_PRESIGNED_TTL = 60 * 60 * 24 * 7;
 
 // node_modules/@smithy/signature-v4/dist-es/credentialDerivation.js
-var import_dist547 = __toESM(require_dist());
-var import_dist548 = __toESM(require_dist2());
-var import_dist549 = __toESM(require_dist3());
+var import_dist589 = __toESM(require_dist());
+var import_dist590 = __toESM(require_dist2());
+var import_dist591 = __toESM(require_dist3());
 var signingKeyCache = {};
 var cacheQueue = [];
 var createScope = (shortDate, region, service) => `${shortDate}/${region}/${service}/${KEY_TYPE_IDENTIFIER}`;
@@ -5243,9 +5560,9 @@ var hmac = (ctor, secret, data) => {
 };
 
 // node_modules/@smithy/signature-v4/dist-es/getCanonicalHeaders.js
-var import_dist550 = __toESM(require_dist());
-var import_dist551 = __toESM(require_dist2());
-var import_dist552 = __toESM(require_dist3());
+var import_dist592 = __toESM(require_dist());
+var import_dist593 = __toESM(require_dist2());
+var import_dist594 = __toESM(require_dist3());
 var getCanonicalHeaders = ({ headers }, unsignableHeaders, signableHeaders) => {
   const canonical = {};
   for (const headerName of Object.keys(headers).sort()) {
@@ -5264,9 +5581,9 @@ var getCanonicalHeaders = ({ headers }, unsignableHeaders, signableHeaders) => {
 };
 
 // node_modules/@smithy/signature-v4/dist-es/getCanonicalQuery.js
-var import_dist553 = __toESM(require_dist());
-var import_dist554 = __toESM(require_dist2());
-var import_dist555 = __toESM(require_dist3());
+var import_dist595 = __toESM(require_dist());
+var import_dist596 = __toESM(require_dist2());
+var import_dist597 = __toESM(require_dist3());
 var getCanonicalQuery = ({ query = {} }) => {
   const keys = [];
   const serialized = {};
@@ -5287,14 +5604,14 @@ var getCanonicalQuery = ({ query = {} }) => {
 };
 
 // node_modules/@smithy/signature-v4/dist-es/getPayloadHash.js
-var import_dist559 = __toESM(require_dist());
-var import_dist560 = __toESM(require_dist2());
-var import_dist561 = __toESM(require_dist3());
+var import_dist601 = __toESM(require_dist());
+var import_dist602 = __toESM(require_dist2());
+var import_dist603 = __toESM(require_dist3());
 
 // node_modules/@smithy/is-array-buffer/dist-es/index.js
-var import_dist556 = __toESM(require_dist());
-var import_dist557 = __toESM(require_dist2());
-var import_dist558 = __toESM(require_dist3());
+var import_dist598 = __toESM(require_dist());
+var import_dist599 = __toESM(require_dist2());
+var import_dist600 = __toESM(require_dist3());
 var isArrayBuffer = (arg) => typeof ArrayBuffer === "function" && arg instanceof ArrayBuffer || Object.prototype.toString.call(arg) === "[object ArrayBuffer]";
 
 // node_modules/@smithy/signature-v4/dist-es/getPayloadHash.js
@@ -5315,9 +5632,9 @@ var getPayloadHash = async ({ headers, body }, hashConstructor) => {
 };
 
 // node_modules/@smithy/signature-v4/dist-es/HeaderFormatter.js
-var import_dist562 = __toESM(require_dist());
-var import_dist563 = __toESM(require_dist2());
-var import_dist564 = __toESM(require_dist3());
+var import_dist604 = __toESM(require_dist());
+var import_dist605 = __toESM(require_dist2());
+var import_dist606 = __toESM(require_dist3());
 var HeaderFormatter = class {
   format(headers) {
     const chunks = [];
@@ -5443,9 +5760,9 @@ function negate(bytes) {
 }
 
 // node_modules/@smithy/signature-v4/dist-es/headerUtil.js
-var import_dist565 = __toESM(require_dist());
-var import_dist566 = __toESM(require_dist2());
-var import_dist567 = __toESM(require_dist3());
+var import_dist607 = __toESM(require_dist());
+var import_dist608 = __toESM(require_dist2());
+var import_dist609 = __toESM(require_dist3());
 var hasHeader = (soughtHeader, headers) => {
   soughtHeader = soughtHeader.toLowerCase();
   for (const headerName of Object.keys(headers)) {
@@ -5457,9 +5774,9 @@ var hasHeader = (soughtHeader, headers) => {
 };
 
 // node_modules/@smithy/signature-v4/dist-es/moveHeadersToQuery.js
-var import_dist568 = __toESM(require_dist());
-var import_dist569 = __toESM(require_dist2());
-var import_dist570 = __toESM(require_dist3());
+var import_dist610 = __toESM(require_dist());
+var import_dist611 = __toESM(require_dist2());
+var import_dist612 = __toESM(require_dist3());
 var moveHeadersToQuery = (request, options = {}) => {
   var _a, _b;
   const { headers, query = {} } = HttpRequest.clone(request);
@@ -5478,9 +5795,9 @@ var moveHeadersToQuery = (request, options = {}) => {
 };
 
 // node_modules/@smithy/signature-v4/dist-es/prepareRequest.js
-var import_dist571 = __toESM(require_dist());
-var import_dist572 = __toESM(require_dist2());
-var import_dist573 = __toESM(require_dist3());
+var import_dist613 = __toESM(require_dist());
+var import_dist614 = __toESM(require_dist2());
+var import_dist615 = __toESM(require_dist3());
 var prepareRequest = (request) => {
   request = HttpRequest.clone(request);
   for (const headerName of Object.keys(request.headers)) {
@@ -5492,9 +5809,9 @@ var prepareRequest = (request) => {
 };
 
 // node_modules/@smithy/signature-v4/dist-es/utilDate.js
-var import_dist574 = __toESM(require_dist());
-var import_dist575 = __toESM(require_dist2());
-var import_dist576 = __toESM(require_dist3());
+var import_dist616 = __toESM(require_dist());
+var import_dist617 = __toESM(require_dist2());
+var import_dist618 = __toESM(require_dist3());
 var iso8601 = (time) => toDate(time).toISOString().replace(/\.\d{3}Z$/, "Z");
 var toDate = (time) => {
   if (typeof time === "number") {
@@ -5800,19 +6117,19 @@ function bindCallerConfig(config, credentialsProvider) {
 }
 
 // node_modules/@aws-sdk/core/dist-es/submodules/protocols/index.js
-var import_dist607 = __toESM(require_dist());
-var import_dist608 = __toESM(require_dist2());
-var import_dist609 = __toESM(require_dist3());
+var import_dist649 = __toESM(require_dist());
+var import_dist650 = __toESM(require_dist2());
+var import_dist651 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/core/dist-es/submodules/protocols/coercing-serializers.js
-var import_dist592 = __toESM(require_dist());
-var import_dist593 = __toESM(require_dist2());
-var import_dist594 = __toESM(require_dist3());
+var import_dist634 = __toESM(require_dist());
+var import_dist635 = __toESM(require_dist2());
+var import_dist636 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/core/dist-es/submodules/protocols/json/awsExpectUnion.js
-var import_dist595 = __toESM(require_dist());
-var import_dist596 = __toESM(require_dist2());
-var import_dist597 = __toESM(require_dist3());
+var import_dist637 = __toESM(require_dist());
+var import_dist638 = __toESM(require_dist2());
+var import_dist639 = __toESM(require_dist3());
 var awsExpectUnion = (value) => {
   if (value == null) {
     return void 0;
@@ -5824,14 +6141,14 @@ var awsExpectUnion = (value) => {
 };
 
 // node_modules/@aws-sdk/core/dist-es/submodules/protocols/json/parseJsonBody.js
-var import_dist601 = __toESM(require_dist());
-var import_dist602 = __toESM(require_dist2());
-var import_dist603 = __toESM(require_dist3());
+var import_dist643 = __toESM(require_dist());
+var import_dist644 = __toESM(require_dist2());
+var import_dist645 = __toESM(require_dist3());
 
 // node_modules/@aws-sdk/core/dist-es/submodules/protocols/common.js
-var import_dist598 = __toESM(require_dist());
-var import_dist599 = __toESM(require_dist2());
-var import_dist600 = __toESM(require_dist3());
+var import_dist640 = __toESM(require_dist());
+var import_dist641 = __toESM(require_dist2());
+var import_dist642 = __toESM(require_dist3());
 var collectBodyString = (streamBody, context) => collectBody(streamBody, context).then((body) => context.utf8Encoder(body));
 
 // node_modules/@aws-sdk/core/dist-es/submodules/protocols/json/parseJsonBody.js
@@ -5886,9 +6203,9 @@ var loadRestJsonErrorCode = (output, data) => {
 };
 
 // node_modules/@aws-sdk/core/dist-es/submodules/protocols/xml/parseXmlBody.js
-var import_dist604 = __toESM(require_dist());
-var import_dist605 = __toESM(require_dist2());
-var import_dist606 = __toESM(require_dist3());
+var import_dist646 = __toESM(require_dist());
+var import_dist647 = __toESM(require_dist2());
+var import_dist648 = __toESM(require_dist3());
 var import_fast_xml_parser = __toESM(require_fxp());
 var parseXmlBody = (streamBody, context) => collectBodyString(streamBody, context).then((encoded) => {
   if (encoded.length) {
@@ -5945,323 +6262,6 @@ var loadRestXmlErrorCode = (output, data) => {
   }
 };
 
-// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/getEndpointFromInstructions.js
-var import_dist634 = __toESM(require_dist());
-var import_dist635 = __toESM(require_dist2());
-var import_dist636 = __toESM(require_dist3());
-
-// node_modules/@smithy/middleware-endpoint/dist-es/service-customizations/index.js
-var import_dist616 = __toESM(require_dist());
-var import_dist617 = __toESM(require_dist2());
-var import_dist618 = __toESM(require_dist3());
-
-// node_modules/@smithy/middleware-endpoint/dist-es/service-customizations/s3.js
-var import_dist613 = __toESM(require_dist());
-var import_dist614 = __toESM(require_dist2());
-var import_dist615 = __toESM(require_dist3());
-var resolveParamsForS3 = async (endpointParams) => {
-  const bucket = (endpointParams == null ? void 0 : endpointParams.Bucket) || "";
-  if (typeof endpointParams.Bucket === "string") {
-    endpointParams.Bucket = bucket.replace(/#/g, encodeURIComponent("#")).replace(/\?/g, encodeURIComponent("?"));
-  }
-  if (isArnBucketName(bucket)) {
-    if (endpointParams.ForcePathStyle === true) {
-      throw new Error("Path-style addressing cannot be used with ARN buckets");
-    }
-  } else if (!isDnsCompatibleBucketName(bucket) || bucket.indexOf(".") !== -1 && !String(endpointParams.Endpoint).startsWith("http:") || bucket.toLowerCase() !== bucket || bucket.length < 3) {
-    endpointParams.ForcePathStyle = true;
-  }
-  if (endpointParams.DisableMultiRegionAccessPoints) {
-    endpointParams.disableMultiRegionAccessPoints = true;
-    endpointParams.DisableMRAP = true;
-  }
-  return endpointParams;
-};
-var DOMAIN_PATTERN = /^[a-z0-9][a-z0-9\.\-]{1,61}[a-z0-9]$/;
-var IP_ADDRESS_PATTERN = /(\d+\.){3}\d+/;
-var DOTS_PATTERN = /\.\./;
-var isDnsCompatibleBucketName = (bucketName) => DOMAIN_PATTERN.test(bucketName) && !IP_ADDRESS_PATTERN.test(bucketName) && !DOTS_PATTERN.test(bucketName);
-var isArnBucketName = (bucketName) => {
-  const [arn, partition, service, , , bucket] = bucketName.split(":");
-  const isArn = arn === "arn" && bucketName.split(":").length >= 6;
-  const isValidArn = Boolean(isArn && partition && service && bucket);
-  if (isArn && !isValidArn) {
-    throw new Error(`Invalid ARN: ${bucketName} was an invalid ARN.`);
-  }
-  return isValidArn;
-};
-
-// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/createConfigValueProvider.js
-var import_dist619 = __toESM(require_dist());
-var import_dist620 = __toESM(require_dist2());
-var import_dist621 = __toESM(require_dist3());
-var createConfigValueProvider = (configKey, canonicalEndpointParamKey, config) => {
-  const configProvider = async () => {
-    const configValue = config[configKey] ?? config[canonicalEndpointParamKey];
-    if (typeof configValue === "function") {
-      return configValue();
-    }
-    return configValue;
-  };
-  if (configKey === "credentialScope" || canonicalEndpointParamKey === "CredentialScope") {
-    return async () => {
-      const credentials = typeof config.credentials === "function" ? await config.credentials() : config.credentials;
-      const configValue = (credentials == null ? void 0 : credentials.credentialScope) ?? (credentials == null ? void 0 : credentials.CredentialScope);
-      return configValue;
-    };
-  }
-  if (configKey === "accountId" || canonicalEndpointParamKey === "AccountId") {
-    return async () => {
-      const credentials = typeof config.credentials === "function" ? await config.credentials() : config.credentials;
-      const configValue = (credentials == null ? void 0 : credentials.accountId) ?? (credentials == null ? void 0 : credentials.AccountId);
-      return configValue;
-    };
-  }
-  if (configKey === "endpoint" || canonicalEndpointParamKey === "endpoint") {
-    return async () => {
-      const endpoint = await configProvider();
-      if (endpoint && typeof endpoint === "object") {
-        if ("url" in endpoint) {
-          return endpoint.url.href;
-        }
-        if ("hostname" in endpoint) {
-          const { protocol, hostname, port, path } = endpoint;
-          return `${protocol}//${hostname}${port ? ":" + port : ""}${path}`;
-        }
-      }
-      return endpoint;
-    };
-  }
-  return configProvider;
-};
-
-// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/getEndpointFromConfig.browser.js
-var import_dist622 = __toESM(require_dist());
-var import_dist623 = __toESM(require_dist2());
-var import_dist624 = __toESM(require_dist3());
-var getEndpointFromConfig = async (serviceId) => void 0;
-
-// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/toEndpointV1.js
-var import_dist631 = __toESM(require_dist());
-var import_dist632 = __toESM(require_dist2());
-var import_dist633 = __toESM(require_dist3());
-
-// node_modules/@smithy/url-parser/dist-es/index.js
-var import_dist628 = __toESM(require_dist());
-var import_dist629 = __toESM(require_dist2());
-var import_dist630 = __toESM(require_dist3());
-
-// node_modules/@smithy/querystring-parser/dist-es/index.js
-var import_dist625 = __toESM(require_dist());
-var import_dist626 = __toESM(require_dist2());
-var import_dist627 = __toESM(require_dist3());
-function parseQueryString(querystring) {
-  const query = {};
-  querystring = querystring.replace(/^\?/, "");
-  if (querystring) {
-    for (const pair of querystring.split("&")) {
-      let [key, value = null] = pair.split("=");
-      key = decodeURIComponent(key);
-      if (value) {
-        value = decodeURIComponent(value);
-      }
-      if (!(key in query)) {
-        query[key] = value;
-      } else if (Array.isArray(query[key])) {
-        query[key].push(value);
-      } else {
-        query[key] = [query[key], value];
-      }
-    }
-  }
-  return query;
-}
-
-// node_modules/@smithy/url-parser/dist-es/index.js
-var parseUrl = (url) => {
-  if (typeof url === "string") {
-    return parseUrl(new URL(url));
-  }
-  const { hostname, pathname, port, protocol, search } = url;
-  let query;
-  if (search) {
-    query = parseQueryString(search);
-  }
-  return {
-    hostname,
-    port: port ? parseInt(port) : void 0,
-    protocol,
-    path: pathname,
-    query
-  };
-};
-
-// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/toEndpointV1.js
-var toEndpointV1 = (endpoint) => {
-  if (typeof endpoint === "object") {
-    if ("url" in endpoint) {
-      return parseUrl(endpoint.url);
-    }
-    return endpoint;
-  }
-  return parseUrl(endpoint);
-};
-
-// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/getEndpointFromInstructions.js
-var getEndpointFromInstructions = async (commandInput, instructionsSupplier, clientConfig, context) => {
-  if (!clientConfig.endpoint) {
-    let endpointFromConfig;
-    if (clientConfig.serviceConfiguredEndpoint) {
-      endpointFromConfig = await clientConfig.serviceConfiguredEndpoint();
-    } else {
-      endpointFromConfig = await getEndpointFromConfig(clientConfig.serviceId);
-    }
-    if (endpointFromConfig) {
-      clientConfig.endpoint = () => Promise.resolve(toEndpointV1(endpointFromConfig));
-    }
-  }
-  const endpointParams = await resolveParams(commandInput, instructionsSupplier, clientConfig);
-  if (typeof clientConfig.endpointProvider !== "function") {
-    throw new Error("config.endpointProvider is not set.");
-  }
-  const endpoint = clientConfig.endpointProvider(endpointParams, context);
-  return endpoint;
-};
-var resolveParams = async (commandInput, instructionsSupplier, clientConfig) => {
-  var _a;
-  const endpointParams = {};
-  const instructions = ((_a = instructionsSupplier == null ? void 0 : instructionsSupplier.getEndpointParameterInstructions) == null ? void 0 : _a.call(instructionsSupplier)) || {};
-  for (const [name, instruction] of Object.entries(instructions)) {
-    switch (instruction.type) {
-      case "staticContextParams":
-        endpointParams[name] = instruction.value;
-        break;
-      case "contextParams":
-        endpointParams[name] = commandInput[instruction.name];
-        break;
-      case "clientContextParams":
-      case "builtInParams":
-        endpointParams[name] = await createConfigValueProvider(instruction.name, name, clientConfig)();
-        break;
-      case "operationContextParams":
-        endpointParams[name] = instruction.get(commandInput);
-        break;
-      default:
-        throw new Error("Unrecognized endpoint parameter instruction: " + JSON.stringify(instruction));
-    }
-  }
-  if (Object.keys(instructions).length === 0) {
-    Object.assign(endpointParams, clientConfig);
-  }
-  if (String(clientConfig.serviceId).toLowerCase() === "s3") {
-    await resolveParamsForS3(endpointParams);
-  }
-  return endpointParams;
-};
-
-// node_modules/@smithy/middleware-endpoint/dist-es/getEndpointPlugin.js
-var import_dist640 = __toESM(require_dist());
-var import_dist641 = __toESM(require_dist2());
-var import_dist642 = __toESM(require_dist3());
-
-// node_modules/@smithy/middleware-endpoint/dist-es/endpointMiddleware.js
-var import_dist637 = __toESM(require_dist());
-var import_dist638 = __toESM(require_dist2());
-var import_dist639 = __toESM(require_dist3());
-var endpointMiddleware = ({ config, instructions }) => {
-  return (next, context) => async (args) => {
-    var _a, _b, _c;
-    if (config.endpoint) {
-      setFeature(context, "ENDPOINT_OVERRIDE", "N");
-    }
-    const endpoint = await getEndpointFromInstructions(args.input, {
-      getEndpointParameterInstructions() {
-        return instructions;
-      }
-    }, { ...config }, context);
-    context.endpointV2 = endpoint;
-    context.authSchemes = (_a = endpoint.properties) == null ? void 0 : _a.authSchemes;
-    const authScheme = (_b = context.authSchemes) == null ? void 0 : _b[0];
-    if (authScheme) {
-      context["signing_region"] = authScheme.signingRegion;
-      context["signing_service"] = authScheme.signingName;
-      const smithyContext = getSmithyContext(context);
-      const httpAuthOption = (_c = smithyContext == null ? void 0 : smithyContext.selectedHttpAuthScheme) == null ? void 0 : _c.httpAuthOption;
-      if (httpAuthOption) {
-        httpAuthOption.signingProperties = Object.assign(httpAuthOption.signingProperties || {}, {
-          signing_region: authScheme.signingRegion,
-          signingRegion: authScheme.signingRegion,
-          signing_service: authScheme.signingName,
-          signingName: authScheme.signingName,
-          signingRegionSet: authScheme.signingRegionSet
-        }, authScheme.properties);
-      }
-    }
-    return next({
-      ...args
-    });
-  };
-};
-
-// node_modules/@smithy/middleware-endpoint/dist-es/getEndpointPlugin.js
-var endpointMiddlewareOptions = {
-  step: "serialize",
-  tags: ["ENDPOINT_PARAMETERS", "ENDPOINT_V2", "ENDPOINT"],
-  name: "endpointV2Middleware",
-  override: true,
-  relation: "before",
-  toMiddleware: serializerMiddlewareOption.name
-};
-var getEndpointPlugin = (config, instructions) => ({
-  applyToStack: (clientStack) => {
-    clientStack.addRelativeTo(endpointMiddleware({
-      config,
-      instructions
-    }), endpointMiddlewareOptions);
-  }
-});
-
-// node_modules/@smithy/middleware-endpoint/dist-es/resolveEndpointConfig.js
-var import_dist643 = __toESM(require_dist());
-var import_dist644 = __toESM(require_dist2());
-var import_dist645 = __toESM(require_dist3());
-var resolveEndpointConfig = (input) => {
-  const tls = input.tls ?? true;
-  const { endpoint, useDualstackEndpoint, useFipsEndpoint } = input;
-  const customEndpointProvider = endpoint != null ? async () => toEndpointV1(await normalizeProvider(endpoint)()) : void 0;
-  const isCustomEndpoint = !!endpoint;
-  const resolvedConfig = Object.assign(input, {
-    endpoint: customEndpointProvider,
-    tls,
-    isCustomEndpoint,
-    useDualstackEndpoint: normalizeProvider(useDualstackEndpoint ?? false),
-    useFipsEndpoint: normalizeProvider(useFipsEndpoint ?? false)
-  });
-  let configuredEndpointPromise = void 0;
-  resolvedConfig.serviceConfiguredEndpoint = async () => {
-    if (input.serviceId && !configuredEndpointPromise) {
-      configuredEndpointPromise = getEndpointFromConfig(input.serviceId);
-    }
-    return configuredEndpointPromise;
-  };
-  return resolvedConfig;
-};
-
-// node_modules/@smithy/middleware-endpoint/dist-es/index.js
-var import_dist652 = __toESM(require_dist());
-var import_dist653 = __toESM(require_dist2());
-var import_dist654 = __toESM(require_dist3());
-
-// node_modules/@smithy/middleware-endpoint/dist-es/adaptors/index.js
-var import_dist646 = __toESM(require_dist());
-var import_dist647 = __toESM(require_dist2());
-var import_dist648 = __toESM(require_dist3());
-
-// node_modules/@smithy/middleware-endpoint/dist-es/types.js
-var import_dist649 = __toESM(require_dist());
-var import_dist650 = __toESM(require_dist2());
-var import_dist651 = __toESM(require_dist3());
-
 // node_modules/@smithy/util-config-provider/dist-es/booleanSelector.js
 var import_dist655 = __toESM(require_dist());
 var import_dist656 = __toESM(require_dist2());
@@ -6288,16 +6288,20 @@ var import_dist662 = __toESM(require_dist2());
 var import_dist663 = __toESM(require_dist3());
 
 export {
-  getHttpHandlerExtensionConfiguration,
-  resolveHttpHandlerRuntimeConfig,
+  buildQueryString,
+  parseUrl,
+  getEndpointFromInstructions,
+  resolveParams,
   EndpointURLScheme,
-  HttpRequest,
-  HttpResponse,
-  isValidHostname,
   getSmithyContext,
   normalizeProvider,
   getHttpAuthSchemeEndpointRuleSetPlugin,
   getSerdePlugin,
+  getHttpHandlerExtensionConfiguration,
+  resolveHttpHandlerRuntimeConfig,
+  HttpRequest,
+  HttpResponse,
+  isValidHostname,
   httpSigningMiddlewareOptions,
   getHttpSigningPlugin,
   normalizeProvider2,
@@ -6311,7 +6315,6 @@ export {
   createBufferedReadable,
   getAwsChunkedEncodingStream,
   headStream,
-  buildQueryString,
   FetchHttpHandler,
   streamCollector,
   fromHex,
@@ -6322,14 +6325,8 @@ export {
   requestBuilder,
   DefaultIdentityProviderConfig,
   NoAuthSigner,
-  setFeature2 as setFeature,
-  AwsSdkSigV4Signer,
-  AwsSdkSigV4ASigner,
-  memoize,
-  resolveAwsSdkSigV4AConfig,
-  isArrayBuffer,
-  SignatureV4,
-  resolveAwsSdkSigV4Config,
+  getEndpointPlugin,
+  resolveEndpointConfig,
   Client,
   Command,
   SENSITIVE_STRING,
@@ -6367,17 +6364,20 @@ export {
   serializeFloat,
   serializeDateTime,
   _json,
+  isArrayBuffer,
+  SignatureV4,
+  setFeature2 as setFeature,
+  AwsSdkSigV4Signer,
+  AwsSdkSigV4ASigner,
+  memoize,
+  resolveAwsSdkSigV4AConfig,
+  resolveAwsSdkSigV4Config,
   awsExpectUnion,
   parseJsonBody,
   parseJsonErrorBody,
   loadRestJsonErrorCode,
   parseXmlBody,
   parseXmlErrorBody,
-  loadRestXmlErrorCode,
-  parseUrl,
-  getEndpointFromInstructions,
-  resolveParams,
-  getEndpointPlugin,
-  resolveEndpointConfig
+  loadRestXmlErrorCode
 };
-//# sourceMappingURL=chunk-WLALPDKA.js.map
+//# sourceMappingURL=chunk-546YFRZM.js.map

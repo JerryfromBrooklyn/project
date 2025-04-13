@@ -31,7 +31,7 @@ import {
   resolveRegionConfig,
   resolveRetryConfig,
   resolveUserAgentConfig
-} from "./chunk-V333OXM4.js";
+} from "./chunk-DIMKL7G7.js";
 import "./chunk-3TAN77E7.js";
 import "./chunk-W2ANHD2T.js";
 import {
@@ -81,7 +81,7 @@ import {
   toBase64,
   toUtf8,
   withBaseException
-} from "./chunk-WLALPDKA.js";
+} from "./chunk-546YFRZM.js";
 import {
   __publicField,
   __toESM,

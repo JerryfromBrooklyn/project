@@ -7,109 +7,381 @@ The Shmong project is organized into a modular structure with clear separation o
 ```
 src/
 ├── components/           # UI Components Directory
-│   ├── Dashboard.jsx     # MAIN DASHBOARD COMPONENT (primary user interface)
-│   ├── AppleDashboard.tsx # Alternative Apple-styled dashboard
-│   ├── MyPhotos.jsx      # Photo gallery component
-│   ├── Navigation.jsx    # Navigation bar component
-│   ├── Card.tsx          # Card component for UI elements
-│   ├── AppleGlassCard.tsx # Apple-styled card component
-│   ├── LandingPage.tsx   # Landing page component
-│   ├── AppleLandingPage.tsx # Apple-styled landing page
-│   └── ui/               # Reusable UI components
+│   ├── Dashboard.jsx     # MAIN DASHBOARD COMPONENT (primary user interface with tabs)
+│   ├── MyPhotos.jsx      # Photo gallery component for matched photos
+│   ├── PhotoManager.js   # Component for displaying Uploaded Photos
+│   ├── PhotoGrid.js      # Reusable grid for displaying photo cards with actions
+│   ├── PhotoUploader.tsx # Photo upload and image viewer functionality
+│   ├── FaceRegistration.js # Component for face registration modal
+│   ├── TrashBin.jsx      # Component for viewing/managing trashed photos
+│   ├── SimplePhotoInfoModal.jsx # Modal for displaying photo information
+│   ├── Navigation.jsx    # Navigation bar component (If separate from Dashboard tabs)
+│   ├── ui/               # Reusable UI components
+│   │   ├── Button.jsx    # Button components with consistent styling
+│   │   ├── Card.jsx      # Card component for UI elements
+│   │   ├── Tabs.jsx      # Tabbed interface components
+│   │   └── ...
 ├── services/             # Business Logic Services
 │   ├── FaceIndexingService.js  # AWS Rekognition integration for face indexing
 │   ├── faceMatchingService.js  # Core face matching logic
-│   ├── awsPhotoService.js      # Photo upload and processing
-│   ├── PhotoService.ts         # Photo handling service (TypeScript version)
+│   ├── awsPhotoService.js      # Photo fetching, upload, processing, and trash management
+│   ├── userVisibilityService.js# Handles photo visibility status (VISIBLE, TRASH, HIDDEN)
 │   ├── FaceStorageService.js   # Face data storage and retrieval
-│   ├── BackgroundJobService.js # Background job processing
-│   └── rekognitionService.ts   # TypeScript wrapper for Rekognition
-├── lib/                  # Shared Libraries
-│   ├── awsClient.js      # AWS SDK configuration
-│   ├── awsClient.ts      # TypeScript version of AWS client
-│   ├── setupDatabase.js  # Database initialization
-│   ├── bufferPolyfill.js # Buffer polyfill for browser compatibility
-│   ├── supabaseClient.ts # Supabase client configuration
-│   ├── utils.js          # JavaScript utilities
-│   └── utils.ts          # TypeScript utilities
+│   └── PhotoService.js         # Client-side photo operations (download, etc.)
+├── context/              # React Context Providers
+│   └── AuthContext.jsx   # Handles user authentication state
+├── hooks/                # Custom React Hooks
 ├── utils/                # Helper Functions
-├── pages/                # Route-based Page Components
-├── auth/                 # Authentication Code
-├── App.jsx               # Main application component
-├── App.tsx               # TypeScript version of App component
-├── App.js                # JavaScript version of App component
+│   └── cn.js             # Utility for conditional class names (using clsx and tailwind-merge)
+├── types.ts              # TypeScript type definitions
+├── config.js             # Application configuration
+├── App.jsx               # Main application component (Handles routing)
 ├── main.jsx              # Application entry point
-├── main.tsx              # TypeScript entry point
-└── index.css             # Global styles
+└── index.css             # Global styles and Tailwind CSS entry point
 ```
 
 ## Key Component: Dashboard
 
-The **Dashboard component (located in `src/components/Dashboard.jsx`)** is the central UI component of the application. This is where users interact with the face matching system, view their photos, and manage their face registration.
+The **Dashboard component (`src/components/Dashboard.jsx`)** is the central UI component of the application. It provides tab-based navigation to different sections:
+
+1. **Home**: User information and face registration
+2. **Matches**: Photos where the user has been recognized
+3. **Upload**: Interface for uploading and managing photos
+4. **Trash**: View and manage trash photos
 
 ## Dependency Relationships
 
-### Dashboard Dependencies
+### Dashboard Dependencies (`Dashboard.jsx`)
 
 ```
 Dashboard.jsx
 ├── Service Dependencies:
-│   ├── FaceIndexingService.js    # For face registration and search
-│   ├── awsPhotoService.js        # For photo management
-│   └── FaceStorageService.js     # For face data management
+│   ├── FaceStorageService.js     # For getting registered face status
+│   └── AuthContext.jsx           # For user authentication info
 │
 ├── Component Dependencies:
-│   ├── MyPhotos.jsx              # To display user's photos
-│   ├── Navigation.jsx            # For navigation UI
-│   └── Various UI components     # From the ui/ directory
-│
-└── External Dependencies:
-    ├── AWS Rekognition           # Through FaceIndexingService
-    ├── AWS S3                    # Through awsPhotoService
-    └── AWS DynamoDB              # For data storage
+│   ├── FaceRegistration.js       # Rendered in Home tab for face setup
+│   ├── MyPhotos.jsx              # Rendered for 'Matches' tab
+│   ├── PhotoManager.js           # Rendered for 'Uploads' tab
+│   ├── TrashBin.jsx              # Rendered for 'Trash' tab
+│   └── ui/Tabs.jsx               # For tabbed navigation
+```
+
+### Photo Display Components
+
+```
+MyPhotos.jsx (Displays Matched Photos)
+├── Service Dependencies:
+│   ├── awsPhotoService.js        # Uses getVisiblePhotos(userId, 'matched')
+│   ├── userVisibilityService.js  # Uses movePhotosToTrash
+│   └── AuthContext.jsx           # For user authentication
+├── Component Dependencies:
+│   └── PhotoGrid.js              # Renders the photo grid with interactive elements
+
+PhotoManager.js (Displays Uploaded Photos)
+├── Service Dependencies:
+│   ├── awsPhotoService.js        # Uses fetchUploadedPhotos, getVisiblePhotos
+│   ├── userVisibilityService.js  # Uses movePhotosToTrash
+│   └── AuthContext.jsx           # For user authentication
+├── Component Dependencies:
+│   ├── PhotoUploader.tsx         # For uploading new photos
+│   └── PhotoGrid.js              # For displaying uploaded photos
+
+PhotoGrid.js (Reusable Grid Component)
+├── Service Dependencies:
+│   └── PhotoService.js           # For photo downloads (if not handled by parent)
+├── Component Dependencies:
+│   └── SimplePhotoInfoModal.jsx  # For displaying photo details
+├── Utility Dependencies:
+│   └── cn.js                     # For conditional class names
+
+PhotoUploader.tsx (Photo Upload + Image Viewer)
+├── Service Dependencies:
+│   ├── awsPhotoService.js        # For uploading photos and trash function
+│   └── AuthContext.jsx           # For user info (optional, may be passed as props)
+├── Library Dependencies:
+│   ├── react-dropzone            # For drag-and-drop file uploads
+│   ├── framer-motion             # For animations
+│   └── lucide-react              # For icons
 ```
 
 ### Service Inter-dependencies
 
 ```
-FaceIndexingService.js
-├── Depends on:
-│   ├── lib/awsClient.js          # For AWS SDK configuration
-│   └── FaceStorageService.js     # For storing face data
-│
-└── Used by:
-    ├── Dashboard.jsx             # For user registration
-    ├── awsPhotoService.js        # For photo face detection
-    └── faceMatchingService.js    # For face matching algorithms
-
 awsPhotoService.js
 ├── Depends on:
 │   ├── lib/awsClient.js          # For AWS SDK configuration
-│   ├── FaceIndexingService.js    # For face detection in photos
-│   └── FaceStorageService.js     # For face data retrieval
+│   ├── FaceStorageService.js     # For getting user face data
+│   └── userVisibilityService.js  # For filtering based on visibility
 │
 └── Used by:
-    ├── Dashboard.jsx             # For photo uploads and management
-    └── MyPhotos.jsx              # For displaying photos
+    ├── MyPhotos.jsx
+    ├── PhotoManager.js
+    ├── PhotoUploader.tsx
+    └── TrashBin.jsx
+
+userVisibilityService.js
+├── Depends on:
+│   └── lib/awsClient.js          # For DynamoDB client
+│
+└── Used by:
+    ├── MyPhotos.jsx
+    ├── PhotoManager.js
+    ├── TrashBin.jsx
+    └── awsPhotoService.js
+
+FaceIndexingService.js
+├── Depends on:
+│   ├── lib/awsClient.js
+│   └── FaceStorageService.js
+│
+└── Used by:
+    ├── FaceRegistration.js
+    ├── awsPhotoService.js        # For photo face detection/indexing
+    └── faceMatchingService.js
 
 FaceStorageService.js
 ├── Depends on:
-│   ├── lib/awsClient.js          # For AWS SDK configuration
-│   └── lib/setupDatabase.js      # For database initialization
+│   └── lib/awsClient.js          # For AWS SDK or Storage API
 │
 └── Used by:
-    ├── FaceIndexingService.js    # For storing face data
-    ├── awsPhotoService.js        # For retrieving face data
-    └── faceMatchingService.js    # For matching algorithms
+    ├── FaceIndexingService.js
+    ├── Dashboard.jsx
+    ├── awsPhotoService.js
+    └── faceMatchingService.js
 ```
 
 ## Application Flow
 
-1. The application initializes through `main.jsx` or `main.tsx`
-2. The App component (`App.jsx` or `App.tsx` or `App.js`) renders the appropriate route
+1. The application initializes through `main.jsx`
+2. The App component (`App.jsx`) sets up routing and context providers (`AuthContext`)
 3. For authenticated users, the **Dashboard component** (`src/components/Dashboard.jsx`) is loaded
-4. The Dashboard interacts with various services to provide face registration, photo upload, and matching functionalities
-5. The MyPhotos component displays the user's uploaded photos and any matches found
+4. The Dashboard displays tabs: Home, Matches, Upload, Trash
+5. The Home tab shows user info and face registration status/actions
+6. The Matches tab renders the `<MyPhotos />` component, which fetches and displays matched photos using `awsPhotoService`
+7. The Upload tab renders the `<PhotoManager />` component with the `<PhotoUploader />` component
+8. The Trash tab renders the `<TrashBin />` component, showing trashed items with options to toggle between uploads and matches
+
+## User Interaction Flows
+
+### Photo Upload Flow
+
+1. User navigates to Upload tab
+2. User interacts with the dropzone in `PhotoUploader.tsx`:
+   - Drags and drops files
+   - Clicks to select files
+3. Uploaded files display with preview and progress indicators
+4. User can enter metadata in the form
+5. Upload completes and photos appear in the grid
+
+### Image Viewing Flow
+
+1. User clicks on a thumbnail in `PhotoGrid.js` or `PhotoUploader.tsx`
+2. Full-screen image viewer opens with controls:
+   - Top bar: Download, Info, Trash, Close buttons
+   - Bottom bar: File info, zoom controls, rotation, fullscreen toggle
+3. User can:
+   - Zoom in/out
+   - Rotate the image
+   - Toggle fullscreen mode
+   - Download or share the image
+   - Move the image to trash
+   - View image information
+4. User clicks close to return to the previous screen
+
+### Trash Management Flow
+
+1. User navigates to Trash tab
+2. `TrashBin.jsx` loads with toggle between "Trashed Uploads" and "Trashed Matches"
+3. User can:
+   - Select photos
+   - Restore selected photos
+   - Permanently hide selected photos
+4. Changes are reflected immediately in the UI
+
+## Key UI Components and Functions
+
+### Dashboard
+
+```jsx
+// Dashboard.jsx
+const Dashboard = () => {
+  const [activeTab, setActiveTab] = useState('home');
+  
+  return (
+    <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <TabsList>
+        <TabsTrigger value="home">Home</TabsTrigger>
+        <TabsTrigger value="matches">Matches</TabsTrigger>
+        <TabsTrigger value="upload">Upload</TabsTrigger>
+        <TabsTrigger value="trash">Trash</TabsTrigger>
+      </TabsList>
+      
+      <TabsContent value="home">
+        <HomeContent />
+        <FaceRegistration />
+      </TabsContent>
+      
+      <TabsContent value="matches">
+        <MyPhotos />
+      </TabsContent>
+      
+      <TabsContent value="upload">
+        <PhotoManager />
+      </TabsContent>
+      
+      <TabsContent value="trash">
+        <TrashBin />
+      </TabsContent>
+    </Tabs>
+  );
+};
+```
+
+### PhotoGrid
+
+```jsx
+// PhotoGrid.js - Key functionality
+const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash }) => {
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  
+  // Photo card rendering with hover effects
+  return (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {photos.map((photo) => (
+          <motion.div key={photo.id} /* animation props */>
+            {/* Photo card with hover effects and action buttons */}
+            <div className="aspect-square rounded-apple-xl overflow-hidden">
+              <img src={photo.url} alt={photo.title} />
+            </div>
+            
+            {/* Hover overlay with action buttons */}
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100">
+              <div className="flex justify-between items-center">
+                {/* Download, Share buttons */}
+                {/* Info, Trash buttons */}
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+      
+      {/* Photo info modal */}
+      <AnimatePresence>
+        {selectedPhoto && (
+          <SimplePhotoInfoModal 
+            photo={selectedPhoto} 
+            onClose={() => setSelectedPhoto(null)} 
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
+};
+```
+
+### PhotoUploader
+
+```tsx
+// PhotoUploader.tsx - Key functionality
+const PhotoUploader = ({ onUploadComplete, onError }) => {
+  const [uploads, setUploads] = useState<UploadItem[]>([]);
+  const [viewerImage, setViewerImage] = useState<UploadItem | null>(null);
+  
+  // Dropzone setup
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop: async (acceptedFiles) => {
+      // Process dropped files
+      // Generate previews
+      // Show metadata form
+    },
+    // Configuration options
+  });
+  
+  return (
+    <div>
+      {/* Dropzone */}
+      <div {...getRootProps()} className="border-dashed border-2 p-10 text-center">
+        <input {...getInputProps()} />
+        <p>Drag and drop photos, or click to select</p>
+      </div>
+      
+      {/* Upload list/grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {uploads.map((upload) => (
+          <div key={upload.id} className="relative">
+            {/* Thumbnail that opens viewer when clicked */}
+            <div onClick={() => setViewerImage(upload)}>
+              <img src={upload.previewUrl} alt={upload.file.name} />
+            </div>
+            
+            {/* Progress indicator, status, etc. */}
+          </div>
+        ))}
+      </div>
+      
+      {/* Image viewer modal */}
+      <AnimatePresence>
+        {viewerImage && (
+          <motion.div className="fixed inset-0 z-50 bg-black/90">
+            {/* Image viewer with controls */}
+            {/* Top bar with actions */}
+            {/* Image with zoom/rotate */}
+            {/* Bottom bar with info */}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+```
+
+## Technology Stack
+
+- Frontend: React with JavaScript/TypeScript
+- Cloud Services: AWS (S3, Rekognition, DynamoDB)
+- UI Libraries:
+  - TailwindCSS for styling
+  - Framer Motion for animations
+  - Lucide for icons
+  - React Dropzone for file uploads
+
+## Important Design Patterns
+
+1. **Component Composition**:
+   - PhotoGrid is a reusable component used by both MyPhotos and TrashBin
+   - Each component has a single responsibility
+
+2. **Context and Services**:
+   - AuthContext for user authentication
+   - Service layer for business logic
+   - Clear separation of UI and data concerns
+
+3. **Responsive Design**:
+   - Mobile-first approach using TailwindCSS breakpoints
+   - Adaptive layouts for different screen sizes
+   - Touch-friendly controls for mobile
+
+4. **Animations and Transitions**:
+   - Framer Motion for smooth animations
+   - Consistent animation patterns for modals, lists, and UI interactions
+
+5. **Visibility Control**:
+   - User-specific visibility system
+   - Photos can be VISIBLE, TRASH, or HIDDEN per user
+   - Consistent filtering across components
+
+## Important Notes
+
+- The **Dashboard component (`Dashboard.jsx`)** acts as the main container and tab navigator.
+- **`MyPhotos.jsx`** is now responsible for displaying matched photos.
+- **`PhotoManager.js`** displays uploaded photos and overall counts.
+- **`PhotoGrid.js`** is a reusable component for displaying photo cards.
+- **`awsPhotoService.js`** and **`userVisibilityService.js`** handle core photo fetching, filtering, and visibility management.
+- Search and complex filtering have been removed from `MyPhotos` and `PhotoManager` for simplification.
+- Photo sorting (newest first) is implemented in fetching/display components.
+- Face registration includes a **synchronous historical matching** step that can be slow (planned for asynchronous improvement).
 
 ## Alternative Dashboards
 

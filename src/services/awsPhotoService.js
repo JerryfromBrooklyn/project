@@ -8,6 +8,8 @@ import { marshall } from '@aws-sdk/util-dynamodb';
 import { PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { filterPhotosByVisibility } from './userVisibilityService';
+import axios from 'axios';
+import { API_URL } from '../config';
 /**
  * Service for handling photo operations with AWS S3 and DynamoDB
  */
@@ -769,6 +771,87 @@ export const awsPhotoService = {
      */
     getHiddenPhotos: async (userId) => {
         return fetchPhotosByVisibility(userId, 'all', 'HIDDEN');
+    },
+    /**
+     * Get user's storage usage
+     * @param {string} userId - The user ID
+     * @returns {Promise<object>} - Result object with total_size in bytes
+     */
+    getUserStorageUsage: async (userId) => {
+        try {
+            const response = await axios.get(`${API_URL}/users/${userId}/storage`);
+            
+            return {
+                success: true,
+                data: response.data
+            };
+        } catch (error) {
+            console.error('Error getting storage usage:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to get storage usage'
+            };
+        }
+    },
+    /**
+     * Move a photo to trash (soft delete)
+     * @param {string} photoId - The photo ID to trash
+     * @returns {Promise<object>} - Result object with success and optional error
+     */
+    trashPhoto: async (photoId) => {
+        try {
+            const response = await axios.post(`${API_URL}/photos/${photoId}/trash`);
+            
+            return {
+                success: true
+            };
+        } catch (error) {
+            console.error('Error moving photo to trash:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to move photo to trash'
+            };
+        }
+    },
+    /**
+     * Restore a photo from trash
+     * @param {string} photoId - The photo ID to restore
+     * @returns {Promise<object>} - Result object with success and optional error
+     */
+    restorePhoto: async (photoId) => {
+        try {
+            const response = await axios.post(`${API_URL}/photos/${photoId}/restore`);
+            
+            return {
+                success: true
+            };
+        } catch (error) {
+            console.error('Error restoring photo from trash:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to restore photo'
+            };
+        }
+    },
+    /**
+     * Permanently delete a photo
+     * @param {string} photoId - The photo ID to delete
+     * @returns {Promise<object>} - Result object with success and optional error
+     */
+    deletePhoto: async (photoId) => {
+        try {
+            const response = await axios.delete(`${API_URL}/photos/${photoId}`);
+            
+            return {
+                success: true
+            };
+        } catch (error) {
+            console.error('Error deleting photo:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to delete photo'
+            };
+        }
     }
 };
 export default awsPhotoService;

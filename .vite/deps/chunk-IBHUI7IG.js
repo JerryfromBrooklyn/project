@@ -16,7 +16,7 @@ import {
   parseRfc7231DateTime,
   setFeature,
   splitStream
-} from "./chunk-WLALPDKA.js";
+} from "./chunk-546YFRZM.js";
 import {
   __publicField,
   __toESM,
@@ -718,4 +718,4 @@ export {
   signatureV4CrtContainer,
   SignatureV4MultiRegion
 };
-//# sourceMappingURL=chunk-XAMNCCZR.js.map
+//# sourceMappingURL=chunk-IBHUI7IG.js.map

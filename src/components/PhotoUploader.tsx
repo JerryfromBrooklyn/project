@@ -1,9 +1,10 @@
 import React, { useCallback, useState, useEffect } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, DropzoneOptions } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Upload, X, Check, Image as ImageIcon, AlertTriangle, Folder, List, Grid, 
-  Filter, Search, Edit2, Calendar, MapPin, User, Building, Users, Info 
+  Filter, Search, Edit2, Calendar, MapPin, User, Building, Users, Info,
+  Download, Trash2, Share2, ZoomIn, ZoomOut, RotateCw, Maximize, Minimize
 } from 'lucide-react';
 import { PhotoMetadata, UploadItem } from '../types';
 import { cn } from '../utils/cn';
@@ -43,6 +44,17 @@ interface UploadMetadata {
   date: string;
 }
 
+// Augment the awsPhotoService type
+// This is a more reliable approach than the module declaration
+declare global {
+  interface AwsPhotoService {
+    trashPhoto: (photoId: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+  }
+}
+
 export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   eventId,
   onUploadComplete,
@@ -75,6 +87,13 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   const [showMetadataForm, setShowMetadataForm] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [selectedUpload, setSelectedUpload] = useState<UploadItem | null>(null);
+  const [pendingPreviews, setPendingPreviews] = useState<{file: File, previewUrl: string}[]>([]);
+  
+  // New state for image viewer
+  const [viewerImage, setViewerImage] = useState<UploadItem | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     // Fetch current storage usage
@@ -124,6 +143,17 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     return true;
   };
 
+  // Function to generate preview URLs for images
+  const generatePreviewUrl = useCallback((file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        resolve(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     // Check if total upload size would exceed limit
     const uploadSize = acceptedFiles.reduce((total, file) => total + file.size, 0);
@@ -132,10 +162,19 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
       return;
     }
 
+    // Generate preview URLs for the dropped files
+    const previewPromises = acceptedFiles.map(async (file) => {
+      const previewUrl = await generatePreviewUrl(file);
+      return { file, previewUrl };
+    });
+    
+    const previews = await Promise.all(previewPromises);
+    setPendingPreviews(previews);
+
     // Store files for later processing
     setPendingFiles(acceptedFiles);
     setShowMetadataForm(true);
-  }, [totalStorage, storageLimit, onError]);
+  }, [totalStorage, storageLimit, onError, generatePreviewUrl]);
 
   const processUploads = async () => {
     if (!validateMetadata()) return;
@@ -165,13 +204,15 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         currentLevel = currentLevel[folder].subfolders;
       });
 
-      // Add file to uploads
+      // Add file to uploads with preview URL
+      const preview = pendingPreviews.find(p => p.file === file);
       const uploadItem = {
         id: Math.random().toString(36).substring(7),
         file,
         progress: 0,
         status: 'pending' as const,
-        folderPath: pathParts.length ? pathParts.join('/') : null
+        folderPath: pathParts.length ? pathParts.join('/') : null,
+        previewUrl: preview?.previewUrl
       };
 
       newUploads.push(uploadItem);
@@ -290,12 +331,14 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
       }
     }
 
-    // Reset metadata form
+    // Reset metadata form and previews
     setShowMetadataForm(false);
     setPendingFiles([]);
+    setPendingPreviews([]);
   };
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  // Fix the useDropzone hook with proper type
+  const dropzoneOptions: DropzoneOptions = {
     onDrop,
     accept: {
       'image/jpeg': ['.jpg', '.jpeg'],
@@ -311,7 +354,14 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     disabled: showMetadataForm,
     noClick: showMetadataForm,
     noKeyboard: showMetadataForm,
-  });
+    // Add the missing properties required by the DropzoneOptions interface
+    multiple: true,
+    onDragEnter: () => {},
+    onDragOver: () => {},
+    onDragLeave: () => {}
+  };
+  
+  const { getRootProps, getInputProps, isDragActive } = useDropzone(dropzoneOptions);
 
   const handleFolderRename = async (oldPath: string, newName: string) => {
     try {
@@ -521,6 +571,92 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     );
   };
 
+  // New function to handle image download
+  const handleDownload = async (upload: UploadItem) => {
+    try {
+      const url = upload.s3Url || upload.previewUrl;
+      if (!url) {
+        throw new Error('No image URL available for download');
+      }
+      
+      // Create an anchor element and trigger download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = upload.file.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (error) {
+      onError?.('Failed to download image');
+    }
+  };
+
+  // New function to handle moving to trash
+  const handleTrash = async (upload: UploadItem) => {
+    try {
+      if (!upload.photoId) {
+        // Just remove from local state if not saved to backend yet
+        removeUpload(upload.id);
+        return;
+      }
+      
+      // Call API to move to trash
+      const result = await awsPhotoService.trashPhoto(upload.photoId);
+      
+      if (result.success) {
+        // Remove from local state
+        removeUpload(upload.id);
+        // Close any open viewers/modals
+        if (viewerImage?.id === upload.id) setViewerImage(null);
+        if (selectedUpload?.id === upload.id) setSelectedUpload(null);
+      } else {
+        throw new Error(result.error || 'Failed to move to trash');
+      }
+    } catch (error) {
+      onError?.((error as Error).message);
+    }
+  };
+  
+  // Function to toggle fullscreen
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        onError?.(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    }
+  };
+  
+  // Reset zoom and rotation when image changes
+  useEffect(() => {
+    setZoomLevel(1);
+    setRotation(0);
+  }, [viewerImage]);
+  
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  // First, make sure the thumbnail click handler is properly working
+  const handleThumbnailClick = (upload: UploadItem) => {
+    if (upload.previewUrl || upload.s3Url) {
+      setViewerImage(upload);
+    }
+  };
+
   return (
     <div className="w-full">
       {/* Storage Usage */}
@@ -551,6 +687,37 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
             <h3 className="text-lg font-medium text-apple-gray-900 mb-4">
               Photo Details
             </h3>
+            
+            {/* Image Preview Grid */}
+            {pendingPreviews.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-sm font-medium text-apple-gray-700 mb-2">
+                  Selected Photos ({pendingPreviews.length})
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {pendingPreviews.slice(0, 10).map((preview, index) => (
+                    <div key={index} className="relative aspect-square rounded-apple overflow-hidden bg-apple-gray-50 border border-apple-gray-200">
+                      <img 
+                        src={preview.previewUrl} 
+                        alt={`Preview ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate">
+                        {preview.file.name}
+                      </div>
+                    </div>
+                  ))}
+                  {pendingPreviews.length > 10 && (
+                    <div className="flex items-center justify-center aspect-square rounded-apple bg-apple-gray-50 border border-apple-gray-200">
+                      <span className="text-apple-gray-500 text-sm">
+                        +{pendingPreviews.length - 10} more
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="ios-label flex items-center">
@@ -627,6 +794,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                 onClick={() => {
                   setShowMetadataForm(false);
                   setPendingFiles([]);
+                  setPendingPreviews([]);
                 }}
                 className="ios-button-secondary"
               >
@@ -661,6 +829,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
           accept="image/*" 
           className="hidden"
           aria-label="Upload files"
+          title="Select files to upload"
+          placeholder="Upload files"
         />
         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white flex items-center justify-center">
           <Upload className="w-8 h-8 text-apple-gray-500" />
@@ -757,8 +927,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
             className={cn(
               "grid gap-4",
               viewMode.mode === 'grid' 
-                ? "grid-cols-1 md:grid-cols-3" 
-                : "grid-cols-1"
+                ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5" 
+                : "space-y-4"
             )}
           >
             {filteredUploads.map((upload) => (
@@ -772,37 +942,55 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                   viewMode.mode === 'list' && "flex items-center"
                 )}
               >
-                {/* Thumbnail/Preview */}
-                <div className={cn(
-                  "relative",
-                  viewMode.mode === 'grid' 
-                    ? "aspect-square" 
-                    : "w-20 h-20"
-                )}>
-                  {upload.file.type.startsWith('image/') && (
+                {/* Thumbnail/Preview - Now clickable */}
+                <div 
+                  className={cn(
+                    "relative cursor-pointer w-full h-full",
+                    viewMode.mode === 'grid' 
+                      ? "aspect-square" 
+                      : "w-20 h-20"
+                  )}
+                  onClick={() => handleThumbnailClick(upload)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View ${upload.file.name}`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      handleThumbnailClick(upload);
+                    }
+                  }}
+                >
+                  {upload.previewUrl || upload.s3Url ? (
                     <img
-                      src={URL.createObjectURL(upload.file)}
+                      src={upload.previewUrl || upload.s3Url}
                       alt={upload.file.name}
                       className="w-full h-full object-cover rounded-tl-apple rounded-tr-apple"
+                      loading="lazy"
                     />
+                  ) : (
+                    <div className="flex items-center justify-center w-full h-full">
+                      <ImageIcon className="w-10 h-10 text-apple-gray-300" />
+                    </div>
                   )}
-                  <div 
-                    className={cn(
-                      "absolute inset-0 bg-black/50 flex items-center justify-center",
-                      upload.status === 'complete' && "bg-apple-green-500/50",
-                      upload.status === 'error' && "bg-apple-red-500/50"
-                    )}
-                  >
-                    {upload.status === 'uploading' && (
-                      <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    )}
-                    {upload.status === 'complete' && (
-                      <Check className="w-8 h-8 text-white" />
-                    )}
-                    {upload.status === 'error' && (
-                      <AlertTriangle className="w-8 h-8 text-white" />
-                    )}
-                  </div>
+                  {upload.status !== 'complete' && (
+                    <div 
+                      className={cn(
+                        "absolute inset-0 bg-black/50 flex items-center justify-center",
+                        upload.status === 'complete' && "bg-apple-green-500/50",
+                        upload.status === 'error' && "bg-apple-red-500/50"
+                      )}
+                    >
+                      {upload.status === 'uploading' && (
+                        <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      )}
+                      {upload.status === 'complete' && (
+                        <Check className="w-8 h-8 text-white" />
+                      )}
+                      {upload.status === 'error' && (
+                        <AlertTriangle className="w-8 h-8 text-white" />
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Info */}
@@ -825,7 +1013,10 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                     <div className="flex items-center space-x-2">
                       {upload.status === 'complete' && (
                         <button
-                          onClick={() => setSelectedUpload(upload)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedUpload(upload);
+                          }}
                           className="text-apple-gray-400 hover:text-apple-gray-600"
                           aria-label={`Show details for ${upload.file.name}`}
                           title="Show details"
@@ -834,7 +1025,10 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                         </button>
                       )}
                       <button
-                        onClick={() => removeUpload(upload.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeUpload(upload.id);
+                        }}
                         className="text-apple-gray-400 hover:text-apple-gray-600"
                         aria-label={`Remove upload ${upload.file.name}`}
                         title="Remove upload"
@@ -891,45 +1085,229 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Photo Details Modal */}
+      {/* Selected Upload Details Modal - Now without image */}
       <AnimatePresence>
-        {selectedUpload && selectedUpload.photoDetails && (
+        {selectedUpload && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mt-8 p-6 bg-white rounded-apple-xl border border-apple-gray-200"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-apple-gray-900">
+                {selectedUpload.file.name}
+              </h3>
+              <button
+                onClick={() => setSelectedUpload(null)}
+                className="text-apple-gray-400 hover:text-apple-gray-600"
+                aria-label="Close details"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-apple-gray-500">Size:</span>
+                  <span className="text-sm font-medium text-apple-gray-700">
+                    {(selectedUpload.file.size / 1024 / 1024).toFixed(2)}MB
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-apple-gray-500">Type:</span>
+                  <span className="text-sm font-medium text-apple-gray-700">
+                    {selectedUpload.file.type}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-apple-gray-500">Modified:</span>
+                  <span className="text-sm font-medium text-apple-gray-700">
+                    {new Date(selectedUpload.file.lastModified).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-apple-gray-500">Status:</span>
+                  <span className="text-sm font-medium text-apple-gray-700">
+                    {selectedUpload.status}
+                  </span>
+                </div>
+              </div>
+              
+              {renderUploadDetails(selectedUpload)}
+
+              <div className="flex space-x-4 pt-4 border-t border-apple-gray-100">
+                <button
+                  onClick={() => setViewerImage(selectedUpload)}
+                  className="ios-button-secondary flex items-center"
+                  aria-label="View image"
+                >
+                  <ImageIcon className="w-4 h-4 mr-2" />
+                  View
+                </button>
+                <button
+                  onClick={() => handleDownload(selectedUpload)}
+                  className="ios-button-secondary flex items-center"
+                  aria-label="Download image"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download
+                </button>
+                <button
+                  onClick={() => handleTrash(selectedUpload)}
+                  className="ios-button-destructive flex items-center"
+                  aria-label="Move to trash"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Hide
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* New Image Viewer Modal */}
+      <AnimatePresence>
+        {viewerImage && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={() => setSelectedUpload(null)}
+            className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col touch-none"
+            onClick={() => setViewerImage(null)}
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative max-w-2xl w-full bg-white rounded-apple-2xl overflow-hidden"
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.9 }}
+              className="relative w-full h-full flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">Photo Details</h3>
+              {/* Top Controls */}
+              <div className="absolute top-0 left-0 right-0 z-10 p-4 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent">
+                <div className="flex-1">
+                  <h2 className="text-lg font-medium text-white truncate max-w-[200px] sm:max-w-sm">
+                    {viewerImage.file.name}
+                  </h2>
+                </div>
+                <div className="flex items-center space-x-2">
                   <button
-                    onClick={() => setSelectedUpload(null)}
-                    className="text-apple-gray-400 hover:text-apple-gray-600"
-                    aria-label="Close photo details"
-                    title="Close"
+                    onClick={() => handleDownload(viewerImage)}
+                    className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+                    aria-label="Download image"
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedUpload(viewerImage);
+                      setViewerImage(null);
+                    }}
+                    className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+                    aria-label="Show image information"
+                  >
+                    <Info className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTrash(viewerImage);
+                      setViewerImage(null);
+                    }}
+                    className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+                    aria-label="Hide image"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setViewerImage(null)}
+                    className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+                    aria-label="Close viewer"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
-
-                <div className="aspect-video rounded-apple-xl overflow-hidden mb-6">
+              </div>
+              
+              {/* Image Container with touch support */}
+              <div 
+                className="flex-1 flex items-center justify-center overflow-hidden touch-pan-y"
+                style={{
+                  touchAction: "pan-y"
+                }}
+              >
+                <div 
+                  className="relative transform-gpu"
+                  style={{
+                    transform: `scale(${zoomLevel}) rotate(${rotation}deg)`,
+                    transition: 'transform 0.3s ease'
+                  }}
+                >
                   <img
-                    src={URL.createObjectURL(selectedUpload.file)}
-                    alt={selectedUpload.file.name}
-                    className="w-full h-full object-cover"
+                    src={viewerImage.previewUrl || viewerImage.s3Url}
+                    alt={viewerImage.file.name}
+                    className="max-h-[85vh] max-w-[95vw] sm:max-w-[90vw] object-contain"
+                    draggable={false}
                   />
                 </div>
-
-                {renderUploadDetails(selectedUpload)}
+              </div>
+              
+              {/* Bottom Controls */}
+              <div className="absolute bottom-0 left-0 right-0 z-10 p-4 bg-gradient-to-t from-black/70 to-transparent">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="text-white text-sm">
+                    {(viewerImage.file.size / 1024 / 1024).toFixed(2)} MB • {viewerImage.file.type.split('/')[1].toUpperCase()}
+                  </div>
+                  <div className="flex flex-wrap gap-2 justify-center sm:justify-end">
+                    <button
+                      onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.2))}
+                      className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+                      aria-label="Zoom out"
+                    >
+                      <ZoomOut className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => setZoomLevel(Math.min(3, zoomLevel + 0.2))}
+                      className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+                      aria-label="Zoom in"
+                    >
+                      <ZoomIn className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => setRotation((rotation + 90) % 360)}
+                      className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+                      aria-label="Rotate image"
+                    >
+                      <RotateCw className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={toggleFullscreen}
+                      className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+                      aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                    >
+                      {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.share?.({
+                          title: viewerImage.file.name,
+                          url: viewerImage.s3Url
+                        }).catch(() => {
+                          // Fallback if Web Share API is not available
+                          handleDownload(viewerImage);
+                        });
+                      }}
+                      className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-white"
+                      aria-label="Share image"
+                    >
+                      <Share2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
               </div>
             </motion.div>
           </motion.div>

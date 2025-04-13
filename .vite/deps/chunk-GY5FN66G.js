@@ -36,7 +36,7 @@ import {
   resolveRegionConfig,
   resolveRetryConfig,
   resolveUserAgentConfig
-} from "./chunk-V333OXM4.js";
+} from "./chunk-DIMKL7G7.js";
 import {
   v4_default
 } from "./chunk-3TAN77E7.js";
@@ -88,7 +88,7 @@ import {
   toBase64,
   toUtf8,
   withBaseException
-} from "./chunk-WLALPDKA.js";
+} from "./chunk-546YFRZM.js";
 import {
   __commonJS,
   __publicField,
@@ -6053,4 +6053,4 @@ export {
   waitForTableNotExists,
   waitUntilTableNotExists
 };
-//# sourceMappingURL=chunk-WFOSQHNO.js.map
+//# sourceMappingURL=chunk-GY5FN66G.js.map

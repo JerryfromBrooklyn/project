@@ -50,14 +50,18 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash }) =>
     return (_jsxs(_Fragment, { children: [
         _jsx("div", { 
             className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4", 
-            children: photos.map((photo) => ( 
-                _jsxs(motion.div, { 
+            children: photos.map((photo) => {
+                const motionProps = { 
                     layout: true, 
                     initial: { opacity: 0, scale: 0.9 }, 
                     animate: { opacity: 1, scale: 1 }, 
                     exit: { opacity: 0, scale: 0.9 }, 
                     className: "relative group", 
+                };
+                
+                return _jsxs(motion.div, { 
                     key: photo.id,
+                    ...motionProps,
                     children: [
                         _jsx("div", { 
                             className: "aspect-square rounded-apple-xl overflow-hidden", 
@@ -137,8 +141,8 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash }) =>
                             })
                         })
                     ]
-                })
-            ))
+                });
+            })
         }),
         _jsx(AnimatePresence, { children: selectedPhoto && (_jsx(SimplePhotoInfoModal, { photo: selectedPhoto, onClose: () => setSelectedPhoto(null) })) })
     ] }));
