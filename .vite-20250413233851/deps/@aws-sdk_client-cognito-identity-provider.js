@@ -31,9 +31,9 @@ import {
   resolveRegionConfig,
   resolveRetryConfig,
   resolveUserAgentConfig
-} from "./chunk-V333OXM4.js";
-import "./chunk-3TAN77E7.js";
+} from "./chunk-HNCKUWWD.js";
 import "./chunk-W2ANHD2T.js";
+import "./chunk-3TAN77E7.js";
 import {
   AwsSdkSigV4Signer,
   Client,

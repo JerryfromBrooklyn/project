@@ -36,7 +36,7 @@ import {
   resolveRegionConfig,
   resolveRetryConfig,
   resolveUserAgentConfig
-} from "./chunk-V333OXM4.js";
+} from "./chunk-HNCKUWWD.js";
 import {
   v4_default
 } from "./chunk-3TAN77E7.js";
@@ -6053,4 +6053,4 @@ export {
   waitForTableNotExists,
   waitUntilTableNotExists
 };
-//# sourceMappingURL=chunk-WFOSQHNO.js.map
+//# sourceMappingURL=chunk-XO6BODHA.js.map

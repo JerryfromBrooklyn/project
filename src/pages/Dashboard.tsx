@@ -9,6 +9,7 @@ import { getFaceDataForUser } from '../services/FaceStorageService';
 import { awsPhotoService } from '../services/awsPhotoService';
 import TabNavigation from '../components/TabNavigation';
 import { permanentlyHidePhotos } from '../services/userVisibilityService';
+import TabBarSpacer from "../components/layout/TabBarSpacer";
 
 interface FaceAttributes {
   age: { low: number; high: number };
@@ -433,6 +434,12 @@ export const Dashboard = () => {
       <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6 mb-6">
         <div className="flex flex-col md:flex-row gap-6">
           <div className="md:w-1/3 flex-shrink-0">
+            {(user?.full_name || user?.email) && (
+              <div className="mb-3 text-sm text-apple-gray-800 font-medium">
+                {user?.full_name || user?.email}
+              </div>
+            )}
+            
             {faceImageUrl ? (
               <div className="relative aspect-square rounded-lg overflow-hidden border border-apple-gray-200 bg-apple-gray-100">
                 <img 
@@ -453,16 +460,6 @@ export const Dashboard = () => {
                   <User className="w-12 h-12 mx-auto text-apple-gray-400 mb-2" />
                   <p className="text-xs text-apple-gray-500">Image not available</p>
                 </div>
-              </div>
-            )}
-            {(user?.full_name || user?.email) && (
-              <div className="mt-2 text-xs text-apple-gray-500 bg-apple-gray-50 p-2 rounded-md border border-apple-gray-100">
-                <span className="font-medium">Name:</span> {user.full_name || user.email}
-              </div>
-            )}
-            {faceId && (
-              <div className="mt-1 text-xs text-apple-gray-500 bg-apple-gray-50 p-2 rounded-md border border-apple-gray-100">
-                <span className="font-medium">Face ID:</span> {faceId.substring(0, 8)}...
               </div>
             )}
           </div>
@@ -658,14 +655,20 @@ export const Dashboard = () => {
                     <Photos className="w-4 h-4 mr-1.5"/> Photo Stats
                   </h2>
                   <div className="grid grid-cols-2 gap-4">
-                     <div className="text-center">
-                      <p className="text-2xl font-semibold text-apple-green-600">{matchedCount}</p>
-                      <p className="text-xs text-apple-gray-500 mt-0.5">Photos Matched</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-2xl font-semibold text-apple-blue-600">{uploadedCount}</p>
-                      <p className="text-xs text-apple-gray-500 mt-0.5">Photos Uploaded</p>
-                    </div>
+                     <button 
+                       onClick={() => setActiveTab('photos')}
+                       className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                     >
+                       <p className="text-2xl font-semibold text-apple-green-600">{matchedCount}</p>
+                       <p className="text-xs text-apple-gray-500 mt-0.5">Photos Matched</p>
+                     </button>
+                     <button 
+                       onClick={() => setActiveTab('upload')}
+                       className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                     >
+                       <p className="text-2xl font-semibold text-apple-blue-600">{uploadedCount}</p>
+                       <p className="text-xs text-apple-gray-500 mt-0.5">Photos Uploaded</p>
+                     </button>
                   </div>
                </div>
                  <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-5">
@@ -699,7 +702,7 @@ export const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-apple-gray-50 font-sans">
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-apple-gray-200 pt-safe">
+      <header className="fixed top-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-b border-apple-gray-200 pt-safe">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-14 items-center">
             <div className="flex-shrink-0 flex items-center">
@@ -753,14 +756,16 @@ export const Dashboard = () => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <div className="mb-6 sm:mb-8 flex justify-center">
-          <TabNavigation 
-            activeTab={activeTab} 
-            onTabChange={setActiveTab}
-          />
-        </div>
+      {/* Add top spacing for fixed header */}
+      <div className="h-14"></div>
+      
+      {/* Tab Navigation moved to top under header */}
+      <TabNavigation 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab}
+      />
 
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <div className={cn(
           "",
           activeTab === 'home' ? "grid grid-cols-1 lg:grid-cols-3 gap-6" : ""

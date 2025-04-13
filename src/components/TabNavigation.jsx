@@ -7,7 +7,7 @@ import {
   Calendar,
   Trash2
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn } from '../utils/cn';
 
 const TabNavigation = ({ activeTab, onTabChange }) => {
   const tabs = [
@@ -49,8 +49,8 @@ const TabNavigation = ({ activeTab, onTabChange }) => {
   ];
 
   return (
-    <div className="bg-apple-gray-100 rounded-lg p-1 w-full md:w-auto">
-      <nav className="flex space-x-1" aria-label="Tabs">
+    <div className="sticky top-14 left-0 right-0 z-20 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
+      <nav className="max-w-screen-lg mx-auto flex items-center justify-around px-2 py-1" aria-label="Tabs">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -60,10 +60,8 @@ const TabNavigation = ({ activeTab, onTabChange }) => {
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={cn(
-                'flex-1 flex items-center justify-center px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150',
-                isActive 
-                  ? 'bg-white text-apple-gray-900 shadow-sm' 
-                  : 'text-apple-gray-600 hover:text-apple-gray-800 hover:bg-apple-gray-50'
+                'flex items-center justify-center py-2 px-3 transition-colors duration-150 relative',
+                isActive ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'
               )}
               aria-current={isActive ? 'page' : undefined}
               title={tab.tooltip}
@@ -71,8 +69,21 @@ const TabNavigation = ({ activeTab, onTabChange }) => {
               tabIndex={0}
               aria-label={tab.tooltip}
             >
-              <Icon className={cn('w-4 h-4 mr-1.5', isActive ? `text-${tab.color}-500` : 'text-apple-gray-400')} />
-              {tab.label}
+              <div className="flex flex-col items-center">
+                <Icon className={cn(
+                  'w-5 h-5 mb-1 transition-transform',
+                  isActive ? `text-${tab.color}-500 scale-110` : 'text-gray-500 dark:text-gray-400'
+                )} />
+                <span className={cn(
+                  'text-xs font-medium truncate',
+                  isActive ? `text-${tab.color}-500` : 'text-gray-500 dark:text-gray-400'
+                )}>
+                  {tab.label}
+                </span>
+              </div>
+              {isActive && (
+                <span className="absolute -bottom-1 w-10 h-1 bg-blue-500 rounded-full" />
+              )}
             </button>
           );
         })}

@@ -36,11 +36,11 @@ import {
   resolveRegionConfig,
   resolveRetryConfig,
   resolveUserAgentConfig
-} from "./chunk-V333OXM4.js";
+} from "./chunk-HNCKUWWD.js";
+import "./chunk-W2ANHD2T.js";
 import {
   v4_default
 } from "./chunk-3TAN77E7.js";
-import "./chunk-W2ANHD2T.js";
 import {
   AwsSdkSigV4Signer,
   Client,

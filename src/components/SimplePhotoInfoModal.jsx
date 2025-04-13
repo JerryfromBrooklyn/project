@@ -157,9 +157,115 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
           </button>
         </div>
         
-        <div className="flex flex-col md:flex-row h-[calc(90vh-3rem)]">
+        {/* Mobile layout: stacked with fixed heights */}
+        <div className="flex flex-col md:hidden h-[calc(90vh-3rem)]">
+          {/* Image section with fixed height on mobile */}
+          <div className="w-full h-[40vh] bg-black relative flex items-center justify-center">
+            <div className={cn(
+              "relative flex items-center justify-center w-full h-full transition-opacity",
+              !imageLoaded && "opacity-0"
+            )}>
+              <img 
+                src={encodeURI(safePhoto.url || '')}
+                alt={safePhoto.title} 
+                className="max-w-full max-h-full object-contain"
+                onLoad={handleImageLoad}
+              />
+            </div>
+            {!imageLoaded && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+          </div>
+          
+          {/* Info section with remaining height */}
+          <div className="w-full h-[calc(50vh-3rem)] overflow-y-auto bg-gray-50 dark:bg-gray-800">
+            <div className="p-4 space-y-4">
+              {/* Content sections - same as below */}
+              {/* Basic Information */}
+              <section className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm">
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
+                  <Image size={16} className="mr-2 text-blue-500" />
+                  Basic Information
+                </h3>
+                <div className="grid grid-cols-1 gap-3">
+                  {[
+                    { label: 'Title', value: safePhoto.title, icon: <Image size={16} className="text-gray-500" /> },
+                    { label: 'Date', value: formatDate(safePhoto.date_taken || safePhoto.created_at), icon: <Calendar size={16} className="text-gray-500" /> },
+                    { label: 'File Size', value: formatFileSize(safePhoto.file_size), icon: <FileType size={16} className="text-gray-500" /> },
+                    { label: 'File Type', value: safePhoto.file_type, icon: <FileType size={16} className="text-gray-500" /> },
+                    { label: 'Uploaded', value: formatDate(safePhoto.created_at), icon: <Clock size={16} className="text-gray-500" /> }
+                  ].map((item, index) => (
+                    <div key={index} className="flex items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="mr-3 text-gray-500">{item.icon}</div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{item.label}</p>
+                        <p className="font-medium text-sm text-gray-900 dark:text-white">{item.value || 'Not available'}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              
+              {/* Album Link */}
+              <section className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm">
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
+                  <Link size={16} className="mr-2 text-blue-500" />
+                  Album Link
+                </h3>
+                <div className="p-3 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                  <div className="flex flex-wrap items-center">
+                    <a 
+                      href={safePhoto.externalAlbumLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 dark:text-blue-400 font-medium hover:underline flex-1 truncate"
+                    >
+                      {safePhoto.externalAlbumLink || "No album link available"}
+                    </a>
+                  </div>
+                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-2">
+                    {safePhoto.externalAlbumLink 
+                      ? "Click to open the album in a new tab" 
+                      : ""}
+                  </p>
+                </div>
+              </section>
+              
+              {/* Location section */}
+              {hasLocationData() && (
+                <section className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm">
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
+                    <Globe size={16} className="mr-2 text-blue-500" />
+                    Location
+                  </h3>
+                  <div className="space-y-2">
+                    <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center">
+                      <Building size={18} className="text-gray-500 mr-3" />
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Place Name</p>
+                        <p className="font-medium text-sm text-gray-900 dark:text-white">{getLocationName()}</p>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center">
+                      <MapPin size={18} className="text-gray-500 mr-3" />
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Address</p>
+                        <p className="font-medium text-sm text-gray-900 dark:text-white">{getLocationAddress()}</p>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* Desktop layout: side-by-side */}
+        <div className="hidden md:flex md:flex-row h-[calc(90vh-3rem)]">
           {/* Left side - Image */}
-          <div className="w-full md:w-1/2 h-full bg-black relative flex items-center justify-center">
+          <div className="w-1/2 h-full bg-black relative flex items-center justify-center">
             <div className={cn(
               "relative flex items-center justify-center w-full h-full transition-opacity",
               !imageLoaded && "opacity-0"
@@ -179,7 +285,7 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
           </div>
           
           {/* Right side - Info sections */}
-          <div className="w-full md:w-1/2 h-full overflow-y-auto bg-gray-50 dark:bg-gray-800">
+          <div className="w-1/2 h-full overflow-y-auto bg-gray-50 dark:bg-gray-800">
             <div className="p-5 space-y-5">
               {/* Basic Information */}
               <section className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm">

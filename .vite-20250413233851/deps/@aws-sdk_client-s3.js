@@ -54,13 +54,13 @@ import {
   resolveUserAgentConfig,
   supportsWebCrypto,
   uint32ArrayFrom
-} from "./chunk-V333OXM4.js";
-import "./chunk-3TAN77E7.js";
+} from "./chunk-HNCKUWWD.js";
 import {
   __awaiter,
   __generator,
   __values
 } from "./chunk-W2ANHD2T.js";
+import "./chunk-3TAN77E7.js";
 import {
   AwsSdkSigV4ASigner,
   AwsSdkSigV4Signer,
