@@ -3,7 +3,7 @@ import PhotoCard from './ui/PhotoCard';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Share2, Trash2, Users, AlertCircle, Info } from 'lucide-react';
-import SimplePhotoInfoModal from './SimplePhotoInfoModal';
+import SimplePhotoInfoModal from './SimplePhotoInfoModal.jsx';
 import { cn } from '../utils/cn';
 
 /**

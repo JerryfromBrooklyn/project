@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Share2, Trash2, Users, AlertCircle, Info } from 'lucide-react';
 import { PhotoService } from '../services/PhotoService';
-import SimplePhotoInfoModal from './SimplePhotoInfoModal';
+import SimplePhotoInfoModal from './SimplePhotoInfoModal.jsx';
 import { cn } from '../utils/cn';
 
 export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash }) => {

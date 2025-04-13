@@ -4,7 +4,7 @@ import PhotoGrid from '../features/photos/components/PhotoGrid';
 import PhotoUploader from '../features/photos/components/PhotoUploader';
 import { usePhotos } from '../features/photos/hooks/usePhotos';
 import LocalStorageDebugPanel from '../features/photos/components/LocalStorageDebugPanel';
-import SimplePhotoInfoModal from '../components/SimplePhotoInfoModal';
+import SimplePhotoInfoModal from '../components/SimplePhotoInfoModal.jsx';
 import { PhotoService } from '../services/PhotoService';
 import { supabase } from '../lib/supabaseClient';
 import LinkAccountsModal from '../components/LinkAccountsModal';

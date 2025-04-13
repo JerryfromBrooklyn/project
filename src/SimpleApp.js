@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import SimplePhotoUpload from './components/workaround/SimplePhotoUpload';
 import AdminTools from './components/AdminTools';
 import { PhotoUploader } from './components/PhotoUploader';
-import SimplePhotoInfoModal from './components/SimplePhotoInfoModal';
+import SimplePhotoInfoModal from './components/SimplePhotoInfoModal.jsx';
 import LocalStorageDebugPanel from './components/LocalStorageDebugPanel';
 import awsAuth from './services/awsAuthService';
 import { getUserPhotos } from './services/PhotoService';
