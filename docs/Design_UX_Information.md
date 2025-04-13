@@ -884,3 +884,23 @@ Follow these rules when you write code:
   - Features showcase with illustrations
   - Authentication forms (login/signup)
   - Footer with links and additional information
+
+### Recent Updates (April 2025)
+- **HIG Alignment**: Applied extensive refinements based on Apple's Human Interface Guidelines.
+  - **Layout/Spacing**: Standardized section padding (e.g., `py-16 md:py-20`), horizontal padding (`px-6 lg:px-8`), and grid gaps.
+  - **Typography**: Adjusted heading sizes (`text-3xl md:text-5xl` for H1, etc.) and body text sizes (`text-lg`, `text-base`) for better hierarchy.
+  - **Color/Buttons**: Standardized button styling using Tailwind classes. Default primary buttons are now HIG-standard blue (`bg-blue-500`). The header "Log In / Sign Up" button was specifically made green (`bg-green-500`) for distinction.
+  - **Cards/Sections**: Simplified styling with consistent rounding (`rounded-xl`), borders, and subtle shadows.
+  - **Animations**: Refined animations in the iPhone mockup:
+    - *Register Face*: Replaced camera icon with pulsing blue scan rings.
+    - *Processing*: Implemented a more dynamic green loading spinner and removed potentially problematic background gradients to ensure a consistent dark background.
+    - *Photos Found*: Added gradient background to the checkmark and applied a vibrant green-to-blue gradient to the "Photos Found!" text.
+- **File Structure**: Removed `LandingPage.js` due to build issues; `LandingPage.tsx` is the active source file.
+
+### Dashboard (src/pages/Dashboard.tsx)
+- **Purpose**: Displays user's photos and provides navigation options
+- **Key Components**:
+  - Photo grid display
+  - Navigation tabs (photos, trash)
+  - Photo upload functionality
+  - User profile display

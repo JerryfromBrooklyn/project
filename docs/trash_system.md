@@ -89,15 +89,8 @@ export const movePhotosToTrash = async (photoIds, userId) => {
 #### Restoring from Trash
 ```javascript
 // In userVisibilityService.js
-export const restorePhotosFromTrash = async (photoIds, userId) => {
-  try {
-    // Update DynamoDB item to set user_visibility[userId] = 'VISIBLE'
-    // for each photo in photoIds
-    return { success: true };
-  } catch (error) {
-    console.error('Error restoring photos from trash:', error);
-    return { success: false, error: error.message };
-  }
+export const restorePhotosFromTrash = async (userId, photoIds) => {
+  return updatePhotoVisibility(userId, photoIds, "VISIBLE"); // Correct function call
 };
 ```
 
@@ -166,9 +159,12 @@ const fetchTrashedPhotos = async () => {
 
 // Restore selected photos
 const handleRestore = async () => {
-  const result = await userVisibilityService.restorePhotosFromTrash(
-    selectedPhotos, 
-    userId
+  // This handler likely lives in the parent component (e.g., Dashboard.tsx)
+  // It calls the service function:
+  const { restorePhotosFromTrash } = await import('../services/userVisibilityService');
+  const result = await restorePhotosFromTrash(
+    userId, // User ID from context or props
+    selectedPhotos // Array of photo IDs from state
   );
   
   if (result.success) {

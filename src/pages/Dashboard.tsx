@@ -160,6 +160,10 @@ export const Dashboard = () => {
       attributesCount: result?.faceAttributes ? Object.keys(result.faceAttributes).length : 0,
       matchesCount: result?.historicalMatches?.length || 0 
     });
+
+    // --- Trigger data refresh IMMEDIATELY --- 
+    console.log('[DASHBOARD] >>> TRIGGERING DASHBOARD DATA REFRESH (EARLY) <<<');
+    fetchUserData(); // Refresh dashboard data
     
     // Debug the raw attribute data
     console.log('[Dashboard] Raw face attributes received:', result?.faceAttributes);
@@ -222,13 +226,22 @@ export const Dashboard = () => {
     if (!user || !user.id || !photoId) return;
     
     try {
-      await awsPhotoService.restorePhotoFromTrash(user.id, photoId);
-      // Update the trashed photos list
-      setTrashedPhotos(trashedPhotos.filter(photo => photo.id !== photoId));
-      // Refresh counts
-      fetchPhotosAndCounts(false);
+      // Call the correct service function for restoring from userVisibilityService
+      const { restorePhotosFromTrash } = await import('../services/userVisibilityService');
+      const result = await restorePhotosFromTrash(user.id, [photoId]); // Pass photoId as an array
+      
+      if (result.success) {
+         console.log(`[Dashboard] Successfully restored photo: ${photoId}`);
+        // Update the trashed photos list locally
+        setTrashedPhotos(prev => prev.filter(photo => photo.id !== photoId));
+        // Refresh counts (optional, depends if restore changes counts)
+        // fetchCounts(); // Consider if you want to refresh all counts
+      } else {
+          throw new Error(result.error || 'Failed to restore photo from service');
+      }
     } catch (err) {
       console.error('[Dashboard] Error restoring photo:', err);
+      // Optionally show an error toast to the user
     }
   };
   

@@ -747,68 +747,97 @@ export const awsPhotoService = {
      * @returns {Promise<Array>} Filtered photos
      */
     fetchPhotosByVisibility: async (userId, type = 'all', visibilityStatus = 'VISIBLE') => {
+        console.log(`[awsPhotoService] fetchPhotosByVisibility called for user: ${userId}, type: ${type}, visibility: ${visibilityStatus}`);
+        if (!userId) {
+            console.error('[awsPhotoService] Cannot fetch photos without userId');
+            return [];
+        }
         try {
-            // Get all photos of the specified type WITHOUT filtering for visibility yet
-            let allPhotos = [];
+            // --- Refactored Logic --- 
+            // Always Scan all potentially relevant items first, then filter client-side for visibility.
+            // This is more reliable than DynamoDB FilterExpressions on nested maps, especially for TRASH/HIDDEN.
             
-            if (type === 'uploaded' || type === 'all') {
-                // Query DynamoDB directly without filtering for visibility
-                const queryParams = {
-                    TableName: PHOTOS_TABLE,
-                    IndexName: 'UserIdIndex', 
-                    KeyConditionExpression: 'user_id = :userId',
-                    ExpressionAttributeValues: {
-                        ':userId': userId 
-                    },
-                    ScanIndexForward: false // Sort by upload time descending
-                };
-                const response = await docClient.send(new QueryCommand(queryParams));
-                const uploadedPhotos = response.Items || [];
-                allPhotos = [...allPhotos, ...uploadedPhotos];
+            let command;
+            const params = {
+                TableName: PHOTOS_TABLE,
+            };
+
+            console.log(`[awsPhotoService] Determining base fetch command based on type: ${type}`);
+            if (type === 'uploaded') {
+                // More efficient Query if we only need photos uploaded by the user
+                console.log(`[awsPhotoService] Using Query on UserIdIndex for uploaded photos.`);
+                params.IndexName = 'UserIdIndex';
+                params.KeyConditionExpression = 'user_id = :userId';
+                params.ExpressionAttributeValues = { ':userId': userId };
+                command = new QueryCommand(params);
+            } else {
+                // Scan needed for 'matched' or 'all' types, or if type is unknown.
+                console.log(`[awsPhotoService] Using Scan for type '${type}'.`);
+                command = new ScanCommand(params);
             }
-            
-            if (type === 'matched' || type === 'all') {
-                // Get matched photos without filtering for visibility
-                const matchedQueryParams = {
-                    TableName: PHOTOS_TABLE,
-                    ScanIndexForward: false
-                };
-                const scanResponse = await docClient.send(new ScanCommand(matchedQueryParams));
-                const allScanPhotos = scanResponse.Items || [];
-                
-                // Perform client-side matching logic without visibility filtering
+
+            // Execute the command with pagination
+            let allItems = [];
+            let lastEvaluatedKey;
+            console.log(`[awsPhotoService] Executing ${command.constructor.name}...`);
+            do {
+                if (lastEvaluatedKey) {
+                    params.ExclusiveStartKey = lastEvaluatedKey;
+                }
+                const response = await docClient.send(command);
+                allItems = allItems.concat(response.Items || []);
+                lastEvaluatedKey = response.LastEvaluatedKey;
+            } while (lastEvaluatedKey);
+            console.log(`[awsPhotoService] Fetched ${allItems.length} total items before any filtering.`);
+
+            // Filter based on type ('matched') if needed, ONLY if we did a full Scan initially
+            let typeFilteredItems = allItems;
+            if (command instanceof ScanCommand && type === 'matched') {
+                console.log(`[awsPhotoService] Performing client-side filtering for type 'matched'.`);
                 const faceData = await getFaceDataForUser(userId);
-                const matchedPhotos = [];
+                const userFaceIds = faceData ? [faceData.faceId] : [];
                 
-                for (const photo of allScanPhotos) {
-                    // Apply matching logic without visibility filtering
-                    if (photo.face_ids && Array.isArray(photo.face_ids) && 
-                        faceData && faceData.registeredFaceIds && 
-                        photo.face_ids.some(id => faceData.registeredFaceIds.includes(id))) {
-                        matchedPhotos.push(photo);
+                typeFilteredItems = allItems.filter(item => {
+                    // Check direct match in matched_users
+                    if (item.matched_users) {
+                         let matchedUsers = item.matched_users;
+                        if (typeof matchedUsers === 'string') try { matchedUsers = JSON.parse(matchedUsers); } catch(e){ console.error(`Error parsing matched_users for photo ${item.id}`, e); }
+                        if (Array.isArray(matchedUsers)) {
+                            if (matchedUsers.some(match => (typeof match === 'string' && match === userId) || (typeof match === 'object' && match !== null && (match.userId || match.user_id) === userId))) {
+                                return true; 
+                            }
+                        }
                     }
-                }
-                
-                // Deduplicate in case we have overlaps
-                const photoIdSet = new Set(allPhotos.map(p => p.id));
-                for (const photo of matchedPhotos) {
-                    if (!photoIdSet.has(photo.id)) {
-                        allPhotos.push(photo);
-                        photoIdSet.add(photo.id);
+                    // Check reverse face match
+                    if (userFaceIds.length > 0 && item.faces) {
+                        let faces = item.faces;
+                        if (Array.isArray(faces)) {
+                            if (faces.some(face => face && userFaceIds.includes(typeof face === 'object' ? face.faceId : face))) {
+                                return true;
+                            }
+                        }
                     }
-                }
+                     // Check historical match
+                     if (faceData && faceData.historicalMatches && Array.isArray(faceData.historicalMatches)) {
+                        if (faceData.historicalMatches.some(match => match.id === item.id)) {
+                            return true;
+                        }
+                    }
+                    return false; // Not a match
+                });
+                 console.log(`[awsPhotoService] Found ${typeFilteredItems.length} photos after filtering for type: ${type}.`);
+            } else {
+                 console.log(`[awsPhotoService] Skipping type filtering as command was ${command.constructor.name} or type was not 'matched'.`);
             }
-            
-            console.log(`[awsPhotoService] fetchPhotosByVisibility: Found ${allPhotos.length} photos for user ${userId} before filtering`);
-            
-            // Now filter by the requested visibility status
-            const filteredPhotos = await filterPhotosByVisibility(userId, allPhotos, visibilityStatus);
-            
-            console.log(`[awsPhotoService] fetchPhotosByVisibility: After filtering for '${visibilityStatus}' status: ${filteredPhotos.length} photos`);
-            
-            return filteredPhotos;
+
+            // Final filtering based on the desired visibility status
+            console.log(`[awsPhotoService] Performing final client-side filtering for status: ${visibilityStatus}`);
+            const finalFilteredPhotos = await filterPhotosByVisibility(userId, typeFilteredItems, visibilityStatus);
+            console.log(`[awsPhotoService] Returning ${finalFilteredPhotos.length} photos after final visibility filtering for status: ${visibilityStatus}`);
+
+            return finalFilteredPhotos;
         } catch (error) {
-            console.error(`Error fetching ${visibilityStatus} photos:`, error);
+            console.error(`[awsPhotoService] Error in fetchPhotosByVisibility (user: ${userId}, type: ${type}, status: ${visibilityStatus}):`, error);
             return [];
         }
     },

@@ -351,6 +351,7 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
       
       // Notify parent about successful registration
       if (onSuccess) {
+        console.log('[FaceReg] Calling onSuccess prop in parent (Dashboard)...');
         console.log('[FaceReg] Sending face data to Dashboard:', {
           faceId: result.faceId,
           attributesSize: result.faceAttributes ? Object.keys(result.faceAttributes).length : 0,

@@ -5,6 +5,7 @@ import { RekognitionClient, SearchFacesByImageCommand } from '@aws-sdk/client-re
 import { docClient } from '../lib/awsClient';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
+import FaceRegistration from './FaceRegistration';
 
 const Dashboard = () => {
     console.log('[DASHBOARD] Rendering Dashboard component');
@@ -32,6 +33,10 @@ const Dashboard = () => {
         try {
             setLoading(true);
             console.log('[DASHBOARD] Fetching user data...');
+            
+            // Clear previous data to ensure refresh
+            setRegisteredFace(null);
+            setMatches([]);
             
             // Get user's face data
             try {
@@ -68,6 +73,8 @@ const Dashboard = () => {
                     console.log(`[DASHBOARD] Found ${matchItems.length} matches`);
                     const processedMatches = matchItems.map(item => unmarshall(item));
                     setMatches(processedMatches);
+                } else {
+                    console.log('[DASHBOARD] Found 0 matches.');
                 }
             } catch (err) {
                 console.error('[DASHBOARD] Error fetching matches:', err);
@@ -217,6 +224,13 @@ const Dashboard = () => {
         }
     };
 
+    // Function to be called after successful face registration
+    const handleRegistrationSuccess = () => {
+        console.log('[DASHBOARD] Face registration successful, refreshing user data...');
+        console.log('[DASHBOARD] >>> TRIGGERING DASHBOARD DATA REFRESH <<<');
+        fetchUserData(); // Re-fetch user data to update face status and matches
+    };
+
     return (
         <div className="max-w-4xl mx-auto p-6">
             <div className="bg-white shadow-md rounded-lg p-6">
@@ -279,12 +293,7 @@ const Dashboard = () => {
                     ) : (
                         <div className="text-center py-4">
                             <p className="text-purple-700 mb-4">You haven't registered your face yet. Register to find photos of you!</p>
-                            <button
-                                onClick={navigateToFaceRegistration}
-                                className="w-full bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-md font-medium"
-                            >
-                                Register Face
-                            </button>
+                            <FaceRegistration onSuccess={handleRegistrationSuccess} />
                         </div>
                     )}
 

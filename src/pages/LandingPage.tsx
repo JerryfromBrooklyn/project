@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AuthForms } from '../components/AuthForms';
 import { useAuth } from '../context/AuthContext';
-import { Camera, Search, Shield, Clock, Users, Image, Sparkles, ChevronRight, ExternalLink, Check, X, Zap, Lock, Timer, User, CheckCircle } from 'lucide-react';
+import { Camera, Search, Shield, Clock, Users, Image, Sparkles, ChevronRight, ExternalLink, Check, X, Zap, Lock, Timer, User, CheckCircle, Star } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 interface NavItem {
@@ -320,7 +320,7 @@ export const LandingPage: React.FC = () => {
     }
   };
 
-  // iPhone mockup slides
+  // iPhone mockup slides - Refined animations and content
   const slides = [
     {
       title: "Register Your Face",
@@ -328,18 +328,20 @@ export const LandingPage: React.FC = () => {
         <div className="relative w-[320px] h-[650px] bg-[#1A1A1A] rounded-[55px] shadow-2xl overflow-hidden">
           {/* Dynamic Island */}
           <div className="absolute top-2 left-1/2 -translate-x-1/2 w-[126px] h-[37px] bg-black rounded-[50px]" />
-          
-          {/* Camera UI */}
-          <div className="absolute inset-0 bg-gradient-to-br from-apple-blue-600/20 to-transparent">
+          {/* Updated scan visual */}
+          <div className="absolute inset-0 bg-gradient-to-br from-apple-blue-600/10 to-transparent">
             <div className="absolute inset-[4px] rounded-[50px] overflow-hidden">
               <div className="h-full w-full bg-gradient-to-tr from-black/5 to-transparent">
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                  <img src="https://www.shmong.tv/wp-content/uploads/2023/05/logo-white.png" alt="SHMONG" className="w-[126px] mb-8" />
-                  <div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center mb-4">
-                    <Camera className="w-10 h-10 text-white/90" />
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-8">
+                  <img src="https://www.shmong.tv/wp-content/uploads/2023/05/logo-white.png" alt="SHMONG" className="w-[100px] mb-10 opacity-80" />
+                  <div className="relative w-32 h-32 mb-6">
+                    <div className="absolute inset-0 rounded-full border-2 border-blue-400/30 animate-pulse"/>
+                    <div className="absolute inset-2 rounded-full border-2 border-blue-400/50 animate-pulse animation-delay-200"/>
+                    <div className="absolute inset-4 rounded-full border-2 border-blue-400/70 animate-pulse animation-delay-400"/>
+                    <div className="absolute inset-6 rounded-full bg-blue-500/20"/>
                   </div>
-                  <p className="text-white/80 text-sm mb-2">Position your face in the frame</p>
-                  <div className="w-[3px] h-2 bg-white/10 rounded-full" />
+                  <p className="text-white/90 text-lg font-medium mb-2">Ready for Your Scan</p>
+                  <p className="text-white/60 text-sm text-center">Align your face within the guides</p>
                 </div>
               </div>
             </div>
@@ -353,32 +355,18 @@ export const LandingPage: React.FC = () => {
         <div className="relative w-[320px] h-[650px] bg-[#1A1A1A] rounded-[55px] shadow-2xl overflow-hidden">
           {/* Dynamic Island */}
           <div className="absolute top-2 left-1/2 -translate-x-1/2 w-[126px] h-[37px] bg-black rounded-[50px]" />
-          
-          {/* Processing UI */}
-          <div className="absolute inset-0 bg-gradient-to-br from-apple-blue-600/20 to-transparent">
-            <div className="absolute inset-[4px] rounded-[50px] overflow-hidden">
-              <div className="h-full w-full bg-gradient-to-tr from-black/5 to-transparent">
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                  <img src="https://www.shmong.tv/wp-content/uploads/2023/05/logo-white.png" alt="SHMONG" className="w-[126px] mb-8" />
-                  <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center mb-4">
-                    <div className="w-10 h-10 flex items-center justify-center">
-                      {/* Modern loading spinner with pulsing effect */}
-                      <div className="relative w-10 h-10">
-                        <div className="absolute inset-0 rounded-full border-4 border-white/30"></div>
-                        <div className="absolute inset-0 rounded-full border-4 border-t-white animate-spin"></div>
-                        <div className="absolute inset-0 rounded-full border-b-2 border-white/60 animate-pulse"></div>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-white/80 text-sm mb-4">Processing your photos...</p>
-                  {/* Modern progress bar with animation */}
-                  <div className="w-48 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full animate-pulse" 
-                         style={{ width: '75%', boxShadow: '0 0 8px rgba(99, 179, 237, 0.6)' }}></div>
-                  </div>
-                </div>
-              </div>
+          {/* Removed gradient overlays, content now directly on #1A1A1A background */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-8">
+            <img src="https://www.shmong.tv/wp-content/uploads/2023/05/logo-white.png" alt="SHMONG" className="w-[100px] mb-10 opacity-80" />
+            {/* Enhanced loading animation */}
+            <div className="relative w-16 h-16 mb-4">
+              <div className="absolute inset-0 rounded-full border-4 border-green-500/30"></div>
+              <div className="absolute inset-0 rounded-full border-t-4 border-green-500 animate-spin"></div>
+              <div className="absolute inset-2 rounded-full border-b-2 border-green-400/50 animate-pulse"></div>
+              <div className="absolute inset-4 rounded-full border-l-1 border-green-300/40 animate-ping"></div>
             </div>
+            <p className="text-white/80 text-lg font-medium mb-2">Finding Your Photos...</p>
+            <p className="text-white/60 text-sm text-center">Our AI is scanning the event gallery</p>
           </div>
         </div>
       )
@@ -389,18 +377,17 @@ export const LandingPage: React.FC = () => {
         <div className="relative w-[320px] h-[650px] bg-[#1A1A1A] rounded-[55px] shadow-2xl overflow-hidden">
           {/* Dynamic Island */}
           <div className="absolute top-2 left-1/2 -translate-x-1/2 w-[126px] h-[37px] bg-black rounded-[50px]" />
-          
-          {/* Success UI */}
-          <div className="absolute inset-0 bg-gradient-to-br from-apple-blue-600/20 to-transparent">
+          {/* Updated success visual */}
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-600/10 to-transparent">
             <div className="absolute inset-[4px] rounded-[50px] overflow-hidden">
               <div className="h-full w-full bg-gradient-to-tr from-black/5 to-transparent">
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                  <img src="https://www.shmong.tv/wp-content/uploads/2023/05/logo-white.png" alt="SHMONG" className="w-[126px] mb-8" />
-                  <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mb-4">
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-8">
+                  <img src="https://www.shmong.tv/wp-content/uploads/2023/05/logo-white.png" alt="SHMONG" className="w-[100px] mb-10 opacity-80" />
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center mb-5 shadow-lg">
                     <Check className="w-12 h-12 text-white" />
                   </div>
-                  <p className="text-white/90 text-lg font-medium mb-2">54 Photos Found!</p>
-                  <p className="text-white/60 text-sm">Ready to view and download</p>
+                  <p className="text-2xl font-bold mb-2 bg-gradient-to-r from-green-400 to-blue-500 text-transparent bg-clip-text">54 Photos Found!</p>
+                  <p className="text-white/70 text-base">Ready to view and share</p>
                 </div>
               </div>
             </div>
@@ -412,20 +399,20 @@ export const LandingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-apple-gray-50 text-apple-gray-900 font-sans overflow-x-hidden">
-      {/* Header */}
+      {/* Header - Adjusted padding, nav button styling, and Log In button color */}
       <header className="fixed inset-x-0 top-0 z-50 backdrop-blur-md bg-white/90 border-b border-apple-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16"> {/* Reduced height */}
             <div className="flex items-center">
-              <img src="https://www.shmong.tv/wp-content/uploads/2023/05/main-logo.png" alt="SHMONG" className="h-10" />
+              <img src="https://www.shmong.tv/wp-content/uploads/2023/05/main-logo.png" alt="SHMONG" className="h-8" /> {/* Smaller logo */}
             </div>
-            
+
             <nav className="hidden md:flex space-x-6">
               {navItems.map((item) => (
                 <button
                   key={item.href}
                   onClick={() => handleNavClick(item.href)}
-                  className="text-apple-gray-600 hover:text-apple-gray-900 text-sm font-medium"
+                  className="text-sm font-medium text-apple-gray-600 hover:text-apple-gray-900 transition-colors" // Standard nav button
                 >
                   {item.label}
                 </button>
@@ -435,7 +422,8 @@ export const LandingPage: React.FC = () => {
             <div className="flex items-center space-x-2">
               <button
                 onClick={(e) => handleLoginSignupClick(e, 'signin')}
-                className="ios-button-primary bg-green-500 hover:bg-green-600"
+                // Green button as requested, HIG compliant style otherwise
+                className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors"
               >
                 Log In / Sign Up
               </button>
@@ -444,197 +432,203 @@ export const LandingPage: React.FC = () => {
         </div>
       </header>
 
-      {/* Hero Section - Updated with improved value proposition */}
-      <section className="pt-20 pb-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      {/* Hero Section - Adjusted text sizes, spacing, and button styles */}
+      <section className="pt-24 pb-16 md:pt-32 md:pb-24"> {/* Standardized Padding */}
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center"> {/* Increased Gap */}
             <motion.div
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
+              transition={{ duration: 0.6, ease: "easeOut" }} // Adjusted transition
               className="text-center lg:text-left"
             >
-              <h1 className="text-7xl font-bold mb-6 bg-black text-white p-4">
-                THIS IS THE CORRECT LANDING PAGE FROM PAGES DIRECTORY
+              <h1 className="text-3xl md:text-5xl font-bold mb-5"> {/* Adjusted H1 size */}
+                Find <span className="bg-gradient-to-b from-blue-500 to-blue-600 text-transparent bg-clip-text">YOUR PHOTOS</span> at Events in Seconds
               </h1>
-              <p className="text-xl text-apple-gray-600 mb-8">
+              <p className="text-lg text-apple-gray-600 mb-8"> {/* Adjusted P size */}
                 Never miss a moment again. SHMONG's AI technology finds all photos of you at events and gatherings - no searching required.
               </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start mb-8">
+              <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start mb-8"> {/* Adjusted Gap */}
                 <button
                   onClick={handleDashboardClick}
-                  className="ios-button-primary bg-green-500 hover:bg-green-600"
+                  // Standard HIG Blue Primary Button
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors"
                 >
                   Find My Photos
                 </button>
                 <button
                   onClick={() => handleNavClick('#how-it-works')}
-                  className="ios-button-secondary"
+                  // Standard HIG Secondary Button
+                  className="bg-apple-gray-100 hover:bg-apple-gray-200 text-blue-500 font-semibold py-2.5 px-5 rounded-lg text-base transition-colors"
                 >
                   See How It Works
                 </button>
               </div>
-              
+
               <div className="flex items-center justify-center lg:justify-start space-x-2 text-apple-gray-600">
-                <Sparkles className="w-5 h-5 text-amber-500" />
-                <span className="text-sm">Already found <span className="font-bold text-amber-500">{formatNumber(photoCounter)}</span> photos for our users</span>
+                <Star className="w-5 h-5 text-amber-500" /> {/* Changed Icon */}
+                <span className="text-sm">
+                  Already found <span className="font-bold text-amber-500">{formatNumber(photoCounter)}</span> photos for our users
+                </span>
               </div>
             </motion.div>
 
+            {/* Animated device mockup */}
             <motion.div
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+              transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }} // Adjusted transition
               className="relative flex justify-center"
             >
-              {/* iPhone mockup with current slide */}
               {slides[currentSlide].content}
             </motion.div>
           </div>
         </div>
       </section>
 
-      {/* Features Section - Updated with more focus on photo-finding efficiency */}
-      <section id="features" className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">Photo Finding, Reinvented</h2>
-            <p className="text-xl text-apple-gray-600 max-w-3xl mx-auto">
+      {/* Features Section - Adjusted padding, text sizes, card styling */}
+      <section id="features" className="py-16 md:py-20 bg-white"> {/* Standardized Padding */}
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="text-center mb-12 md:mb-16"> {/* Adjusted Margin */}
+            <h2 className="text-2xl md:text-3xl font-bold mb-4">Photo Finding, Reinvented</h2> {/* Adjusted H2 size */}
+            <p className="text-lg text-apple-gray-600 max-w-3xl mx-auto"> {/* Adjusted P size */}
               SHMONG combines cutting-edge AI with intelligent design for the most efficient photo discovery experience
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6"> {/* Adjusted Gap */}
             {features.map((feature, index) => (
               <motion.div
                 key={feature.title}
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: feature.delay }}
-                className="relative p-8 rounded-apple-xl border border-apple-gray-200 bg-white hover:shadow-lg transition-all duration-300"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: feature.delay * 0.5 }} // Adjusted delay
+                // Simplified Card Style
+                className="p-6 rounded-xl border border-apple-gray-100 bg-white hover:shadow-md transition-shadow duration-300"
               >
-                <div className={`${feature.color} w-12 h-12 rounded-full flex items-center justify-center text-white mb-6`}>
+                <div className={`${feature.color} w-10 h-10 rounded-lg flex items-center justify-center text-white mb-4`}> {/* Adjusted Icon Box */}
                   {feature.icon}
                 </div>
-                <h3 className="text-xl font-semibold mb-3">{feature.title}</h3>
-                <p className="text-apple-gray-600">{feature.description}</p>
+                <h3 className="text-lg font-semibold mb-2">{feature.title}</h3> {/* Adjusted H3 style */}
+                <p className="text-base text-apple-gray-600">{feature.description}</p> {/* Adjusted P style */}
               </motion.div>
             ))}
           </div>
 
-          <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="mt-12 md:mt-16 grid grid-cols-1 md:grid-cols-3 gap-6"> {/* Adjusted Margin/Gap */}
             {stats.map((stat, index) => (
               <motion.div
                 key={stat.label}
                 initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                className="text-center p-8 rounded-apple-xl bg-white border border-apple-gray-200 hover:shadow-lg transition-all duration-300"
-              >
-                <div className="flex justify-center mb-4">
-                  {stat.icon}
-                </div>
-                <div className={`text-4xl font-bold bg-gradient-to-b ${stat.color} bg-clip-text text-transparent mb-2`}>
-                  {stat.value}
-                </div>
-                <div className="text-apple-gray-600">{stat.label}</div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Use Cases Section - New section highlighting different user types */}
-      <section id="use-cases" className="py-24 bg-apple-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">Who Benefits from SHMONG?</h2>
-            <p className="text-xl text-apple-gray-600 max-w-3xl mx-auto">
-              Our technology creates value for everyone involved in event photography
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            {useCases.map((useCase, index) => (
-              <motion.div
-                key={useCase.title}
-                initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: useCase.delay }}
                 viewport={{ once: true }}
-                className="relative overflow-hidden rounded-apple-xl"
+                transition={{ duration: 0.5, delay: index * 0.05 }} // Adjusted delay
+                // Simplified Stat Card Style
+                className="text-center p-6 rounded-xl bg-apple-gray-50 border border-apple-gray-100"
               >
-                <div className={`relative p-8 rounded-apple-xl border border-gray-200 bg-white shadow-lg`}>
-                  <div className={`absolute top-0 left-0 w-full h-2 ${useCase.color}`}></div>
-                  <div className="mb-6">
-                    <div className="w-14 h-14 rounded-full bg-apple-gray-100 flex items-center justify-center mb-4">
-                      {useCase.icon}
-                    </div>
-                    <h3 className="text-2xl font-semibold mb-3">{useCase.title}</h3>
-                    <p className="text-apple-gray-600 mb-6">{useCase.description}</p>
-                  </div>
-                  
-                  <ul className="space-y-3">
-                    {useCase.points.map((point, i) => (
-                      <li key={i} className="flex items-start">
-                        <div className="flex-shrink-0 mt-1">
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                        </div>
-                        <span className="ml-3 text-apple-gray-700">{point}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <div className="flex justify-center mb-3">{stat.icon}</div> {/* Adjusted margin */}
+                <div className={`text-3xl font-bold bg-gradient-to-b ${stat.color} bg-clip-text text-transparent mb-1`}>{stat.value}</div> {/* Adjusted size/margin */}
+                <div className="text-sm text-apple-gray-600">{stat.label}</div> {/* Adjusted size */}
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Process Section */}
-      <section id="how-it-works" className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">How It Works</h2>
-            <p className="text-lg text-apple-gray-600 max-w-3xl mx-auto">
+      {/* Use Cases Section - Adjusted padding, text sizes, card styling */}
+      <section id="use-cases" className="py-16 md:py-20 bg-apple-gray-50"> {/* Standardized Padding */}
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div>
+            <div className="text-center mb-12 md:mb-16"> {/* Adjusted Margin */}
+              <h2 className="text-2xl md:text-3xl font-bold mb-4">Who Benefits from SHMONG?</h2> {/* Adjusted H2 size */}
+              <p className="text-lg text-apple-gray-600 max-w-3xl mx-auto"> {/* Adjusted P size */}
+                Our technology creates value for everyone involved in event photography
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6"> {/* Adjusted Gap */}
+              {useCases.map((useCase, index) => (
+                <motion.div
+                  key={useCase.title}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: useCase.delay * 0.5 }} // Adjusted delay
+                  className="relative overflow-hidden rounded-xl" // Consistent rounding
+                >
+                  {/* Simplified Card Style */}
+                  <div className={`relative p-6 border border-apple-gray-100 bg-white shadow-sm`}>
+                    <div className={`absolute top-0 left-0 w-full h-1.5 ${useCase.color}`}></div> {/* Thinner accent */}
+                    <div className="mb-4"> {/* Adjusted Margin */}
+                      <div className="w-10 h-10 rounded-lg bg-apple-gray-100 flex items-center justify-center mb-3"> {/* Adjusted Icon Box */}
+                        {useCase.icon}
+                      </div>
+                      <h3 className="text-lg font-semibold mb-2">{useCase.title}</h3> {/* Adjusted H3 style */}
+                      <p className="text-base text-apple-gray-600 mb-4">{useCase.description}</p> {/* Adjusted P style/margin */}
+                    </div>
+
+                    <ul className="space-y-2"> {/* Adjusted Spacing */}
+                      {useCase.points.map((point, i) => (
+                        <li key={i} className="flex items-start">
+                          <div className="flex-shrink-0 mt-0.5"> {/* Adjusted Check Alignment */}
+                            <CheckCircle className="h-4 w-4 text-green-500" /> {/* Adjusted Check size */}
+                          </div>
+                          <span className="ml-2 text-sm text-apple-gray-700">{point}</span> {/* Adjusted Text size/margin */}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Process Section - Adjusted padding, text sizes, card styling */}
+      <section id="how-it-works" className="py-16 md:py-20 bg-white"> {/* Standardized Padding */}
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="text-center mb-12 md:mb-16"> {/* Adjusted Margin */}
+            <h2 className="text-2xl md:text-3xl font-bold mb-4">How It Works</h2> {/* Adjusted H2 size */}
+            <p className="text-lg text-apple-gray-600 max-w-3xl mx-auto"> {/* Adjusted P size */}
               Our simple process makes finding your photos effortless
             </p>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 mt-12"> {/* Adjusted Gap */}
             {processSteps.map((step, index) => (
               <motion.div
                 key={step.number}
-                initial={{ opacity: 0, y: 30 }}
+                initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: step.delay }}
                 viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: step.delay * 0.5 }} // Adjusted delay
                 className="relative"
               >
                 <div className="flex flex-col items-center text-center">
-                  <div className="flex items-center justify-center w-20 h-20 rounded-full bg-white shadow-apple-button mb-6">
-                    <div className="w-14 h-14 rounded-full bg-apple-gray-900 flex items-center justify-center text-white">
+                  <div className="flex items-center justify-center w-16 h-16 rounded-full bg-apple-gray-100 mb-4"> {/* Adjusted Icon BG */}
+                    <div className="w-12 h-12 rounded-lg bg-apple-gray-900 flex items-center justify-center text-white"> {/* Adjusted Icon Container */}
                       {step.icon}
                     </div>
                   </div>
-                  
-                  <h3 className="text-xl font-semibold mb-3">{step.title}</h3>
-                  <p className="text-apple-gray-600">{step.description}</p>
+                  <h3 className="text-lg font-semibold mb-2">{step.title}</h3> {/* Adjusted H3 style */}
+                  <p className="text-base text-apple-gray-600">{step.description}</p> {/* Adjusted P style */}
                 </div>
-                
+
                 {index < processSteps.length - 1 && (
-                  <div className="hidden md:block absolute top-10 left-full w-full h-px transform -translate-x-8 pointer-events-none">
-                    {/* Removed the blue line here */}
-                  </div>
+                  // Added subtle connector line
+                  <div className="hidden md:block absolute top-8 left-1/2 w-full h-px bg-apple-gray-200 transform translate-x-1/2 -z-10"></div>
                 )}
               </motion.div>
             ))}
           </div>
-          
-          <div className="text-center mt-16">
+
+          <div className="text-center mt-12 md:mt-16"> {/* Adjusted Margin */}
             <button
               onClick={handleDashboardClick}
-              className="ios-button-primary"
+              // Standard HIG Blue Primary Button
+              className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors"
             >
               Get Started
             </button>
@@ -642,24 +636,23 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section id="cta-section" className="py-24">
-        <div className="max-w-3xl mx-auto text-center px-4">
+      {/* CTA Section - Adjusted padding, text sizes, button style */}
+      <section id="cta-section" className="py-16 md:py-20 bg-apple-gray-50"> {/* Standardized Padding */}
+        <div className="max-w-3xl mx-auto text-center px-6"> {/* Consistent Padding */}
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={isVisible ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.8 }}
+            transition={{ duration: 0.6 }} // Adjusted duration
           >
-            <h2 className="text-4xl font-bold mb-6">
-              Ready to Find Your Photos?
-            </h2>
-            <p className="text-xl text-apple-gray-600 mb-8">
+            <h2 className="text-2xl md:text-3xl font-bold mb-4">Ready to Find Your Photos?</h2> {/* Adjusted H2 size */}
+            <p className="text-lg text-apple-gray-600 mb-8"> {/* Adjusted P size */}
               Join thousands of others who are already using SHMONG to discover their event photos effortlessly.
             </p>
             <div className="flex justify-center">
               <button
                 onClick={handleDashboardClick}
-                className="ios-button-primary"
+                // Standard HIG Blue Primary Button, slightly larger for CTA
+                className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg text-lg transition-colors"
               >
                 Get Started Now
               </button>
@@ -668,77 +661,51 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-apple-gray-900 text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* Footer - Adjusted padding and text styles */}
+      <footer className="bg-apple-gray-900 text-apple-gray-400 py-12 md:py-16"> {/* Standardized Padding */}
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
-              <img src="https://www.shmong.tv/wp-content/uploads/2023/05/logo-white.png" alt="SHMONG" className="h-8 mb-6" />
-              <p className="text-apple-gray-400">
-                Making event photography accessible and enjoyable for everyone.
-              </p>
+              <img src="https://www.shmong.tv/wp-content/uploads/2023/05/logo-white.png" alt="SHMONG" className="h-7 mb-4" /> {/* Adjusted Logo */}
+              <p className="text-sm">Making event photography accessible and enjoyable for everyone.</p> {/* Adjusted Text */}
             </div>
             <div>
-              <h3 className="text-lg font-semibold mb-4">Product</h3>
-              <ul className="space-y-2">
-                <li>
-                  <Link to="#features" className="text-apple-gray-400 hover:text-white">
-                    Features
-                  </Link>
-                </li>
-                <li>
-                  <Link to="#how-it-works" className="text-apple-gray-400 hover:text-white">
-                    How It Works
-                  </Link>
-                </li>
+              <h3 className="text-base font-semibold text-white mb-3">Product</h3> {/* Adjusted Heading */}
+              <ul className="space-y-1.5"> {/* Adjusted Spacing */}
+                <li><Link to="#features" className="text-sm hover:text-white transition-colors">Features</Link></li> {/* Adjusted Links */}
+                <li><Link to="#how-it-works" className="text-sm hover:text-white transition-colors">How It Works</Link></li>
               </ul>
             </div>
             <div>
-              <h3 className="text-lg font-semibold mb-4">Company</h3>
-              <ul className="space-y-2">
-                <li>
-                  <Link to="#about" className="text-apple-gray-400 hover:text-white">
-                    About Us
-                  </Link>
-                </li>
-                <li>
-                  <Link to="#contact" className="text-apple-gray-400 hover:text-white">
-                    Contact
-                  </Link>
-                </li>
+              <h3 className="text-base font-semibold text-white mb-3">Company</h3> {/* Adjusted Heading */}
+              <ul className="space-y-1.5"> {/* Adjusted Spacing */}
+                <li><Link to="#about" className="text-sm hover:text-white transition-colors">About Us</Link></li> {/* Adjusted Links */}
+                <li><Link to="#contact" className="text-sm hover:text-white transition-colors">Contact</Link></li>
               </ul>
             </div>
             <div>
-              <h3 className="text-lg font-semibold mb-4">Legal</h3>
-              <ul className="space-y-2">
-                <li>
-                  <Link to="/privacy" className="text-apple-gray-400 hover:text-white">
-                    Privacy Policy
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/terms" className="text-apple-gray-400 hover:text-white">
-                    Terms of Service
-                  </Link>
-                </li>
+              <h3 className="text-base font-semibold text-white mb-3">Legal</h3> {/* Adjusted Heading */}
+              <ul className="space-y-1.5"> {/* Adjusted Spacing */}
+                <li><Link to="/privacy" className="text-sm hover:text-white transition-colors">Privacy Policy</Link></li> {/* Adjusted Links */}
+                <li><Link to="/terms" className="text-sm hover:text-white transition-colors">Terms of Service</Link></li>
               </ul>
             </div>
           </div>
-          <div className="border-t border-apple-gray-800 mt-12 pt-8">
+          <div className="border-t border-apple-gray-700 mt-8 md:mt-12 pt-8"> {/* Adjusted Margin */}
             <div className="flex flex-col sm:flex-row justify-between items-center">
-              <p className="text-apple-gray-400 text-sm">
+              <p className="text-xs"> {/* Adjusted Text */}
                 © {new Date().getFullYear()} SHMONG. All rights reserved.
               </p>
-              <div className="flex space-x-6 mt-4 sm:mt-0">
+              <div className="flex space-x-5 mt-4 sm:mt-0"> {/* Adjusted Spacing */}
                 {socialLinks.map((link) => (
                   <a
                     key={link.name}
                     href={link.href}
-                    className="text-apple-gray-400 hover:text-white"
+                    className="hover:text-white transition-colors"
                   >
                     <span className="sr-only">{link.name}</span>
                     <svg
-                      className="h-6 w-6"
+                      className="h-5 w-5" // Adjusted Icon Size
                       fill="currentColor"
                       viewBox="0 0 24 24"
                       aria-hidden="true"
@@ -753,26 +720,28 @@ export const LandingPage: React.FC = () => {
         </div>
       </footer>
 
-      {/* Auth Modal */}
+      {/* Auth Modal - Adjusted styling */}
       <AnimatePresence>
         {showAuthModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            // Darker backdrop, added padding
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="w-full max-w-md"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ duration: 0.3, ease: "easeOut" }} // Smoother transition
+              // Standard rounding, bg, shadow
+              className="relative mx-auto max-w-md w-full max-h-[90vh] overflow-auto rounded-2xl bg-white shadow-xl"
             >
-              <AuthForms 
-                defaultView={authModalView} 
-                isModal={true} 
-                onClose={() => setShowAuthModal(false)} 
+              <AuthForms
+                defaultView={authModalView}
+                isModal={true}
+                onClose={() => setShowAuthModal(false)}
               />
             </motion.div>
           </motion.div>

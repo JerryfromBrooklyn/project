@@ -66,6 +66,7 @@ Dashboard.jsx
 │   ├── PhotoManager.js           # Rendered for 'Uploads' tab
 │   ├── TrashBin.jsx              # Rendered for 'Trash' tab
 │   └── ui/Tabs.jsx               # For tabbed navigation
+└── userVisibilityService.js  # For restore/delete handlers
 ```
 
 ### Photo Display Components
@@ -129,7 +130,8 @@ userVisibilityService.js
     ├── MyPhotos.jsx
     ├── PhotoManager.js
     ├── TrashBin.jsx
-    └── awsPhotoService.js
+    ├── Dashboard.tsx             # For handling restore/delete actions
+    └── awsPhotoService.js        # For visibility filtering
 
 FaceIndexingService.js
 ├── Depends on:
@@ -383,7 +385,7 @@ const PhotoUploader = ({ onUploadComplete, onError }) => {
 - Search and complex filtering have been removed from `MyPhotos` and `PhotoManager` for simplification.
 - Photo sorting (newest first) is implemented in fetching/display components.
 - Face registration includes a **synchronous historical matching** step that can be slow (planned for asynchronous improvement).
-- **File extensions**: Components using JSX syntax should have `.jsx` or `.tsx` extensions. This is a Vite requirement for correctly parsing JSX. Regular JavaScript files without JSX should use `.js` extension.
+- **File extensions**: Components using JSX syntax **must** have `.jsx` or `.tsx` extensions. Vite requires these extensions for correctly parsing JSX, otherwise build errors will occur (as seen with `LandingPage.js` vs `LandingPage.tsx`). Regular JavaScript files without JSX should use the `.js` extension. `LandingPage.js` was removed due to this requirement.
 
 ## Alternative Dashboards
 
@@ -409,6 +411,6 @@ The system also provides an alternative Apple-styled dashboard in `src/component
   - Description: Entry point for unauthenticated users, contains marketing content and authentication forms
 
 - `Dashboard` (in `src/pages/Dashboard.tsx`)
-  - Dependencies: `PhotoUploader`, `PhotoGrid`, `Header`, `UserMenu`
+  - Dependencies: `PhotoUploader`, `PhotoGrid`, `Header`, `UserMenu`, `FaceRegistration`, `TrashBin`
   - Services: `awsPhotoService`, `userVisibilityService`
-  - Description: Main interface after login where users manage photos 
+  - Description: Main interface after login where users manage photos and face registration 
