@@ -88,20 +88,22 @@ const Dialog = ({
                 <div className="my-4">
                   {children}
                 </div>
-                
-                {/* Actions - touch-friendly buttons */}
-                {actions.length > 0 && (
-                  <div className="mt-6 flex flex-wrap gap-3 justify-end">
+              </div>
+              
+              {/* Actions - fixed footer with buttons */}
+              {actions.length > 0 && (
+                <div className="border-t border-gray-200 py-4 px-6 bg-gray-50 rounded-b-lg">
+                  <div className="flex flex-wrap gap-3 justify-end">
                     {actions.map((action, index) => (
                       <button
                         key={index}
                         onClick={action.onClick}
-                        className={`min-h-[44px] min-w-[44px] px-4 py-2 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${
+                        className={`min-h-[44px] min-w-[120px] px-6 py-3 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${
                           action.variant === 'danger'
                             ? 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500'
                             : action.variant === 'secondary'
                             ? 'bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-500'
-                            : 'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500'
+                            : 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 shadow-md'
                         }`}
                         disabled={action.disabled}
                       >
@@ -109,8 +111,8 @@ const Dialog = ({
                       </button>
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </motion.div>
           </div>
         </div>

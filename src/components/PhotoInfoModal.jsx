@@ -64,6 +64,11 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
     console.log("[PhotoInfoModal] Has location:", Boolean(enhancedPhoto.location?.lat && enhancedPhoto.location?.lng));
     console.log("[PhotoInfoModal] Has event_details:", Boolean(enhancedPhoto.event_details));
     
+    // Check externalAlbumLink specifically
+    console.log("[PhotoInfoModal] DEBUG: externalAlbumLink value:", enhancedPhoto.externalAlbumLink);
+    console.log("[PhotoInfoModal] DEBUG: All keys in enhancedPhoto:", Object.keys(enhancedPhoto));
+    console.log("[PhotoInfoModal] DEBUG: safeGet result:", safeGet(enhancedPhoto, 'externalAlbumLink', null));
+    
     // Check for potential issues with data structure
     if (enhancedPhoto.faces) {
         console.log("[PhotoInfoModal] First face structure:", JSON.stringify(enhancedPhoto.faces[0], null, 2));
@@ -171,6 +176,40 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
         }) })] }));
     };
 
+    const renderAlbumLink = () => {
+        if (!safeGet(enhancedPhoto, 'externalAlbumLink', null)) {
+            return null;
+        }
+
+        return (
+            <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Album Link</h4>
+                <div className="bg-blue-50 p-4 rounded-xl">
+                    <div className="flex items-center">
+                        <Link className="w-5 h-5 text-blue-600 mr-3" />
+                        <a 
+                            href={enhancedPhoto.externalAlbumLink} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 font-medium hover:underline flex-1 truncate"
+                        >
+                            {enhancedPhoto.externalAlbumLink}
+                        </a>
+                        <button 
+                            onClick={() => window.open(enhancedPhoto.externalAlbumLink, '_blank')}
+                            className="ml-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                        >
+                            Visit
+                        </button>
+                    </div>
+                    <p className="text-blue-700 text-xs mt-2">
+                        Click to open the album in a new tab
+                    </p>
+                </div>
+            </div>
+        );
+    };
+
     const renderPhotoDetails = () => {
         const details = [
             {
@@ -226,20 +265,7 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
             });
         }
         
-        // Add external album link if available
-        if (safeGet(enhancedPhoto, 'externalAlbumLink', null)) {
-            details.push({
-                icon: _jsx(Link, { className: "w-4 h-4" }),
-                label: "Album Link",
-                value: _jsx("a", { 
-                    href: enhancedPhoto.externalAlbumLink, 
-                    target: "_blank", 
-                    rel: "noopener noreferrer",
-                    className: "text-blue-500 hover:underline",
-                    children: "Open Album" 
-                })
-            });
-        }
+        // Album link is now handled in its own dedicated section
         
         // Check if GoogleMaps component is available
         let GoogleMapsComponent = null;
@@ -718,6 +744,9 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
 
                             {/* Event Details */}
                             {renderEventDetails()}
+
+                            {/* Album Link */}
+                            {renderAlbumLink()}
 
                             {/* Photo Details */}
                             {renderPhotoDetails()}

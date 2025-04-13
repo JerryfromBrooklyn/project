@@ -91,7 +91,8 @@ export const awsPhotoService = {
         tags: metadata.tags || [],
         folder_path: folderPath || null,
         title: metadata.title || file.name,
-        description: metadata.description || ''
+        description: metadata.description || '',
+        externalAlbumLink: metadata.externalAlbumLink || null
       };
 
       progressCallback(70);

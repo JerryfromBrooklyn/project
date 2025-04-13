@@ -6,6 +6,8 @@ import { Upload, Check, AlertTriangle, Grid, List, Search, Filter, Users, X, Inf
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
 import { awsPhotoService } from '../services/awsPhotoService';
+import { useAuth } from '../context/AuthContext';
+import { updatePhotoVisibility } from '../services/userVisibilityService';
 
 // Import our new components with proper mobile UX
 import Dialog from './ui/Dialog.jsx';
@@ -25,11 +27,15 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     venueName: '',
     promoterName: '',
     date: new Date().toISOString().split('T')[0],
+    albumLink: '',
     location: null
   });
   const [pendingFiles, setPendingFiles] = useState([]);
   const [selectedUpload, setSelectedUpload] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  
+  // Get auth context
+  const { user } = useAuth();
 
   const validateMetadata = () => {
     if (!metadata.eventName || !metadata.venueName || !metadata.promoterName || !metadata.date) {
@@ -56,14 +62,25 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     }
 
     // Process pending files with metadata
-    const newUploads = pendingFiles.map(file => ({
-      id: uuidv4(),
-      file,
-      progress: 0,
-      status: 'uploading',
-      metadata: { ...metadata },
-      folderPath: file.path ? file.path.split('/').slice(0, -1).join('/') : null
-    }));
+    const newUploads = pendingFiles.map(file => {
+      // Clean up folder path - don't use '.' as a folder path
+      let folderPath = null;
+      if (file.path) {
+        const pathParts = file.path.split('/').slice(0, -1);
+        if (pathParts.length > 0 && pathParts.join('/') !== '.') {
+          folderPath = pathParts.join('/');
+        }
+      }
+
+      return {
+        id: uuidv4(),
+        file,
+        progress: 0,
+        status: 'uploading',
+        metadata: { ...metadata },
+        folderPath: folderPath
+      };
+    });
 
     setUploads(prev => [...prev, ...newUploads]);
     setPendingFiles([]);
@@ -108,13 +125,46 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     }, 200);
 
     try {
-      // Call AWS photo service
-      const result = await awsPhotoService.uploadPhoto(upload.file, {
+      // Use the current user from auth context
+      const userId = user?.id;
+      
+      if (!userId) {
+        console.warn("⚠️ No user ID found in auth context. Upload will proceed with unknown user.");
+      } else {
+        console.log(`👤 Using user ID from auth context: ${userId}`);
+      }
+      
+      // Call AWS photo service with user ID explicitly set
+      const result = await awsPhotoService.uploadPhoto(
+        upload.file,
         eventId,
-        metadata: upload.metadata
-      });
+        upload.folderPath,
+        {
+          ...upload.metadata,
+          user_id: userId,
+          uploadedBy: userId,
+          uploaded_by: userId,
+          externalAlbumLink: upload.metadata.albumLink
+        },
+        (progress) => {
+          setUploads(prev => prev.map(u => 
+            u.id === upload.id ? { ...u, progress: Math.min(progress, 99) } : u
+          ));
+        }
+      );
 
       clearInterval(interval);
+
+      // Explicitly set the photo visibility to VISIBLE in the visibility table
+      if (result.success && result.photoId && userId) {
+        console.log(`Setting visibility for new photo ${result.photoId} to VISIBLE`);
+        try {
+          await updatePhotoVisibility(userId, [result.photoId], 'VISIBLE');
+          console.log(`✅ Successfully set visibility for photo ${result.photoId} to VISIBLE`);
+        } catch (visibilityError) {
+          console.error(`❌ Error setting visibility for photo ${result.photoId}:`, visibilityError);
+        }
+      }
 
       // Update with success
       setUploads(prev => prev.map(u => 
@@ -225,6 +275,18 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           <p className="text-sm text-apple-gray-500">Event: {upload.metadata?.eventName}</p>
           <p className="text-sm text-apple-gray-500">Venue: {upload.metadata?.venueName}</p>
           <p className="text-sm text-apple-gray-500">Date: {upload.metadata?.date}</p>
+          {upload.metadata?.albumLink && (
+            <p className="text-sm text-apple-gray-500">
+              Album Link: <a 
+                href={upload.metadata.albumLink} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:underline"
+              >
+                {upload.metadata.albumLink}
+              </a>
+            </p>
+          )}
         </div>
         
         <div className="md:col-span-2">
@@ -279,19 +341,33 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         <div 
           {...getRootProps()} 
           className={cn(
-            "mt-4 p-10 border-2 border-dashed rounded-xl text-center transition-colors duration-300 min-h-[120px]", 
-            isDragActive ? "border-apple-blue-500 bg-apple-blue-50" : "border-apple-gray-200 bg-apple-gray-50",
+            "mt-4 p-10 border-4 border-dashed rounded-xl text-center transition-colors duration-300 min-h-[200px] flex flex-col items-center justify-center", 
+            isDragActive ? "border-blue-500 bg-blue-50" : "border-blue-300 bg-blue-50",
             uploads.length > 0 && "mb-8"
           )}
         >
           <input {...getInputProps()} multiple type="file" accept="image/*" className="hidden" aria-label="Upload files" />
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white flex items-center justify-center">
-            <Upload className="w-8 h-8 text-apple-gray-500" />
+          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-white flex items-center justify-center shadow-lg">
+            <Upload className="w-10 h-10 text-blue-500" />
           </div>
-          <p className="text-apple-gray-500 mb-2">
-            {isDragActive ? "Drop the photos or folders here" : "Tap here or drag and drop photos"}
+          <p className="text-gray-700 mb-4 text-lg font-semibold">
+            {isDragActive ? "Drop the photos or folders here" : "Drag and drop photos here"}
           </p>
-          <p className="text-apple-gray-400 text-sm">Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file</p>
+          
+          <button 
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-lg text-lg shadow-lg transform transition hover:scale-105 flex items-center"
+            onClick={(e) => {
+              e.stopPropagation();
+              // Trigger the hidden file input click
+              document.querySelector('input[type="file"]').click();
+            }}
+            type="button"
+          >
+            <Upload className="w-6 h-6 mr-2" />
+            UPLOAD
+          </button>
+          
+          <p className="text-gray-600 text-sm mt-4">Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file</p>
         </div>
         
         {/* Uploads list with touch-friendly controls */}
@@ -518,6 +594,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         }}
         title="Photo Details"
         description="Please provide information about these photos"
+        maxWidth="max-w-3xl"
         actions={[
           {
             label: "Cancel",
@@ -530,7 +607,8 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           {
             label: "Continue Upload",
             onClick: processUploads,
-            variant: "primary"
+            variant: "primary",
+            className: "bg-blue-600 text-white font-bold shadow-lg"
           }
         ]}
       >
@@ -592,12 +670,26 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">
+              Album Link (optional)
+            </label>
+            <input
+              type="url"
+              value={metadata.albumLink}
+              onChange={(e) => setMetadata({ ...metadata, albumLink: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              placeholder="https://example.com/album"
+            />
+            <p className="mt-1 text-xs text-gray-500">Enter a URL to the album or event page</p>
+          </div>
+          
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Location (optional)
             </label>
             <GoogleMaps
               location={metadata.location}
               onLocationChange={(location) => setMetadata({ ...metadata, location })}
-              height="300px"
+              height="220px"
               className="rounded overflow-hidden border border-gray-300"
             />
           </div>

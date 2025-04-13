@@ -22,26 +22,81 @@ export const awsPhotoService = {
      * @param {boolean} analyzeWithAI - Whether to analyze the photo with AI
      * @returns {Promise<Object>} The uploaded photo data
      */
-    uploadPhoto: async (file, eventId, folderPath, metadata = {}, progressCallback = () => { }) => {
-        const uploadId = uuidv4().substring(0, 8);
-        let rekognitionCallCount = 0; // Initialize Rekognition call counter
-        console.groupCollapsed(`📸 [Upload ${uploadId}] Starting upload for: ${file.name}`);
-        console.log(`   File Size: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
-        console.log(`   Target Folder: ${folderPath || 'root'}`);
-        console.log(`   Event ID: ${eventId || 'N/A'}`);
-        console.log(`   Provided Metadata:`, metadata);
-        console.groupEnd();
-
+    uploadPhoto: async (file, eventId, folderPath, metadata = {}, progressCallback = (progress) => {}) => {
+        const uploadId = Math.random().toString(36).substring(7); // For debugging logs
         try {
-            const fileId = uuidv4();
-            const fileName = `${fileId}-${file.name}`;
-            const userId = metadata.uploadedBy || metadata.uploaded_by;
-            const path = folderPath
-                ? `photos/${userId}/${folderPath}/${fileName}` // Standardized photos path
-                : `photos/${userId}/${fileName}`;
+            console.group(`🚀 [Upload ${uploadId}] Starting upload for ${file.name}`);
+            console.log(`📤 [Upload ${uploadId}] Starting S3 process...`);
+            console.log(`   File: ${file.name} (${file.size} bytes)`);
             
-            console.log(`🔄 [Upload ${uploadId}] Generated Photo ID: ${fileId}`);
-            console.log(`🔄 [Upload ${uploadId}] S3 Storage Path: ${path}`);
+            console.log('   Event ID:', eventId);
+            console.log('   Folder Path:', folderPath);
+            console.log('   Metadata:', JSON.stringify(metadata, null, 2));
+            
+            // Get user ID from metadata or localStorage
+            let userId = metadata?.user_id || metadata?.uploaded_by || metadata?.uploadedBy;
+            console.log(`   User ID from metadata: ${userId}`);
+            
+            // If userId is not in metadata, try to get it from localStorage
+            if (!userId) {
+                try {
+                    // Try to get the user from authUser in localStorage
+                    const userStr = localStorage.getItem('authUser');
+                    if (userStr) {
+                        const user = JSON.parse(userStr);
+                        if (user && user.id) {
+                            userId = user.id;
+                            console.log(`   User ID from localStorage authUser: ${userId}`);
+                        } else {
+                            console.warn(`   Invalid user object in localStorage authUser: ${userStr}`);
+                        }
+                    } else {
+                        // Try the aws_auth_session as a fallback
+                        const sessionStr = localStorage.getItem('aws_auth_session');
+                        if (sessionStr) {
+                            console.log(`   Found aws_auth_session, attempting to get current user...`);
+                            // This is an async operation but we're inside an async function, so we can await
+                            const { getCurrentUser } = await import('./awsAuthService');
+                            const currentUser = await getCurrentUser();
+                            if (currentUser && currentUser.id) {
+                                userId = currentUser.id;
+                                console.log(`   User ID from AWS auth service: ${userId}`);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error(`   Error retrieving user from storage:`, error);
+                }
+            }
+            
+            // Use 'unknown' as fallback if userId is still not found
+            if (!userId) {
+                console.warn(`⚠️ No user ID found in metadata or localStorage. Using 'unknown' as default.`);
+                userId = 'unknown';
+            }
+            
+            // Generate UUID for the file
+            const fileId = uuidv4();
+            
+            // Clean up folder path (remove dots and ensure no leading/trailing slashes)
+            let cleanFolderPath = '';
+            if (folderPath && folderPath !== '.') {
+                cleanFolderPath = folderPath.replace(/^\.\/|\/\.\/|\/\.$|\.$/, '');
+                // Remove leading and trailing slashes
+                cleanFolderPath = cleanFolderPath.replace(/^\/+|\/+$/g, '');
+                if (cleanFolderPath) {
+                    cleanFolderPath = `${cleanFolderPath}/`;
+                }
+            }
+            
+            // File path with userId (which now has a fallback)
+            const fileName = `${fileId}_${file.name}`;
+            const path = cleanFolderPath 
+                ? `photos/${userId}/${cleanFolderPath}${fileName}` // Folder path included
+                : `photos/${userId}/${fileName}`; // No folder path
+                
+            console.log(`   Generated S3 path: ${path}`);
+            console.log(`   Generated photo ID: ${fileId}`);
             progressCallback(20);
 
             console.log(`⬆️ [Upload ${uploadId}] Reading file into buffer...`);
@@ -86,13 +141,14 @@ export const awsPhotoService = {
                 tags: metadata.tags || [],
                 folder_path: folderPath || null,
                 title: metadata.title || file.name,
-                description: metadata.description || ''
+                description: metadata.description || '',
+                externalAlbumLink: metadata.externalAlbumLink || null
             };
             console.log(`📝 [Upload ${uploadId}] Prepared initial metadata for DynamoDB.`);
             progressCallback(60);
 
             // --- Rekognition Face Indexing & Comparison --- 
-            console.groupCollapsed(`�� [Upload ${uploadId}] Running Rekognition Face Indexing & Comparison...`);
+            console.groupCollapsed(`🔄 [Upload ${uploadId}] Running Rekognition Face Indexing & Comparison...`);
             let detectedFaceId = null; // Store detected face ID
             try {
                 console.log(`   Using global Rekognition Client: ${!!rekognitionClient}`); 
@@ -112,7 +168,6 @@ export const awsPhotoService = {
                 };
                 console.log(`   IndexFaces Params Prepared (Bytes omitted):`, { ...indexParams, Image: { Bytes: `Uint8Array length: ${fileUint8Array.byteLength}` } }); 
                 console.log(`   Sending IndexFaces command...`);
-                rekognitionCallCount++; 
                 const indexResponse = await rekognitionClient.send(new IndexFacesCommand(indexParams)); 
                 console.log(`   Rekognition IndexFaces response received successfully.`);
                 
@@ -149,7 +204,6 @@ export const awsPhotoService = {
                                 FaceMatchThreshold: 99.0  // Set threshold back to 99
                             };
                             
-                            rekognitionCallCount++;
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
                             
                             if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
@@ -258,7 +312,6 @@ export const awsPhotoService = {
                                 FaceMatchThreshold: 99.0  // Set threshold back to 99
                             };
                             
-                            rekognitionCallCount++; // Count this call too
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
                             
                             if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
@@ -397,13 +450,24 @@ export const awsPhotoService = {
             console.log(`✅ [Upload ${uploadId}] DynamoDB save successful (using base client).`);
             progressCallback(100);
             
+            // In the PhotoUploader component, we already set visibility
+            // But let's ensure we're setting it here as well
+            try {
+                console.log(`   Setting photo visibility to VISIBLE for user ${userId} and photo ${fileId}`);
+                const { updatePhotoVisibility } = await import('./userVisibilityService');
+                await updatePhotoVisibility(userId, [fileId], 'VISIBLE');
+                console.log(`   ✅ Successfully set photo visibility to VISIBLE`);
+            } catch (visibilityError) {
+                console.error(`   ❌ Error setting photo visibility:`, visibilityError);
+                // Continue even if this fails - the photo is still uploaded
+            }
+
             console.log(`🎉 [Upload ${uploadId}] SUCCESS! Photo upload & indexing complete.`);
             console.log(`   Photo ID: ${fileId}`);
             console.log(`   S3 URL: ${publicUrl}`);
             console.log(`   Detected Faces Indexed: ${photoMetadata.face_ids.length}`);
             // Matched users is now 0 because we don't do it here
             console.log(`   Matched Users (During Upload): ${photoMetadata.matched_users.length}`); 
-            console.log(`   📞 AWS Rekognition Calls Made: ${rekognitionCallCount}`);
 
             return {
                 success: true,

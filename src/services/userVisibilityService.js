@@ -14,17 +14,24 @@ const USER_VISIBILITY_TABLE = "shmong-user-photo-visibility";
  */
 export const updatePhotoVisibility = async (userId, photoIds, status) => {
   try {
-    if (!userId) throw new Error("User ID is required");
+    if (!userId) {
+      console.error('[updatePhotoVisibility] Error: User ID is required');
+      throw new Error("User ID is required");
+    }
+    
     if (!photoIds || !Array.isArray(photoIds) || photoIds.length === 0) {
+      console.error('[updatePhotoVisibility] Error: Photo IDs array is empty or invalid', photoIds);
       throw new Error("Photo IDs array is required");
     }
     
     const validStatuses = ["VISIBLE", "TRASH", "HIDDEN"];
     if (!validStatuses.includes(status)) {
+      console.error(`[updatePhotoVisibility] Error: Invalid status: ${status}`);
       throw new Error(`Invalid status: ${status}. Must be one of: ${validStatuses.join(", ")}`);
     }
     
-    console.log(`Updating visibility for ${photoIds.length} photos for user ${userId} to: ${status}`);
+    console.log(`[updatePhotoVisibility] Updating visibility for ${photoIds.length} photos for user ${userId} to: ${status}`);
+    console.log(`[updatePhotoVisibility] Photo IDs: ${JSON.stringify(photoIds)}`);
     
     // Create batch write requests (25 items max per batch)
     const now = new Date().toISOString();
@@ -49,16 +56,26 @@ export const updatePhotoVisibility = async (userId, photoIds, status) => {
     }
     
     // Process all batches
+    console.log(`[updatePhotoVisibility] Processing ${chunks.length} batch(es) of requests`);
+    
     const results = await Promise.all(
-      chunks.map(chunk => 
-        dynamoClient.send(
-          new BatchWriteItemCommand({
-            RequestItems: {
-              [USER_VISIBILITY_TABLE]: chunk
-            }
-          })
-        )
-      )
+      chunks.map(async (chunk, index) => {
+        try {
+          console.log(`[updatePhotoVisibility] Sending batch ${index + 1}/${chunks.length} with ${chunk.length} items`);
+          const result = await dynamoClient.send(
+            new BatchWriteItemCommand({
+              RequestItems: {
+                [USER_VISIBILITY_TABLE]: chunk
+              }
+            })
+          );
+          console.log(`[updatePhotoVisibility] Batch ${index + 1} sent successfully`);
+          return result;
+        } catch (batchError) {
+          console.error(`[updatePhotoVisibility] Error processing batch ${index + 1}:`, batchError);
+          throw batchError; // Re-throw to be caught by the outer try-catch
+        }
+      })
     );
     
     // Check if any unprocessed items
@@ -69,16 +86,79 @@ export const updatePhotoVisibility = async (userId, photoIds, status) => {
       .flatMap(result => result.UnprocessedItems[USER_VISIBILITY_TABLE]);
       
     if (unprocessedItems.length > 0) {
-      console.warn(`Some items were not processed: ${unprocessedItems.length}`);
+      console.warn(`[updatePhotoVisibility] Warning: ${unprocessedItems.length} items were not processed`);
     }
+    
+    // Verify the updates were applied successfully
+    const verificationResults = await verifyPhotoVisibility(userId, photoIds, status);
     
     return {
       success: true,
       totalUpdated: photoIds.length - unprocessedItems.length,
-      message: `Successfully updated visibility for ${photoIds.length - unprocessedItems.length} photos`
+      message: `Successfully updated visibility for ${photoIds.length - unprocessedItems.length} photos`,
+      verificationResults
     };
   } catch (error) {
-    console.error("Error updating photo visibility:", error);
+    console.error("[updatePhotoVisibility] Error updating photo visibility:", error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Verify that photo visibility was correctly set
+ * @param {string} userId - User ID
+ * @param {string[]} photoIds - Array of photo IDs
+ * @param {string} expectedStatus - Expected visibility status
+ * @returns {Promise<object>} Verification results
+ */
+export const verifyPhotoVisibility = async (userId, photoIds, expectedStatus) => {
+  try {
+    if (!userId || !photoIds || photoIds.length === 0) {
+      return { success: false, message: "Missing parameters for verification" };
+    }
+    
+    console.log(`[verifyPhotoVisibility] Verifying visibility status for ${photoIds.length} photos`);
+    
+    // Sample up to 5 photos to verify (to avoid overloading with large batches)
+    const sampleSize = Math.min(photoIds.length, 5);
+    const samplePhotoIds = photoIds.slice(0, sampleSize);
+    
+    // Get the visibility map
+    const { visibilityMap, success } = await getPhotoVisibilityMap(userId);
+    
+    if (!success) {
+      return { success: false, message: "Failed to get visibility map for verification" };
+    }
+    
+    // Check each sampled photo
+    const results = samplePhotoIds.map(photoId => {
+      const actualStatus = visibilityMap[photoId] || "VISIBLE"; // Default is VISIBLE
+      const isCorrect = actualStatus === expectedStatus;
+      
+      return {
+        photoId,
+        expected: expectedStatus,
+        actual: actualStatus,
+        isCorrect
+      };
+    });
+    
+    const allCorrect = results.every(result => result.isCorrect);
+    
+    console.log(`[verifyPhotoVisibility] Verification ${allCorrect ? 'successful' : 'failed'} for sample of ${sampleSize} photos`);
+    
+    return {
+      success: allCorrect,
+      results,
+      message: allCorrect 
+        ? "All sampled photos have correct visibility status" 
+        : "Some photos have incorrect visibility status"
+    };
+  } catch (error) {
+    console.error("[verifyPhotoVisibility] Error verifying photo visibility:", error);
     return {
       success: false,
       error: error.message

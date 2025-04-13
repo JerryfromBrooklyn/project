@@ -140,9 +140,11 @@ export interface Filters {
 
 export interface PhotoMetadata {
   id: string;
+  user_id?: string;
+  uploaded_by?: string;
+  uploadedBy?: string;
   url: string;
   eventId?: string;
-  uploadedBy: string;
   created_at: string;
   updated_at?: string;
   folderPath?: string;

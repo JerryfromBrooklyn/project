@@ -211,7 +211,7 @@ const TrashBin = ({ userId }) => {
                aria-label="Permanently hide selected photos"
              >
                <FaTrash />
-               <span>Delete Permanently</span>
+               <span>DELETE</span>
              </button>
              
              <button

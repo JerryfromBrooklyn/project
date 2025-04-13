@@ -286,12 +286,15 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
           },
           externalAlbumLink: metadata.externalAlbumLink || undefined,
           tags: [],
+          user_id: user?.id, // Add the current user's ID
+          uploaded_by: user?.id, // Add the current user's ID
+          uploadedBy: user?.id, // Add the current user's ID for consistency
         };
 
         // Upload photo using AWS S3 service
         const result = await awsPhotoService.uploadPhoto(
           upload.file,
-          eventId,
+          eventId ? eventId : undefined, // Fix potential object conversion issue
           upload.folderPath,
           partialMetadata,
           handleProgress

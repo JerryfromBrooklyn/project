@@ -33,10 +33,16 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
     venue: photo?.venue || { name: null },
     location: photo?.location || { name: null, lat: null, lng: null, address: null },
     tags: Array.isArray(photo?.tags) ? photo.tags : [],
-    date_taken: photo?.date_taken
+    date_taken: photo?.date_taken,
+    // Check multiple possible field names for album link
+    externalAlbumLink: photo?.externalAlbumLink || photo?.albumLink || photo?.album_link || null
   };
 
+  // Enhanced debugging to see all fields
   console.log('[SimplePhotoInfoModal] Using sanitized photo data:', safePhoto);
+  console.log('[SimplePhotoInfoModal] All original photo keys:', Object.keys(photo || {}));
+  console.log('[SimplePhotoInfoModal] External album link value:', safePhoto.externalAlbumLink);
+  console.log('[SimplePhotoInfoModal] Looking for these keys:', 'externalAlbumLink:', photo?.externalAlbumLink, 'albumLink:', photo?.albumLink, 'album_link:', photo?.album_link);
   
   const handleDownload = async () => {
     try {
@@ -227,6 +233,37 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
                         <p className="font-medium text-sm text-gray-900 dark:text-white">{getLocationAddress()}</p>
                       </div>
                     </div>
+                  </div>
+                </section>
+              )}
+              
+              {/* External Album Link - with enhanced visibility */}
+              {safePhoto.externalAlbumLink && (
+                <section className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm border-2 border-blue-500">
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
+                    <Globe size={16} className="mr-2 text-blue-500" />
+                    Album Link
+                  </h3>
+                  <div className="p-3 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                    <div className="flex flex-wrap items-center">
+                      <a 
+                        href={safePhoto.externalAlbumLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 dark:text-blue-400 font-medium hover:underline flex-1 truncate"
+                      >
+                        {safePhoto.externalAlbumLink}
+                      </a>
+                      <button
+                        onClick={() => window.open(safePhoto.externalAlbumLink, '_blank')}
+                        className="ml-2 px-3 py-1 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                      >
+                        Visit
+                      </button>
+                    </div>
+                    <p className="text-xs text-blue-700 dark:text-blue-400 mt-2">
+                      Click to open the album in a new tab
+                    </p>
                   </div>
                 </section>
               )}
