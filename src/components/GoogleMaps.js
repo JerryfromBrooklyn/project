@@ -4,6 +4,9 @@ import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 import { Loader2 } from 'lucide-react';
 const libraries = ["places"];
 export const GoogleMaps = ({ location, onLocationChange, height = "100%", className }) => {
+    // Add default empty location object to prevent null errors
+    const safeLocation = location || { lat: 0, lng: 0, name: '' };
+    
     const { isLoaded } = useJsApiLoader({
         id: 'google-map-script',
         googleMapsApiKey: 'AIzaSyAfp-MrsswDkw8NAgm5CYvpcKAG_Ia8c2w',
@@ -47,24 +50,30 @@ export const GoogleMaps = ({ location, onLocationChange, height = "100%", classN
     if (!isLoaded) {
         return (_jsx("div", { className: "h-64 bg-apple-gray-100 rounded-apple flex items-center justify-center", children: _jsx(Loader2, { className: "w-8 h-8 text-apple-gray-400 animate-spin" }) }));
     }
-    return (_jsxs("div", { className: className, children: [_jsx("div", { className: "relative", children: _jsx("input", { ref: searchInputRef, type: "text", placeholder: "Search for a location...", className: "ios-input w-full mb-2", value: location.name || '', onChange: (e) => {
+    // Handle case when onLocationChange might not be provided
+    const handleLocationChange = (newLocation) => {
+        if (typeof onLocationChange === 'function') {
+            onLocationChange(newLocation);
+        }
+    };
+    return (_jsxs("div", { className: className, children: [_jsx("div", { className: "relative", children: _jsx("input", { ref: searchInputRef, type: "text", placeholder: "Search for a location...", className: "ios-input w-full mb-2", value: safeLocation.name || '', onChange: (e) => {
                         // Update the location name when typing
-                        onLocationChange({
-                            ...location,
+                        handleLocationChange({
+                            ...safeLocation,
                             name: e.target.value
                         });
-                    } }) }), _jsx("div", { style: { height, width: '100%' }, className: "rounded-apple overflow-hidden", children: _jsx(GoogleMap, { mapContainerStyle: { width: '100%', height: '100%' }, center: location.lat && location.lng ? location : { lat: 0, lng: 0 }, zoom: location.lat && location.lng ? 15 : 1, onClick: (e) => {
+                    } }) }), _jsx("div", { style: { height, width: '100%' }, className: "rounded-apple overflow-hidden", children: _jsx(GoogleMap, { mapContainerStyle: { width: '100%', height: '100%' }, center: safeLocation.lat && safeLocation.lng ? safeLocation : { lat: 0, lng: 0 }, zoom: safeLocation.lat && safeLocation.lng ? 15 : 1, onClick: (e) => {
                         if (e.latLng) {
                             const newLocation = {
                                 lat: e.latLng.lat(),
                                 lng: e.latLng.lng(),
-                                name: location.name || `${e.latLng.lat().toFixed(6)}, ${e.latLng.lng().toFixed(6)}`
+                                name: safeLocation.name || `${e.latLng.lat().toFixed(6)}, ${e.latLng.lng().toFixed(6)}`
                             };
-                            onLocationChange(newLocation);
+                            handleLocationChange(newLocation);
                         }
                     }, onLoad: setMap, options: {
                         mapTypeControl: false,
                         streetViewControl: false,
                         fullscreenControl: false
-                    }, children: location.lat && location.lng && (_jsx(Marker, { position: location })) }) })] }));
+                    }, children: safeLocation.lat && safeLocation.lng && (_jsx(Marker, { position: safeLocation })) }) })] }));
 };

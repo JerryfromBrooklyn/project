@@ -1,7 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, User, AlertCircle, Calendar, Tag, Download, Share2, Building, UserCog, Image, Clock, Sparkles, Eye, Ruler, Smile, Sliders, Glasses, Laugh, Bean as Beard, FileType, HardDrive, Globe, Upload, Users, MapPin } from 'lucide-react';
+import { X, User, AlertCircle, Calendar, Tag, Download, Share2, Building, UserCog, Image, Clock, Sparkles, Eye, Ruler, Smile, Sliders, Glasses, Laugh, Bean as Beard, FileType, HardDrive, Globe, Upload, Users, MapPin, Link } from 'lucide-react';
 import { PhotoService } from '../services/PhotoService';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
@@ -223,6 +223,21 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
                 icon: _jsx(Tag, { className: "w-4 h-4" }),
                 label: "Tags",
                 value: Array.isArray(enhancedPhoto.tags) ? enhancedPhoto.tags.join(', ') : 'No tags'
+            });
+        }
+        
+        // Add external album link if available
+        if (safeGet(enhancedPhoto, 'externalAlbumLink', null)) {
+            details.push({
+                icon: _jsx(Link, { className: "w-4 h-4" }),
+                label: "Album Link",
+                value: _jsx("a", { 
+                    href: enhancedPhoto.externalAlbumLink, 
+                    target: "_blank", 
+                    rel: "noopener noreferrer",
+                    className: "text-blue-500 hover:underline",
+                    children: "Open Album" 
+                })
             });
         }
         
