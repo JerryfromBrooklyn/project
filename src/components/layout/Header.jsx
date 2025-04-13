@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/hooks/useAuth';
 import { fullVersion } from '../../utils/version';
 
@@ -8,6 +8,11 @@ import { fullVersion } from '../../utils/version';
  */
 const Header = () => {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleAuthClick = () => {
+    navigate('/login');
+  };
 
   return (
     <header className="bg-white border-b border-gray-200">
@@ -56,9 +61,12 @@ const Header = () => {
               <Link to="/login" className="px-4 py-2 rounded-md bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">
                 Login
               </Link>
-              <Link to="/signup" className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700">
-                Sign Up
-              </Link>
+              <button 
+                onClick={handleAuthClick}
+                className="px-4 py-2 rounded-md bg-green-500 text-white hover:bg-green-600"
+              >
+                Log In / Sign Up
+              </button>
             </div>
           )}
         </div>

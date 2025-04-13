@@ -68,7 +68,7 @@ export default function LandingPage() {
       <main>
         {/* Hero Section */}
         <AppleHero
-          title="Powerful Tools for Modern Creators"
+          title="EXTREMELY OBVIOUS RED TEXT HERE!!"
           subtitle="Introducing"
           description="Experience a new way to manage your digital life with our intuitive and powerful platform."
           imageUrl={heroImageUrl}

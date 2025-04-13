@@ -63,11 +63,11 @@ export const updatePhotoVisibility = async (userId, photoIds, status) => {
         try {
           console.log(`[updatePhotoVisibility] Sending batch ${index + 1}/${chunks.length} with ${chunk.length} items`);
           const result = await dynamoClient.send(
-            new BatchWriteItemCommand({
-              RequestItems: {
-                [USER_VISIBILITY_TABLE]: chunk
-              }
-            })
+          new BatchWriteItemCommand({
+            RequestItems: {
+              [USER_VISIBILITY_TABLE]: chunk
+            }
+          })
           );
           console.log(`[updatePhotoVisibility] Batch ${index + 1} sent successfully`);
           return result;

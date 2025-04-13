@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AuthForms } from '../components/AuthForms';
 import { useAuth } from '../context/AuthContext';
-import { Camera, Search, Shield, Clock, Users, Image, Sparkles, ChevronRight, ExternalLink, Check, X, Zap, Lock, Timer } from 'lucide-react';
+import { Camera, Search, Shield, Clock, Users, Image, Sparkles, ChevronRight, ExternalLink, Check, X, Zap, Lock, Timer, User, CheckCircle } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 interface NavItem {
@@ -67,8 +67,9 @@ export const LandingPage: React.FC = () => {
   const [isVisible, setIsVisible] = useState<boolean>(false);
   const [activeSection, setActiveSection] = useState<string>('');
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
-  const [authModalView, setAuthModalView] = useState<'signin' | 'signup'>('signin');
+  const [authModalView, setAuthModalView] = useState<'signin' | 'signup'>('signup');
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [photoCounter, setPhotoCounter] = useState(0);
   
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -107,43 +108,106 @@ export const LandingPage: React.FC = () => {
     const slideInterval = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % 3);
     }, 5000);
+    
+    // Animated counter effect for photos found
+    const counterInterval = setInterval(() => {
+      setPhotoCounter(prev => {
+        if (prev < 250000) {
+          return prev + 2500;
+        }
+        clearInterval(counterInterval);
+        return 250000;
+      });
+    }, 30);
 
     return () => {
       observer.disconnect();
       sectionObserver.disconnect();
       clearInterval(slideInterval);
+      clearInterval(counterInterval);
     };
   }, []);
 
   // Navigation items
   const navItems: NavItem[] = [
     { label: "Features", href: "#features" },
-    { label: "How It Works", href: "#how-it-works" },
-    { label: "About", href: "#about" }
+    { label: "How It Works", href: "#how-it-works" }
   ];
 
-  // Features data
+  // Features data - Updated with focus on photo-finding efficiency
   const features: Feature[] = [
     {
-      title: "Instant Recognition",
-      description: "Our AI identifies your face in photos with 99.7% accuracy, even in low light and crowded scenes.",
+      title: "AI-Powered Recognition",
+      description: "Our advanced technology finds your face in crowds, low light, and varied angles with 99.7% accuracy.",
       icon: <Search className="h-7 w-7" />,
       color: "bg-apple-blue-500",
       delay: 0
     },
     {
-      title: "One-Click Access",
-      description: "Find all your photos instantly without scrolling through hundreds of images. Save time and eliminate frustration.",
+      title: "Seconds, Not Hours",
+      description: "Find all your photos instantly without scrolling through hundreds of images. Average search time: 3.2 seconds.",
       icon: <Clock className="h-7 w-7" />,
       color: "bg-apple-green-500",
       delay: 0.1
     },
     {
-      title: "Bank-Level Security",
-      description: "Your facial data is encrypted and never shared. Only you can access your photos, maintaining complete privacy.",
+      title: "Privacy Guaranteed",
+      description: "Your facial data is encrypted with bank-level security. Only you decide who sees your photos.",
       icon: <Shield className="h-7 w-7" />,
       color: "bg-apple-purple-500",
       delay: 0.2
+    }
+  ];
+
+  // Use cases for both attendees and photographers
+  const useCases = [
+    {
+      title: "For Event Attendees",
+      description: "Never miss a special moment again. SHMONG finds all photos of you, eliminating the frustration of searching through endless galleries.",
+      icon: <User className="h-7 w-7" />,
+      points: [
+        "Discover photos of yourself within seconds",
+        "Get notified when new photos of you are uploaded",
+        "Share your memories directly to social media"
+      ],
+      color: "bg-gradient-to-r from-blue-500 to-indigo-600",
+      delay: 0
+    },
+    {
+      title: "For Event Photographers",
+      description: "Deliver a premium service to your clients. SHMONG helps professional photographers organize, distribute, and monetize their event photos.",
+      icon: <Camera className="h-7 w-7" />,
+      points: [
+        "Automatic tagging and organization of photos",
+        "Easy delivery system for clients to find their images",
+        "Increase revenue with premium photo packages"
+      ],
+      color: "bg-gradient-to-r from-amber-500 to-orange-600",
+      delay: 0.2
+    },
+    {
+      title: "For Event Managers",
+      description: "Boost your event's appeal and reach. SHMONG creates additional value for attendees while promoting your brand to a wider audience.",
+      icon: <Sparkles className="h-7 w-7" />,
+      points: [
+        "Efficiently distribute photos to all event participants",
+        "Gain popularity as image details include your branding",
+        "Reach people who would never search for event photos otherwise"
+      ],
+      color: "bg-gradient-to-r from-green-500 to-teal-600",
+      delay: 0.4
+    },
+    {
+      title: "For Venues",
+      description: "Increase walk-in traffic by reminding patrons of their memorable experiences at your venue, encouraging more return visits.",
+      icon: <Image className="h-7 w-7" />,
+      points: [
+        "Remind people of where they attended spontaneous events",
+        "Bring in more foot traffic automatically when photos surface",
+        "Create lasting impressions that drive repeat business"
+      ],
+      color: "bg-gradient-to-r from-purple-500 to-pink-600",
+      delay: 0.6
     }
   ];
 
@@ -199,8 +263,13 @@ export const LandingPage: React.FC = () => {
     { number: "50+", label: "Event Organizers" },
     { number: "120+", label: "Venues" },
     { number: "10,000+", label: "Users" },
-    { number: "250,000+", label: "Photos Found" }
+    { number: formatNumber(photoCounter), label: "Photos Found" }
   ];
+
+  // Function to format numbers with commas
+  function formatNumber(num: number): string {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
 
   // Social media links
   const socialLinks: SocialLink[] = [
@@ -366,7 +435,7 @@ export const LandingPage: React.FC = () => {
             <div className="flex items-center space-x-2">
               <button
                 onClick={(e) => handleLoginSignupClick(e, 'signin')}
-                className="ios-button-primary bg-amber-500 hover:bg-amber-600"
+                className="ios-button-primary bg-green-500 hover:bg-green-600"
               >
                 Log In / Sign Up
               </button>
@@ -375,7 +444,7 @@ export const LandingPage: React.FC = () => {
         </div>
       </header>
 
-      {/* Hero Section */}
+      {/* Hero Section - Updated with improved value proposition */}
       <section className="pt-20 pb-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
@@ -385,21 +454,31 @@ export const LandingPage: React.FC = () => {
               transition={{ duration: 0.8, ease: "easeOut" }}
               className="text-center lg:text-left"
             >
-              <h1 className="text-4xl md:text-6xl font-bold mb-6">
-                Find Your Event Photos{" "}
-                <span className="bg-gradient-to-b from-apple-blue-500 to-apple-blue-600 text-transparent bg-clip-text">
-                  Instantly
-                </span>
+              <h1 className="text-7xl font-bold mb-6 bg-black text-white p-4">
+                THIS IS THE CORRECT LANDING PAGE FROM PAGES DIRECTORY
               </h1>
               <p className="text-xl text-apple-gray-600 mb-8">
-                Using advanced facial recognition, SHMONG helps you discover all your photos from events in seconds.
+                Never miss a moment again. SHMONG's AI technology finds all photos of you at events and gatherings - no searching required.
               </p>
-              <button
-                onClick={handleDashboardClick}
-                className="ios-button-primary"
-              >
-                Get Started
-              </button>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start mb-8">
+                <button
+                  onClick={handleDashboardClick}
+                  className="ios-button-primary bg-green-500 hover:bg-green-600"
+                >
+                  Find My Photos
+                </button>
+                <button
+                  onClick={() => handleNavClick('#how-it-works')}
+                  className="ios-button-secondary"
+                >
+                  See How It Works
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-center lg:justify-start space-x-2 text-apple-gray-600">
+                <Sparkles className="w-5 h-5 text-amber-500" />
+                <span className="text-sm">Already found <span className="font-bold text-amber-500">{formatNumber(photoCounter)}</span> photos for our users</span>
+              </div>
             </motion.div>
 
             <motion.div
@@ -415,13 +494,13 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Features Section */}
+      {/* Features Section - Updated with more focus on photo-finding efficiency */}
       <section id="features" className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">Why Choose SHMONG</h2>
-            <p className="text-xl text-apple-gray-600">
-              Advanced technology meets simplicity for the perfect photo-finding experience
+            <h2 className="text-4xl font-bold mb-4">Photo Finding, Reinvented</h2>
+            <p className="text-xl text-apple-gray-600 max-w-3xl mx-auto">
+              SHMONG combines cutting-edge AI with intelligent design for the most efficient photo discovery experience
             </p>
           </div>
 
@@ -432,7 +511,7 @@ export const LandingPage: React.FC = () => {
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: feature.delay }}
-                className="relative p-8 rounded-apple-xl border border-apple-gray-200 bg-white"
+                className="relative p-8 rounded-apple-xl border border-apple-gray-200 bg-white hover:shadow-lg transition-all duration-300"
               >
                 <div className={`${feature.color} w-12 h-12 rounded-full flex items-center justify-center text-white mb-6`}>
                   {feature.icon}
@@ -443,14 +522,14 @@ export const LandingPage: React.FC = () => {
             ))}
           </div>
 
-          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
             {stats.map((stat, index) => (
               <motion.div
                 key={stat.label}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: index * 0.1 }}
-                className="text-center p-8 rounded-apple-xl bg-white border border-apple-gray-200"
+                className="text-center p-8 rounded-apple-xl bg-white border border-apple-gray-200 hover:shadow-lg transition-all duration-300"
               >
                 <div className="flex justify-center mb-4">
                   {stat.icon}
@@ -465,8 +544,55 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
+      {/* Use Cases Section - New section highlighting different user types */}
+      <section id="use-cases" className="py-24 bg-apple-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold mb-4">Who Benefits from SHMONG?</h2>
+            <p className="text-xl text-apple-gray-600 max-w-3xl mx-auto">
+              Our technology creates value for everyone involved in event photography
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            {useCases.map((useCase, index) => (
+              <motion.div
+                key={useCase.title}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: useCase.delay }}
+                viewport={{ once: true }}
+                className="relative overflow-hidden rounded-apple-xl"
+              >
+                <div className={`relative p-8 rounded-apple-xl border border-gray-200 bg-white shadow-lg`}>
+                  <div className={`absolute top-0 left-0 w-full h-2 ${useCase.color}`}></div>
+                  <div className="mb-6">
+                    <div className="w-14 h-14 rounded-full bg-apple-gray-100 flex items-center justify-center mb-4">
+                      {useCase.icon}
+                    </div>
+                    <h3 className="text-2xl font-semibold mb-3">{useCase.title}</h3>
+                    <p className="text-apple-gray-600 mb-6">{useCase.description}</p>
+                  </div>
+                  
+                  <ul className="space-y-3">
+                    {useCase.points.map((point, i) => (
+                      <li key={i} className="flex items-start">
+                        <div className="flex-shrink-0 mt-1">
+                          <CheckCircle className="h-5 w-5 text-green-500" />
+                        </div>
+                        <span className="ml-3 text-apple-gray-700">{point}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Process Section */}
-      <section id="how-it-works" className="py-24 bg-apple-gray-50">
+      <section id="how-it-works" className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">How It Works</h2>
@@ -512,28 +638,6 @@ export const LandingPage: React.FC = () => {
             >
               Get Started
             </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Trust Stats Section */}
-      <section className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {trustStats.map((stat) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="text-center"
-              >
-                <div className="text-4xl font-bold text-apple-gray-900 mb-2">
-                  {stat.number}
-                </div>
-                <div className="text-apple-gray-600">{stat.label}</div>
-              </motion.div>
-            ))}
           </div>
         </div>
       </section>

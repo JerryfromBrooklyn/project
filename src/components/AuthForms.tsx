@@ -199,21 +199,21 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
   return (
     <div className={cn(
       "w-full max-w-md mx-auto bg-white", 
-      isModal && "relative bg-white rounded-[20px] shadow-2xl overflow-hidden border border-gray-200"
+      isModal && "relative bg-white rounded-[28px] shadow-2xl overflow-hidden border border-gray-100"
     )}>
       {isModal && (
         <button 
           onClick={onClose}
-          className="absolute right-4 top-4 p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition duration-150 z-10"
+          className="absolute right-5 top-5 p-2.5 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition duration-150 z-10"
           aria-label="Close"
           title="Close"
         >
-          <X className="w-5 h-5" />
+          <X className="w-6 h-6" />
         </button>
       )}
 
-      <div className="flex justify-center pt-8 pb-4 px-8">
-        <div className="flex rounded-full overflow-hidden bg-gray-100 p-0.5">
+      <div className="flex justify-center pt-8 pb-5 px-8">
+        <div className="flex rounded-full overflow-hidden bg-gray-100 p-1 w-full max-w-xs">
           <button
             onClick={() => {
               setView('signin');
@@ -221,7 +221,7 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
               setError(null);
             }}
             className={cn(
-              "px-6 py-2 text-sm font-medium transition-all duration-200 rounded-full",
+              "flex-1 py-3.5 text-sm font-medium transition-all duration-200 rounded-full",
               view === 'signin' 
                 ? "bg-white text-gray-900 shadow-sm"
                 : "text-gray-600 hover:text-gray-900"
@@ -236,7 +236,7 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
               setError(null);
             }}
             className={cn(
-              "px-6 py-2 text-sm font-medium transition-all duration-200 rounded-full",
+              "flex-1 py-3.5 text-sm font-medium transition-all duration-200 rounded-full",
               view === 'signup'
                 ? "bg-white text-gray-900 shadow-sm"
                 : "text-gray-600 hover:text-gray-900"
@@ -247,7 +247,7 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
         </div>
       </div>
 
-      <div className="px-8 pb-8">
+      <div className="px-8 pb-8 max-h-[70vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
         <AnimatePresence mode="wait">
           {!showEmailForm ? (
             <motion.div
@@ -256,9 +256,9 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.3 }}
-              className="flex flex-col gap-4"
+              className="flex flex-col gap-5"
             >
-              <h2 className="text-2xl font-semibold text-gray-900 mb-6 text-center">
+              <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 mb-6 text-center">
                 {view === 'signin' ? 'Welcome Back' : 'Create Your Account'}
               </h2>
 
@@ -277,9 +277,9 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
               {view === 'signin' && (
                 <button
                   onClick={handleGoogleSignIn}
-                  className="flex items-center justify-center w-full py-3 px-4 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm"
+                  className="flex items-center justify-center w-full py-4 px-5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm"
                 >
-                  <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
                     <path
                       fill="#4285F4"
                       d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -298,13 +298,13 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                     />
                     <path fill="none" d="M1 1h22v22H1z" />
                   </svg>
-                  <span className="text-gray-800 font-medium">
-                    Log in with Google
+                  <span className="text-gray-800 font-medium text-base">
+                    Continue with Google
                   </span>
                 </button>
               )}
 
-              <div className="relative flex items-center my-4">
+              <div className="relative flex items-center my-6">
                 <div className="flex-grow border-t border-gray-200"></div>
                 <span className="flex-shrink-0 mx-4 text-gray-500 text-sm">or</span>
                 <div className="flex-grow border-t border-gray-200"></div>
@@ -312,9 +312,9 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
 
               <button
                 onClick={() => setShowEmailForm(true)}
-                className="w-full py-3 px-4 rounded-xl bg-blue-500 hover:bg-blue-600 text-white transition-colors shadow-sm font-medium"
+                className="w-full py-4 px-5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white transition-colors shadow-md font-medium text-base"
               >
-                {view === 'signin' ? 'Log in with Email' : 'Sign up with Email'}
+                {view === 'signin' ? 'Continue with Email' : 'Sign up with Email'}
               </button>
             </motion.div>
           ) : (
@@ -327,7 +327,7 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
               onSubmit={handleSubmit}
               className="bg-white"
             >
-              <h2 className="text-2xl font-semibold text-gray-900 mb-6 text-center">
+              <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 mb-6 text-center">
                 {view === 'signin' ? 'Log In with Email' : 'Sign Up with Email'}
               </h2>
 
@@ -335,7 +335,7 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mb-5 p-4 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100 flex items-start"
+                  className="mb-6 p-4 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100 flex items-start"
                 >
                   <AlertCircle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
                   <span>{error}</span>
@@ -344,8 +344,8 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
 
               {view === 'signup' && (
                 <>
-                  <div className="mb-5">
-                    <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
+                  <div className="mb-6">
+                    <label htmlFor="fullName" className="block text-base font-medium text-gray-700 mb-2">
                       Full Name
                     </label>
                     <div className="relative">
@@ -356,21 +356,21 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                         onChange={(e) => setFullName(e.target.value)}
                         onBlur={() => setTouched({ ...touched, fullName: true })}
                         className={cn(
-                          "block w-full p-3 pl-10 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 transition-all duration-200",
+                          "block w-full p-4 pl-12 text-base border border-gray-300 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 transition-all duration-200 shadow-md",
                           touched.fullName && !fullName.trim() && "border-red-300 focus:ring-red-500"
                         )}
                         placeholder="Your full name"
                         required
                       />
-                      <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <User className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                       {touched.fullName && fullName.trim() && (
-                        <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-500" />
+                        <CheckCircle className="absolute right-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-500" />
                       )}
                     </div>
                   </div>
 
-                  <div className="mb-5">
-                    <label htmlFor="userType" className="block text-sm font-medium text-gray-700 mb-1">
+                  <div className="mb-6">
+                    <label htmlFor="userType" className="block text-base font-medium text-gray-700 mb-2">
                       I am a...
                     </label>
                     <div className="relative">
@@ -378,7 +378,7 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                         id="userType"
                         value={userType}
                         onChange={(e) => setUserType(e.target.value as UserType)}
-                        className="block w-full p-3 pl-10 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all duration-200 appearance-none"
+                        className="block w-full p-4 pl-12 text-base border border-gray-300 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all duration-200 appearance-none shadow-md"
                         required
                       >
                         {USER_TYPES.map(type => (
@@ -387,8 +387,8 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                           </option>
                         ))}
                       </select>
-                      <UserCog className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                      <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                      <UserCog className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none">
                         <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
                         </svg>
@@ -398,8 +398,8 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                 </>
               )}
 
-              <div className="mb-5">
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="mb-6">
+                <label htmlFor="email" className="block text-base font-medium text-gray-700 mb-2">
                   Email
                 </label>
                 <div className="relative">
@@ -410,21 +410,21 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                     onChange={(e) => setEmail(e.target.value)}
                     onBlur={() => setTouched({ ...touched, email: true })}
                     className={cn(
-                      "block w-full p-3 pl-10 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 transition-all duration-200",
+                      "block w-full p-4 pl-12 text-base border border-gray-300 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 transition-all duration-200 shadow-md",
                       touched.email && !email.trim() && "border-red-300 focus:ring-red-500"
                     )}
                     placeholder="Your email address"
                     required
                   />
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   {touched.email && email.trim() && email.includes('@') && (
-                    <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-500" />
+                    <CheckCircle className="absolute right-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-500" />
                   )}
                 </div>
               </div>
 
-              <div className="mb-5">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="mb-6">
+                <label htmlFor="password" className="block text-base font-medium text-gray-700 mb-2">
                   Password
                 </label>
                 <div className="relative">
@@ -435,17 +435,17 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                     onChange={(e) => setPassword(e.target.value)}
                     onBlur={() => setTouched({ ...touched, password: true })}
                     className={cn(
-                      "block w-full p-3 pl-10 pr-10 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 transition-all duration-200",
+                      "block w-full p-4 pl-12 pr-12 text-base border border-gray-300 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 transition-all duration-200 shadow-md",
                       touched.password && !password.trim() && "border-red-300 focus:ring-red-500"
                     )}
                     placeholder="Your password"
                     required
                   />
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 px-3 flex items-center"
+                    className="absolute inset-y-0 right-0 px-4 flex items-center"
                   >
                     {showPassword ? (
                       <EyeOff className="h-5 w-5 text-gray-400" />
@@ -458,8 +458,8 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
 
               {view === 'signup' && (
                 <>
-                  <div className="mb-5">
-                    <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                  <div className="mb-6">
+                    <label htmlFor="confirmPassword" className="block text-base font-medium text-gray-700 mb-2">
                       Confirm Password
                     </label>
                     <div className="relative">
@@ -470,17 +470,17 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         onBlur={() => setTouched({ ...touched, confirmPassword: true })}
                         className={cn(
-                          "block w-full p-3 pl-10 pr-10 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 transition-all duration-200",
+                          "block w-full p-4 pl-12 pr-12 text-base border border-gray-300 rounded-xl bg-gray-100 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400 transition-all duration-200 shadow-md",
                           touched.confirmPassword && password !== confirmPassword && "border-red-300 focus:ring-red-500"
                         )}
                         placeholder="Confirm your password"
                         required
                       />
-                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute inset-y-0 right-0 px-3 flex items-center"
+                        className="absolute inset-y-0 right-0 px-4 flex items-center"
                       >
                         {showConfirmPassword ? (
                           <EyeOff className="h-5 w-5 text-gray-400" />
@@ -491,7 +491,7 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                     </div>
                   </div>
 
-                  <div className="mb-5 flex justify-end">
+                  <div className="mb-6 flex justify-end">
                     <button
                       type="button"
                       onClick={generatePassword}
@@ -505,9 +505,10 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
               )}
 
               {view === 'signin' && (
-                <div className="mb-5 flex justify-end">
+                <div className="mb-6 flex justify-end">
                   <button
                     type="button"
+                    onClick={() => navigate('/reset-password')}
                     className="text-sm text-blue-500 hover:text-blue-700"
                   >
                     Forgot Password?
@@ -515,20 +516,20 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                 </div>
               )}
 
-              <div className="mb-3">
+              <div className="mb-6">
                 <button
                   type="submit"
                   disabled={loading}
                   className={cn(
-                    "w-full p-3 rounded-xl text-white font-medium relative overflow-hidden transition-all",
+                    "w-full p-4 rounded-xl text-white font-medium relative overflow-hidden transition-all text-base shadow-md",
                     loading
                       ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-sm"
+                      : "bg-blue-500 hover:bg-blue-600"
                   )}
                 >
                   {loading ? (
                     <div className="flex items-center justify-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>

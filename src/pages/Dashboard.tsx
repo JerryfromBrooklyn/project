@@ -243,8 +243,8 @@ export const Dashboard = () => {
       const result = await permanentlyHidePhotos(user.id, [photoId]);
       
       if (result.success) {
-        // Update the trashed photos list
-        setTrashedPhotos(trashedPhotos.filter(photo => photo.id !== photoId));
+      // Update the trashed photos list
+      setTrashedPhotos(trashedPhotos.filter(photo => photo.id !== photoId));
       } else {
         throw new Error(result.error || 'Failed to permanently hide photo');
       }

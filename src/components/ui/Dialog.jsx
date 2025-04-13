@@ -89,9 +89,9 @@ const Dialog = ({
                   {children}
                 </div>
               </div>
-              
+                
               {/* Actions - fixed footer with buttons */}
-              {actions.length > 0 && (
+                {actions.length > 0 && (
                 <div className="border-t border-gray-200 py-4 px-6 bg-gray-50 rounded-b-lg">
                   <div className="flex flex-wrap gap-3 justify-end">
                     {actions.map((action, index) => (
@@ -111,8 +111,8 @@ const Dialog = ({
                       </button>
                     ))}
                   </div>
-                </div>
-              )}
+                  </div>
+                )}
             </motion.div>
           </div>
         </div>

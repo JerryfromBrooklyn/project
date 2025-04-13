@@ -4,6 +4,8 @@
 
 The Shmong project is organized into a modular structure with clear separation of concerns. Below is a comprehensive map of the file structure and dependencies.
 
+## Directory Structure
+
 ```
 src/
 ├── components/           # UI Components Directory
@@ -21,6 +23,10 @@ src/
 │   │   ├── Card.jsx      # Card component for UI elements
 │   │   ├── Tabs.jsx      # Tabbed interface components
 │   │   └── ...
+│   ├── context/          # React context providers
+│   ├── hooks/            # Custom React hooks
+│   ├── pages/            # Page components (LandingPage, Dashboard, etc.)
+│   └── utils/            # Utility functions and helpers
 ├── services/             # Business Logic Services
 │   ├── FaceIndexingService.js  # AWS Rekognition integration for face indexing
 │   ├── faceMatchingService.js  # Core face matching logic
@@ -28,11 +34,6 @@ src/
 │   ├── userVisibilityService.js# Handles photo visibility status (VISIBLE, TRASH, HIDDEN)
 │   ├── FaceStorageService.js   # Face data storage and retrieval
 │   └── PhotoService.js         # Client-side photo operations (download, etc.)
-├── context/              # React Context Providers
-│   └── AuthContext.jsx   # Handles user authentication state
-├── hooks/                # Custom React Hooks
-├── utils/                # Helper Functions
-│   └── cn.js             # Utility for conditional class names (using clsx and tailwind-merge)
 ├── types.ts              # TypeScript type definitions
 ├── config.js             # Application configuration
 ├── App.jsx               # Main application component (Handles routing)
@@ -399,3 +400,15 @@ The system also provides an alternative Apple-styled dashboard in `src/component
 - The **Dashboard component is the primary UI entry point** for users interacting with the face matching system
 - Multiple service implementations exist with both JavaScript and TypeScript versions
 - The application follows a service-oriented architecture with clear separation between UI components and business logic services 
+
+## Component Dependencies
+
+### Page Components
+- `LandingPage` (in `src/pages/LandingPage.tsx`)
+  - Dependencies: `AuthForms`, `Header`, UI components
+  - Description: Entry point for unauthenticated users, contains marketing content and authentication forms
+
+- `Dashboard` (in `src/pages/Dashboard.tsx`)
+  - Dependencies: `PhotoUploader`, `PhotoGrid`, `Header`, `UserMenu`
+  - Services: `awsPhotoService`, `userVisibilityService`
+  - Description: Main interface after login where users manage photos 

@@ -1,13 +1,77 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { AppleSection, AppleSectionTitle, AppleSectionSubtitle } from './ui/AppleSection';
 import { AppleButton } from './ui/AppleButton';
 import { AppleCard } from './ui/AppleCard';
-import { ChevronRightIcon } from 'lucide-react';
+import { ChevronRightIcon, Users, Image, Search, ShieldCheck, Clock, Camera, Heart } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AuthForms } from './AuthForms';
 
 const AppleLandingPage: React.FC = () => {
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authView, setAuthView] = useState<'signin' | 'signup'>('signin');
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [showLoadingAnimation, setShowLoadingAnimation] = useState(false);
+  const navigate = useNavigate();
+
+  // Simulated loading animation for the "found photos" feature
+  useEffect(() => {
+    if (showLoadingAnimation) {
+      const interval = setInterval(() => {
+        setLoadingProgress(prev => {
+          if (prev >= 100) {
+            clearInterval(interval);
+            return 100;
+          }
+          return prev + 1;
+        });
+      }, 20);
+      
+      return () => clearInterval(interval);
+    }
+  }, [showLoadingAnimation]);
+
+  const handleGetStarted = () => {
+    setAuthView('signup');
+    setShowAuthModal(true);
+  };
+
+  const handleLogin = () => {
+    setAuthView('signin');
+    setShowAuthModal(true);
+  };
+
+  const handleDemoAnimation = () => {
+    setLoadingProgress(0);
+    setShowLoadingAnimation(true);
+  };
+
   return (
     <div className="bg-white">
+      {/* Header */}
+      <header className="sticky top-0 bg-white/90 backdrop-blur-md z-50 border-b border-gray-200">
+        <div className="container mx-auto px-4 md:px-6 py-4 flex justify-between items-center">
+          <Link to="/" className="flex items-center">
+            <Camera className="h-7 w-7 text-apple-blue-500 mr-2" />
+            <span className="text-xl font-semibold tracking-tight">PhotoMatch</span>
+          </Link>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={handleLogin}
+              className="text-gray-700 font-medium hover:text-gray-900"
+            >
+              Log In
+            </button>
+            <button 
+              onClick={handleLogin}
+              className="px-5 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-full transition-colors"
+            >
+              Log In / Sign Up
+            </button>
+          </div>
+        </div>
+      </header>
+
       {/* Hero Section */}
       <AppleSection color="white" spacing="loose" centered>
         <motion.div 
@@ -17,20 +81,20 @@ const AppleLandingPage: React.FC = () => {
           className="max-w-5xl mx-auto mb-12"
         >
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-medium font-sf-pro leading-tight tracking-tight mb-6">
-            Beautiful design.
+            Find all your photos.
             <br />
-            <span className="text-apple-blue">Simple experience.</span>
+            <span className="text-apple-blue">Without the search.</span>
           </h1>
           <p className="text-xl md:text-2xl leading-relaxed text-apple-gray-600 max-w-3xl mx-auto mb-8">
-            Experience our intuitive platform with an interface inspired by Apple's human-centered design principles.
+            Our facial recognition technology automatically finds photos of you from events you've attended. No more hunting through galleries or asking friends for pictures.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            <AppleButton size="lg" variant="primary">
+            <AppleButton size="lg" variant="primary" onClick={handleGetStarted}>
               Get Started
               <ChevronRightIcon className="ml-2 h-5 w-5" />
             </AppleButton>
-            <AppleButton size="lg" variant="secondary">
-              Learn More
+            <AppleButton size="lg" variant="secondary" onClick={handleDemoAnimation}>
+              See How It Works
             </AppleButton>
           </div>
         </motion.div>
@@ -41,14 +105,59 @@ const AppleLandingPage: React.FC = () => {
           transition={{ duration: 0.8, delay: 0.5 }}
           className="rounded-apple-xl overflow-hidden shadow-apple-lg mx-auto max-w-6xl"
         >
-          <img 
-            src="/images/dashboard-preview.jpg" 
-            alt="Dashboard preview" 
-            className="w-full h-auto"
-            onError={(e) => {
-              e.currentTarget.src = 'https://placehold.co/1200x800/0071e3/ffffff?text=Dashboard+Preview';
-            }}
-          />
+          {showLoadingAnimation ? (
+            <div className="bg-gray-50 p-8 rounded-apple-xl">
+              <div className="max-w-md mx-auto">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Search className="h-5 w-5 text-apple-blue mr-2" />
+                    <span className="font-medium">Scanning event photos...</span>
+                  </div>
+                  <span className="text-sm text-apple-gray-500">{loadingProgress}%</span>
+                </div>
+                
+                <div className="h-2 bg-gray-200 rounded-full mb-6">
+                  <motion.div 
+                    className="h-full bg-apple-blue rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${loadingProgress}%` }}
+                    transition={{ duration: 0.1 }}
+                  />
+                </div>
+                
+                {loadingProgress >= 100 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="bg-green-50 border border-green-100 rounded-apple-xl p-6 flex items-start"
+                  >
+                    <div className="bg-green-100 rounded-full p-3 mr-4">
+                      <Image className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-green-800 mb-1">Success! 54 photos found</h3>
+                      <p className="text-green-700 text-sm mb-3">
+                        We found 54 photos from the last event you attended. Ready to see them?
+                      </p>
+                      <button className="text-sm font-medium text-green-700 bg-green-100 px-4 py-2 rounded-full hover:bg-green-200 transition-colors">
+                        View Photos
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <img 
+              src="/images/dashboard-preview.jpg" 
+              alt="Dashboard preview" 
+              className="w-full h-auto"
+              onError={(e) => {
+                e.currentTarget.src = 'https://placehold.co/1200x800/0071e3/ffffff?text=PhotoMatch+Preview';
+              }}
+            />
+          )}
         </motion.div>
       </AppleSection>
 
@@ -56,10 +165,10 @@ const AppleLandingPage: React.FC = () => {
       <AppleSection color="light" spacing="normal">
         <div className="text-center mb-16">
           <AppleSectionTitle>
-            Designed with purpose
+            How it works
           </AppleSectionTitle>
           <AppleSectionSubtitle>
-            Every detail has been carefully considered to provide you with the best experience.
+            Simple, secure, and intuitive photo discovery
           </AppleSectionSubtitle>
         </div>
 
@@ -84,42 +193,45 @@ const AppleLandingPage: React.FC = () => {
         </div>
       </AppleSection>
 
-      {/* Testimonial Section */}
+      {/* Use Cases Section */}
       <AppleSection color="white" spacing="normal" centered>
         <AppleSectionTitle>
-          Loved by users
+          Perfect for everyone
         </AppleSectionTitle>
         <AppleSectionSubtitle>
-          See what people are saying about our platform.
+          From event attendees to photographers, our platform benefits everyone
         </AppleSectionSubtitle>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
-          {testimonials.map((testimonial, index) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-12">
+          {useCases.map((useCase, index) => (
             <motion.div
-              key={testimonial.name}
+              key={useCase.title}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: index * 0.1 }}
+              className="flex flex-col h-full"
             >
               <AppleCard padding="md" className="h-full">
-                <div className="flex items-center mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <svg key={i} className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-blue-100 rounded-full">
+                    {useCase.icon}
+                  </div>
+                  <h3 className="text-xl font-medium">{useCase.title}</h3>
+                </div>
+                <p className="text-apple-gray-600 mb-4">{useCase.description}</p>
+                <ul className="space-y-2 mt-auto">
+                  {useCase.benefits.map((benefit, i) => (
+                    <li key={i} className="flex items-start">
+                      <div className="text-green-500 mr-2 mt-1">
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <span className="text-gray-700">{benefit}</span>
+                    </li>
                   ))}
-                </div>
-                <p className="text-apple-gray-600 mb-4 italic">"{testimonial.quote}"</p>
-                <div className="flex items-center mt-auto">
-                  <div className="w-10 h-10 rounded-full bg-apple-gray-200 flex items-center justify-center text-apple-gray-700 font-medium mr-3">
-                    {testimonial.name.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="font-medium">{testimonial.name}</p>
-                    <p className="text-sm text-apple-gray-500">{testimonial.title}</p>
-                  </div>
-                </div>
+                </ul>
               </AppleCard>
             </motion.div>
           ))}
@@ -130,10 +242,10 @@ const AppleLandingPage: React.FC = () => {
       <AppleSection color="dark" spacing="normal" centered>
         <div className="max-w-3xl mx-auto">
           <AppleSectionTitle className="text-white">
-            Ready to get started?
+            Start finding your photos today
           </AppleSectionTitle>
           <AppleSectionSubtitle className="text-apple-gray-300">
-            Join thousands of satisfied users today and experience the difference.
+            No more endless scrolling through galleries. Let our technology work for you.
           </AppleSectionSubtitle>
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
@@ -142,93 +254,89 @@ const AppleLandingPage: React.FC = () => {
             transition={{ duration: 0.5, delay: 0.3 }}
             className="flex flex-wrap justify-center gap-4 mt-8"
           >
-            <AppleButton size="lg" variant="primary">
-              Sign Up Now
+            <AppleButton size="lg" variant="primary" onClick={handleGetStarted}>
+              Create Free Account
             </AppleButton>
-            <AppleButton size="lg" variant="tertiary">
-              Contact Sales
+            <AppleButton size="lg" variant="tertiary" onClick={handleLogin}>
+              Already Registered? Log In
             </AppleButton>
           </motion.div>
         </div>
       </AppleSection>
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md">
+            <AuthForms 
+              defaultView={authView} 
+              isModal={true} 
+              onClose={() => setShowAuthModal(false)} 
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-// Sample feature data
+// Feature data
 const features = [
   {
-    title: 'Intuitive Interface',
-    description: 'Our clean, intuitive interface makes it easy to navigate and find what you need.',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-      </svg>
-    ),
+    title: 'One-Time Registration',
+    description: 'Register once with a selfie photo. Our system creates a secure facial signature that's used to find you in future photos.',
+    icon: <Users className="h-10 w-10" />,
   },
   {
-    title: 'Secure & Private',
-    description: 'Your data is encrypted and protected with industry-leading security practices.',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-      </svg>
-    ),
+    title: 'Automatic Discovery',
+    description: 'Our system automatically scans all new photos uploaded to the platform and notifies you when you appear in them.',
+    icon: <Search className="h-10 w-10" />,
   },
   {
-    title: 'Seamless Sync',
-    description: 'Access your content from any device with real-time synchronization.',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-      </svg>
-    ),
+    title: 'Privacy First',
+    description: 'You control your data. Approve which photos you want to keep and which to hide. All face data is encrypted and secure.',
+    icon: <ShieldCheck className="h-10 w-10" />,
   },
   {
-    title: 'Powerful Analytics',
-    description: 'Gain insights with comprehensive analytics and reporting tools.',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-      </svg>
-    ),
+    title: 'Quick Access',
+    description: 'No more waiting for event photographers to share albums. Get instant access to your photos as soon as they're uploaded.',
+    icon: <Clock className="h-10 w-10" />,
   },
   {
-    title: 'Customizable Workflows',
-    description: 'Create personalized workflows that suit your specific needs.',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
-      </svg>
-    ),
+    title: 'High Accuracy',
+    description: 'Advanced facial recognition ensures high accuracy matches, even in group photos or different lighting conditions.',
+    icon: <Image className="h-10 w-10" />,
   },
   {
-    title: '24/7 Support',
-    description: 'Our dedicated support team is always available to assist you.',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
-      </svg>
-    ),
+    title: 'Easy Sharing',
+    description: 'Instantly share found photos to social media or download them in high resolution for printing or keeping.',
+    icon: <Heart className="h-10 w-10" />,
   },
 ];
 
-// Sample testimonial data
-const testimonials = [
+// Use case data
+const useCases = [
   {
-    name: 'Emma Wilson',
-    title: 'Product Designer',
-    quote: 'The beautiful interface and attention to detail makes this platform a joy to use every day.',
+    title: 'Event Attendees',
+    description: 'Never miss a photo you appear in at events, parties, or gatherings.',
+    icon: <Users className="h-6 w-6 text-blue-500" />,
+    benefits: [
+      'Automatically find all photos you appear in',
+      'No need to check multiple photographer albums',
+      'Get notified when new photos of you are uploaded',
+      'Share event memories instantly with friends and family'
+    ]
   },
   {
-    name: 'James Roberts',
-    title: 'Marketing Director',
-    quote: 'I\'ve tried many similar tools, but nothing comes close to the seamless experience this platform provides.',
-  },
-  {
-    name: 'Sarah Chen',
-    title: 'Startup Founder',
-    quote: 'This platform has transformed our workflow. The intuitive design makes onboarding new team members a breeze.',
+    title: 'Photographers & Event Organizers',
+    description: 'Provide an enhanced experience for your clients and attendees.',
+    icon: <Camera className="h-6 w-6 text-blue-500" />,
+    benefits: [
+      'Automatically organize photos by people appearing in them',
+      'Simplify distribution of photos to event attendees',
+      'Increase client satisfaction with innovative technology',
+      'Differentiate your service from competitors'
+    ]
   },
 ];
 

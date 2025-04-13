@@ -89,13 +89,13 @@ App
 │       │   │   └── PhotoGrid
 │       │   │       └── ImageViewer
 │       │   ├── PhotoUploader
-│       │   │   ├── Dropzone
-│       │   │   ├── Progress
-│       │   │   └── ImageViewer
-│       │   └── TrashBin
-│       │       └── PhotoGrid
-│       └── Footer
-└── Toast Container
+│   │   │   ├── Dropzone
+│   │   │   ├── Progress
+│   │   │   └── ImageViewer
+│   │   │   └── TrashBin
+│   │   │       └── PhotoGrid
+│       │   └── Footer
+│       └── Toast Container
 ```
 
 ### Data Flow
@@ -873,3 +873,14 @@ Follow these rules when you write code:
 - Implement accessibility features on elements. For example, a tag should have a tabindex="0", aria-label, on:click, and on:keydown, and similar attributes.
 - Use consts instead of functions, for example, "const toggle = () =>". Also, define a type if possible.
 - When working with React components that use JSX syntax, always use the `.jsx` extension for JavaScript files or `.tsx` for TypeScript files. Vite requires these extensions for proper parsing of JSX syntax. 
+
+## Main UI Components
+
+### Landing Page (src/pages/LandingPage.tsx)
+- **Purpose**: Introduces new users to the service and provides authentication options
+- **Key Components**:
+  - Header with navigation
+  - Hero section with value proposition
+  - Features showcase with illustrations
+  - Authentication forms (login/signup)
+  - Footer with links and additional information

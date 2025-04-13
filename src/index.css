@@ -1,3 +1,91 @@
+/* Removing the error notice since we found the correct file */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Add custom classes for Apple-style rounded elements */
+@layer components {
+  .rounded-apple {
+    @apply rounded-xl;
+  }
+  .rounded-apple-xl {
+    @apply rounded-2xl;
+  }
+  .rounded-apple-full {
+    @apply rounded-full;
+  }
+
+  /* Button styles that match Apple's design language */
+  .ios-button {
+    @apply inline-block px-5 py-3 text-sm font-medium rounded-full transition-all duration-300 transform focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+
+  .ios-button-primary {
+    @apply ios-button bg-apple-blue-500 text-white;
+  }
+  .ios-button-primary:hover {
+    @apply bg-apple-blue-600 transform scale-[1.02] transition-all duration-300;
+  }
+
+  .ios-button-secondary {
+    @apply ios-button bg-white text-apple-gray-900 border border-apple-gray-200;
+  }
+  .ios-button-secondary:hover {
+    @apply bg-apple-gray-100 transform scale-[1.02] transition-all duration-300;
+  }
+
+  /* Apple-style input fields */
+  .apple-input {
+    @apply bg-apple-gray-100 rounded-apple px-4 py-3.5 w-full text-apple-gray-900 transition-all duration-300 focus:ring-2 focus:ring-apple-blue-500 focus:outline-none border border-apple-gray-200 focus:border-apple-blue-400;
+  }
+
+  /* Custom box shadow that matches Apple's design */
+  .shadow-apple-button {
+    @apply shadow-lg;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Custom card styles */
+  .apple-card {
+    @apply bg-white rounded-apple-xl border border-apple-gray-200 shadow-sm overflow-hidden transition-all duration-300;
+  }
+  .apple-card:hover {
+    @apply shadow-md;
+    transform: translateY(-2px);
+  }
+}
+
+/* Apple color palette */
+:root {
+  --apple-blue-400: #5ac8fa;
+  --apple-blue-500: #007aff;
+  --apple-blue-600: #0062cc;
+  --apple-green-500: #34c759;
+  --apple-green-600: #30b751;
+  --apple-purple-500: #af52de;
+  --apple-purple-600: #9e47c7;
+  --apple-gray-50: #f9f9f9;
+  --apple-gray-100: #f2f2f7;
+  --apple-gray-200: #e5e5ea;
+  --apple-gray-300: #d1d1d6;
+  --apple-gray-400: #c7c7cc;
+  --apple-gray-500: #aeaeb2;
+  --apple-gray-600: #8e8e93;
+  --apple-gray-700: #636366;
+  --apple-gray-800: #48484a;
+  --apple-gray-900: #3a3a3c;
+}
+
+/* Dark mode colors */
+.dark {
+  --apple-gray-50: #1c1c1e;
+  --apple-gray-100: #2c2c2e;
+  --apple-gray-200: #39393b;
+  --apple-gray-800: #aeaeb2;
+  --apple-gray-900: #f2f2f7;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -28,10 +116,6 @@
 }
 
 @layer components {
-  .ios-button {
-    @apply flex items-center justify-center px-7 py-3.5 text-base font-medium transition-all duration-300 rounded-apple shadow-apple-button relative overflow-hidden;
-  }
-
   .ios-button::after {
     content: "";
     @apply absolute inset-0 w-full h-full opacity-0 transition-opacity duration-300 bg-white;
@@ -42,24 +126,8 @@
     @apply opacity-20;
   }
 
-  .ios-button-primary {
-    @apply ios-button bg-apple-blue-500 text-white;
-  }
-
-  .ios-button-primary:hover {
-    @apply bg-apple-blue-600 transform scale-[1.02] transition-all duration-300;
-  }
-
   .ios-button-primary:active {
     @apply transform scale-[0.98];
-  }
-
-  .ios-button-secondary {
-    @apply ios-button bg-apple-gray-200 text-apple-gray-900;
-  }
-
-  .ios-button-secondary:hover {
-    @apply bg-apple-gray-300 transform scale-[1.02] transition-all duration-300;
   }
 
   .ios-button-secondary:active {
@@ -72,10 +140,6 @@
 
   .ios-card-elevated {
     @apply ios-card shadow-apple-lg;
-  }
-
-  .ios-input {
-    @apply bg-apple-gray-100 rounded-apple px-4 py-3.5 w-full text-apple-gray-900 transition-all duration-300 focus:ring-2 focus:ring-apple-blue-500 focus:outline-none border border-apple-gray-200 focus:border-apple-blue-400;
   }
 
   .ios-input::placeholder {
@@ -112,10 +176,6 @@
 
   .text-gradient-primary {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-[#007AFF] to-[#5AC8FA];
-  }
-
-  .shadow-apple-button {
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   }
 
   .backdrop-navbar {
