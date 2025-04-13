@@ -7,169 +7,169 @@
     "react": {
       "src": "../../node_modules/react/index.js",
       "file": "react.js",
-      "fileHash": "58ab1728",
+      "fileHash": "d950a60e",
       "needsInterop": true
     },
     "react-dom": {
       "src": "../../node_modules/react-dom/index.js",
       "file": "react-dom.js",
-      "fileHash": "c907b54a",
+      "fileHash": "d6fbcba6",
       "needsInterop": true
     },
     "react/jsx-dev-runtime": {
       "src": "../../node_modules/react/jsx-dev-runtime.js",
       "file": "react_jsx-dev-runtime.js",
-      "fileHash": "f5720a48",
+      "fileHash": "d9613752",
       "needsInterop": true
     },
     "react/jsx-runtime": {
       "src": "../../node_modules/react/jsx-runtime.js",
       "file": "react_jsx-runtime.js",
-      "fileHash": "af56ac3d",
+      "fileHash": "6423bfdb",
       "needsInterop": true
     },
     "@aws-sdk/client-cognito-identity-provider": {
       "src": "../../node_modules/@aws-sdk/client-cognito-identity-provider/dist-es/index.js",
       "file": "@aws-sdk_client-cognito-identity-provider.js",
-      "fileHash": "2a2a887c",
+      "fileHash": "d8beb7ca",
       "needsInterop": false
     },
     "@aws-sdk/client-dynamodb": {
       "src": "../../node_modules/@aws-sdk/client-dynamodb/dist-es/index.js",
       "file": "@aws-sdk_client-dynamodb.js",
-      "fileHash": "0ca9eecb",
+      "fileHash": "28ae004c",
       "needsInterop": false
     },
     "@aws-sdk/client-rekognition": {
       "src": "../../node_modules/@aws-sdk/client-rekognition/dist-es/index.js",
       "file": "@aws-sdk_client-rekognition.js",
-      "fileHash": "91780664",
+      "fileHash": "a94b1ede",
       "needsInterop": false
     },
     "@aws-sdk/client-s3": {
       "src": "../../node_modules/@aws-sdk/client-s3/dist-es/index.js",
       "file": "@aws-sdk_client-s3.js",
-      "fileHash": "837e5e69",
+      "fileHash": "8d828389",
       "needsInterop": false
     },
     "@aws-sdk/lib-dynamodb": {
       "src": "../../node_modules/@aws-sdk/lib-dynamodb/dist-es/index.js",
       "file": "@aws-sdk_lib-dynamodb.js",
-      "fileHash": "1837117e",
+      "fileHash": "2bd2a0c9",
       "needsInterop": false
     },
     "@aws-sdk/s3-request-presigner": {
       "src": "../../node_modules/@aws-sdk/s3-request-presigner/dist-es/index.js",
       "file": "@aws-sdk_s3-request-presigner.js",
-      "fileHash": "df14ec81",
+      "fileHash": "7b219bc9",
       "needsInterop": false
     },
     "@aws-sdk/util-dynamodb": {
       "src": "../../node_modules/@aws-sdk/util-dynamodb/dist-es/index.js",
       "file": "@aws-sdk_util-dynamodb.js",
-      "fileHash": "2b182847",
+      "fileHash": "699c42c2",
       "needsInterop": false
     },
     "@radix-ui/react-slot": {
       "src": "../../node_modules/@radix-ui/react-slot/dist/index.mjs",
       "file": "@radix-ui_react-slot.js",
-      "fileHash": "3baff01e",
+      "fileHash": "1d276f3b",
       "needsInterop": false
     },
     "@react-google-maps/api": {
       "src": "../../node_modules/@react-google-maps/api/dist/esm.js",
       "file": "@react-google-maps_api.js",
-      "fileHash": "e8941809",
+      "fileHash": "8a651ddc",
       "needsInterop": false
     },
     "axios": {
       "src": "../../node_modules/axios/index.js",
       "file": "axios.js",
-      "fileHash": "a795d6a4",
+      "fileHash": "68337ce1",
       "needsInterop": false
     },
     "clsx": {
       "src": "../../node_modules/clsx/dist/clsx.mjs",
       "file": "clsx.js",
-      "fileHash": "06c6c8cd",
+      "fileHash": "5b390aaf",
       "needsInterop": false
     },
     "cross-fetch": {
       "src": "../../node_modules/cross-fetch/dist/browser-ponyfill.js",
       "file": "cross-fetch.js",
-      "fileHash": "21e4e0d4",
+      "fileHash": "78c04e70",
       "needsInterop": true
     },
     "dotenv": {
       "src": "../../node_modules/dotenv/lib/main.js",
       "file": "dotenv.js",
-      "fileHash": "53fec7c5",
+      "fileHash": "d2ee8774",
       "needsInterop": true
     },
     "framer-motion": {
       "src": "../../node_modules/framer-motion/dist/es/index.mjs",
       "file": "framer-motion.js",
-      "fileHash": "cb4e77ae",
+      "fileHash": "380df0ce",
       "needsInterop": false
     },
     "lucide-react": {
       "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
       "file": "lucide-react.js",
-      "fileHash": "5e9307b6",
+      "fileHash": "3707c76e",
       "needsInterop": false
     },
     "react-dom/client": {
       "src": "../../node_modules/react-dom/client.js",
       "file": "react-dom_client.js",
-      "fileHash": "f94f9cb8",
+      "fileHash": "803d7658",
       "needsInterop": true
     },
     "react-dropzone": {
       "src": "../../node_modules/react-dropzone/dist/es/index.js",
       "file": "react-dropzone.js",
-      "fileHash": "0d05b95f",
+      "fileHash": "37ddb93a",
       "needsInterop": false
     },
     "react-router-dom": {
       "src": "../../node_modules/react-router-dom/dist/index.mjs",
       "file": "react-router-dom.js",
-      "fileHash": "7bbe8c70",
+      "fileHash": "d12b8fd5",
       "needsInterop": false
     },
     "react-webcam": {
       "src": "../../node_modules/react-webcam/dist/react-webcam.js",
       "file": "react-webcam.js",
-      "fileHash": "dbab5413",
+      "fileHash": "15d43038",
       "needsInterop": true
     },
     "tailwind-merge": {
       "src": "../../node_modules/tailwind-merge/dist/bundle-mjs.mjs",
       "file": "tailwind-merge.js",
-      "fileHash": "236361ed",
+      "fileHash": "a9510a4f",
       "needsInterop": false
     },
     "uuid": {
       "src": "../../node_modules/uuid/dist/esm-browser/index.js",
       "file": "uuid.js",
-      "fileHash": "2e6a703a",
+      "fileHash": "901ad4b4",
       "needsInterop": false
     },
     "vite-plugin-node-polyfills/shims/buffer": {
       "src": "../../node_modules/vite-plugin-node-polyfills/shims/buffer/dist/index.js",
       "file": "vite-plugin-node-polyfills_shims_buffer.js",
-      "fileHash": "41b38e01",
+      "fileHash": "326a886a",
       "needsInterop": false
     },
     "vite-plugin-node-polyfills/shims/global": {
       "src": "../../node_modules/vite-plugin-node-polyfills/shims/global/dist/index.js",
       "file": "vite-plugin-node-polyfills_shims_global.js",
-      "fileHash": "2d1ebb10",
+      "fileHash": "8153be75",
       "needsInterop": false
     },
     "vite-plugin-node-polyfills/shims/process": {
       "src": "../../node_modules/vite-plugin-node-polyfills/shims/process/dist/index.js",
       "file": "vite-plugin-node-polyfills_shims_process.js",
-      "fileHash": "46c8626e",
+      "fileHash": "083ab1f2",
       "needsInterop": false
     }
   },

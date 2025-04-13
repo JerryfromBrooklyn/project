@@ -36,6 +36,9 @@ export const Dashboard = () => {
   const [uploadedCount, setUploadedCount] = useState(0);
   const [matchedCount, setMatchedCount] = useState(0);
   const [trashedPhotos, setTrashedPhotos] = useState([]);
+  // State flags for one-time messages
+  const [showRegistrationSuccessMessage, setShowRegistrationSuccessMessage] = useState(false);
+  const [showHistoricalMatchesMessage, setShowHistoricalMatchesMessage] = useState(false);
 
   useEffect(() => {
     const fetchFaceData = async () => {
@@ -219,6 +222,12 @@ export const Dashboard = () => {
         setFaceImageUrl(fallbackUrl);
       }
     }
+
+    // --- Set flags to show one-time messages --- 
+    setShowRegistrationSuccessMessage(true);
+    if (result?.historicalMatches?.length > 0) {
+      setShowHistoricalMatchesMessage(true);
+    }
   };
 
   // Add functions to handle photo restoration and permanent deletion
@@ -383,7 +392,8 @@ export const Dashboard = () => {
   };
 
   const renderHistoricalMatches = () => {
-    if (!historicalMatches || historicalMatches.length === 0) return null;
+    // --- Only render if the flag is true --- 
+    if (!showHistoricalMatchesMessage || !historicalMatches || historicalMatches.length === 0) return null;
     
     return (
       <div className="mt-4">
@@ -604,11 +614,19 @@ export const Dashboard = () => {
                 </div>
               </div>
               
-              <p className="text-apple-gray-600 mb-6 border-l-4 border-apple-blue-500 pl-4 py-2 bg-apple-blue-50 rounded-r-apple">
-                {faceRegistered 
-                  ? "Your face has been registered. You can now use the facial recognition feature to get your images!"
-                  : "Get started by registering your face to enable quick authentication and find your photos at events."}
-              </p>
+              {/* --- Show Registration Success Message based on flag --- */}
+              {showRegistrationSuccessMessage && (
+                <p className="text-apple-gray-600 mb-6 border-l-4 border-green-500 pl-4 py-2 bg-green-50 rounded-r-apple">
+                  Your face has been successfully registered! You can now use the facial recognition feature.
+                </p>
+              )}
+              
+              {/* --- Show Default Message if not registered AND success message isn't shown --- */}
+              {!faceRegistered && !showRegistrationSuccessMessage && (
+                 <p className="text-apple-gray-600 mb-6 border-l-4 border-amber-500 pl-4 py-2 bg-amber-50 rounded-r-apple">
+                  Get started by registering your face to enable quick authentication and find your photos at events.
+                 </p>
+              )}
 
               {/* Summary Counts */}
               <div className="mt-6 grid grid-cols-2 gap-4 border-t border-apple-gray-200 pt-6">
