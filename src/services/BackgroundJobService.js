@@ -1,4 +1,4 @@
-import FaceMatchingService from './FaceMatchingService';
+import FaceMatchingService from './faceMatchingService';
 
 /**
  * BackgroundJobService - Handles scheduling and execution of background tasks
