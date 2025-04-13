@@ -7,12 +7,12 @@ globalThis.process = globalThis.process || __process_polyfill
 
 import {
   SignatureV4MultiRegion
-} from "./chunk-IBHUI7IG.js";
+} from "./chunk-XAMNCCZR.js";
 import {
   HttpRequest,
   buildQueryString,
   getEndpointFromInstructions
-} from "./chunk-546YFRZM.js";
+} from "./chunk-WLALPDKA.js";
 import {
   __publicField,
   __toESM,

@@ -1,90 +1,130 @@
+import React, { useState, useEffect } from 'react';
+import PhotoCard from './ui/PhotoCard';
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Share2, Trash2, Users, AlertCircle, Info } from 'lucide-react';
 import SimplePhotoInfoModal from './SimplePhotoInfoModal';
 import { cn } from '../utils/cn';
 
-export const PhotoGrid = ({ photos, onDelete, onShare, onDownload }) => {
-    const [selectedPhoto, setSelectedPhoto] = useState(null);
-    const [loading, setLoading] = useState({});
-
-    const handleDownload = async (photo) => {
-        if (onDownload) {
-            try {
-                setLoading({ ...loading, [photo.id]: true });
-                await onDownload(photo.id);
-            }
-            catch (error) {
-                console.error('Error downloading photo via prop function:', error);
-            }
-            finally {
-                setLoading({ ...loading, [photo.id]: false });
-            }
-        } else {
-             console.warn('No onDownload prop provided to PhotoGrid');
-        }
+/**
+ * Mobile-optimized photo grid component
+ * Uses responsive grid layout with appropriate sizing for different devices
+ */
+const PhotoGrid = ({
+  photos = [],
+  onPhotoSelect,
+  onPhotoAction,
+  loading = false,
+  columns = {
+    default: 2,
+    sm: 3,
+    md: 4,
+    lg: 5
+  }
+}) => {
+  const [isMobile, setIsMobile] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [loading: loadingState, setLoading] = useState({});
+  
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
     };
-
-    if (photos.length === 0) {
-        return (_jsxs("div", { className: "text-center py-12 bg-apple-gray-50 rounded-apple-xl border-2 border-dashed border-apple-gray-200", children: [_jsx(AlertCircle, { className: "w-12 h-12 text-apple-gray-400 mx-auto mb-4" }), _jsx("p", { className: "text-apple-gray-500 font-medium", children: "No photos found" }), _jsx("p", { className: "text-apple-gray-400 text-sm mt-1", children: photos.length === 0 ? "No photos have been uploaded yet" : "No matches found in any photos" })] }));
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+    };
+  }, []);
+  
+  // Get actual number of columns based on screen size
+  const getColumnCount = () => {
+    const width = window.innerWidth;
+    
+    if (width >= 1280 && columns.lg) return columns.lg;
+    if (width >= 1024 && columns.md) return columns.md;
+    if (width >= 768 && columns.sm) return columns.sm;
+    return columns.default || 2;
+  };
+  
+  const columnCount = getColumnCount();
+  
+  // Handle photo actions from the card
+  const handlePhotoAction = (action) => {
+    if (onPhotoAction) {
+      onPhotoAction(action);
     }
-    return (_jsxs(_Fragment, { children: [_jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4", children: photos.map((photo, index) => {
-        console.log(`[PhotoGrid] Rendering photo ${index}, ID: ${photo.id}, URL: ${photo.url}`);
-        return _jsxs(motion.div, { layout: true, initial: { opacity: 0, scale: 0.9 }, animate: { opacity: 1, scale: 1 }, exit: { opacity: 0, scale: 0.9 }, className: "relative group", children: [_jsx("div", { className: "aspect-square rounded-apple-xl overflow-hidden", children: _jsx("img", { src: encodeURI(photo.url || ''), alt: photo.title || `Photo ${photo.id}`, className: "w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" }) }), 
-                            // Only show a badge for photos with faces detected
-                            (() => {
-                                // Helper to safely get array length, handling different data structures
-                                const getFaceCount = (photo) => {
-                                    // Check if photo.faces exists
-                                    if (!photo.faces) return 0;
-                                    
-                                    // If it's an array, return its length
-                                    if (Array.isArray(photo.faces)) {
-                                        return photo.faces.length;
-                                    }
-                                    
-                                    // If it's an object with a length property
-                                    if (typeof photo.faces === 'object' && photo.faces.length !== undefined) {
-                                        return photo.faces.length;
-                                    }
-
-                                    // Fall back to face_ids if available
-                                    if (Array.isArray(photo.face_ids)) {
-                                        return photo.face_ids.length;
-                                    }
-                                    
-                                    // If it's an object but we can count its keys
-                                    if (typeof photo.faces === 'object') {
-                                        return Object.keys(photo.faces).length;
-                                    }
-                                    
-                                    // Default fallback
-                                    return 0;
-                                };
-                                
-                                // Get the face count
-                                const faceCount = getFaceCount(photo);
-                                
-                                // Get the match count
-                                const matchCount = photo.matched_users && Array.isArray(photo.matched_users) 
-                                    ? photo.matched_users.length 
-                                    : 0;
-                                
-                                // Only render badge if there are faces or matches
-                                return (faceCount > 0 || matchCount > 0) && (
-                                    <div className={cn(
-                                        "absolute top-2 right-2 px-2 py-1 rounded-full text-sm flex items-center gap-1", 
-                                        "bg-apple-blue-500/80 text-white backdrop-blur-sm"
-                                    )}>
-                                        <Users className="w-4 h-4" />
-                                        {matchCount > 0
-                                            ? `${matchCount} ${matchCount === 1 ? "Match" : "Matches"}`
-                                            : `${faceCount} ${faceCount === 1 ? "Face" : "Faces"}`
-                                        }
-                                    </div>
-                                );
-                            })()}
-                            _jsx("div", { className: "absolute inset-0 bg-black/50 rounded-apple-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300", children: _jsxs("div", { className: "absolute bottom-0 inset-x-0 p-4 flex justify-between items-center", children: [_jsxs("div", { className: "flex space-x-2", children: [_jsx("button", { onClick: () => handleDownload(photo), className: "p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300", disabled: loading[photo.id], "aria-label": "Download photo", children: _jsx(Download, { className: "w-5 h-5" }) }), _jsx("button", { onClick: () => setSelectedPhoto(photo), className: "p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300", "aria-label": "View photo details", children: _jsx(Info, { className: "w-5 h-5" }) })] }), onDelete && (_jsx("button", { onClick: () => onDelete(photo.id), className: "p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors duration-300", "aria-label": "Delete photo", children: _jsx(Trash2, { className: "w-5 h-5" }) }))] }) })] }, `${photo.id}-${index}`))) }), _jsx(AnimatePresence, { children: selectedPhoto && (_jsx(SimplePhotoInfoModal, { photo: selectedPhoto, onClose: () => setSelectedPhoto(null) })) })] }));
+    
+    // If action is 'view', also trigger select
+    if (action.type === 'view' && onPhotoSelect) {
+      onPhotoSelect(action.photo);
     }
-}));
+  };
+  
+  const handleDownload = async (photo) => {
+    if (onPhotoAction && onPhotoAction.onDownload) {
+      try {
+        setLoading({ ...loadingState, [photo.id]: true });
+        await onPhotoAction.onDownload(photo.id);
+      }
+      catch (error) {
+        console.error('Error downloading photo via prop function:', error);
+      }
+      finally {
+        setLoading({ ...loadingState, [photo.id]: false });
+      }
+    } else {
+      console.warn('No onDownload prop provided to PhotoGrid');
+    }
+  };
+  
+  // Render skeleton loaders when loading
+  if (loading) {
+    return (
+      <div className={`grid grid-cols-${columnCount} gap-4`}>
+        {Array.from({ length: 8 }).map((_, idx) => (
+          <div 
+            key={`skeleton-${idx}`}
+            className="aspect-square rounded-lg bg-gray-200 animate-pulse"
+          />
+        ))}
+      </div>
+    );
+  }
+  
+  // If no photos, show message
+  if (photos.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+        <div className="w-16 h-16 mb-4 text-gray-400">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <h3 className="text-xl font-medium text-gray-900">No photos found</h3>
+        <p className="mt-2 text-gray-500">Upload some photos to get started.</p>
+      </div>
+    );
+  }
+  
+  // Dynamic grid class based on column count
+  const gridClass = `grid gap-3 md:gap-4 grid-cols-${columnCount <= 2 ? columnCount : 2} sm:grid-cols-${columnCount <= 3 ? columnCount : 3} md:grid-cols-${columnCount <= 4 ? columnCount : 4} lg:grid-cols-${columnCount}`;
+  
+  return (
+    <div className={gridClass}>
+      {photos.map((photo) => (
+        <PhotoCard
+          key={photo.id || photo.photoId}
+          photo={photo}
+          onAction={handlePhotoAction}
+          showActions={true}
+        />
+      ))}
+    </div>
+  );
+};
+
+export default PhotoGrid;

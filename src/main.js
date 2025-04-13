@@ -4,6 +4,19 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { testRekognitionConnectivity } from './lib/awsClient';
+// Import version and cache busting utilities
+import { checkVersion, APP_VERSION } from './utils/version';
+import './utils/cacheBuster';
+
+// Set the build timestamp for cache busting
+const buildTimestamp = import.meta.env.VITE_BUILD_TIMESTAMP || Date.now().toString();
+if (typeof window !== 'undefined') {
+    window.__APP_VERSION__ = APP_VERSION;
+    window.__BUILD_TIMESTAMP__ = buildTimestamp;
+}
+
+// Log version information
+console.log(`[STARTUP] 🚀 App Version: ${APP_VERSION} (Build: ${buildTimestamp})`);
 
 // Log environment information (non-sensitive)
 const awsEnvStatus = {
@@ -68,4 +81,13 @@ Check your .env file or environment configuration.
         }
     }
 });
+
+// Check for version changes (important for cache busting)
+checkVersion().catch(console.error);
+
+// Add a listener for when the app becomes online again to check for updates
+window.addEventListener('online', () => {
+    checkVersion().catch(console.error);
+});
+
 ReactDOM.createRoot(document.getElementById('root')).render(_jsx(React.StrictMode, { children: _jsx(App, {}) }));

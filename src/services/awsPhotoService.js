@@ -852,6 +852,23 @@ export const awsPhotoService = {
                 error: error.response?.data?.message || 'Failed to delete photo'
             };
         }
+    },
+    /**
+     * Moves a photo to trash for a specific user
+     * @param {string} photoId - The ID of the photo to move to trash
+     * @returns {Promise<{success: boolean, error?: string}>} Result of the operation
+     */
+    moveToTrash: async (photoId) => {
+        try {
+            // We'll use the existing trashPhoto method which already implements this functionality
+            return await awsPhotoService.trashPhoto(photoId);
+        } catch (error) {
+            console.error("Error moving photo to trash:", error);
+            return { 
+                success: false, 
+                error: error.message || "Failed to move photo to trash" 
+            };
+        }
     }
 };
 export default awsPhotoService;

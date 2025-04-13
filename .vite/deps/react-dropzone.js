@@ -6,11 +6,11 @@ import __process_polyfill from 'vite-plugin-node-polyfills/shims/process'
 globalThis.process = globalThis.process || __process_polyfill
 
 import {
-  __awaiter
-} from "./chunk-W2ANHD2T.js";
-import {
   require_react
 } from "./chunk-KMLDHAXH.js";
+import {
+  __awaiter
+} from "./chunk-W2ANHD2T.js";
 import {
   __commonJS,
   __toESM,

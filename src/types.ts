@@ -68,6 +68,7 @@ export interface PhotoMetadata {
     promoter: string | null 
   } | null;
   matched_users: MatchedUser[]; // Array of users matched in this photo
+  externalAlbumLink?: string;
 }
 
 // Type for user profile data from Supabase/DB

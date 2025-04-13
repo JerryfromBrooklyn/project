@@ -6,6 +6,18 @@ import __process_polyfill from 'vite-plugin-node-polyfills/shims/process'
 globalThis.process = globalThis.process || __process_polyfill
 
 import {
+  SignatureV4MultiRegion,
+  getCheckContentLengthHeaderPlugin,
+  getRegionRedirectMiddlewarePlugin,
+  getS3ExpiresMiddlewarePlugin,
+  getS3ExpressHttpSigningPlugin,
+  getS3ExpressPlugin,
+  getThrow200ExceptionsPlugin,
+  getValidateBucketNamePlugin,
+  resolveS3Config,
+  signatureV4CrtContainer
+} from "./chunk-XAMNCCZR.js";
+import {
   WaiterState,
   checkExceptions,
   createWaiter
@@ -42,25 +54,13 @@ import {
   resolveUserAgentConfig,
   supportsWebCrypto,
   uint32ArrayFrom
-} from "./chunk-DIMKL7G7.js";
-import "./chunk-3TAN77E7.js";
+} from "./chunk-HNCKUWWD.js";
 import {
   __awaiter,
   __generator,
   __values
 } from "./chunk-W2ANHD2T.js";
-import {
-  SignatureV4MultiRegion,
-  getCheckContentLengthHeaderPlugin,
-  getRegionRedirectMiddlewarePlugin,
-  getS3ExpiresMiddlewarePlugin,
-  getS3ExpressHttpSigningPlugin,
-  getS3ExpressPlugin,
-  getThrow200ExceptionsPlugin,
-  getValidateBucketNamePlugin,
-  resolveS3Config,
-  signatureV4CrtContainer
-} from "./chunk-IBHUI7IG.js";
+import "./chunk-3TAN77E7.js";
 import {
   AwsSdkSigV4ASigner,
   AwsSdkSigV4Signer,
@@ -127,7 +127,7 @@ import {
   toUint8Array,
   toUtf8,
   withBaseException
-} from "./chunk-546YFRZM.js";
+} from "./chunk-WLALPDKA.js";
 import {
   __publicField,
   __toESM,
