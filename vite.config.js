@@ -4,9 +4,31 @@ import path from 'path';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import tailwindcss from 'tailwindcss';
 import autoprefixer from 'autoprefixer';
+import fs from 'fs';
+
+// Generate a new timestamp for this build
+const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+fs.writeFileSync('./src/utils/build-info.js', 
+  `// Auto-generated timestamp
+export const BUILD_TIMESTAMP = "${timestamp}";
+export const APP_VERSION = "1.0.0";
+`);
+
+console.log(`Build info generated with timestamp ${timestamp}`);
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // Force a clean server restart every time
+  server: {
+    force: true,
+    hmr: {
+      overlay: true,
+    },
+    watch: {
+      usePolling: true,
+      interval: 100
+    }
+  },
   plugins: [
     react(),
     nodePolyfills({
@@ -31,10 +53,13 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
+    // Force dependency pre-bundling to always run
+    force: true,
     esbuildOptions: {
     },
   },
-  cacheDir: '.vite',
+  // Use a unique cache dir with timestamp to force fresh cache
+  cacheDir: `.vite-${timestamp}`,
   clearScreen: true,
   
   // Add build configuration for cache busting with content hashing

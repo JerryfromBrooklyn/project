@@ -684,26 +684,60 @@ export const awsPhotoService = {
      */
     fetchPhotosByVisibility: async (userId, type = 'all', visibilityStatus = 'VISIBLE') => {
         try {
-            // Get all photos of the specified type
-            let allPhotos;
+            // Get all photos of the specified type WITHOUT filtering for visibility yet
+            let allPhotos = [];
             
-            if (type === 'uploaded') {
-                allPhotos = await awsPhotoService.fetchUploadedPhotos(userId);
-            } else if (type === 'matched') {
-                allPhotos = await awsPhotoService.fetchPhotos(userId);
-            } else {
-                // Get both types
-                const [uploaded, matched] = await Promise.all([
-                    awsPhotoService.fetchUploadedPhotos(userId),
-                    awsPhotoService.fetchPhotos(userId)
-                ]);
+            if (type === 'uploaded' || type === 'all') {
+                // Query DynamoDB directly without filtering for visibility
+                const queryParams = {
+                    TableName: PHOTOS_TABLE,
+                    IndexName: 'UserIdIndex', 
+                    KeyConditionExpression: 'user_id = :userId',
+                    ExpressionAttributeValues: {
+                        ':userId': userId 
+                    },
+                    ScanIndexForward: false // Sort by upload time descending
+                };
+                const response = await docClient.send(new QueryCommand(queryParams));
+                const uploadedPhotos = response.Items || [];
+                allPhotos = [...allPhotos, ...uploadedPhotos];
+            }
+            
+            if (type === 'matched' || type === 'all') {
+                // Get matched photos without filtering for visibility
+                const matchedQueryParams = {
+                    TableName: PHOTOS_TABLE,
+                    ScanIndexForward: false
+                };
+                const scanResponse = await docClient.send(new ScanCommand(matchedQueryParams));
+                const allScanPhotos = scanResponse.Items || [];
                 
-                allPhotos = [...uploaded, ...matched];
+                // Perform client-side matching logic without visibility filtering
+                const faceData = await getFaceDataForUser(userId);
+                const matchedPhotos = [];
+                
+                for (const photo of allScanPhotos) {
+                    // Apply matching logic without visibility filtering
+                    if (photo.face_ids && Array.isArray(photo.face_ids) && 
+                        faceData && faceData.registeredFaceIds && 
+                        photo.face_ids.some(id => faceData.registeredFaceIds.includes(id))) {
+                        matchedPhotos.push(photo);
+                    }
+                }
+                
+                // Deduplicate in case we have overlaps
+                const photoIdSet = new Set(allPhotos.map(p => p.id));
+                for (const photo of matchedPhotos) {
+                    if (!photoIdSet.has(photo.id)) {
+                        allPhotos.push(photo);
+                        photoIdSet.add(photo.id);
+                    }
+                }
             }
             
             console.log(`[awsPhotoService] fetchPhotosByVisibility: Found ${allPhotos.length} photos for user ${userId} before filtering`);
             
-            // Filter by visibility
+            // Now filter by the requested visibility status
             const filteredPhotos = await filterPhotosByVisibility(userId, allPhotos, visibilityStatus);
             
             console.log(`[awsPhotoService] fetchPhotosByVisibility: After filtering for '${visibilityStatus}' status: ${filteredPhotos.length} photos`);
@@ -722,9 +756,11 @@ export const awsPhotoService = {
      */
     getVisiblePhotos: async (userId, type = 'all') => {
         console.log(`[awsPhotoService] getVisiblePhotos called for user: ${userId}, type: ${type}`);
-        // Corrected logic: Call the base functions which already filter for VISIBLE.
         try {
-            if (type === 'uploaded') {
+            if (type === 'trashed') {
+                // Directly fetch photos with TRASH visibility status
+                return await awsPhotoService.fetchPhotosByVisibility(userId, 'all', 'TRASH');
+            } else if (type === 'uploaded') {
                 // fetchUploadedPhotos already returns VISIBLE, sorted photos
                 return await awsPhotoService.fetchUploadedPhotos(userId);
             } else if (type === 'matched') {
@@ -762,7 +798,7 @@ export const awsPhotoService = {
      * @returns {Promise<Array>} Trashed photos
      */
     getTrashedPhotos: async (userId) => {
-        return fetchPhotosByVisibility(userId, 'all', 'TRASH');
+        return awsPhotoService.fetchPhotosByVisibility(userId, 'all', 'TRASH');
     },
     /**
      * Get permanently hidden photos
@@ -770,7 +806,7 @@ export const awsPhotoService = {
      * @returns {Promise<Array>} Hidden photos
      */
     getHiddenPhotos: async (userId) => {
-        return fetchPhotosByVisibility(userId, 'all', 'HIDDEN');
+        return awsPhotoService.fetchPhotosByVisibility(userId, 'all', 'HIDDEN');
     },
     /**
      * Get user's storage usage

@@ -8,8 +8,9 @@ import SimpleApp from './SimpleApp';
 import Dashboard from './pages/Dashboard';
 import FaceRegistration from './components/FaceRegistration';
 import MyPhotos from './pages/MyPhotos';
-import PhotoUploader from './components/PhotoUploader';
+import { PhotoUploader } from './components/PhotoUploader.jsx';
 import Notifications from './pages/Notifications';
+import SimpleTest from './components/SimpleTest';
 
 // AWS Configuration for Rekognition
 // These would typically be in .env files and injected during build
@@ -36,6 +37,7 @@ const App = () => {
   
   return (
     <>
+      <SimpleTest />
       <AuthProvider>
         {console.log('[APP] AuthProvider rendered')}
         <Router>

@@ -8,6 +8,52 @@ import { testRekognitionConnectivity } from './lib/awsClient';
 import { checkVersion, APP_VERSION } from './utils/version';
 import './utils/cacheBuster';
 
+// ULTRA DEBUG MODE - Add a visible timestamp that proves new code is loaded
+const now = new Date();
+const debugTimestamp = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
+console.log(`%c[LOAD] 🔄 APP LOADED/RELOADED AT: ${debugTimestamp}`, 'background: #ff0000; color: white; font-size: 20px; padding: 10px;');
+
+// Create a visible debug element to confirm code loading
+const createDebugElement = () => {
+  // Remove any existing debug element
+  const existingDebug = document.getElementById('debug-timestamp');
+  if (existingDebug) {
+    existingDebug.remove();
+  }
+  
+  // Create a new debug element
+  const debugEl = document.createElement('div');
+  debugEl.id = 'debug-timestamp';
+  debugEl.style.position = 'fixed';
+  debugEl.style.top = '0';
+  debugEl.style.right = '0';
+  debugEl.style.backgroundColor = 'red';
+  debugEl.style.color = 'white';
+  debugEl.style.padding = '5px';
+  debugEl.style.zIndex = '9999';
+  debugEl.style.fontSize = '12px';
+  debugEl.textContent = `LOADED: ${debugTimestamp}`;
+  
+  // Add it to the document after a slight delay to ensure DOM is ready
+  setTimeout(() => {
+    document.body.appendChild(debugEl);
+  }, 500);
+};
+
+// Execute our debug element creator
+createDebugElement();
+
+// Force clear cache on application startup
+if ('caches' in window) {
+  caches.keys().then(cacheNames => {
+    cacheNames.forEach(cacheName => {
+      console.log(`[CACHE] Deleting cache: ${cacheName}`);
+      caches.delete(cacheName);
+    });
+    console.log('[CACHE] All caches cleared');
+  });
+}
+
 // Set the build timestamp for cache busting
 const buildTimestamp = import.meta.env.VITE_BUILD_TIMESTAMP || Date.now().toString();
 if (typeof window !== 'undefined') {

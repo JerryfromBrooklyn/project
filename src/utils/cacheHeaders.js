@@ -68,11 +68,79 @@ export const setVaryHeader = (headers, varyOn = ['Accept', 'Accept-Encoding']) =
   };
 };
 
+// Enhanced cache control utility
+import { BUILD_TIMESTAMP } from './build-info';
+
+/**
+ * Sets cache control headers for API responses
+ * @param {Response} response - The fetch response object
+ * @returns {Response} The modified response
+ */
+export const setCacheControlHeaders = (response) => {
+  // Force no caching for development
+  if (import.meta.env.DEV) {
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    response.headers.set('Surrogate-Control', 'no-store');
+  } else {
+    // For production, use more nuanced caching with versioning
+    response.headers.set('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    response.headers.set('ETag', `"${BUILD_TIMESTAMP}"`);
+  }
+  return response;
+};
+
+/**
+ * Adds cache busting version to URL
+ * @param {string} url - The URL to add cache busting to
+ * @returns {string} - The URL with cache busting parameter
+ */
+export const addVersionToUrl = (url) => {
+  if (!url) return url;
+  
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}v=${BUILD_TIMESTAMP}`;
+};
+
+/**
+ * Creates fetch options with cache busting headers
+ * @param {Object} options - Original fetch options
+ * @returns {Object} - Modified fetch options
+ */
+export const createNoCacheOptions = (options = {}) => {
+  const newOptions = { ...options };
+  newOptions.headers = {
+    ...newOptions.headers,
+    'Pragma': 'no-cache',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'X-App-Version': BUILD_TIMESTAMP,
+  };
+  return newOptions;
+};
+
+/**
+ * Enhanced fetch with cache busting
+ * @param {string} url - URL to fetch
+ * @param {Object} options - Fetch options
+ * @returns {Promise<Response>} - Fetch response
+ */
+export const fetchWithCacheBusting = async (url, options = {}) => {
+  const bustUrl = addVersionToUrl(url);
+  const noCacheOptions = createNoCacheOptions(options);
+  
+  return fetch(bustUrl, noCacheOptions);
+};
+
 export default {
   STATIC_ASSET_HEADERS,
   HTML_HEADERS,
   NO_CACHE_HEADERS,
   SHORT_CACHE_HEADERS,
   getCacheControlHeaders,
-  setVaryHeader
+  setVaryHeader,
+  setCacheControlHeaders,
+  addVersionToUrl,
+  createNoCacheOptions,
+  fetchWithCacheBusting
 }; 

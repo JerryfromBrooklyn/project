@@ -20,6 +20,67 @@
 .trash-description {
   color: #6b7280;
   font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.trash-view-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.trash-view-toggle button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+  background-color: white;
+  color: #4b5563;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.trash-view-toggle button:hover {
+  background-color: #f9fafb;
+}
+
+.trash-view-toggle button.active {
+  background-color: #f3f4f6;
+  border-color: #d1d5db;
+  color: #1f2937;
+}
+
+.photo-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #e5e7eb;
+  color: #4b5563;
+  font-size: 0.75rem;
+  font-weight: 600;
+  height: 1.25rem;
+  min-width: 1.25rem;
+  padding: 0 0.375rem;
+  border-radius: 9999px;
+  margin-left: 0.375rem;
+}
+
+.trash-view-toggle button.active .photo-count {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.trash-summary {
+  color: #4b5563;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.trash-summary p {
+  margin: 0;
 }
 
 /* Reuse the same toolbar, button and photo grid styles from MyPhotos.css */

@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos } from 'lucide-react';
+import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos, Trash2, RotateCcw } from 'lucide-react';
 import { cn } from '../utils/cn';
 import FaceRegistration from '../components/FaceRegistration';
 import { PhotoManager } from '../components/PhotoManager';
 import { getFaceDataForUser } from '../services/FaceStorageService';
 import { awsPhotoService } from '../services/awsPhotoService';
+import TabNavigation from '../components/TabNavigation';
+import { permanentlyHidePhotos } from '../services/userVisibilityService';
 
 interface FaceAttributes {
   age: { low: number; high: number };
@@ -33,6 +35,7 @@ export const Dashboard = () => {
   const [isLoadingFaceData, setIsLoadingFaceData] = useState(true);
   const [uploadedCount, setUploadedCount] = useState(0);
   const [matchedCount, setMatchedCount] = useState(0);
+  const [trashedPhotos, setTrashedPhotos] = useState([]);
 
   useEffect(() => {
     const fetchFaceData = async () => {
@@ -132,6 +135,25 @@ export const Dashboard = () => {
     fetchCounts();
   }, [user]); // Re-run when user changes
 
+  // Add a function to fetch trashed photos
+  useEffect(() => {
+    const fetchTrashedPhotos = async () => {
+      if (!user || !user.id) return;
+      
+      try {
+        const trashed = await awsPhotoService.getVisiblePhotos(user.id, 'trashed');
+        setTrashedPhotos(trashed || []);
+      } catch (err) {
+        console.error('[Dashboard] Error fetching trashed photos:', err);
+        setTrashedPhotos([]);
+      }
+    };
+    
+    if (activeTab === 'trash') {
+      fetchTrashedPhotos();
+    }
+  }, [user, activeTab]);
+
   const handleRegistrationSuccess = (result: any) => {
     console.log('[Dashboard] Face registration successful:', { 
       faceId: result?.faceId, 
@@ -192,6 +214,42 @@ export const Dashboard = () => {
         console.log('[Dashboard] Using constructed fallback URL:', fallbackUrl);
         setFaceImageUrl(fallbackUrl);
       }
+    }
+  };
+
+  // Add functions to handle photo restoration and permanent deletion
+  const handleRestorePhoto = async (photoId) => {
+    if (!user || !user.id || !photoId) return;
+    
+    try {
+      await awsPhotoService.restorePhotoFromTrash(user.id, photoId);
+      // Update the trashed photos list
+      setTrashedPhotos(trashedPhotos.filter(photo => photo.id !== photoId));
+      // Refresh counts
+      fetchPhotosAndCounts(false);
+    } catch (err) {
+      console.error('[Dashboard] Error restoring photo:', err);
+    }
+  };
+  
+  const handlePermanentDelete = async (photoId) => {
+    if (!user || !user.id || !photoId) return;
+    
+    const confirmDelete = window.confirm("Are you sure you want to permanently hide this photo? This action cannot be undone.");
+    if (!confirmDelete) return;
+    
+    try {
+      // Use the permanentlyHidePhotos method from userVisibilityService instead
+      const result = await permanentlyHidePhotos(user.id, [photoId]);
+      
+      if (result.success) {
+        // Update the trashed photos list
+        setTrashedPhotos(trashedPhotos.filter(photo => photo.id !== photoId));
+      } else {
+        throw new Error(result.error || 'Failed to permanently hide photo');
+      }
+    } catch (err) {
+      console.error('[Dashboard] Error permanently deleting photo:', err);
     }
   };
 
@@ -407,13 +465,13 @@ export const Dashboard = () => {
       case 'upload':
         return (
           <div className="bg-white rounded-apple-2xl shadow-apple p-8 border border-apple-gray-100">
-            <div className="flex items-center mb-6">
+            <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-apple-gray-900 flex items-center">
-                <Upload className="w-5 h-5 mr-2 text-apple-blue-500" />
+                <Upload className="w-5 h-5 mr-2 text-green-500" />
                 Upload Photos
               </h2>
             </div>
-            <p className="text-apple-gray-600 mb-6 border-l-4 border-apple-blue-500 pl-4 py-2 bg-apple-blue-50 rounded-r-apple">
+            <p className="text-apple-gray-600 mb-6 border-l-4 border-green-500 pl-4 py-2 bg-green-50 rounded-r-apple">
               Upload photos to be indexed for facial recognition. Other users will be able to find photos they appear in.
             </p>
             <PhotoManager mode="upload" />
@@ -424,14 +482,14 @@ export const Dashboard = () => {
           <div className="bg-white rounded-apple-2xl shadow-apple p-8 border border-apple-gray-100">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-apple-gray-900 flex items-center">
-                <Photos className="w-5 h-5 mr-2 text-apple-blue-500" />
+                <Photos className="w-5 h-5 mr-2 text-amber-500" />
                 My Photos
               </h2>
             </div>
-            <p className="text-apple-gray-600 mb-6 border-l-4 border-apple-blue-500 pl-4 py-2 bg-apple-blue-50 rounded-r-apple">
+            <p className="text-apple-gray-600 mb-6 border-l-4 border-amber-500 pl-4 py-2 bg-amber-50 rounded-r-apple">
               Photos where you have been identified through facial recognition.
             </p>
-            <PhotoManager mode="matches" />
+            <PhotoManager mode="matches" nativeShare={true} />
           </div>
         );
       case 'events':
@@ -439,11 +497,75 @@ export const Dashboard = () => {
           <div className="bg-white rounded-apple-2xl shadow-apple p-8 border border-apple-gray-100">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-apple-gray-900 flex items-center">
-                <Calendar className="w-5 h-5 mr-2 text-apple-blue-500" />
+                <Calendar className="w-5 h-5 mr-2 text-indigo-500" />
                 Events
               </h2>
             </div>
-            <p className="text-apple-gray-500">No events found.</p>
+            <p className="text-apple-gray-600 mb-6 border-l-4 border-indigo-500 pl-4 py-2 bg-indigo-50 rounded-r-apple">
+              View photos organized by events.
+            </p>
+            <p className="text-apple-gray-500 p-4 bg-apple-gray-50 rounded-apple flex items-center justify-center h-32">
+              <span className="text-center">No events found. Event photos will appear here.</span>
+            </p>
+          </div>
+        );
+      case 'trash':
+        return (
+          <div className="bg-white rounded-apple-2xl shadow-apple p-8 border border-apple-gray-100">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-apple-gray-900 flex items-center">
+                <Trash2 className="w-5 h-5 mr-2 text-gray-500" />
+                Trash
+              </h2>
+              <div className="text-center bg-gray-50 px-3 py-2 rounded-full border border-gray-200">
+                <span className="text-sm font-medium text-gray-700">{trashedPhotos.length}</span>
+                <span className="text-xs text-gray-500 ml-1">items</span>
+              </div>
+            </div>
+            <p className="text-apple-gray-600 mb-6 border-l-4 border-gray-500 pl-4 py-2 bg-gray-50 rounded-r-apple">
+              Items in trash will be hidden from your view. You can restore them or permanently hide them from your account.
+            </p>
+            {trashedPhotos.length > 0 ? (
+              <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {trashedPhotos.map(photo => (
+                    <div key={photo.id} className="relative group">
+                      <div className="aspect-square rounded-apple-xl overflow-hidden shadow-md">
+                        <img 
+                          src={photo.url} 
+                          alt={photo.title || `Photo ${photo.id}`} 
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
+                        />
+                      </div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent rounded-apple-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center">
+                          <button 
+                            onClick={() => handleRestorePhoto(photo.id)}
+                            className="p-2.5 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors duration-300 shadow-lg flex items-center"
+                            title="Restore photo"
+                          >
+                            <RotateCcw className="w-4 h-4 mr-1" />
+                            <span className="text-xs">Restore</span>
+                          </button>
+                          <button 
+                            onClick={() => handlePermanentDelete(photo.id)}
+                            className="p-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg flex items-center"
+                            title="Permanently hide photo"
+                          >
+                            <Trash2 className="w-4 h-4 mr-1" />
+                            <span className="text-xs">Hide</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-apple-gray-500 p-4 bg-apple-gray-50 rounded-apple flex items-center justify-center h-32">
+                <span className="text-center">Trash is empty. Deleted items will appear here.</span>
+              </p>
+            )}
           </div>
         );
       default:
@@ -588,30 +710,12 @@ export const Dashboard = () => {
 
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-ios-safe">
-        {/* Tabs */}
-        <div className="flex overflow-x-auto mb-8 pb-2 no-scrollbar">
-          <nav className="flex space-x-2 mx-auto bg-apple-gray-200 p-1 rounded-full">
-            {[
-              { id: 'home', name: 'Home', icon: <User className="w-4 h-4" /> },
-              { id: 'upload', name: 'Upload', icon: <Upload className="w-4 h-4" /> },
-              { id: 'photos', name: 'My Photos', icon: <Image className="w-4 h-4" /> },
-              { id: 'events', name: 'Events', icon: <Calendar className="w-4 h-4" /> },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "flex items-center px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap transition-all duration-300",
-                  activeTab === tab.id
-                    ? "bg-white text-apple-gray-900 shadow-apple-button"
-                    : "text-apple-gray-600 hover:text-apple-gray-900"
-                )}
-              >
-                {tab.icon}
-                <span className="ml-2">{tab.name}</span>
-              </button>
-            ))}
-          </nav>
+        {/* Using the improved TabNavigation component */}
+        <div className="mb-8">
+          <TabNavigation 
+            activeTab={activeTab} 
+            onTabChange={setActiveTab}
+          />
         </div>
 
         <div className={cn(

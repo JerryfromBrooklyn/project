@@ -109,9 +109,100 @@ export const checkForUpdates = async () => {
 };
 ```
 
-## Cache-Optimized Deployment
+## Development Environment Cache Busting
 
-The deployment process includes optimized cache settings for different file types:
+### For Windows PowerShell
+
+Windows PowerShell doesn't support the `&&` operator for command chaining like Unix-based systems. Use the following sequence of commands for complete cache busting:
+
+```powershell
+# Step 1: Kill any running Node processes
+taskkill /F /IM node.exe
+
+# Step 2: Clean the npm cache
+npm cache clean --force
+
+# Step 3: Remove Vite cache directories
+Remove-Item -Force -Recurse -ErrorAction SilentlyContinue .vite*
+Remove-Item -Force -Recurse -ErrorAction SilentlyContinue node_modules\.vite
+
+# Step 4: Start the development server with fresh timestamp
+npm run dev
+```
+
+For convenience, you can create a script in package.json:
+
+```json
+"scripts": {
+  "dev:clean-win": "powershell -Command \"taskkill /F /IM node.exe; npm cache clean --force; Remove-Item -Force -Recurse -ErrorAction SilentlyContinue .vite*; Remove-Item -Force -Recurse -ErrorAction SilentlyContinue node_modules\\.vite; npm run dev\""
+}
+```
+
+Then run:
+```
+npm run dev:clean-win
+```
+
+### For Unix-based Systems (macOS/Linux)
+
+Unix-based systems can use the `&&` operator to chain commands:
+
+```bash
+# Kill any running Node processes, clean caches, and start development server
+killall node && npm cache clean --force && rm -rf .vite* node_modules/.vite && npm run dev
+```
+
+Add to package.json:
+
+```json
+"scripts": {
+  "dev:clean": "killall node || true && npm cache clean --force && rm -rf .vite* node_modules/.vite && npm run dev"
+}
+```
+
+Then run:
+```
+npm run dev:clean
+```
+
+Note: The `|| true` after `killall node` ensures the script continues even if no node processes are running.
+
+## Browser Cache Clearing
+
+To manually clear browser cache:
+
+1. **Chrome/Edge**:
+   - Press `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (Mac)
+   - Or open DevTools (`F12`), right-click the reload button, and select "Empty Cache and Hard Reload"
+
+2. **Firefox**:
+   - Press `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (Mac)
+   - Or hold `Shift` while clicking the reload button
+
+3. **Safari**:
+   - Press `Option+Cmd+E` to empty the cache
+   - Then press `Cmd+R` to reload
+
+## Cache-Optimized Production Deployment
+
+### Preparation for Deployment
+
+Before deploying to production, ensure a fresh build:
+
+```powershell
+# Windows PowerShell
+npm cache clean --force
+Remove-Item -Force -Recurse -ErrorAction SilentlyContinue .vite*
+Remove-Item -Force -Recurse -ErrorAction SilentlyContinue node_modules\.vite
+npm run build
+```
+
+or
+
+```bash
+# Unix-based systems
+npm cache clean --force && rm -rf .vite* node_modules/.vite && npm run build
+```
 
 ### HTML Files (No Cache)
 
@@ -140,76 +231,30 @@ After deployment, the CloudFront CDN cache is invalidated to ensure the new cont
 aws cloudfront create-invalidation --distribution-id E3OEKXFISG92UV --paths "/*"
 ```
 
-## Scripts and Commands
+For Windows PowerShell, create a deployment script in package.json:
 
-### Cache Busting During Development
-
-To start development with a fresh timestamp:
-
-```bash
-npm run dev
+```json
+"scripts": {
+  "deploy:win": "powershell -Command \"npm cache clean --force; Remove-Item -Force -Recurse -ErrorAction SilentlyContinue .vite*; npm run build && npm run s3-sync:win && npm run invalidate-cf\"",
+  "s3-sync:win": "powershell -Command \"aws s3 sync dist/ s3://shmong --delete --exclude '*' --include '*.html' --cache-control 'public, max-age=0, must-revalidate' --content-type 'text/html; charset=utf-8' && aws s3 sync dist/assets/ s3://shmong/assets --delete --cache-control 'public, max-age=31536000, immutable'\""
+}
 ```
 
-This runs:
-```bash
-node scripts/generate-timestamp.js && vite
-```
+## Troubleshooting Cache Issues
 
-### Build with Cache Busting
+If you encounter unexpected behavior related to caching:
 
-To build with cache busting:
+1. **Check for Port Conflicts**: If many Vite development servers are running in the background, you might see messages like "Port 5173 is in use, trying another one...". Use `taskkill /F /IM node.exe` (Windows) or `killall node` (Unix) to close all Node processes.
 
-```bash
-npm run build
-```
+2. **Vite Cache Issues**: If Vite generates warnings about dependencies or shows incorrect behavior, remove the Vite cache with:
+   ```
+   Remove-Item -Force -Recurse -ErrorAction SilentlyContinue .vite*
+   Remove-Item -Force -Recurse -ErrorAction SilentlyContinue node_modules\.vite
+   ```
 
-This runs:
-```bash
-node scripts/generate-timestamp.js && vite build
-```
+3. **Browser Hard Refresh**: Use a hard refresh (Ctrl+Shift+R or Cmd+Shift+R) to bypass browser cache.
 
-### Deploying with Cache Optimization
-
-To deploy with optimized cache settings:
-
-```bash
-npm run deploy:cache
-```
-
-This runs:
-```bash
-npm run build && npm run s3-sync:cache && npm run invalidate-cf
-```
-
-Or for Windows:
-
-```bash
-npm run deploy:win
-```
-
-### Clear Browser Cache
-
-To clear browser cache during debugging, users can:
-
-1. Press Ctrl+F5 or Cmd+Shift+R
-2. In Chrome DevTools:
-   - Open DevTools (F12)
-   - Right-click the reload button
-   - Select "Empty Cache and Hard Reload"
-
-## Manual Cache Invalidation
-
-To manually invalidate the CloudFront cache:
-
-```bash
-npm run invalidate-cf
-```
-
-Or directly with AWS CLI:
-
-```bash
-aws cloudfront create-invalidation --distribution-id E3OEKXFISG92UV --paths "/*"
-```
+4. **Service Worker Issues**: If using service workers, you might need to unregister them through browser DevTools > Application > Service Workers.
 
 ## Component Usage
 

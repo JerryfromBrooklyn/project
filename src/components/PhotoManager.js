@@ -9,7 +9,8 @@ import { AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Upload, Image as I
 import { cn } from '../utils/cn';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { movePhotosToTrash } from '../services/userVisibilityService';
-export const PhotoManager = ({ eventId, mode = 'upload' }) => {
+
+export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) => {
     const [photos, setPhotos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -18,6 +19,7 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const photosPerPage = 48; // 12 rows of 4 images
     const { user } = useAuth();
+
     const fetchPhotosAndCounts = useCallback(async (showLoading = true) => {
         if (!user?.id) {
             console.log(`[PhotoManager ${mode}] No user ID, skipping fetch.`);
@@ -77,14 +79,17 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             if(showLoading) setLoading(false);
         }
     }, [user?.id, mode]); 
+
     useEffect(() => {
         if (!user?.id) return;
         console.log(`🔄 [PhotoManager ${mode}] Effect triggered: mode or user changed.`);
         fetchPhotosAndCounts();
     }, [fetchPhotosAndCounts]);
+
     const handlePhotoUpload = async (photoId) => {
         await fetchPhotosAndCounts();
     };
+
     const handlePhotoDelete = async (photoId) => {
         try {
             // Use userVisibilityService to move the photo to trash instead of deleting it
@@ -101,6 +106,7 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             setError('Failed to move photo to trash. Please try again.');
         }
     };
+
     const handleTrashSinglePhoto = async (photoId, event) => {
         event.stopPropagation(); // Prevent card selection/other actions
         if (!user?.id || !photoId) return;
@@ -126,9 +132,61 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             setError('Failed to move photo to trash. Please try again later.');
         }
     };
+
     const handleShare = async (photoId) => {
-        console.log('Share photo:', photoId);
+        if (!photoId) return;
+        
+        try {
+            // Find the photo in our current photos array
+            const photo = photos.find(p => p.id === photoId);
+            if (!photo || !photo.url) {
+                console.error('[PhotoManager] Cannot share photo: No URL found');
+                return;
+            }
+            
+            console.log('[PhotoManager] Sharing photo:', photo.url);
+            
+            // Use the Web Share API if available (modern browsers/mobile)
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: photo.title || 'Shared Photo',
+                        text: photo.description || 'Check out this photo!',
+                        url: photo.url
+                    });
+                    console.log('[PhotoManager] Photo shared successfully via Web Share API');
+                } catch (err) {
+                    console.warn('[PhotoManager] Error using Web Share API:', err);
+                    // Fallback to download if sharing fails
+                    downloadPhoto(photo);
+                }
+            } else {
+                // Fallback for browsers without Web Share API
+                downloadPhoto(photo);
+            }
+        } catch (err) {
+            console.error('[PhotoManager] Error sharing photo:', err);
+        }
     };
+    
+    const downloadPhoto = (photo) => {
+        // Create a temporary anchor element for downloading
+        const link = document.createElement('a');
+        link.href = photo.url;
+        link.download = `photo-${photo.id}.jpg`;
+        
+        // iOS Safari specific handling (open in new tab)
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        if (isIOS) {
+            window.open(photo.url, '_blank');
+        } else {
+            // Standard download approach for other browsers
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
     // Pagination logic (using photos directly)
     const totalPages = Math.ceil(photos.length / photosPerPage);
     const currentPhotos = useMemo(() => {
@@ -136,15 +194,21 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
         const indexOfFirstPhoto = indexOfLastPhoto - photosPerPage;
         return photos.slice(indexOfFirstPhoto, indexOfLastPhoto);
     }, [photos, currentPage, photosPerPage]);
+
     if (loading) {
         return (_jsx("div", { className: "flex items-center justify-center h-64", children: _jsx(RefreshCw, { className: "w-8 h-8 text-apple-gray-400 animate-spin" }) }));
     }
     return (_jsxs("div", { children: [error && (_jsxs("div", { className: "mb-6 p-4 bg-red-50 text-red-600 rounded-apple flex items-center", children: [_jsx(AlertTriangle, { className: "w-5 h-5 mr-2" }), error] })), mode === 'upload' && (_jsx(PhotoUploader, { eventId: eventId, onUploadComplete: handlePhotoUpload, onError: (error) => setError(error) })), _jsxs("div", { className: "photo-manager-header mb-4 p-4 bg-gray-50 rounded-lg border", children: [
         _jsxs("h3", { className: "text-lg font-semibold mb-2", children: [mode === 'upload' ? "My Uploads" : "Matched Photos"]}),
         _jsxs("div", { className: "flex items-center space-x-4 text-sm text-gray-600", children: [
-            _jsxs("span", { className: "flex items-center", children: [_jsx(Upload, { size: 16, className:"mr-1"}), `Uploaded: ${uploadedCount}`]}),
-            _jsx("span", { className: "text-gray-300", children: "|"}),
-            _jsxs("span", { className: "flex items-center", children: [_jsx(ImageIcon, { size: 16, className:"mr-1"}), `Matched: ${matchedCount}`]})
+            mode === 'upload' && _jsxs("span", { className: "flex items-center", children: [
+                _jsx(Upload, { size: 16, className:"mr-1"}), 
+                `Uploaded: ${uploadedCount}`
+            ]}),
+            mode === 'matches' && _jsxs("span", { className: "flex items-center", children: [
+                _jsx(ImageIcon, { size: 16, className:"mr-1"}), 
+                `Matched: ${matchedCount}`
+            ]})
         ]})
     ]}), _jsx("hr", { className: "mb-6"}), _jsx(motion.div, { 
         initial: { opacity: 0, y: 20 }, 

@@ -169,14 +169,29 @@ export const filterPhotosByVisibility = async (userId, photos, status = "VISIBLE
   try {
     if (!photos || photos.length === 0) return [];
     
+    console.log(`[filterPhotosByVisibility] Starting for user ${userId}, status: ${status}, with ${photos.length} photos`);
+    
     // Get visibility map for this user
-    const { visibilityMap } = await getPhotoVisibilityMap(userId);
+    const { visibilityMap, success } = await getPhotoVisibilityMap(userId);
+    
+    if (!success) {
+      console.error("[filterPhotosByVisibility] Failed to get visibility map");
+      return [];
+    }
     
     // Filter photos by status (default is VISIBLE if no record exists)
-    return photos.filter(photo => {
+    const filtered = photos.filter(photo => {
+      if (!photo.id) {
+        console.warn('[filterPhotosByVisibility] Photo missing ID:', photo);
+        return false;
+      }
+      
       const photoStatus = visibilityMap[photo.id] || "VISIBLE";
       return photoStatus === status;
     });
+    
+    console.log(`[filterPhotosByVisibility] Filtered to ${filtered.length} photos with status '${status}'`);
+    return filtered;
   } catch (error) {
     console.error("Error filtering photos by visibility:", error);
     return [];

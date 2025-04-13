@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { awsPhotoService } from '../services/awsPhotoService';
-import { restorePhotosFromTrash, permanentlyHidePhotos } from '../services/userVisibilityService';
+import { restorePhotosFromTrash, permanentlyHidePhotos, getPhotoVisibilityMap } from '../services/userVisibilityService';
 import { downloadImagesAsZip, downloadSingleImage } from '../utils/downloadUtils';
 import '../styles/TrashBin.css';
 import { FaTrash, FaDownload, FaUndo, FaCheckSquare, FaSquare } from 'react-icons/fa';
@@ -12,13 +12,32 @@ const TrashBin = ({ userId }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTrashView, setActiveTrashView] = useState('matched');
+  const [visibilityMap, setVisibilityMap] = useState({});
 
   useEffect(() => {
     const loadTrashedPhotos = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const photos = await awsPhotoService.fetchPhotosByVisibility(userId, 'all', 'TRASH');
+        console.log(`[TrashBin] Fetching trashed photos for user: ${userId}`);
+        
+        // Use getTrashedPhotos which properly fetches photos with TRASH visibility status
+        const photos = await awsPhotoService.getTrashedPhotos(userId);
+        
+        console.log(`[TrashBin] Fetched ${photos.length} trashed photos`);
+        
+        // Get the visibility map for debugging
+        const visibilityMapResult = await getPhotoVisibilityMap(userId);
+        setVisibilityMap(visibilityMapResult.visibilityMap || {});
+        
+        // Verify all photos have TRASH status in the visibility map
+        const trashCount = photos.filter(p => visibilityMapResult.visibilityMap[p.id] === 'TRASH').length;
+        console.log(`[TrashBin] Photos confirmed in TRASH status: ${trashCount} out of ${photos.length}`);
+        
+        if (trashCount !== photos.length) {
+          console.warn('[TrashBin] Some photos in the trash don\'t have TRASH visibility status');
+        }
+        
         setAllTrashedPhotos(photos || []);
       } catch (err) {
         console.error('Error fetching trashed photos:', err);
@@ -35,9 +54,11 @@ const TrashBin = ({ userId }) => {
 
   const filteredTrashedPhotos = useMemo(() => {
     if (activeTrashView === 'uploaded') {
-      return allTrashedPhotos.filter(photo => photo.user_id === userId);
+      return allTrashedPhotos.filter(photo => photo.user_id === userId || photo.uploaded_by === userId);
+    } else if (activeTrashView === 'matched') {
+      return allTrashedPhotos.filter(photo => photo.user_id !== userId && photo.uploaded_by !== userId);
     } else {
-      return allTrashedPhotos.filter(photo => photo.user_id !== userId);
+      return allTrashedPhotos;
     }
   }, [allTrashedPhotos, activeTrashView, userId]);
 
@@ -139,13 +160,18 @@ const TrashBin = ({ userId }) => {
             className={activeTrashView === 'matched' ? 'active' : ''}
           >
             <ImageIcon size={16} /> Matched Photos
+            <span className="photo-count">{allTrashedPhotos.filter(photo => photo.user_id !== userId && photo.uploaded_by !== userId).length}</span>
           </button>
           <button 
             onClick={() => setActiveTrashView('uploaded')}
             className={activeTrashView === 'uploaded' ? 'active' : ''}
           >
              <Upload size={16} /> My Uploads
+             <span className="photo-count">{allTrashedPhotos.filter(photo => photo.user_id === userId || photo.uploaded_by === userId).length}</span>
           </button>
+        </div>
+        <div className="trash-summary">
+          <p>Total in trash: <strong>{filteredTrashedPhotos.length}</strong> photos</p>
         </div>
       </div>
       
@@ -233,6 +259,9 @@ const TrashBin = ({ userId }) => {
                 <p className="photo-title">{photo.title || 'Untitled'}</p>
                 <p className="photo-date">
                   {new Date(photo.createdAt || photo.created_at || Date.now()).toLocaleDateString()}
+                </p>
+                <p className="photo-visibility">
+                  Status: {visibilityMap[photo.id] || 'Unknown'}
                 </p>
               </div>
             </div>
