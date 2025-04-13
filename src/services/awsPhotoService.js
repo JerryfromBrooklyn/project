@@ -720,8 +720,39 @@ export const awsPhotoService = {
      */
     getVisiblePhotos: async (userId, type = 'all') => {
         console.log(`[awsPhotoService] getVisiblePhotos called for user: ${userId}, type: ${type}`);
-        // Revert to simpler implementation - fetchPhotosByVisibility handles fetching and filtering
-        return fetchPhotosByVisibility(userId, type, 'VISIBLE');
+        // Corrected logic: Call the base functions which already filter for VISIBLE.
+        try {
+            if (type === 'uploaded') {
+                // fetchUploadedPhotos already returns VISIBLE, sorted photos
+                return await awsPhotoService.fetchUploadedPhotos(userId);
+            } else if (type === 'matched') {
+                 // fetchPhotos already returns VISIBLE, sorted matched photos
+                return await awsPhotoService.fetchPhotos(userId);
+            } else { // type === 'all'
+                // Fetch both (they are already filtered for VISIBLE and sorted)
+                const [uploaded, matched] = await Promise.all([
+                    awsPhotoService.fetchUploadedPhotos(userId),
+                    awsPhotoService.fetchPhotos(userId)
+                ]);
+                
+                // Combine and de-duplicate
+                const allVisiblePhotosMap = new Map();
+                uploaded.forEach(p => allVisiblePhotosMap.set(p.id, p));
+                matched.forEach(p => allVisiblePhotosMap.set(p.id, p)); // Overwrites duplicates from uploaded if any
+                
+                const combinedPhotos = Array.from(allVisiblePhotosMap.values());
+                
+                // Re-sort the combined list by date
+                const sortedCombined = combinedPhotos.sort((a, b) => 
+                    new Date(b.created_at || 0) - new Date(a.created_at || 0)
+                );
+                console.log(`[awsPhotoService] Returning ${sortedCombined.length} combined visible photos for type 'all'.`);
+                return sortedCombined;
+            }
+        } catch (error) {
+             console.error(`[awsPhotoService] Error in getVisiblePhotos for type '${type}':`, error);
+             return []; // Return empty array on error
+        }
     },
     /**
      * Get photos in trash bin

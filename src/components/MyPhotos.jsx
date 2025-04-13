@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import PhotoDetailsModal from './PhotoDetailsModal';
-import { Trash2, RefreshCw, Search, Filter, User, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trash2, RefreshCw, User, ChevronLeft, ChevronRight } from 'lucide-react';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { movePhotosToTrash } from '../services/userVisibilityService';
 import { downloadImagesAsZip, downloadSingleImage } from '../utils/downloadUtils';
@@ -19,7 +19,6 @@ const MyPhotos = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
   const [selectedPhotos, setSelectedPhotos] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const photosPerPage = 48; // 12 rows of 4 images
@@ -45,10 +44,13 @@ const MyPhotos = () => {
     
     try {
       console.log(`[MyPhotos] Fetching matched photos for user: ${user.id}`);
-      // Use the corrected service function for matched photos (which includes visibility filter)
-      const fetchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'matched'); 
-      setPhotos(fetchedPhotos || []); 
-      console.log(`[MyPhotos] Successfully fetched ${fetchedPhotos?.length || 0} matched photos.`);
+      const fetchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'matched');
+      // Sort photos by date (newest first) after fetching
+      const sortedPhotos = (fetchedPhotos || []).sort((a, b) => 
+        new Date(b.created_at || 0) - new Date(a.created_at || 0)
+      );
+      setPhotos(sortedPhotos);
+      console.log(`[MyPhotos] Successfully fetched and sorted ${sortedPhotos?.length || 0} matched photos.`);
     } catch (err) {
       console.error('[MyPhotos] Error fetching photos:', err);
       setError(err.message || 'An error occurred while fetching photos');
@@ -69,29 +71,14 @@ const MyPhotos = () => {
 
   }, [fetchPhotos]); // Depend on the memoized fetchPhotos function
 
-  // Recalculate filtered photos when photos or searchTerm changes
-  const filteredPhotos = useMemo(() => {
-      return photos.filter(photo => {
-        const searchFields = [
-          photo.id,
-          photo.description || '',
-          photo.location?.name || '',
-          photo.title || '',
-          ...(photo.tags || []),
-          ...(photo.matched_users?.map(u => u.userId || u.user_id || '') || []) // Search matched user IDs
-        ].join(' ').toLowerCase();
-        
-        return searchTerm === '' || searchFields.includes(searchTerm.toLowerCase());
-      });
-  }, [photos, searchTerm]);
-
-  // Recalculate pagination based on filtered photos
-  const totalPages = Math.ceil(filteredPhotos.length / photosPerPage);
+  // Update pagination logic to use photos directly
+  const totalPages = Math.ceil(photos.length / photosPerPage);
   const currentPhotos = useMemo(() => {
       const indexOfLastPhoto = currentPage * photosPerPage;
       const indexOfFirstPhoto = indexOfLastPhoto - photosPerPage;
-      return filteredPhotos.slice(indexOfFirstPhoto, indexOfLastPhoto);
-  }, [filteredPhotos, currentPage, photosPerPage]);
+      // Slice directly from photos state
+      return photos.slice(indexOfFirstPhoto, indexOfLastPhoto);
+  }, [photos, currentPage, photosPerPage]);
 
   const handleRefresh = () => {
     fetchPhotos(true);
@@ -116,13 +103,12 @@ const MyPhotos = () => {
     // handlePhotoSelect(photos.find(p => p.id === photoId)); 
   };
 
-  // Toggle selection of all photos currently visible
+  // Update toggleSelectAll to use currentPhotos
   const toggleSelectAll = () => {
     if (selectedPhotos.length === currentPhotos.length && currentPhotos.length > 0) {
-      setSelectedPhotos([]); // Deselect all in current view
+      setSelectedPhotos([]);
     } else {
-      // Select all in current view
-      setSelectedPhotos(currentPhotos.map(photo => photo.id)); 
+      setSelectedPhotos(currentPhotos.map(photo => photo.id));
     }
   };
 
@@ -217,24 +203,6 @@ const MyPhotos = () => {
             <span>Refresh</span>
           </button>
         </div>
-      </div>
-      
-      <div className="mb-6 flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-grow">
-          <input
-            type="text"
-            placeholder="Search photos..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-        </div>
-        
-        <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center">
-          <Filter size={16} className="mr-2" />
-          <span>Filter</span>
-        </button>
       </div>
       
       {loading ? (
@@ -383,7 +351,7 @@ const MyPhotos = () => {
         <div className="flex flex-col items-center justify-center h-64 bg-gray-50 rounded-lg border border-gray-200">
           <p className="text-gray-500 mb-2">No photos found</p>
           <p className="text-sm text-gray-400">
-            {searchTerm ? 'Try a different search term' : 'Upload some photos to get started'}
+            No photos matched your face yet.
           </p>
         </div>
       )}

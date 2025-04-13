@@ -1,134 +1,89 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 // src/components/PhotoManager.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoGrid } from './PhotoGrid';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, RefreshCw, Filter, ChevronDown, Calendar, MapPin, Tag, Clock, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Upload, Image as ImageIcon } from 'lucide-react';
 import { cn } from '../utils/cn';
-import { GoogleMaps } from './GoogleMaps';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { movePhotosToTrash } from '../services/userVisibilityService';
 export const PhotoManager = ({ eventId, mode = 'upload' }) => {
     const [photos, setPhotos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [showFilters, setShowFilters] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [uploadedCount, setUploadedCount] = useState(0);
+    const [matchedCount, setMatchedCount] = useState(0);
     const [currentPage, setCurrentPage] = useState(1);
     const photosPerPage = 48; // 12 rows of 4 images
-    const [filters, setFilters] = useState({
-        dateRange: {
-            start: '',
-            end: ''
-        },
-        location: {
-            lat: 0,
-            lng: 0,
-            name: ''
-        },
-        tags: [],
-        timeRange: {
-            start: '',
-            end: ''
-        }
-    });
     const { user } = useAuth();
-    useEffect(() => {
-        if (!user)
+    const fetchPhotosAndCounts = useCallback(async (showLoading = true) => {
+        if (!user?.id) {
+            console.log(`[PhotoManager ${mode}] No user ID, skipping fetch.`);
+            if(showLoading) setLoading(false);
+            setPhotos([]);
+            setUploadedCount(0);
+            setMatchedCount(0);
             return;
-        console.log(`🔄 [PhotoManager ${mode}] Setting up AWS photo polling...`);
-        
-        let initialFetchTimeoutId = null;
-
-        // Fetch photos immediately on mount for all modes
-        fetchPhotos(); // Fetch immediately for all modes
-        
-        // Only set up polling for non-upload modes like 'matches'
-        let pollingInterval = null;
-        if (mode !== 'upload') {
-            console.log(`   Setting up polling interval for '${mode}' mode`);
-            pollingInterval = setInterval(() => {
-                console.log(`   Polling interval triggered for mode: ${mode}`);
-                fetchPhotos();
-            }, 30000); // Poll every 30 seconds
-        } else {
-            console.log(`   Polling disabled for '${mode}' mode`);
         }
         
-        return () => {
-            console.log(`🔄 [PhotoManager ${mode}] Cleaning up AWS photo polling`);
-            if (initialFetchTimeoutId) {
-                clearTimeout(initialFetchTimeoutId);
-            }
-            if (pollingInterval) {
-                clearInterval(pollingInterval);
-            }
-        };
-    // Depend on user.id AND mode, so fetch runs when mode changes
-    }, [user?.id, mode]);
-    const fetchPhotos = async () => {
-        try {
+        if (showLoading) {
             setLoading(true);
-            setError(null);
-            if (!user)
-                return;
+        }
+        setError(null);
+        
+        try {
+            console.log(`[PhotoManager ${mode}] Fetching photos for mode: ${mode}`);
             let fetchedPhotos = [];
             if (mode === 'matches') {
-                console.log(`📥 [PhotoManager ${mode}] Fetching MATCHED photos from AWS DynamoDB...`);
-                fetchedPhotos = await awsPhotoService.fetchPhotos(user.id);
-            } else {
-                console.log(`📥 [PhotoManager ${mode}] Fetching UPLOADED photos from AWS DynamoDB...`);
+                console.log(`📥 [PhotoManager ${mode}] Fetching MATCHED photos...`);
+                fetchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'matched');
+            } else { // Assume 'upload' mode
+                console.log(`📥 [PhotoManager ${mode}] Fetching UPLOADED photos...`);
                 fetchedPhotos = await awsPhotoService.fetchUploadedPhotos(user.id);
             }
-            // Apply filters if needed
-            let filteredPhotos = [...fetchedPhotos];
-            // Apply date range filter
-            if (filters.dateRange.start) {
-                filteredPhotos = filteredPhotos.filter(photo => photo.date_taken && new Date(photo.date_taken) >= new Date(filters.dateRange.start));
-            }
-            if (filters.dateRange.end) {
-                filteredPhotos = filteredPhotos.filter(photo => photo.date_taken && new Date(photo.date_taken) <= new Date(filters.dateRange.end));
-            }
-            // Apply location filter
-            if (filters.location.name) {
-                filteredPhotos = filteredPhotos.filter(photo => photo.location?.name?.toLowerCase().includes(filters.location.name.toLowerCase()));
-            }
-            // Apply tags filter
-            if (filters.tags.length > 0) {
-                filteredPhotos = filteredPhotos.filter(photo => {
-                    if (!photo.tags || !Array.isArray(photo.tags))
-                        return false;
-                    return filters.tags.every(tag => photo.tags.includes(tag));
-                });
-            }
-            // Apply search query
-            if (searchQuery) {
-                const query = searchQuery.toLowerCase();
-                filteredPhotos = filteredPhotos.filter(photo => {
-                    const searchableFields = [
-                        photo.title,
-                        photo.description,
-                        photo.location?.name,
-                        photo.venue?.name,
-                        ...(photo.tags || [])
-                    ].filter(Boolean);
-                    return searchableFields.some(field => field && field.toLowerCase().includes(query));
-                });
-            }
-            setPhotos(filteredPhotos);
+            
+            const sortedPhotos = (fetchedPhotos || []).sort((a, b) => 
+                new Date(b.created_at || 0) - new Date(a.created_at || 0)
+            );
+
+            setPhotos(sortedPhotos);
+            console.log(`[PhotoManager ${mode}] Successfully fetched ${sortedPhotos.length} photos for current view.`);
+
+            console.log(`[PhotoManager ${mode}] Fetching counts...`);
+            const [uploadedResult, matchedResult] = await Promise.all([
+                awsPhotoService.fetchUploadedPhotos(user.id).catch(err => { 
+                    console.error("[PhotoManager] Error fetching uploaded count:", err); 
+                    return [];
+                }),
+                awsPhotoService.getVisiblePhotos(user.id, 'matched').catch(err => { 
+                    console.error("[PhotoManager] Error fetching matched count:", err); 
+                    return [];
+                })
+            ]);
+            
+            setUploadedCount(uploadedResult.length);
+            setMatchedCount(matchedResult.length);
+            console.log(`[PhotoManager ${mode}] Counts updated: Uploaded=${uploadedResult.length}, Matched=${matchedResult.length}`);
+
+        } catch (err) {
+            console.error(`[PhotoManager ${mode}] Error fetching photos/counts:`, err);
+            setError(err.message || 'An error occurred while fetching data');
+            setPhotos([]);
+            setUploadedCount(0);
+            setMatchedCount(0);
+        } finally {
+            if(showLoading) setLoading(false);
         }
-        catch (err) {
-            console.error('Error fetching photos:', err);
-            setError('Failed to load photos. Please try again.');
-        }
-        finally {
-            setLoading(false);
-        }
-    };
+    }, [user?.id, mode]); 
+    useEffect(() => {
+        if (!user?.id) return;
+        console.log(`🔄 [PhotoManager ${mode}] Effect triggered: mode or user changed.`);
+        fetchPhotosAndCounts();
+    }, [fetchPhotosAndCounts]);
     const handlePhotoUpload = async (photoId) => {
-        await fetchPhotos();
+        await fetchPhotosAndCounts();
     };
     const handlePhotoDelete = async (photoId) => {
         try {
@@ -159,10 +114,9 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
             
             if (result.success) {
                 console.log(`[PhotoManager] Successfully trashed photo: ${photoId}`);
-                // Remove the trashed photo from the current view
+                // Optimistic UI update + refetch counts
                 setPhotos(prevPhotos => prevPhotos.filter(photo => photo.id !== photoId));
-                // Consider if you need to clear selection state if applicable here
-                // setSelectedPhotos(prevSelected => prevSelected.filter(id => id !== photoId));
+                fetchPhotosAndCounts(false); // Refetch quietly
             } else {
                 setError(`Failed to move photo to trash: ${result.error}`);
                 console.error(`[PhotoManager] Error trashing photo ${photoId}:`, result.error);
@@ -175,97 +129,69 @@ export const PhotoManager = ({ eventId, mode = 'upload' }) => {
     const handleShare = async (photoId) => {
         console.log('Share photo:', photoId);
     };
-    const clearFilters = () => {
-        setFilters({
-            dateRange: {
-                start: '',
-                end: ''
-            },
-            location: {
-                lat: 0,
-                lng: 0,
-                name: ''
-            },
-            tags: [],
-            timeRange: {
-                start: '',
-                end: ''
-            }
-        });
-        setSearchQuery('');
-    };
+    // Pagination logic (using photos directly)
+    const totalPages = Math.ceil(photos.length / photosPerPage);
+    const currentPhotos = useMemo(() => {
+        const indexOfLastPhoto = currentPage * photosPerPage;
+        const indexOfFirstPhoto = indexOfLastPhoto - photosPerPage;
+        return photos.slice(indexOfFirstPhoto, indexOfLastPhoto);
+    }, [photos, currentPage, photosPerPage]);
     if (loading) {
         return (_jsx("div", { className: "flex items-center justify-center h-64", children: _jsx(RefreshCw, { className: "w-8 h-8 text-apple-gray-400 animate-spin" }) }));
     }
-    return (_jsxs("div", { children: [error && (_jsxs("div", { className: "mb-6 p-4 bg-red-50 text-red-600 rounded-apple flex items-center", children: [_jsx(AlertTriangle, { className: "w-5 h-5 mr-2" }), error] })), mode === 'upload' && (_jsx(PhotoUploader, { eventId: eventId, onUploadComplete: handlePhotoUpload, onError: (error) => setError(error) })), _jsxs("div", { className: "mt-8 mb-6", children: [_jsxs("div", { className: "flex items-center justify-between mb-4", children: [_jsxs("div", { className: "relative flex-1 max-w-lg", children: [_jsx(Search, { className: "absolute left-3 top-1/2 transform -translate-y-1/2 text-apple-gray-400 w-5 h-5" }), _jsx("input", { type: "text", placeholder: "Search photos...", value: searchQuery, onChange: (e) => setSearchQuery(e.target.value), className: "w-full pl-10 pr-4 py-2 ios-input", "aria-label": "Search photos", title: "Search photos by title, description, location or tags" })] }), _jsxs("button", { onClick: () => setShowFilters(!showFilters), className: cn("ios-button-secondary ml-4 flex items-center", showFilters && "bg-apple-blue-500 text-white hover:bg-apple-blue-600"), children: [_jsx(Filter, { className: "w-4 h-4 mr-2" }), "Filters", _jsx(ChevronDown, { className: cn("w-4 h-4 ml-2 transition-transform duration-200", showFilters && "transform rotate-180") })] })] }), _jsx(AnimatePresence, { children: showFilters && (_jsx(motion.div, { initial: { height: 0, opacity: 0 }, animate: { height: "auto", opacity: 1 }, exit: { height: 0, opacity: 0 }, transition: { duration: 0.2 }, className: "overflow-hidden", children: _jsxs("div", { className: "p-4 bg-white rounded-apple-xl border border-apple-gray-200 mb-6", children: [_jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4", children: [_jsxs("div", { children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(Calendar, { className: "w-4 h-4 mr-2" }), "Date Range"] }), _jsxs("div", { className: "space-y-2", children: [_jsx("input", { type: "date", value: filters.dateRange.start, onChange: (e) => setFilters({
-                                                                    ...filters,
-                                                                    dateRange: { ...filters.dateRange, start: e.target.value }
-                                                                }), className: "ios-input", "aria-label": "Start date", title: "Filter start date" }), _jsx("input", { type: "date", value: filters.dateRange.end, onChange: (e) => setFilters({
-                                                                    ...filters,
-                                                                    dateRange: { ...filters.dateRange, end: e.target.value }
-                                                                }), className: "ios-input", "aria-label": "End date", title: "Filter end date" })] })] }), _jsxs("div", { children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(MapPin, { className: "w-4 h-4 mr-2" }), "Location"] }), _jsx(GoogleMaps, { location: filters.location, onLocationChange: (location) => setFilters({
-                                                            ...filters,
-                                                            location
-                                                        }), height: "200px", className: "rounded-apple overflow-hidden" })] }), _jsxs("div", { children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(Tag, { className: "w-4 h-4 mr-2" }), "Tags"] }), _jsx("input", { type: "text", placeholder: "Add tags...", onKeyDown: (e) => {
-                                                            if (e.key === 'Enter' && e.currentTarget.value) {
-                                                                setFilters({
-                                                                    ...filters,
-                                                                    tags: [...filters.tags, e.currentTarget.value]
-                                                                });
-                                                                e.currentTarget.value = '';
-                                                            }
-                                                        }, className: "ios-input", "aria-label": "Add tags", title: "Type a tag and press Enter to add it" }), filters.tags.length > 0 && (_jsx("div", { className: "flex flex-wrap gap-2 mt-2", children: filters.tags.map((tag, index) => (_jsxs("span", { className: "bg-apple-blue-100 text-apple-blue-700 px-2 py-1 rounded-full text-sm flex items-center", children: [tag, _jsx("button", { onClick: () => setFilters({
-                                                                        ...filters,
-                                                                        tags: filters.tags.filter((_, i) => i !== index)
-                                                                    }), className: "ml-1 hover:text-apple-blue-900", children: "\u00D7" })] }, index))) }))] }), _jsxs("div", { children: [_jsxs("label", { className: "ios-label flex items-center", children: [_jsx(Clock, { className: "w-4 h-4 mr-2" }), "Time Range"] }), _jsxs("div", { className: "space-y-2", children: [_jsx("input", { type: "time", value: filters.timeRange.start, onChange: (e) => setFilters({
-                                                                    ...filters,
-                                                                    timeRange: { ...filters.timeRange, start: e.target.value }
-                                                                }), className: "ios-input", "aria-label": "Start time", title: "Filter start time" }), _jsx("input", { type: "time", value: filters.timeRange.end, onChange: (e) => setFilters({
-                                                                    ...filters,
-                                                                    timeRange: { ...filters.timeRange, end: e.target.value }
-                                                                }), className: "ios-input", "aria-label": "End time", title: "Filter end time" })] })] })] }), _jsx("div", { className: "flex justify-end mt-4", children: _jsx("button", { onClick: clearFilters, className: "ios-button-secondary", children: "Clear Filters" }) })] }) })) })] }), _jsx(motion.div, { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, children: photos.length > 0 ? (
-        _jsxs("div", { children: [
-            _jsx(PhotoGrid, { 
-                photos: photos.slice((currentPage - 1) * photosPerPage, currentPage * photosPerPage), 
-                onDelete: mode === 'upload' ? handlePhotoDelete : undefined,
-                onTrash: handleTrashSinglePhoto,
-                onShare: handleShare 
-            }),
-            // Pagination controls
-            photos.length > photosPerPage && (
-                _jsx("div", { className: "mt-8 flex justify-center", children: 
-                    _jsxs("nav", { className: "flex items-center", children: [
-                        _jsx("button", { 
-                            onClick: () => setCurrentPage(prev => Math.max(prev - 1, 1)),
-                            disabled: currentPage === 1,
-                            className: "p-2 mr-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed",
-                            children: _jsx(ChevronLeft, { size: 18 })
-                        }),
-                        _jsx("div", { className: "flex space-x-1", children:
-                            [...Array(Math.ceil(photos.length / photosPerPage))].map((_, i) => (
-                                _jsx("button", {
-                                    onClick: () => setCurrentPage(i + 1),
-                                    className: `px-3 py-1 rounded-md ${
-                                        currentPage === i + 1
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-gray-100 hover:bg-gray-200'
-                                    }`,
-                                    children: i + 1
-                                }, i)
-                            ))
-                        }),
-                        _jsx("button", { 
-                            onClick: () => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(photos.length / photosPerPage))),
-                            disabled: currentPage === Math.ceil(photos.length / photosPerPage),
-                            className: "p-2 ml-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed",
-                            children: _jsx(ChevronRight, { size: 18 })
-                        })
-                    ]})
-                })
-            )
+    return (_jsxs("div", { children: [error && (_jsxs("div", { className: "mb-6 p-4 bg-red-50 text-red-600 rounded-apple flex items-center", children: [_jsx(AlertTriangle, { className: "w-5 h-5 mr-2" }), error] })), mode === 'upload' && (_jsx(PhotoUploader, { eventId: eventId, onUploadComplete: handlePhotoUpload, onError: (error) => setError(error) })), _jsxs("div", { className: "photo-manager-header mb-4 p-4 bg-gray-50 rounded-lg border", children: [
+        _jsxs("h3", { className: "text-lg font-semibold mb-2", children: [mode === 'upload' ? "My Uploads" : "Matched Photos"]}),
+        _jsxs("div", { className: "flex items-center space-x-4 text-sm text-gray-600", children: [
+            _jsxs("span", { className: "flex items-center", children: [_jsx(Upload, { size: 16, className:"mr-1"}), `Uploaded: ${uploadedCount}`]}),
+            _jsx("span", { className: "text-gray-300", children: "|"}),
+            _jsxs("span", { className: "flex items-center", children: [_jsx(ImageIcon, { size: 16, className:"mr-1"}), `Matched: ${matchedCount}`]})
         ]})
-    ) : (
-        _jsx("div", { className: "text-center py-12 bg-apple-gray-50 rounded-apple-xl border-2 border-dashed border-apple-gray-200", children: _jsx("p", { className: "text-apple-gray-500", children: mode === 'upload'
-                            ? "No photos uploaded yet"
-                            : "No photos found with your face" }) })) })] }));
+    ]}), _jsx("hr", { className: "mb-6"}), _jsx(motion.div, { 
+        initial: { opacity: 0, y: 20 }, 
+        animate: { opacity: 1, y: 0 }, 
+        children: currentPhotos.length > 0 ? (
+            _jsxs("div", { children: [
+                _jsx(PhotoGrid, { 
+                    photos: currentPhotos, 
+                    onDelete: mode === 'upload' ? handlePhotoDelete : undefined,
+                    onTrash: handleTrashSinglePhoto,
+                    onShare: handleShare 
+                }),
+                // Pagination controls (use photos.length for total count)
+                photos.length > photosPerPage && (
+                    _jsx("div", { className: "mt-8 flex justify-center", children: 
+                        _jsxs("nav", { className: "flex items-center", children: [
+                            _jsx("button", { 
+                                onClick: () => setCurrentPage(prev => Math.max(prev - 1, 1)),
+                                disabled: currentPage === 1,
+                                className: "p-2 mr-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed",
+                                children: _jsx(ChevronLeft, { size: 18 })
+                            }),
+                            _jsx("div", { className: "flex space-x-1", children:
+                                [...Array(totalPages)].map((_, i) => (
+                                    _jsx("button", {
+                                        onClick: () => setCurrentPage(i + 1),
+                                        className: `px-3 py-1 rounded-md ${
+                                            currentPage === i + 1
+                                                ? 'bg-blue-600 text-white'
+                                                : 'bg-gray-100 hover:bg-gray-200'
+                                        }`,
+                                        children: i + 1
+                                    }, i)
+                                ))
+                            }),
+                            _jsx("button", { 
+                                onClick: () => setCurrentPage(prev => Math.min(prev + 1, totalPages)),
+                                disabled: currentPage === totalPages,
+                                className: "p-2 ml-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed",
+                                children: _jsx(ChevronRight, { size: 18 })
+                            })
+                        ]})
+                    })
+                )
+            ]})
+        ) : (
+            _jsx("div", { className: "text-center py-12 bg-apple-gray-50 rounded-apple-xl border-2 border-dashed border-apple-gray-200", children: _jsx("p", { className: "text-apple-gray-500", children: mode === 'upload'
+                                ? "No photos uploaded yet"
+                                : "No photos found with your face" }) })) })] }));
 };
