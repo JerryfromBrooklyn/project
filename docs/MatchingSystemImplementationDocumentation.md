@@ -404,7 +404,17 @@ Photos in the system have a user-specific visibility status stored in a map:
 
 This design allows each user to have a personalized view of the photo collection without affecting other users.
 
-### 4.2 Trash System Implementation
+### 4.2 Vite Project File Extensions
+
+Vite requires specific file extensions for proper syntax parsing:
+
+- `.jsx` extension for files containing React JSX syntax
+- `.tsx` extension for TypeScript files with JSX syntax
+- `.js` extension for regular JavaScript files without JSX
+
+Using incorrect extensions (like `.js` for files containing JSX) will cause parsing errors during development and build. Always verify file extensions match their content type.
+
+### 4.3 Trash System Implementation
 
 The trash system architecture relies on the user_visibility map:
 
@@ -431,7 +441,7 @@ export const permanentlyHidePhotos = async (photoIds, userId) => {
 };
 ```
 
-### 4.3 Image Viewer Implementation
+### 4.4 Image Viewer Implementation
 
 The image viewer uses several technologies for a smooth experience:
 

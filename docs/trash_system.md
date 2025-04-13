@@ -54,6 +54,21 @@ The trash system relies on a user-specific visibility map stored in DynamoDB:
 
 The `user_visibility` map allows each user to have their own view of the photo collection.
 
+### File Extension Requirements
+
+When working with React components, file extensions are important for proper parsing by the Vite build system:
+
+- Use `.jsx` extension for JavaScript files containing JSX syntax
+- Use `.tsx` extension for TypeScript files containing JSX syntax
+- Use `.js` extension only for standard JavaScript without JSX
+
+For example:
+- `TrashBin.jsx` - Component with JSX syntax
+- `SimplePhotoInfoModal.jsx` - Modal component with JSX
+- `userVisibilityService.js` - Service with standard JavaScript
+
+Using incorrect extensions (like `.js` for JSX components) will cause parsing errors.
+
 ### Key Methods
 
 #### Moving to Trash

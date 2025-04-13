@@ -862,4 +862,14 @@ function PhotoCard({ photo, isLoading }) {
 
 ## Conclusion
 
-This document provides the foundation for consistent UX development in the Shmong application. When making changes to the UI, always consider the existing patterns, accessibility requirements, and performance implications. Refer to this guide for standard practices and implementation details to ensure a cohesive user experience. 
+This document provides the foundation for consistent UX development in the Shmong application. When making changes to the UI, always consider the existing patterns, accessibility requirements, and performance implications. Refer to this guide for standard practices and implementation details to ensure a cohesive user experience.
+
+## Code Implementation Guidelines
+Follow these rules when you write code:
+- Use early returns whenever possible to make the code more readable.
+- Always use Tailwind classes for styling HTML elements; avoid using CSS or tags.
+- Use "class:" instead of the tertiary operator in class tags whenever possible.
+- Use descriptive variable and function/const names. Also, event functions should be named with a "handle" prefix, like "handleClick" for onClick and "handleKeyDown" for onKeyDown.
+- Implement accessibility features on elements. For example, a tag should have a tabindex="0", aria-label, on:click, and on:keydown, and similar attributes.
+- Use consts instead of functions, for example, "const toggle = () =>". Also, define a type if possible.
+- When working with React components that use JSX syntax, always use the `.jsx` extension for JavaScript files or `.tsx` for TypeScript files. Vite requires these extensions for proper parsing of JSX syntax. 

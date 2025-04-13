@@ -382,6 +382,7 @@ const PhotoUploader = ({ onUploadComplete, onError }) => {
 - Search and complex filtering have been removed from `MyPhotos` and `PhotoManager` for simplification.
 - Photo sorting (newest first) is implemented in fetching/display components.
 - Face registration includes a **synchronous historical matching** step that can be slow (planned for asynchronous improvement).
+- **File extensions**: Components using JSX syntax should have `.jsx` or `.tsx` extensions. This is a Vite requirement for correctly parsing JSX. Regular JavaScript files without JSX should use `.js` extension.
 
 ## Alternative Dashboards
 
