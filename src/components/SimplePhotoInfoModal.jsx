@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, User, Calendar, MapPin, Building, Tag, Download, Image, FileType,
-         Smile, Eye, Glasses, Sliders, Ruler, Laugh, AlertCircle, Clock, Globe } from 'lucide-react';
+         Smile, Eye, Glasses, Sliders, Ruler, Laugh, AlertCircle, Clock, Globe, Link } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 /**
@@ -34,15 +34,12 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
     location: photo?.location || { name: null, lat: null, lng: null, address: null },
     tags: Array.isArray(photo?.tags) ? photo.tags : [],
     date_taken: photo?.date_taken,
-    // Check multiple possible field names for album link
-    externalAlbumLink: photo?.externalAlbumLink || photo?.albumLink || photo?.album_link || null
+    // Check ALL possible field name variations for album link
+    externalAlbumLink: photo?.externalAlbumLink || photo?.albumLink || photo?.album_link || 
+                      photo?.external_album_link || photo?.external_link || null
   };
 
-  // Enhanced debugging to see all fields
   console.log('[SimplePhotoInfoModal] Using sanitized photo data:', safePhoto);
-  console.log('[SimplePhotoInfoModal] All original photo keys:', Object.keys(photo || {}));
-  console.log('[SimplePhotoInfoModal] External album link value:', safePhoto.externalAlbumLink);
-  console.log('[SimplePhotoInfoModal] Looking for these keys:', 'externalAlbumLink:', photo?.externalAlbumLink, 'albumLink:', photo?.albumLink, 'album_link:', photo?.album_link);
   
   const handleDownload = async () => {
     try {
@@ -108,8 +105,6 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
   // Check if we have location data to display
   const hasLocationData = () => {
     const loc = safePhoto.location;
-    // Debug log location data
-    console.log('[SimplePhotoInfoModal] Location data:', loc);
     
     // Always show location section, even with minimal data
     return true;
@@ -237,36 +232,30 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
                 </section>
               )}
               
-              {/* External Album Link - with enhanced visibility */}
-              {safePhoto.externalAlbumLink && (
-                <section className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm border-2 border-blue-500">
-                  <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
-                    <Globe size={16} className="mr-2 text-blue-500" />
-                    Album Link
-                  </h3>
-                  <div className="p-3 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
-                    <div className="flex flex-wrap items-center">
-                      <a 
-                        href={safePhoto.externalAlbumLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 dark:text-blue-400 font-medium hover:underline flex-1 truncate"
-                      >
-                        {safePhoto.externalAlbumLink}
-                      </a>
-                      <button
-                        onClick={() => window.open(safePhoto.externalAlbumLink, '_blank')}
-                        className="ml-2 px-3 py-1 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                      >
-                        Visit
-                      </button>
-                    </div>
-                    <p className="text-xs text-blue-700 dark:text-blue-400 mt-2">
-                      Click to open the album in a new tab
-                    </p>
+              {/* ALWAYS display External Album Link section for debugging - with URL from data or fallback */}
+              <section className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm">
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
+                  <Link size={16} className="mr-2 text-blue-500" />
+                  Album Link
+                </h3>
+                <div className="p-3 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                  <div className="flex flex-wrap items-center">
+                    <a 
+                      href={safePhoto.externalAlbumLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 dark:text-blue-400 font-medium hover:underline flex-1 truncate"
+                    >
+                      {safePhoto.externalAlbumLink || "No album link available"}
+                    </a>
                   </div>
-                </section>
-              )}
+                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-2">
+                    {safePhoto.externalAlbumLink 
+                      ? "Click to open the album in a new tab" 
+                      : ""}
+                  </p>
+                </div>
+              </section>
               
               {/* Event info */}
               {(safePhoto.event_details?.name || safePhoto.venue?.name) && (
@@ -546,4 +535,4 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
   );
 };
 
-export default SimplePhotoInfoModal; 
+export default SimplePhotoInfoModal;
