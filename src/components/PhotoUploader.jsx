@@ -12,7 +12,7 @@ import { updatePhotoVisibility } from '../services/userVisibilityService';
 // Import our new components with proper mobile UX
 import Dialog from './ui/Dialog.jsx';
 import ImageViewer from './ui/ImageViewer.jsx';
-import Button from './ui/Button.jsx';
+import { Button } from './ui/Button.jsx';
 
 export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   // State variables
