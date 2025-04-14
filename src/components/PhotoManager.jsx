@@ -1,12 +1,14 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoGrid } from './PhotoGrid';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Upload, Image as ImageIcon, Trash2, CheckSquare, Square, Select } from 'lucide-react';
+import { AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Upload, Image as ImageIcon, Trash2, CheckSquare, Square } from 'lucide-react';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { movePhotosToTrash } from '../services/userVisibilityService';
 import { Button } from './ui/Button';
+import { FaCheckSquare, FaSquare } from 'react-icons/fa';
 
 export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) => {
     const [photos, setPhotos] = useState<any[]>([]);
