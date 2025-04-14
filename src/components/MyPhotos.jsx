@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import PhotoDetailsModal from './PhotoDetailsModal';
-import { Trash2, RefreshCw, User, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trash2, RefreshCw, User, ChevronLeft, ChevronRight, CheckSquare, Square, Select } from 'lucide-react';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { movePhotosToTrash } from '../services/userVisibilityService';
 import { downloadImagesAsZip, downloadSingleImage } from '../utils/downloadUtils';
@@ -9,6 +9,7 @@ import '../styles/MyPhotos.css';
 import { FaTrash, FaDownload, FaCheckSquare, FaSquare } from 'react-icons/fa';
 import { PhotoGrid } from './PhotoGrid';
 import { Button } from './ui/Button';
+import { AnimatePresence, motion } from 'framer-motion';
 
 const MyPhotos = () => {
   // Add useEffect for mount logging
@@ -21,9 +22,10 @@ const MyPhotos = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
-  const [selectedPhotos, setSelectedPhotos] = useState([]);
+  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const photosPerPage = 48; // 12 rows of 4 images
+  const [isSelecting, setIsSelecting] = useState(false);
   
   // Get total matches count
   const totalMatchesCount = photos.reduce((total, photo) => {
@@ -94,8 +96,16 @@ const MyPhotos = () => {
     setSelectedPhoto(null);
   };
 
-  // Toggle selection of a single photo
-  const handleSelectPhoto = (photoId) => {
+  // Start or end selection mode
+  const handleToggleSelectionMode = () => {
+    setIsSelecting(!isSelecting);
+    setSelectedPhotos([]); // Clear selection when toggling mode
+  };
+
+  // Toggle selection of a single photo (only works if isSelecting is true)
+  const handleSelectPhoto = (photoId: string) => {
+    if (!isSelecting) return; // Only allow selection in selection mode
+
     setSelectedPhotos(prev =>
       prev.includes(photoId)
         ? prev.filter(id => id !== photoId)
@@ -103,23 +113,26 @@ const MyPhotos = () => {
     );
   };
   
-  // Toggle selection of all currently visible photos
+  // Toggle selection of all currently visible photos (only in selection mode)
   const toggleSelectAll = () => {
+    if (!isSelecting) return;
+    
     const currentPhotoIds = currentPhotos.map(p => p.id);
-    if (selectedPhotos.length === currentPhotoIds.length && currentPhotoIds.length > 0) {
-      // If all current page photos are selected, deselect them
+    const allVisibleSelected = currentPhotoIds.length > 0 && currentPhotoIds.every(id => selectedPhotos.includes(id));
+
+    if (allVisibleSelected) {
+      // Deselect all on the current page
       setSelectedPhotos(prev => prev.filter(id => !currentPhotoIds.includes(id)));
     } else {
-      // Otherwise, select all photos on the current page
+      // Select all photos on the current page
       setSelectedPhotos(prev => [...new Set([...prev, ...currentPhotoIds])]);
     }
   };
 
-  // Move selected photos to trash
+  // Move selected photos to trash (only in selection mode)
   const handleTrashSelected = async () => {
-    if (!selectedPhotos.length || !user?.id) return;
+    if (!isSelecting || !selectedPhotos.length || !user?.id) return;
 
-    // Optional: Add a confirmation dialog
     const confirmTrash = window.confirm(`Are you sure you want to move ${selectedPhotos.length} selected photo(s) to the trash?`);
     if (!confirmTrash) return;
 
@@ -144,6 +157,8 @@ const MyPhotos = () => {
       // Optionally show an error toast/message
     } finally {
       setLoading(false);
+      setIsSelecting(false); // Exit selection mode after action
+      setSelectedPhotos([]); // Clear selection
     }
   };
 
@@ -168,10 +183,11 @@ const MyPhotos = () => {
     }
   };
 
-  // Handler for trashing a single photo
-  const handleTrashSinglePhoto = async (photoId, event) => {
-    event.stopPropagation(); // Prevent card selection when clicking the trash icon
-    if (!user?.id || !photoId) return;
+  // Handler for trashing a single photo (outside selection mode)
+  const handleTrashSinglePhoto = async (photo: any, event?: React.MouseEvent) => {
+    event?.stopPropagation(); // Prevent card click if called from button
+    if (isSelecting || !user?.id || !photo?.id) return; // Don't allow single trash in selection mode
+    const photoId = photo.id;
 
     const confirmTrash = window.confirm("Are you sure you want to move this photo to the trash?");
     if (!confirmTrash) return;
@@ -208,16 +224,70 @@ const MyPhotos = () => {
           )}
         </div>
         <div className="flex space-x-2">
-          <button 
+          {/* Select / Cancel Button */} 
+          <Button 
+             variant={isSelecting ? "destructive_outline" : "outline"} // Style differently in selection mode
+             size="sm"
+             onClick={handleToggleSelectionMode}
+           >
+             {isSelecting ? "Cancel" : "Select"}
+           </Button>
+          <Button 
             onClick={handleRefresh}
-            className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            disabled={loading || isSelecting} // Disable refresh in selection mode
+            size="sm"
+            className="flex items-center"
           >
-            <RefreshCw size={16} className="mr-1" />
+            <RefreshCw size={16} className={`mr-1 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
-          </button>
+          </Button>
         </div>
       </div>
       
+      {/* Conditional Action Bar - Only show when isSelecting */} 
+      <AnimatePresence>
+        {isSelecting && selectedPhotos.length > 0 && (
+          <motion.div 
+             initial={{ opacity: 0, y: -10 }} 
+             animate={{ opacity: 1, y: 0 }} 
+             exit={{ opacity: 0, y: -10 }}
+             className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between sticky top-0 z-10 shadow"
+          >
+            <div className="flex items-center space-x-3">
+              <Button 
+                variant="ghost" // Less prominent style for select all
+                size="sm"
+                onClick={toggleSelectAll}
+                aria-label={currentPhotos.length > 0 && currentPhotos.every(p => selectedPhotos.includes(p.id)) ? 'Deselect all visible' : 'Select all visible'}
+              >
+                 {currentPhotos.length > 0 && currentPhotos.every(p => selectedPhotos.includes(p.id)) ? (
+                   <CheckSquare className="mr-2 h-4 w-4" />
+                 ) : (
+                   <Square className="mr-2 h-4 w-4" />
+                 )}
+                {currentPhotos.length > 0 && currentPhotos.every(p => selectedPhotos.includes(p.id)) ? 'Deselect All' : 'Select All'}
+              </Button>
+              <span className="text-sm font-medium text-blue-700">
+                {selectedPhotos.length} selected
+              </span>
+            </div>
+            <div className="flex space-x-2">
+              <Button 
+                variant="destructive"
+                size="sm"
+                onClick={handleTrashSelected} 
+                disabled={loading} // Disable while trashing
+                aria-label="Move selected photos to trash"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Move to Trash
+              </Button>
+              {/* Add Download button here if needed, ensure it also exits selection mode */}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {loading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
@@ -234,59 +304,17 @@ const MyPhotos = () => {
         </div>
       ) : currentPhotos.length > 0 ? (
         <div>
-          {/* Conditional Action Bar */}
-          {selectedPhotos.length > 0 && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between sticky top-0 z-10 shadow">
-              <div className="flex items-center space-x-3">
-                 <Button 
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleSelectAll}
-                  aria-label={selectedPhotos.length === currentPhotos.length ? 'Deselect all visible' : 'Select all visible'}
-                >
-                   {selectedPhotos.length === currentPhotos.length ? (
-                     <FaCheckSquare className="mr-2 h-4 w-4" />
-                   ) : (
-                     <FaSquare className="mr-2 h-4 w-4" />
-                   )}
-                  {selectedPhotos.length === currentPhotos.length ? 'Deselect All Visible' : 'Select All Visible'}
-                 </Button>
-                <span className="text-sm font-medium text-blue-700">
-                  {selectedPhotos.length} selected
-                </span>
-              </div>
-              <div className="flex space-x-2">
-                <Button 
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleTrashSelected} 
-                  disabled={loading} // Disable while trashing
-                  aria-label="Move selected photos to trash"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Move to Trash
-                </Button>
-                {/* Add Download button here if needed */}
-                {/* <Button 
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleDownloadSelected} 
-                  aria-label="Download selected photos"
-                >
-                  <FaDownload className="mr-2 h-4 w-4" />
-                  Download
-                </Button> */}
-              </div>
-            </div>
-          )}
-          
-          {/* Pass selection state and handler to PhotoGrid */}
           <PhotoGrid 
             photos={currentPhotos}
-            onTrash={handleTrashSinglePhoto}
-            selectedPhotos={selectedPhotos}
-            onSelectPhoto={handleSelectPhoto}
-            // Pass other necessary props like onDownload, onShare if needed
+            onTrash={handleTrashSinglePhoto} // For single trash icon (only works outside select mode)
+            selectedPhotos={selectedPhotos} 
+            onSelectPhoto={handleSelectPhoto} // Handles selection tapping
+            isSelecting={isSelecting} // Pass selection mode status
+            onPhotoClick={(photo) => {
+              if (!isSelecting) {
+                 setSelectedPhoto(photo); // Open detail modal if not selecting
+              }
+            }}
           />
           
           {/* Pagination controls */}

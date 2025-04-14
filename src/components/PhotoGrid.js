@@ -6,7 +6,7 @@ import { PhotoService } from '../services/PhotoService';
 import SimplePhotoInfoModal from './SimplePhotoInfoModal.jsx';
 import { cn } from '../utils/cn';
 
-export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash, selectedPhotos, onSelectPhoto }) => {
+export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash, selectedPhotos, onSelectPhoto, isSelecting, onPhotoClick }) => {
     const [selectedPhoto, setSelectedPhoto] = useState(null);
     const [loading, setLoading] = useState({});
     const [sharing, setSharing] = useState({});
@@ -75,24 +75,37 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash, sele
                     transition: { duration: 0.2, ease: "easeInOut" },
                     className: cn(
                         "relative group aspect-square rounded-apple-lg overflow-hidden shadow-md transition-all duration-200 ease-in-out",
-                        isSelected ? "ring-4 ring-blue-500 ring-offset-2 scale-[0.98]" : "hover:scale-[1.02]",
-                        "cursor-pointer"
+                        !isSelecting && "hover:scale-[1.02]",
+                        isSelecting ? "cursor-pointer" : ""
                     ),
                 };
 
                 return _jsx(motion.div, {
                     ...motionProps,
-                    onClick: () => onSelectPhoto && onSelectPhoto(photo.id),
+                    onClick: () => {
+                        if (isSelecting) {
+                            onSelectPhoto && onSelectPhoto(photo.id);
+                        } else {
+                            onPhotoClick && onPhotoClick(photo);
+                        }
+                    },
                     children: _jsxs("div", {
                       className: "w-full h-full",
                       children: [
-                          _jsx("div", {
-                            className: cn(
-                              "absolute top-2 left-2 z-10 p-1 rounded-full transition-all duration-200",
-                              isSelected ? "bg-blue-500 text-white scale-100 opacity-100" : "bg-black/30 text-white scale-90 opacity-0 group-hover:opacity-100 group-hover:scale-100"
-                            ),
-                            children: isSelected ? _jsx(CheckCircle2, { className: "w-4 h-4 sm:w-5 sm:h-5" }) : _jsx(Circle, { className: "w-4 h-4 sm:w-5 sm:h-5" })
-                          }),
+                          isSelecting && (
+                            _jsx("div", {
+                              className: cn(
+                                "absolute top-2 left-2 z-10 p-1 rounded-full transition-all duration-200",
+                                "bg-black/40 backdrop-blur-sm",
+                                isSelected ? "text-white bg-blue-500" : "text-gray-200 hover:bg-black/60"
+                              ),
+                              onClick: (e) => {
+                                  e.stopPropagation();
+                                  onSelectPhoto && onSelectPhoto(photo.id);
+                              },
+                              children: isSelected ? _jsx(CheckCircle2, { className: "w-4 h-4 sm:w-5 sm:h-5" }) : _jsx(Circle, { className: "w-4 h-4 sm:w-5 sm:h-5" })
+                            })
+                          ),
                            _jsx("div", {
                               className: "w-full h-full",
                               children: _jsx("img", {
@@ -112,7 +125,10 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash, sele
                         })),
                           _jsx("div", {
                              onClick: (e) => e.stopPropagation(), 
-                              className: "absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent rounded-apple-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300",
+                              className: cn(
+                                "absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent rounded-apple-lg transition-opacity duration-300", 
+                                isSelecting ? "opacity-0" : "opacity-0 group-hover:opacity-100" 
+                              ),
                               children: _jsxs("div", {
                                  className: "absolute bottom-2 left-2 right-2 flex justify-between items-center",
                                  children: [
@@ -149,7 +165,7 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash, sele
                                               }),
                                               onTrash && (
                                                   _jsx("button", {
-                                                      onClick: (e) => { e.stopPropagation(); onTrash(photo); }, 
+                                                      onClick: (e) => { e.stopPropagation(); onTrash(photo, e); },
                                                      className: "p-2 sm:p-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg",
                                                       "aria-label": "Move photo to trash",
                                                       title: "Move to Trash",

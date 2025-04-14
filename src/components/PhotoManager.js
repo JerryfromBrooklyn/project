@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoGrid } from './PhotoGrid';
 import { useAuth } from '../context/AuthContext';
-import { motion } from 'framer-motion';
-import { AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Upload, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Upload, Image as ImageIcon, Trash2, CheckSquare, Square } from 'lucide-react';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { movePhotosToTrash } from '../services/userVisibilityService';
 import { Button } from './ui/Button';
@@ -22,7 +22,8 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
     const photosPerPage = 48; // 12 rows of 4 images
     const { user } = useAuth();
     
-    const [selectedPhotos, setSelectedPhotos] = useState([]);
+    const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
+    const [isSelecting, setIsSelecting] = useState(false);
 
     const fetchPhotosAndCounts = useCallback(async (showLoading = true) => {
         if (!user?.id) {
@@ -95,9 +96,14 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
         await fetchPhotosAndCounts(false);
     };
 
-    const handleTrashSinglePhoto = async (photo, event) => {
-        event.stopPropagation();
-        if (!user?.id || !photo?.id) return;
+    const handleToggleSelectionMode = () => {
+        setIsSelecting(!isSelecting);
+        setSelectedPhotos([]);
+    };
+
+    const handleTrashSinglePhoto = async (photo: any, event?: React.MouseEvent) => {
+        event?.stopPropagation();
+        if (isSelecting || !user?.id || !photo?.id) return;
         const photoId = photo.id;
 
         setTrashLoading(true);
@@ -122,7 +128,9 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
         }
     };
     
-    const handleSelectPhoto = (photoId) => {
+    const handleSelectPhoto = (photoId: string) => {
+        if (!isSelecting) return;
+        
         setSelectedPhotos(prev =>
             prev.includes(photoId)
                 ? prev.filter(id => id !== photoId)
@@ -185,6 +193,8 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
     }, [photos, currentPage, photosPerPage]);
 
     const toggleSelectAll = () => {
+        if (!isSelecting) return;
+        
         const currentPhotoIds = currentPhotos.map(p => p.id);
         const allSelectedOnPage = currentPhotoIds.length > 0 && currentPhotoIds.every(id => selectedPhotos.includes(id));
 
@@ -196,7 +206,7 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
     };
 
     const handleTrashSelected = async () => {
-        if (!selectedPhotos.length || !user?.id) return;
+        if (!isSelecting || !selectedPhotos.length || !user?.id) return;
 
         const confirmTrash = window.confirm(`Are you sure you want to move ${selectedPhotos.length} selected photo(s) to the trash?`);
         if (!confirmTrash) return;
@@ -220,6 +230,8 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
             setError('An error occurred while moving photos to trash. Please try again.');
         } finally {
             setTrashLoading(false);
+            setIsSelecting(false);
+            setSelectedPhotos([]);
         }
     };
 
@@ -231,6 +243,12 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
                 onTrash: handleTrashSinglePhoto, 
                 selectedPhotos: selectedPhotos,
                 onSelectPhoto: handleSelectPhoto, 
+                isSelecting: isSelecting,
+                onPhotoClick: (photo) => {
+                   if (!isSelecting) {
+                      console.log('Photo clicked (not selecting):', photo.id);
+                   }
+                 },
                 onShare: handleShare, 
             }), 
             photos.length > photosPerPage && (
@@ -298,7 +316,7 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
                 variant: "outline", 
                 size: "sm", 
                 onClick: () => fetchPhotosAndCounts(true), 
-                disabled: loading,
+                disabled: loading || isSelecting,
                 children: _jsxs("span", { className: "flex items-center", children: [
                     _jsx(RefreshCw, { size: 16, className: `mr-1 ${loading ? 'animate-spin' : ''}` }), 
                     "Refresh"
@@ -306,11 +324,17 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
             })
         ]}), 
         
-        selectedPhotos.length > 0 && (
-          _jsxs("div", { className: "mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between sticky top-0 z-10 shadow", children: [
-            _jsxs("div", { className: "flex items-center space-x-3", children: [
-               _jsxs(Button, { 
-                variant: "outline",
+        <AnimatePresence>
+        {isSelecting && selectedPhotos.length > 0 && (
+          <motion.div 
+             initial={{ opacity: 0, y: -10 }} 
+             animate={{ opacity: 1, y: 0 }} 
+             exit={{ opacity: 0, y: -10 }}
+             className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between sticky top-0 z-10 shadow"
+           >
+            <div className="flex items-center space-x-3">
+              <Button, { 
+                variant: "ghost",
                 size: "sm",
                 onClick: toggleSelectAll,
                 "aria-label": currentPhotos.length > 0 && currentPhotos.every(p => selectedPhotos.includes(p.id)) 
@@ -318,13 +342,13 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
                               : 'Select all visible',
                 children: [
                    currentPhotos.length > 0 && currentPhotos.every(p => selectedPhotos.includes(p.id)) ? (
-                     _jsx(FaCheckSquare, { className: "mr-2 h-4 w-4" })
+                     _jsx(CheckSquare, { className: "mr-2 h-4 w-4" })
                    ) : (
-                     _jsx(FaSquare, { className: "mr-2 h-4 w-4" })
+                     _jsx(Square, { className: "mr-2 h-4 w-4" })
                    ), 
-                  "Select/Deselect Visible"
+                  currentPhotos.length > 0 && currentPhotos.every(p => selectedPhotos.includes(p.id)) ? 'Deselect All' : 'Select All'
                 ]
-               }), 
+               }>,
               _jsx("span", { className: "text-sm font-medium text-blue-700", children: `${selectedPhotos.length} selected` })
             ]}), 
             _jsx("div", { className: "flex space-x-2", children: 
@@ -340,8 +364,9 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
                 ]
               })
             })
-          ]})
-        ),
+          </motion.div>
+        )}
+       </AnimatePresence>,
 
         _jsx(motion.div, { 
             initial: { opacity: 0, y: 20 }, 
