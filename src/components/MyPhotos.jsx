@@ -7,6 +7,8 @@ import { movePhotosToTrash } from '../services/userVisibilityService';
 import { downloadImagesAsZip, downloadSingleImage } from '../utils/downloadUtils';
 import '../styles/MyPhotos.css';
 import { FaTrash, FaDownload, FaCheckSquare, FaSquare } from 'react-icons/fa';
+import { PhotoGrid } from './PhotoGrid';
+import { Button } from './ui/Button';
 
 const MyPhotos = () => {
   // Add useEffect for mount logging
@@ -93,44 +95,55 @@ const MyPhotos = () => {
   };
 
   // Toggle selection of a single photo
-  const togglePhotoSelection = (photoId) => {
-    setSelectedPhotos(prev => 
-      prev.includes(photoId) 
+  const handleSelectPhoto = (photoId) => {
+    setSelectedPhotos(prev =>
+      prev.includes(photoId)
         ? prev.filter(id => id !== photoId)
         : [...prev, photoId]
     );
-    // Don't automatically open modal on selection toggle
-    // handlePhotoSelect(photos.find(p => p.id === photoId)); 
   };
-
-  // Update toggleSelectAll to use currentPhotos
+  
+  // Toggle selection of all currently visible photos
   const toggleSelectAll = () => {
-    if (selectedPhotos.length === currentPhotos.length && currentPhotos.length > 0) {
-      setSelectedPhotos([]);
+    const currentPhotoIds = currentPhotos.map(p => p.id);
+    if (selectedPhotos.length === currentPhotoIds.length && currentPhotoIds.length > 0) {
+      // If all current page photos are selected, deselect them
+      setSelectedPhotos(prev => prev.filter(id => !currentPhotoIds.includes(id)));
     } else {
-      setSelectedPhotos(currentPhotos.map(photo => photo.id));
+      // Otherwise, select all photos on the current page
+      setSelectedPhotos(prev => [...new Set([...prev, ...currentPhotoIds])]);
     }
   };
 
-  // Move selected photos to trash (updated to use filtered list)
-  const handleMoveToTrash = async () => {
-    if (!selectedPhotos.length) return;
-    const photosToTrash = selectedPhotos; // IDs are already selected
+  // Move selected photos to trash
+  const handleTrashSelected = async () => {
+    if (!selectedPhotos.length || !user?.id) return;
 
-    const confirmTrash = window.confirm(`Are you sure you want to move ${photosToTrash.length} photos to the trash?`);
+    // Optional: Add a confirmation dialog
+    const confirmTrash = window.confirm(`Are you sure you want to move ${selectedPhotos.length} selected photo(s) to the trash?`);
     if (!confirmTrash) return;
 
+    setLoading(true); // Indicate loading state for the trash action
     try {
-      const result = await movePhotosToTrash(user.id, photosToTrash);
+      console.log(`[MyPhotos] Trashing ${selectedPhotos.length} photos for user: ${user.id}`);
+      const result = await movePhotosToTrash(user.id, selectedPhotos);
       if (result.success) {
-        setPhotos(prevPhotos => prevPhotos.filter(photo => !photosToTrash.includes(photo.id)));
-        setSelectedPhotos([]); // Clear selection
+        console.log(`[MyPhotos] Successfully trashed photos.`);
+        // Refresh photos list to reflect changes (or filter locally)
+        await fetchPhotos(false); // Fetch photos without showing main loading indicator
+        setSelectedPhotos([]); // Clear selection after successful trash
+        // Optionally show a success toast/message
       } else {
         setError(`Failed to move photos to trash: ${result.error}`);
+        console.error('[MyPhotos] Error trashing selected photos:', result.error);
+        // Optionally show an error toast/message
       }
     } catch (err) {
-      console.error('Error moving photos to trash:', err);
-      setError('Failed to move photos to trash. Please try again later.');
+      console.error('[MyPhotos] Exception trashing selected photos:', err);
+      setError('An error occurred while moving photos to trash. Please try again.');
+      // Optionally show an error toast/message
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -221,92 +234,60 @@ const MyPhotos = () => {
         </div>
       ) : currentPhotos.length > 0 ? (
         <div>
-          <div className="toolbar">
-            <div className="selection-tools">
-              <button
-                className="btn btn-text"
-                onClick={toggleSelectAll}
-                aria-label={selectedPhotos.length === photos.length ? 'Deselect all' : 'Select all'}
-              >
-                {selectedPhotos.length === photos.length ? <FaCheckSquare /> : <FaSquare />}
-                <span>{selectedPhotos.length === photos.length ? 'Deselect All' : 'Select All'}</span>
-              </button>
-              
-              <div className="selected-count">
-                {selectedPhotos.length > 0 && (
-                  <span>{selectedPhotos.length} selected</span>
-                )}
+          {/* Conditional Action Bar */}
+          {selectedPhotos.length > 0 && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between sticky top-0 z-10 shadow">
+              <div className="flex items-center space-x-3">
+                 <Button 
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleSelectAll}
+                  aria-label={selectedPhotos.length === currentPhotos.length ? 'Deselect all visible' : 'Select all visible'}
+                >
+                   {selectedPhotos.length === currentPhotos.length ? (
+                     <FaCheckSquare className="mr-2 h-4 w-4" />
+                   ) : (
+                     <FaSquare className="mr-2 h-4 w-4" />
+                   )}
+                  {selectedPhotos.length === currentPhotos.length ? 'Deselect All Visible' : 'Select All Visible'}
+                 </Button>
+                <span className="text-sm font-medium text-blue-700">
+                  {selectedPhotos.length} selected
+                </span>
+              </div>
+              <div className="flex space-x-2">
+                <Button 
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleTrashSelected} 
+                  disabled={loading} // Disable while trashing
+                  aria-label="Move selected photos to trash"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Move to Trash
+                </Button>
+                {/* Add Download button here if needed */}
+                {/* <Button 
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleDownloadSelected} 
+                  aria-label="Download selected photos"
+                >
+                  <FaDownload className="mr-2 h-4 w-4" />
+                  Download
+                </Button> */}
               </div>
             </div>
-            
-            {selectedPhotos.length > 0 && (
-              <div className="action-buttons">
-                <button
-                  className="btn btn-danger"
-                  onClick={handleMoveToTrash}
-                  aria-label="Move to trash"
-                >
-                  <FaTrash />
-                  <span>Move to Trash</span>
-                </button>
-                
-                <button
-                  className="btn btn-primary"
-                  onClick={handleDownloadSelected}
-                  aria-label="Download selected"
-                >
-                  <FaDownload />
-                  <span>Download</span>
-                </button>
-              </div>
-            )}
-          </div>
+          )}
           
-          <div className="photo-grid">
-            {currentPhotos.map((photo) => (
-              <div
-                key={photo.id}
-                className={`photo-card ${selectedPhotos.includes(photo.id) ? 'selected' : ''}`}
-                onClick={() => {
-                  togglePhotoSelection(photo.id);
-                  handlePhotoSelect(photo);
-                }}
-              >
-                <div className="photo-select-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={selectedPhotos.includes(photo.id)}
-                    onChange={() => {}} // Handled by parent div click
-                    onClick={e => e.stopPropagation()}
-                  />
-                </div>
-                
-                {/* Add Trash Icon Button to Photo Card */}
-                <button 
-                  className="absolute top-2 right-2 p-1 bg-black bg-opacity-40 rounded-full text-white hover:bg-opacity-60 transition-opacity opacity-0 group-hover:opacity-100 z-10"
-                  onClick={(e) => handleTrashSinglePhoto(photo.id, e)}
-                  aria-label="Move photo to trash"
-                >
-                  <Trash2 size={14} />
-                </button>
-                
-                <div className="photo-image">
-                  <img
-                    src={photo.url}
-                    alt={photo.description || 'Photo'}
-                    loading="lazy"
-                  />
-                </div>
-                
-                <div className="photo-info">
-                  <p className="photo-title">{photo.description || 'Untitled'}</p>
-                  <p className="photo-date">
-                    {new Date(photo.created_at || Date.now()).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+          {/* Pass selection state and handler to PhotoGrid */}
+          <PhotoGrid 
+            photos={currentPhotos}
+            onTrash={handleTrashSinglePhoto}
+            selectedPhotos={selectedPhotos}
+            onSelectPhoto={handleSelectPhoto}
+            // Pass other necessary props like onDownload, onShare if needed
+          />
           
           {/* Pagination controls */}
           {totalPages > 1 && (

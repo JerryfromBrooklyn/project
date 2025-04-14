@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos, Trash2, RotateCcw, CheckCircle } from 'lucide-react';
@@ -10,6 +10,7 @@ import { awsPhotoService } from '../services/awsPhotoService';
 import TabNavigation from '../components/TabNavigation';
 import { permanentlyHidePhotos } from '../services/userVisibilityService';
 import TabBarSpacer from "../components/layout/TabBarSpacer";
+import TrashBin from '../components/TrashBin';
 
 interface FaceAttributes {
   age: { low: number; high: number };
@@ -36,366 +37,113 @@ export const Dashboard = () => {
   const [isLoadingFaceData, setIsLoadingFaceData] = useState(true);
   const [uploadedCount, setUploadedCount] = useState(0);
   const [matchedCount, setMatchedCount] = useState(0);
-  const [trashedPhotos, setTrashedPhotos] = useState([]);
-  // State flags for one-time messages
   const [showRegistrationSuccessMessage, setShowRegistrationSuccessMessage] = useState(false);
   const [showHistoricalMatchesMessage, setShowHistoricalMatchesMessage] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null); // Ref for the dropdown menu
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const fetchFaceData = async () => {
-      if (!user || !user.id) {
-        console.warn('[Dashboard] fetchFaceData called, but user or user.id is not yet available. User:', user);
-        return;
-      }
-      
-      setIsLoadingFaceData(true);
-      console.log('[Dashboard] Fetching face data for user:', user.id);
-
-      try {
-        // Use AWS DynamoDB service instead of Supabase
-        console.log('[Dashboard] Fetching face data from DynamoDB...');
-        const data = await getFaceDataForUser(user.id);
-        
-        if (data) {
-          console.log('🟢 [Dashboard] getFaceDataForUser returned data, setting state...');
-          console.log('[Dashboard] Face data found:', data);
-          setFaceRegistered(true);
-          
-          if (data.faceId) {
-            console.log('[Dashboard] Found face ID:', data.faceId);
-            setFaceId(data.faceId);
-          } else {
-            console.warn('[Dashboard] No face ID found in data');
-            setFaceId(null);
-          }
-          
-          if (data.faceAttributes) {
-            console.log('[Dashboard] Found face attributes:', data.faceAttributes);
-            setFaceAttributes(data.faceAttributes);
-          } else {
-            console.warn('[Dashboard] No face attributes found in data');
-          }
-          
-          if (data.imageUrl) {
-            console.log('[Dashboard] Found image URL:', data.imageUrl);
-            setFaceImageUrl(data.imageUrl);
-          } else if (data.imagePath) {
-            const imageUrl = `https://shmong.s3.amazonaws.com/face-images/${data.imagePath}`;
-            console.log('[Dashboard] Constructed image URL from path:', imageUrl);
-            setFaceImageUrl(imageUrl);
-          } else {
-            console.warn('[Dashboard] No image URL found in data');
-          }
-          
-          if (data.historicalMatches && data.historicalMatches.length > 0) {
-            console.log('[Dashboard] Found historical matches:', data.historicalMatches.length);
-            setHistoricalMatches(data.historicalMatches);
-          }
-        } else {
-          console.log('[Dashboard] No face data found for user');
-          setFaceRegistered(false);
-          setFaceImageUrl(null);
-          setFaceAttributes(null);
-          setFaceId(null);
-          setHistoricalMatches([]);
-        }
-      } catch (err) {
-        console.error('[Dashboard] Error fetching face data:', err);
-        // Set default state on error
-        setFaceRegistered(false);
-        setFaceImageUrl(null);
-        setFaceAttributes(null);
-        setFaceId(null);
-        setHistoricalMatches([]);
-      } finally {
-        setIsLoadingFaceData(false);
-      }
-    };
-
-    fetchFaceData();
-  }, [user]);
-
-  // New useEffect to fetch photo counts
-  useEffect(() => {
-    const fetchCounts = async () => {
-      if (!user || !user.id) return;
-
-      try {
-        console.log('[Dashboard] Fetching photo counts...');
-        // Use the functions from awsPhotoService
-        const uploadedPhotos = await awsPhotoService.fetchUploadedPhotos(user.id);
-        const matchedPhotos = await awsPhotoService.fetchPhotos(user.id);
-
-        console.log(`[Dashboard] Fetched counts: Uploaded=${uploadedPhotos.length}, Matched=${matchedPhotos.length}`);
-        setUploadedCount(uploadedPhotos.length);
-        setMatchedCount(matchedPhotos.length);
-      } catch (error) {
-        console.error('[Dashboard] Error fetching photo counts:', error);
-        setUploadedCount(0);
-        setMatchedCount(0);
-      }
-    };
-
-    fetchCounts();
-  }, [user]); // Re-run when user changes
-
-  // Add a function to fetch trashed photos
-  useEffect(() => {
-    const fetchTrashedPhotos = async () => {
-      if (!user || !user.id) return;
-      
-      try {
-        const trashed = await awsPhotoService.getVisiblePhotos(user.id, 'trashed');
-        setTrashedPhotos(trashed || []);
-      } catch (err) {
-        console.error('[Dashboard] Error fetching trashed photos:', err);
-        setTrashedPhotos([]);
-      }
-    };
-    
-    if (activeTab === 'trash') {
-      fetchTrashedPhotos();
+  const fetchDashboardData = useCallback(async () => {
+    if (!user?.id) {
+      console.warn('[Dashboard] fetchDashboardData skipped: no user ID');
+      setIsLoadingFaceData(false);
+      return;
     }
-  }, [user, activeTab]);
+    setIsLoadingFaceData(true);
+    console.log('[Dashboard] Fetching data for user:', user.id);
+    try {
+      // Reset state
+      setFaceRegistered(false); setFaceImageUrl(null); setFaceAttributes(null); setFaceId(null); setHistoricalMatches([]); setUploadedCount(0); setMatchedCount(0);
 
-  // Effect to handle clicks outside the dropdown menu
+      // Fetch face data
+      const faceDataResult = await getFaceDataForUser(user.id);
+      if (faceDataResult) {
+        setFaceRegistered(true);
+        setFaceId(faceDataResult.faceId || null);
+        setFaceAttributes(faceDataResult.faceAttributes || null);
+        setHistoricalMatches(faceDataResult.historicalMatches || []);
+        if (faceDataResult.imageUrl) setFaceImageUrl(faceDataResult.imageUrl);
+        else if (faceDataResult.imagePath) setFaceImageUrl(`https://shmong.s3.amazonaws.com/face-images/${faceDataResult.imagePath}`);
+        else setFaceImageUrl(null);
+      }
+
+      // Fetch counts
+      const [uploadedPhotos, matchedPhotos] = await Promise.all([
+        awsPhotoService.fetchUploadedPhotos(user.id),
+        awsPhotoService.fetchPhotos(user.id) // Assuming gets matched
+      ]);
+      setUploadedCount(uploadedPhotos?.length || 0);
+      setMatchedCount(matchedPhotos?.length || 0);
+      console.log(`[Dashboard] Counts Updated: Uploaded=${uploadedCount}, Matched=${matchedCount}`);
+
+    } catch (err) {
+      console.error('[Dashboard] Error fetching dashboard data:', err);
+    } finally {
+      setIsLoadingFaceData(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      // Check if the menu is open and the click is outside the menu element
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
       }
     };
-
-    // Add listener only when the menu is open
-    if (isMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    } else {
-      // Remove listener if menu is closed
-      document.removeEventListener('mousedown', handleClickOutside);
-    }
-
-    // Cleanup function to remove the listener when the component unmounts or menu closes
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isMenuOpen]); // Dependency array ensures this runs when isMenuOpen changes
+    if (isMenuOpen) { document.addEventListener('mousedown', handleClickOutside); }
+    else { document.removeEventListener('mousedown', handleClickOutside); }
+    return () => { document.removeEventListener('mousedown', handleClickOutside); };
+  }, [isMenuOpen]);
 
   const handleRegistrationSuccess = (result: any) => {
-    console.log('[Dashboard] Face registration successful:', { 
-      faceId: result?.faceId, 
-      attributesCount: result?.faceAttributes ? Object.keys(result.faceAttributes).length : 0,
-      matchesCount: result?.historicalMatches?.length || 0 
-    });
-    
-    // Debug the raw attribute data
-    console.log('[Dashboard] Raw face attributes received:', result?.faceAttributes);
-    
-    // Log historical matches if any
-    if (result?.historicalMatches && result.historicalMatches.length > 0) {
-      console.log('[Dashboard] Historical matches found!', result.historicalMatches.length);
-      result.historicalMatches.forEach((match: any, index: number) => {
-        console.log(`[Dashboard] Match ${index + 1}:`, match);
-      });
-    } else {
-      console.log('[Dashboard] No historical matches found.');
-    }
-    
-    // --- 1. UPDATE STATE FIRST --- 
-    setFaceRegistered(true);
-    
-    if (result?.faceId) {
-      console.log('[Dashboard] Setting faceId:', result.faceId);
-      setFaceId(result.faceId);
-    }
-    
-    if (result?.faceAttributes) {
-      console.log('[Dashboard] Setting face attributes directly from registration');
-      setFaceAttributes(result.faceAttributes);
-    }
-    
-    // Handle historical matches if they exist  
-    if (result?.historicalMatches && result.historicalMatches.length > 0) {
-      console.log('[Dashboard] Setting historical matches:', result.historicalMatches);
-      setHistoricalMatches(result.historicalMatches);
-    }
-    
-    // Set image URL if available from the result
-    if (result?.imageUrl) {
-      console.log('[Dashboard] Setting face image URL from result:', result.imageUrl);
-      setFaceImageUrl(result.imageUrl);
-    } else {
-      // Fallback logic for image URL (keep as is)
-      console.warn('[Dashboard] No image URL in registration result, attempting fallbacks.');
-      const capturedImage = document.querySelector('.face-registration img[src^="blob:"]');
-      if (capturedImage) {
-        const img = capturedImage as HTMLImageElement;
-        console.log('[Dashboard] Found captured image in DOM, using as fallback');
-        setFaceImageUrl(img.src);
-      } else if (result?.faceId && user?.id) {
-        const fallbackUrl = `https://shmong.s3.amazonaws.com/face-images/${user.id}/${Date.now()}.jpg`;
-        console.log('[Dashboard] Using constructed fallback URL:', fallbackUrl);
-        setFaceImageUrl(fallbackUrl);
-      }
-    }
-
-    // --- 2. SET FLAGS TO SHOW ONE-TIME MESSAGES --- 
+    console.log('[Dashboard] Face registration successful, refreshing data...');
     setShowRegistrationSuccessMessage(true);
-    if (result?.historicalMatches?.length > 0) {
-      setShowHistoricalMatchesMessage(true);
-    }
-
-    // --- 3. CLOSE MODAL ---
+    if (result?.historicalMatches?.length > 0) { setShowHistoricalMatchesMessage(true); }
     setShowRegistrationModal(false);
-
-    // --- 4. TRIGGER REFRESH LAST --- 
-    console.log('[DASHBOARD] >>> TRIGGERING DASHBOARD DATA REFRESH (AFTER STATE UPDATE) <<<');
-    // Make sure fetchUserData exists and is correctly defined elsewhere in the component
-    if (typeof fetchUserData === 'function') {
-        fetchUserData(); // Refresh dashboard data
-    } else {
-        console.error('[Dashboard] fetchUserData function is not defined!');
-        // If fetchUserData is not defined here, perhaps we need to call fetchFaceData instead?
-        // Or maybe fetchCounts? Let's try fetchFaceData as it seems more comprehensive.
-        console.log('[Dashboard] Attempting fetchFaceData as fallback for refresh.');
-        fetchFaceData(); 
-    }
-  };
-  
-  const handlePermanentDelete = async (photoId: string) => {
-    if (!user || !user.id || !photoId) return;
-    
-    const confirmDelete = window.confirm("Are you sure you want to permanently hide this photo? This action cannot be undone.");
-    if (!confirmDelete) return;
-    
-    try {
-      // Use the permanentlyHidePhotos method from userVisibilityService instead
-      const result = await permanentlyHidePhotos(user.id, [photoId]);
-      
-      if (result.success) {
-      // Update the trashed photos list
-      setTrashedPhotos(trashedPhotos.filter(photo => photo.id !== photoId));
-      } else {
-        throw new Error(result.error || 'Failed to permanently hide photo');
-      }
-    } catch (err) {
-      console.error('[Dashboard] Error permanently deleting photo:', err);
-    }
+    fetchDashboardData(); // Refresh dashboard data
   };
 
-  const renderFaceAttributes = () => {
+  const renderFaceAttributesContent = () => {
     if (!faceAttributes) return null;
     
-    console.log('[Dashboard] Rendering face attributes:', faceAttributes);
-
-    // Check if we're dealing with AWS Rekognition format (uppercase keys) or our normalized format
-    const isRekognitionFormat = faceAttributes.AgeRange || faceAttributes.Gender;
-    
-    let parsedAttributes: any = { ...faceAttributes };
-    
-    // Convert Rekognition format to our normalized format if needed
-    if (isRekognitionFormat) {
-      console.log('[Dashboard] Converting Rekognition format to normalized format');
-      parsedAttributes = {
-        age: faceAttributes.AgeRange ? { 
-          low: faceAttributes.AgeRange.Low, 
-          high: faceAttributes.AgeRange.High 
-        } : undefined,
-        smile: faceAttributes.Smile ? { 
-          value: faceAttributes.Smile.Value, 
-          confidence: faceAttributes.Smile.Confidence 
-        } : undefined,
-        eyeglasses: faceAttributes.Eyeglasses ? { 
-          value: faceAttributes.Eyeglasses.Value, 
-          confidence: faceAttributes.Eyeglasses.Confidence 
-        } : undefined,
-        sunglasses: faceAttributes.Sunglasses ? { 
-          value: faceAttributes.Sunglasses.Value, 
-          confidence: faceAttributes.Sunglasses.Confidence 
-        } : undefined,
-        gender: faceAttributes.Gender ? { 
-          value: faceAttributes.Gender.Value, 
-          confidence: faceAttributes.Gender.Confidence 
-        } : undefined,
-        eyesOpen: faceAttributes.EyesOpen ? { 
-          value: faceAttributes.EyesOpen.Value, 
-          confidence: faceAttributes.EyesOpen.Confidence 
-        } : undefined,
-        mouthOpen: faceAttributes.MouthOpen ? { 
-          value: faceAttributes.MouthOpen.Value, 
-          confidence: faceAttributes.MouthOpen.Confidence 
-        } : undefined,
-        emotions: faceAttributes.Emotions ? faceAttributes.Emotions.map((e: any) => ({
-          type: e.Type,
-          confidence: e.Confidence
-        })) : undefined
-      };
-    }
-
-    // Determine the primary emotion (with the highest confidence)
-    const primaryEmotion =
-      parsedAttributes.emotions && parsedAttributes.emotions.length > 0
-        ? parsedAttributes.emotions.reduce((prev: any, curr: any) => (prev.confidence > curr.confidence ? prev : curr))
-        : null;
-
-    // Create attributes list - this will work with either normalized format or our converted format
-    const attributes = [
-      {
-        icon: <Smile className="w-4 h-4" />,
-        label: "Smile",
-        value: parsedAttributes.smile?.value ? "Yes" : "No",
-        confidence: parsedAttributes.smile?.confidence || 0
-      },
-      {
-        icon: <Eye className="w-4 h-4" />,
-        label: "Eyes Open",
-        value: parsedAttributes.eyesOpen?.value ? "Yes" : "No",
-        confidence: parsedAttributes.eyesOpen?.confidence || 0
-      },
-      {
-        icon: <Ruler className="w-4 h-4" />,
-        label: "Age Range",
-        value: `${parsedAttributes.age?.low || 0}-${parsedAttributes.age?.high || 0}`,
-        confidence: 100
-      },
-      {
-        icon: <Smile className="w-4 h-4" />,
-        label: "Emotion",
-        value: primaryEmotion ? primaryEmotion.type : "None",
-        confidence: primaryEmotion ? primaryEmotion.confidence : 0
-      },
-      {
-        icon: <User className="w-4 h-4" />,
-        label: "Gender",
-        value: parsedAttributes.gender?.value || "Unknown",
-        confidence: parsedAttributes.gender?.confidence || 0
-      }
-    ];
+    console.log('[Dashboard] Rendering face attributes content:', faceAttributes);
 
     return (
-      <div className="mt-4 space-y-2">
-        <h4 className="text-sm font-medium text-apple-gray-700 mb-2">Face Attributes</h4>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {attributes.map((attr, index) => (
-            <div 
-              key={index}
-              className="flex items-center p-2.5 bg-apple-gray-50 rounded-lg border border-apple-gray-100"
-            >
-              <div className="mr-2 text-apple-gray-500">
-                {attr.icon}
-              </div>
-              <div>
-                <div className="text-xs font-medium text-apple-gray-800">
-                  {attr.label}
-                </div>
-                <div className="text-xs text-apple-gray-500">
-                  {attr.value} ({Math.round(attr.confidence)}%)
-                </div>
-              </div>
-            </div>
-          ))}
+      <div className="space-y-3 text-sm">
+        <h3 className="text-base font-semibold text-apple-gray-800 mb-2">Face Details</h3>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          <div className="flex items-center">
+            <User className="w-4 h-4 mr-1.5 text-apple-gray-400" />
+            <span className="text-apple-gray-600">Gender:</span>
+            <span className="ml-1 font-medium text-apple-gray-900">{faceAttributes.gender?.value || 'N/A'}</span>
+          </div>
+          <div className="flex items-center">
+            <Calendar className="w-4 h-4 mr-1.5 text-apple-gray-400" />
+            <span className="text-apple-gray-600">Age Range:</span>
+            <span className="ml-1 font-medium text-apple-gray-900">{faceAttributes.age ? `${faceAttributes.age.low} - ${faceAttributes.age.high}` : 'N/A'}</span>
+          </div>
+          <div className="flex items-center">
+            <Smile className="w-4 h-4 mr-1.5 text-apple-gray-400" />
+            <span className="text-apple-gray-600">Smiling:</span>
+            <span className="ml-1 font-medium text-apple-gray-900">{faceAttributes.smile?.value ? 'Yes' : 'No'}</span>
+          </div>
+          <div className="flex items-center">
+            <Eye className="w-4 h-4 mr-1.5 text-apple-gray-400" />
+            <span className="text-apple-gray-600">Eyes Open:</span>
+            <span className="ml-1 font-medium text-apple-gray-900">{faceAttributes.eyesOpen?.value ? 'Yes' : 'No'}</span>
+          </div>
+          {/* Add more attributes as needed */}
         </div>
+        {/* Render Emotions if available */}
+        {faceAttributes.emotions && faceAttributes.emotions.length > 0 && (
+          <div className="pt-2">
+            <h4 className="text-xs font-medium text-apple-gray-500 mb-1">Detected Emotion:</h4>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              {faceAttributes.emotions[0].type} ({Math.round(faceAttributes.emotions[0].confidence)}%)
+            </span>
+          </div>
+        )}
       </div>
     );
   };
@@ -466,7 +214,7 @@ export const Dashboard = () => {
           <div className="flex-1">
             {faceAttributes ? (
               <>
-                {renderFaceAttributes()}
+                {renderFaceAttributesContent()}
                 {renderHistoricalMatches()}
               </>
             ) : (
@@ -482,197 +230,26 @@ export const Dashboard = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'upload':
+      case 'home':
         return (
-          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
-            <div className="flex items-center justify-between mb-4 pb-4 border-b border-apple-gray-100">
-              <h2 className="text-lg font-semibold text-apple-gray-900 flex items-center">
-                <Upload className="w-5 h-5 mr-2 text-apple-gray-500" />
-                Upload Photos
-              </h2>
-            </div>
-            <p className="text-sm text-apple-gray-600 mb-6">
-              Upload photos to be indexed. Other users matched in these photos will be able to view them.
-            </p>
-            <PhotoManager mode="upload" />
-          </div>
-        );
-      case 'photos':
-        return (
-          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
-            <div className="flex items-center justify-between mb-4 pb-4 border-b border-apple-gray-100">
-              <h2 className="text-lg font-semibold text-apple-gray-900 flex items-center">
-                <Photos className="w-5 h-5 mr-2 text-apple-gray-500" />
-                My Photos
-              </h2>
-               <div className="text-center bg-apple-gray-50 px-3 py-1.5 rounded-full border border-apple-gray-200">
-                <span className="text-sm font-medium text-apple-gray-700">{matchedCount}</span>
-                <span className="text-xs text-apple-gray-500 ml-1">found</span>
-              </div>
-            </div>
-            <p className="text-sm text-apple-gray-600 mb-6">
-              Photos where your registered face has been identified.
-            </p>
-            <PhotoManager mode="matches" nativeShare={true} />
-          </div>
-        );
-      case 'events':
-        return (
-          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
-            <div className="flex items-center justify-between mb-4 pb-4 border-b border-apple-gray-100">
-              <h2 className="text-lg font-semibold text-apple-gray-900 flex items-center">
-                <Calendar className="w-5 h-5 mr-2 text-apple-gray-500" />
-                Events
-              </h2>
-            </div>
-            <p className="text-sm text-apple-gray-600 mb-6">
-              View photos organized by the events they were uploaded to.
-            </p>
-            <div className="text-center p-8 bg-apple-gray-50 rounded-lg border border-apple-gray-100">
-              <Calendar className="w-10 h-10 mx-auto text-apple-gray-400 mb-3" />
-              <p className="text-sm text-apple-gray-500">Event functionality coming soon.</p>
-            </div>
-          </div>
-        );
-      case 'trash':
-        return (
-          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
-            <div className="flex items-center justify-between mb-4 pb-4 border-b border-apple-gray-100">
-              <h2 className="text-lg font-semibold text-apple-gray-900 flex items-center">
-                <Trash2 className="w-5 h-5 mr-2 text-apple-gray-500" />
-                Trash
-              </h2>
-              <div className="text-center bg-apple-gray-50 px-3 py-1.5 rounded-full border border-apple-gray-200">
-                <span className="text-sm font-medium text-apple-gray-700">{trashedPhotos.length}</span>
-                <span className="text-xs text-apple-gray-500 ml-1">items</span>
-              </div>
-            </div>
-            <p className="text-sm text-apple-gray-600 mb-6">
-              Items you've hidden. They will be permanently removed after 30 days.
-            </p>
-            {trashedPhotos.length > 0 ? (
-              <div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                  {trashedPhotos.map(photo => (
-                    <div key={photo.id} className="relative group">
-                      <div className="aspect-square rounded-lg overflow-hidden border border-apple-gray-100">
-                        <img 
-                          src={photo.url} 
-                          alt={photo.title || `Photo ${photo.id}`} 
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
-                        />
-                      </div>
-                      <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                        <div className="flex flex-col space-y-2">
-                          <button 
-                            onClick={() => handleRestorePhoto(photo.id)}
-                            className="bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold py-2 px-3 rounded-md transition-colors shadow flex items-center justify-center"
-                            title="Restore photo"
-                          >
-                            <RotateCcw className="w-3 h-3 mr-1" />
-                            Restore
-                          </button>
-                          <button 
-                            onClick={() => handlePermanentDelete(photo.id)}
-                            className="bg-red-500 hover:bg-red-600 text-white text-xs font-semibold py-2 px-3 rounded-md transition-colors shadow flex items-center justify-center"
-                            title="Permanently hide photo"
-                          >
-                            <Trash2 className="w-3 h-3 mr-1" />
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+          <div className="space-y-6">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
+              {showRegistrationSuccessMessage && ( <div className="mb-5 bg-green-50 border-l-4 border-green-500 p-3 rounded-r-md"><p className="text-sm text-green-800 flex items-center"><CheckCircle className="w-4 h-4 mr-1.5 flex-shrink-0"/><span className="font-medium">Face registration complete!</span></p></div>)}
+              {!faceRegistered && !showRegistrationModal && (<div className="mb-5 bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-md"><p className="text-sm text-amber-800 flex items-center"><AlertCircle className="w-4 h-4 mr-1.5 flex-shrink-0"/><span className="font-medium">Register your face to find photos.</span></p></div>)}
+              {!faceRegistered && showRegistrationModal && (<div className="mb-6"><FaceRegistration onSuccess={handleRegistrationSuccess} onClose={() => setShowRegistrationModal(false)} /></div>)}
+              {faceRegistered && renderFaceImageWithAttributes()}
+              {!showRegistrationModal && (<button onClick={() => setShowRegistrationModal(true)} className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors flex items-center justify-center w-full md:w-auto"><Camera className="w-4 h-4 mr-2" />{faceRegistered ? "Update Face Registration" : "Register Your Face"}</button>)}
+            </motion.div>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} className="space-y-6">
+              <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-5">
+                <h2 className="text-sm font-medium text-apple-gray-500 mb-3 flex items-center"><Photos className="w-4 h-4 mr-1.5"/> Photo Stats</h2>
+                <div className="grid grid-cols-2 gap-4">
+                   <button onClick={() => setActiveTab('photos')} className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"><p className="text-2xl font-semibold text-apple-green-600">{matchedCount}</p><p className="text-xs text-apple-gray-500 mt-0.5">Photos Matched</p></button>
+                   <button onClick={() => setActiveTab('upload')} className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"><p className="text-2xl font-semibold text-apple-blue-600">{uploadedCount}</p><p className="text-xs text-apple-gray-500 mt-0.5">Photos Uploaded</p></button>
                 </div>
               </div>
-            ) : (
-              <div className="text-center p-8 bg-apple-gray-50 rounded-lg border border-apple-gray-100">
-                 <Trash2 className="w-10 h-10 mx-auto text-apple-gray-400 mb-3" />
-                <p className="text-sm text-apple-gray-500">Trash is empty.</p>
-              </div>
-            )}
-          </div>
-        );
-      default:
-        return (
-          <>
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-              className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6"
-            >
-              
-              {showRegistrationSuccessMessage && (
-                <div className="mb-5 bg-green-50 border-l-4 border-green-500 p-3 rounded-r-md">
-                  <p className="text-sm text-green-800 flex items-center">
-                    <CheckCircle className="w-4 h-4 mr-1.5 flex-shrink-0"/>
-                    <span className="font-medium">Face registration complete!</span>
-                  </p>
-                 </div>
-              )}
-              
-              {!faceRegistered && !showRegistrationModal && (
-                 <div className="mb-5 bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-md">
-                   <p className="text-sm text-amber-800 flex items-center">
-                      <AlertCircle className="w-4 h-4 mr-1.5 flex-shrink-0"/>
-                     <span className="font-medium">Register your face to find photos.</span>
-                   </p>
-                 </div>
-              )}
-
-              {!faceRegistered && showRegistrationModal && (
-                 <div className="mb-6">
-                    <FaceRegistration 
-                        onSuccess={handleRegistrationSuccess} 
-                        onClose={() => setShowRegistrationModal(false)} 
-                     />
-                 </div>
-              )}
-
-              {faceRegistered && renderFaceImageWithAttributes()}
-              
-              {!showRegistrationModal && (
-                <button
-                  onClick={() => setShowRegistrationModal(true)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors flex items-center justify-center w-full md:w-auto"
-                >
-                  <Camera className="w-4 h-4 mr-2" />
-                  {faceRegistered ? "Update Face Registration" : "Register Your Face"}
-                </button>
-              )}
-            </motion.div>
-
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 }}
-              className="space-y-6"
-            >
                <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-5">
-                  <h2 className="text-sm font-medium text-apple-gray-500 mb-3 flex items-center">
-                    <Photos className="w-4 h-4 mr-1.5"/> Photo Stats
-                  </h2>
-                  <div className="grid grid-cols-2 gap-4">
-                     <button 
-                       onClick={() => setActiveTab('photos')}
-                       className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"
-                     >
-                       <p className="text-2xl font-semibold text-apple-green-600">{matchedCount}</p>
-                       <p className="text-xs text-apple-gray-500 mt-0.5">Photos Matched</p>
-                     </button>
-                     <button 
-                       onClick={() => setActiveTab('upload')}
-                       className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"
-                     >
-                       <p className="text-2xl font-semibold text-apple-blue-600">{uploadedCount}</p>
-                       <p className="text-xs text-apple-gray-500 mt-0.5">Photos Uploaded</p>
-                     </button>
-                  </div>
-               </div>
-                 <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-5">
-                  <h2 className="text-sm font-medium text-apple-gray-500 mb-3 flex items-center">
+                 <h2 className="text-sm font-medium text-apple-gray-500 mb-3 flex items-center">
                     <Shield className="w-4 h-4 mr-1.5"/> Account Status
                   </h2>
                    <div className="flex items-center p-3 bg-apple-gray-50 rounded-lg mb-3 border border-apple-gray-100">
@@ -695,108 +272,111 @@ export const Dashboard = () => {
                   </div>
                </div>
             </motion.div>
-          </>
+          </div>
+        );
+      case 'upload':
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
+            <h2 className="text-lg font-semibold text-apple-gray-900 flex items-center mb-4">
+                <Upload className="w-5 h-5 mr-2 text-apple-gray-500" /> Upload Photos
+            </h2>
+            <PhotoManager
+                mode="upload"
+                enableMultiSelect={true}
+                onRefresh={fetchDashboardData}
+            />
+          </div>
+        );
+      case 'photos':
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
+            <h2 className="text-lg font-semibold text-apple-gray-900 flex items-center mb-4">
+                <Photos className="w-5 h-5 mr-2 text-apple-gray-500" /> My Photos
+            </h2>
+            <PhotoManager
+                mode="matches"
+                enableMultiSelect={true}
+                onRefresh={fetchDashboardData}
+            />
+          </div>
+        );
+      case 'trash':
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
+            <TrashBin userId={user?.id} />
+          </div>
+        );
+      default:
+        return (
+          <div className="text-center p-10 text-gray-500">
+              Select a tab to view content.
+          </div>
         );
     }
   };
 
   return (
-    <div className="min-h-screen bg-apple-gray-50 font-sans">
+    <div className="min-h-screen bg-apple-gray-50 font-sans flex flex-col">
       <header className="fixed top-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-b border-apple-gray-200 pt-safe">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-14 items-center">
-            <div className="flex-shrink-0 flex items-center">
-              <img src="https://www.shmong.tv/wp-content/uploads/2023/05/main-logo.png" alt="SHMONG" className="h-7" />
-            </div>
-            
-            <div className="relative">
-              <button 
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="flex items-center space-x-2 text-sm font-medium text-apple-gray-700 hover:text-apple-gray-900 focus:outline-none"
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex justify-between items-center">
+          <div className="flex-shrink-0 flex items-center">
+            <img src="https://www.shmong.tv/wp-content/uploads/2023/05/main-logo.png" alt="SHMONG" className="h-7" />
+          </div>
+          <div className="relative">
+            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="flex items-center space-x-2 text-sm font-medium text-apple-gray-700 hover:text-apple-gray-900 focus:outline-none">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-apple-blue-400 to-apple-purple-500 text-white flex items-center justify-center text-xs font-semibold">{(user?.email?.charAt(0) || 'U').toUpperCase()}</div>
+              <span className="hidden sm:inline">{user?.email}</span>
+              <ChevronDown className={cn("h-4 w-4 text-apple-gray-400 transition-transform", isMenuOpen && "rotate-180")} />
+            </button>
+            <AnimatePresence>{isMenuOpen && (
+              <motion.div 
+                ref={menuRef}
+                initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.1 } }}
+                transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+                className="absolute right-0 mt-2 w-56 origin-top-right bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none py-1 z-10"
               >
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-apple-blue-400 to-apple-purple-500 text-white flex items-center justify-center text-xs font-semibold">
-                  {(user?.email?.charAt(0) || 'U').toUpperCase()}
+                <div className="px-3 py-2 border-b border-apple-gray-100">
+                  <p className="text-sm font-medium text-apple-gray-900 truncate">
+                    {user?.full_name || user?.email}
+                  </p>
+                  {user?.full_name && (
+                  <p className="text-xs text-apple-gray-500 truncate">
+                    {user?.email}
+                  </p>
+                  )}
                 </div>
-                <span className="hidden sm:inline">{user?.email}</span>
-                <ChevronDown className={cn("h-4 w-4 text-apple-gray-400 transition-transform", isMenuOpen && "rotate-180")} />
-              </button>
-              
-              <AnimatePresence>
-                {isMenuOpen && (
-                  <motion.div 
-                    ref={menuRef}
-                    initial={{ opacity: 0, scale: 0.95, y: -5 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.1 } }}
-                    transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
-                    className="absolute right-0 mt-2 w-56 origin-top-right bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none py-1 z-10"
-                  >
-                    <div className="px-3 py-2 border-b border-apple-gray-100">
-                      <p className="text-sm font-medium text-apple-gray-900 truncate">
-                        {user?.full_name || user?.email}
-                      </p>
-                      {user?.full_name && (
-                      <p className="text-xs text-apple-gray-500 truncate">
-                        {user?.email}
-                      </p>
-                      )}
-                    </div>
-                    <button 
-                      onClick={() => signOut()}
-                      className="flex items-center w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-apple-gray-50"
-                    >
-                      <LogOut className="w-4 h-4 mr-2" />
-                      Sign out
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                <button 
+                  onClick={() => signOut()}
+                  className="flex items-center w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-apple-gray-50"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign out
+                </button>
+              </motion.div>
+            )}</AnimatePresence>
           </div>
         </div>
       </header>
-
-      {/* Add top spacing for fixed header */}
-      <div className="h-14"></div>
       
-      {/* Tab Navigation moved to top under header */}
-      <TabNavigation 
-        activeTab={activeTab} 
-        onTabChange={setActiveTab}
-      />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <div className={cn(
-          "",
-          activeTab === 'home' ? "grid grid-cols-1 lg:grid-cols-3 gap-6" : ""
-        )}>
-          {renderContent()}
-        </div>
-      </main>
-
-      <AnimatePresence>
-        {showRegistrationModal && (
-           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-md z-40 flex items-center justify-center p-4"
-          >
-             <motion.div 
-               initial={{ scale: 0.9, opacity: 0 }}
-               animate={{ scale: 1, opacity: 1 }}
-               exit={{ scale: 0.9, opacity: 0 }}
-               transition={{ type: "spring", damping: 20, stiffness: 200 }}
-               className="relative w-full max-w-2xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden"
-             >
-               <FaceRegistration
-                 onSuccess={handleRegistrationSuccess}
-                 onClose={() => setShowRegistrationModal(false)}
-               />
-             </motion.div>
-           </motion.div>
+      <div className="sticky top-14 z-20 bg-white border-b border-apple-gray-200 mb-6 pt-safe">
+         <TabNavigation 
+            activeTab={activeTab} 
+            onTabChange={setActiveTab} 
+          />
+      </div>
+      
+      <main className="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-4 pb-24">
+        {isLoadingFaceData ? (
+             <div className="flex justify-center items-center py-16 text-apple-gray-400">
+                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className="w-6 h-6 border-2 border-apple-gray-200 border-t-apple-blue-500 rounded-full" />
+                <span className="ml-2 text-sm">Loading dashboard...</span>
+            </div>
+        ) : (
+            renderContent()
         )}
-      </AnimatePresence>
+      </main>
     </div>
   );
 };
