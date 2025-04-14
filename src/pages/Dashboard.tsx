@@ -109,42 +109,73 @@ export const Dashboard = () => {
     
     console.log('[Dashboard] Rendering face attributes content:', faceAttributes);
 
+    // Get the primary emotion (highest confidence)
+    const topEmotion = faceAttributes.emotions && faceAttributes.emotions.length > 0
+      ? [...faceAttributes.emotions].sort((a, b) => b.confidence - a.confidence)[0]
+      : null;
+
+    // Refined layout and styling for attributes
     return (
-      <div className="space-y-3 text-sm">
-        <h3 className="text-base font-semibold text-apple-gray-800 mb-2">Face Details</h3>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <div className="flex items-center">
-            <User className="w-4 h-4 mr-1.5 text-apple-gray-400" />
-            <span className="text-apple-gray-600">Gender:</span>
-            <span className="ml-1 font-medium text-apple-gray-900">{faceAttributes.gender?.value || 'N/A'}</span>
-          </div>
-          <div className="flex items-center">
-            <Calendar className="w-4 h-4 mr-1.5 text-apple-gray-400" />
-            <span className="text-apple-gray-600">Age Range:</span>
-            <span className="ml-1 font-medium text-apple-gray-900">{faceAttributes.age ? `${faceAttributes.age.low} - ${faceAttributes.age.high}` : 'N/A'}</span>
-          </div>
-          <div className="flex items-center">
-            <Smile className="w-4 h-4 mr-1.5 text-apple-gray-400" />
-            <span className="text-apple-gray-600">Smiling:</span>
-            <span className="ml-1 font-medium text-apple-gray-900">{faceAttributes.smile?.value ? 'Yes' : 'No'}</span>
-          </div>
-          <div className="flex items-center">
-            <Eye className="w-4 h-4 mr-1.5 text-apple-gray-400" />
-            <span className="text-apple-gray-600">Eyes Open:</span>
-            <span className="ml-1 font-medium text-apple-gray-900">{faceAttributes.eyesOpen?.value ? 'Yes' : 'No'}</span>
-          </div>
-          {/* Add more attributes as needed */}
-        </div>
-        {/* Render Emotions if available */}
-        {faceAttributes.emotions && faceAttributes.emotions.length > 0 && (
-          <div className="pt-2">
-            <h4 className="text-xs font-medium text-apple-gray-500 mb-1">Detected Emotion:</h4>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              {faceAttributes.emotions[0].type} ({Math.round(faceAttributes.emotions[0].confidence)}%)
-            </span>
-          </div>
-        )}
-      </div>
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 border-b pb-2">Face Details</h3>
+        
+        <div className="grid grid-cols-1 gap-y-3 text-sm">
+          {/* Gender */}
+          {faceAttributes.gender && (
+            <div className="flex items-center">
+              <User className="w-4 h-4 mr-2 text-gray-500" />
+              <span className="text-gray-600 dark:text-gray-400 w-20">Gender:</span>
+              <span className="font-medium text-gray-900 dark:text-gray-100">{faceAttributes.gender.value}</span>
+            </div>
+          )}
+          {/* Age Range */}
+          {faceAttributes.age && (
+            <div className="flex items-center">
+              <Calendar className="w-4 h-4 mr-2 text-gray-500" />
+              <span className="text-gray-600 dark:text-gray-400 w-20">Age Range:</span>
+              <span className="font-medium text-gray-900 dark:text-gray-100">
+                {`${faceAttributes.age.low} - ${faceAttributes.age.high}`}
+              </span>
+            </div>
+          )}
+          {/* Smiling */}
+          {faceAttributes.smile && (
+             <div className="flex items-center">
+               <Smile className="w-4 h-4 mr-2 text-gray-500" />
+               <span className="text-gray-600 dark:text-gray-400 w-20">Smiling:</span>
+               <span className="font-medium text-gray-900 dark:text-gray-100">{faceAttributes.smile.value ? 'Yes' : 'No'}</span>
+             </div>
+          )}
+           {/* Eyes Open */}
+           {faceAttributes.eyesOpen && (
+             <div className="flex items-center">
+               <Eye className="w-4 h-4 mr-2 text-gray-500" />
+               <span className="text-gray-600 dark:text-gray-400 w-20">Eyes Open:</span>
+               <span className="font-medium text-gray-900 dark:text-gray-100">{faceAttributes.eyesOpen.value ? 'Yes' : 'No'}</span>
+             </div>
+           )}
+           {/* Eyeglasses */}
+           {faceAttributes.eyeglasses && (
+             <div className="flex items-center">
+               <Eye className="w-4 h-4 mr-2 text-gray-500" /> 
+               <span className="text-gray-600 dark:text-gray-400 w-20">Eyeglasses:</span>
+               <span className="font-medium text-gray-900 dark:text-gray-100">{faceAttributes.eyeglasses.value ? 'Yes' : 'No'}</span>
+             </div>
+           )}
+           {/* Emotion */}
+           {topEmotion && (
+              <div className="flex items-center">
+                 <Smile className="w-4 h-4 mr-2 text-gray-500" /> 
+                 <span className="text-gray-600 dark:text-gray-400 w-20">Emotion:</span>
+                 <span className="font-medium text-gray-900 dark:text-gray-100">
+                   {topEmotion.type} ({Math.round(topEmotion.confidence)}%)
+                 </span>
+               </div>
+            )}
+           {/* MouthOpen attribute is removed */} 
+           {/* ... add other attributes like Beard, Mustache, Sunglasses if needed, following this pattern ... */} 
+         </div>
+       </div>
     );
   };
 
@@ -167,11 +198,11 @@ export const Dashboard = () => {
   const renderFaceImageWithAttributes = () => {
     if (isLoadingFaceData) {
       return (
-        <div className="flex justify-center items-center py-8 text-apple-gray-400">
+        <div className="flex justify-center items-center py-8 text-gray-400">
           <motion.div 
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            className="w-6 h-6 border-2 border-apple-gray-200 border-t-apple-blue-500 rounded-full"
+            className="w-6 h-6 border-2 border-gray-200 border-t-blue-500 rounded-full"
           />
           <span className="ml-2 text-sm">Loading face data...</span>
         </div>
@@ -179,17 +210,19 @@ export const Dashboard = () => {
     }
 
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6 mb-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
         <div className="flex flex-col md:flex-row gap-6">
           <div className="md:w-1/3 flex-shrink-0">
             {(user?.full_name || user?.email) && (
-              <div className="mb-3 text-sm text-apple-gray-800 font-medium">
-                {user?.full_name || user?.email}
+              <div className="mb-4 text-center md:text-left">
+                <p className="text-lg font-semibold text-gray-800 truncate" title={user.full_name || user.email}>
+                    {user.full_name || user.email}
+                </p>
               </div>
             )}
             
             {faceImageUrl ? (
-              <div className="relative aspect-square rounded-lg overflow-hidden border border-apple-gray-200 bg-apple-gray-100">
+              <div className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
                 <img 
                   src={encodeURI(faceImageUrl || '')}
                   alt="Registered face" 
@@ -203,10 +236,10 @@ export const Dashboard = () => {
                 />
               </div>
             ) : (
-              <div className="relative aspect-square rounded-lg overflow-hidden border border-apple-gray-200 bg-apple-gray-100 flex items-center justify-center">
+              <div className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center">
                 <div className="text-center p-4">
-                  <User className="w-12 h-12 mx-auto text-apple-gray-400 mb-2" />
-                  <p className="text-xs text-apple-gray-500">Image not available</p>
+                  <User className="w-12 h-12 mx-auto text-gray-400 mb-2" />
+                  <p className="text-xs text-gray-500">Image not available</p>
                 </div>
               </div>
             )}
@@ -218,8 +251,8 @@ export const Dashboard = () => {
                 {renderHistoricalMatches()}
               </>
             ) : (
-              <div className="p-4 bg-apple-gray-50 rounded-lg border border-apple-gray-100 h-full flex items-center justify-center">
-                <p className="text-sm text-apple-gray-500 text-center">Face attributes unavailable.</p>
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-100 h-full flex items-center justify-center">
+                <p className="text-sm text-gray-500 text-center">Face attributes unavailable.</p>
               </div>
             )}
           </div>
@@ -233,7 +266,7 @@ export const Dashboard = () => {
       case 'home':
         return (
           <div className="space-y-6">
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
               {showRegistrationSuccessMessage && ( <div className="mb-5 bg-green-50 border-l-4 border-green-500 p-3 rounded-r-md"><p className="text-sm text-green-800 flex items-center"><CheckCircle className="w-4 h-4 mr-1.5 flex-shrink-0"/><span className="font-medium">Face registration complete!</span></p></div>)}
               {!faceRegistered && !showRegistrationModal && (<div className="mb-5 bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-md"><p className="text-sm text-amber-800 flex items-center"><AlertCircle className="w-4 h-4 mr-1.5 flex-shrink-0"/><span className="font-medium">Register your face to find photos.</span></p></div>)}
               {!faceRegistered && showRegistrationModal && (<div className="mb-6"><FaceRegistration onSuccess={handleRegistrationSuccess} onClose={() => setShowRegistrationModal(false)} /></div>)}
@@ -241,32 +274,32 @@ export const Dashboard = () => {
               {!showRegistrationModal && (<button onClick={() => setShowRegistrationModal(true)} className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors flex items-center justify-center w-full md:w-auto"><Camera className="w-4 h-4 mr-2" />{faceRegistered ? "Update Face Registration" : "Register Your Face"}</button>)}
             </motion.div>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} className="space-y-6">
-              <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-5">
-                <h2 className="text-sm font-medium text-apple-gray-500 mb-3 flex items-center"><Photos className="w-4 h-4 mr-1.5"/> Photo Stats</h2>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h2 className="text-sm font-medium text-gray-500 mb-3 flex items-center"><Photos className="w-4 h-4 mr-1.5"/> Photo Stats</h2>
                 <div className="grid grid-cols-2 gap-4">
-                   <button onClick={() => setActiveTab('photos')} className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"><p className="text-2xl font-semibold text-apple-green-600">{matchedCount}</p><p className="text-xs text-apple-gray-500 mt-0.5">Photos Matched</p></button>
-                   <button onClick={() => setActiveTab('upload')} className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"><p className="text-2xl font-semibold text-apple-blue-600">{uploadedCount}</p><p className="text-xs text-apple-gray-500 mt-0.5">Photos Uploaded</p></button>
+                   <button onClick={() => setActiveTab('photos')} className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"><p className="text-2xl font-semibold text-green-600">{matchedCount}</p><p className="text-xs text-gray-500 mt-0.5">Photos Matched</p></button>
+                   <button onClick={() => setActiveTab('upload')} className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"><p className="text-2xl font-semibold text-blue-600">{uploadedCount}</p><p className="text-xs text-gray-500 mt-0.5">Photos Uploaded</p></button>
                 </div>
               </div>
-               <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-5">
-                 <h2 className="text-sm font-medium text-apple-gray-500 mb-3 flex items-center">
+               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                 <h2 className="text-sm font-medium text-gray-500 mb-3 flex items-center">
                     <Shield className="w-4 h-4 mr-1.5"/> Account Status
                   </h2>
-                   <div className="flex items-center p-3 bg-apple-gray-50 rounded-lg mb-3 border border-apple-gray-100">
+                   <div className="flex items-center p-3 bg-gray-50 rounded-lg mb-3 border border-gray-100">
                     <div className={`w-2.5 h-2.5 rounded-full mr-2.5 ${faceRegistered ? 'bg-green-500' : 'bg-amber-500'}`}></div>
                     <div>
-                      <span className="text-sm font-medium text-apple-gray-800">
+                      <span className="text-sm font-medium text-gray-800">
                         {faceRegistered ? 'Face Registered' : 'Not Registered'}
                       </span>
-                      <p className="text-xs text-apple-gray-500">
+                      <p className="text-xs text-gray-500">
                         {faceRegistered ? 'Ready for matching' : 'Complete registration'}
                       </p>
                     </div>
                   </div>
                    <div className="mt-4">
-                    <h3 className="text-xs font-medium text-apple-gray-500 mb-1">Privacy Information</h3>
-                    <div className="flex items-start text-xs text-apple-gray-500">
-                      <AlertCircle className="w-3 h-3 mr-1.5 text-apple-gray-400 flex-shrink-0 mt-0.5" />
+                    <h3 className="text-xs font-medium text-gray-500 mb-1">Privacy Information</h3>
+                    <div className="flex items-start text-xs text-gray-500">
+                      <AlertCircle className="w-3 h-3 mr-1.5 text-gray-400 flex-shrink-0 mt-0.5" />
                       <p>Your face data is encrypted and stored securely. We never share your biometric data.</p>
                     </div>
                   </div>
@@ -276,9 +309,9 @@ export const Dashboard = () => {
         );
       case 'upload':
         return (
-          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-apple-gray-900 flex items-center mb-4">
-                <Upload className="w-5 h-5 mr-2 text-apple-gray-500" /> Upload Photos
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-4">
+                <Upload className="w-5 h-5 mr-2 text-gray-500" /> Upload Photos
             </h2>
             <PhotoManager
                 mode="upload"
@@ -289,9 +322,9 @@ export const Dashboard = () => {
         );
       case 'photos':
         return (
-          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-apple-gray-900 flex items-center mb-4">
-                <Photos className="w-5 h-5 mr-2 text-apple-gray-500" /> My Photos
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center mb-4">
+                <Photos className="w-5 h-5 mr-2 text-gray-500" /> My Photos
             </h2>
             <PhotoManager
                 mode="matches"
@@ -302,7 +335,7 @@ export const Dashboard = () => {
         );
       case 'trash':
         return (
-          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <TrashBin userId={user?.id} />
           </div>
         );
@@ -316,17 +349,17 @@ export const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-apple-gray-50 font-sans flex flex-col">
-      <header className="fixed top-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-b border-apple-gray-200 pt-safe">
+    <div className="min-h-screen bg-gray-50 font-sans flex flex-col">
+      <header className="fixed top-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 pt-safe">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex justify-between items-center">
           <div className="flex-shrink-0 flex items-center">
             <img src="https://www.shmong.tv/wp-content/uploads/2023/05/main-logo.png" alt="SHMONG" className="h-7" />
           </div>
           <div className="relative">
-            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="flex items-center space-x-2 text-sm font-medium text-apple-gray-700 hover:text-apple-gray-900 focus:outline-none">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-apple-blue-400 to-apple-purple-500 text-white flex items-center justify-center text-xs font-semibold">{(user?.email?.charAt(0) || 'U').toUpperCase()}</div>
+            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="flex items-center space-x-2 text-sm font-medium text-gray-700 hover:text-gray-900 focus:outline-none">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 text-white flex items-center justify-center text-xs font-semibold">{(user?.email?.charAt(0) || 'U').toUpperCase()}</div>
               <span className="hidden sm:inline">{user?.email}</span>
-              <ChevronDown className={cn("h-4 w-4 text-apple-gray-400 transition-transform", isMenuOpen && "rotate-180")} />
+              <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform", isMenuOpen && "rotate-180")} />
             </button>
             <AnimatePresence>{isMenuOpen && (
               <motion.div 
@@ -337,19 +370,14 @@ export const Dashboard = () => {
                 transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
                 className="absolute right-0 mt-2 w-56 origin-top-right bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none py-1 z-10"
               >
-                <div className="px-3 py-2 border-b border-apple-gray-100">
-                  <p className="text-sm font-medium text-apple-gray-900 truncate">
+                <div className="px-3 py-2 border-b border-gray-100">
+                  <p className="text-sm font-medium text-gray-900 truncate">
                     {user?.full_name || user?.email}
                   </p>
-                  {user?.full_name && (
-                  <p className="text-xs text-apple-gray-500 truncate">
-                    {user?.email}
-                  </p>
-                  )}
                 </div>
                 <button 
                   onClick={() => signOut()}
-                  className="flex items-center w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-apple-gray-50"
+                  className="flex items-center w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-gray-50"
                 >
                   <LogOut className="w-4 h-4 mr-2" />
                   Sign out
@@ -360,7 +388,7 @@ export const Dashboard = () => {
         </div>
       </header>
       
-      <div className="sticky top-14 z-20 bg-white border-b border-apple-gray-200 mb-6 pt-safe">
+      <div className="sticky top-14 z-20 bg-white border-b border-gray-200 mb-6 pt-safe">
          <TabNavigation 
             activeTab={activeTab} 
             onTabChange={setActiveTab} 
@@ -369,9 +397,8 @@ export const Dashboard = () => {
       
       <main className="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-4 pb-24">
         {isLoadingFaceData ? (
-             <div className="flex justify-center items-center py-16 text-apple-gray-400">
-                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className="w-6 h-6 border-2 border-apple-gray-200 border-t-apple-blue-500 rounded-full" />
-                <span className="ml-2 text-sm">Loading dashboard...</span>
+             <div className="flex justify-center items-center py-16 text-gray-500">
+                <span className="text-sm">Loading dashboard...</span>
             </div>
         ) : (
             renderContent()

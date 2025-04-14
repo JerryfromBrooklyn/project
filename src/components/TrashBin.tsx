@@ -1,121 +1,140 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { restorePhotosFromTrash, permanentlyHidePhotos, getPhotoVisibilityMap } from '../services/userVisibilityService';
 import { downloadImagesAsZip, downloadSingleImage } from '../utils/downloadUtils';
 import '../styles/TrashBin.css';
 import { FaTrash, FaDownload, FaUndo, FaCheckSquare, FaSquare } from 'react-icons/fa';
-import { AlertCircle, Trash2, Upload, Image as ImageIcon } from 'lucide-react';
+import { AlertCircle, Trash2, Upload, Image as ImageIcon, RotateCcw, XSquare, CheckSquare, Square, Select, Loader } from 'lucide-react';
+import { PhotoGrid } from './PhotoGrid';
+import { Button } from './ui/Button';
+import { AnimatePresence, motion } from 'framer-motion';
+import { cn } from '../utils/cn';
 
 const TrashBin = ({ userId }) => {
-  const [allTrashedPhotos, setAllTrashedPhotos] = useState([]);
-  const [selectedPhotos, setSelectedPhotos] = useState([]);
+  const [allTrashedPhotos, setAllTrashedPhotos] = useState<any[]>([]);
+  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [activeTrashView, setActiveTrashView] = useState('matched');
   const [visibilityMap, setVisibilityMap] = useState({});
+  const [isSelecting, setIsSelecting] = useState(false);
 
-  useEffect(() => {
-    const loadTrashedPhotos = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        console.log(`[TrashBin] Fetching trashed photos for user: ${userId}`);
-        
-        // Use getTrashedPhotos which properly fetches photos with TRASH visibility status
-        const photos = await awsPhotoService.getTrashedPhotos(userId);
-        
-        console.log(`[TrashBin] Fetched ${photos.length} trashed photos`);
-        
-        // Get the visibility map for debugging
-        const visibilityMapResult = await getPhotoVisibilityMap(userId);
-        setVisibilityMap(visibilityMapResult.visibilityMap || {});
-        
-        // Verify all photos have TRASH status in the visibility map
-        const trashCount = photos.filter(p => visibilityMapResult.visibilityMap[p.id] === 'TRASH').length;
-        console.log(`[TrashBin] Photos confirmed in TRASH status: ${trashCount} out of ${photos.length}`);
-        
-        if (trashCount !== photos.length) {
-          console.warn('[TrashBin] Some photos in the trash don\'t have TRASH visibility status');
-        }
-        
-        setAllTrashedPhotos(photos || []);
-      } catch (err) {
-        console.error('Error fetching trashed photos:', err);
-        setError('Failed to load trashed photos. Please try again later.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (userId) {
-      loadTrashedPhotos();
+  const fetchTrashedPhotos = useCallback(async () => {
+    if (!userId) {
+      setIsLoading(false);
+      setAllTrashedPhotos([]);
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      console.log(`[TrashBin] Fetching trashed photos for user: ${userId}`);
+      const photos = await awsPhotoService.getTrashedPhotos(userId);
+      console.log(`[TrashBin] Fetched ${photos.length} trashed photos`);
+      const sortedPhotos = (photos || []).sort((a: any, b: any) => 
+         new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime()
+      );
+      setAllTrashedPhotos(sortedPhotos);
+    } catch (err: any) {
+      console.error('[TrashBin] Error fetching trashed photos:', err);
+      setError('Failed to load trashed photos. Please try again later.');
+      setAllTrashedPhotos([]);
+    } finally {
+      setIsLoading(false);
     }
   }, [userId]);
 
+  useEffect(() => {
+    fetchTrashedPhotos();
+  }, [fetchTrashedPhotos]);
+
   const filteredTrashedPhotos = useMemo(() => {
-    if (activeTrashView === 'uploaded') {
-      return allTrashedPhotos.filter(photo => photo.user_id === userId || photo.uploaded_by === userId);
-    } else if (activeTrashView === 'matched') {
-      return allTrashedPhotos.filter(photo => photo.user_id !== userId && photo.uploaded_by !== userId);
-    } else {
-      return allTrashedPhotos;
-    }
+    return allTrashedPhotos.filter(photo => {
+        const isUploadedByUser = photo.user_id === userId || photo.uploaded_by === userId;
+        return activeTrashView === 'uploaded' ? isUploadedByUser : !isUploadedByUser;
+    });
   }, [allTrashedPhotos, activeTrashView, userId]);
 
   useEffect(() => {
-    setSelectedPhotos([]);
-  }, [filteredTrashedPhotos]);
+    if (!isSelecting) {
+       setSelectedPhotos([]);
+    }
+  }, [activeTrashView, isSelecting]);
 
-  const togglePhotoSelection = (photoId) => {
-    setSelectedPhotos(prev => 
-      prev.includes(photoId) 
-        ? prev.filter(id => id !== photoId)
-        : [...prev, photoId]
-    );
+  const handleToggleSelectionMode = () => {
+    setIsSelecting(!isSelecting);
+    setSelectedPhotos([]);
   };
 
-  const toggleSelectAll = () => {
-    if (selectedPhotos.length === filteredTrashedPhotos.length) {
-      setSelectedPhotos([]);
+  const handleSelectPhoto = (photoId: string) => {
+    if (!isSelecting) return; 
+    setSelectedPhotos(prev =>
+      prev.includes(photoId) ? prev.filter(id => id !== photoId) : [...prev, photoId]
+    );
+  };
+  
+  const toggleSelectAllOnPage = () => {
+    if (!isSelecting) return;
+    const currentPhotoIds = filteredTrashedPhotos.map(p => p.id);
+    const allVisibleSelected = currentPhotoIds.length > 0 && currentPhotoIds.every(id => selectedPhotos.includes(id));
+
+    if (allVisibleSelected) {
+      setSelectedPhotos(prev => prev.filter(id => !currentPhotoIds.includes(id)));
     } else {
-      setSelectedPhotos(filteredTrashedPhotos.map(photo => photo.id));
+      setSelectedPhotos(prev => [...new Set([...prev, ...currentPhotoIds])]);
     }
   };
 
   const handleRestorePhotos = async () => {
-    if (!selectedPhotos.length) return;
+    if (!isSelecting || !selectedPhotos.length) return;
+    setIsActionLoading(true);
+    setError(null);
     try {
+      console.log(`[TrashBin] Restoring ${selectedPhotos.length} photos for user: ${userId}`);
       const result = await restorePhotosFromTrash(userId, selectedPhotos);
       if (result.success) {
+        console.log('[TrashBin] Restore successful');
         setAllTrashedPhotos(prev => prev.filter(photo => !selectedPhotos.includes(photo.id)));
-        setSelectedPhotos([]);
       } else {
-        setError(`Failed to restore photos: ${result.error}`);
+        setError(`Failed to restore photos: ${result.error || 'Unknown error'}`);
       }
-    } catch (err) {
-      console.error('Error restoring photos:', err);
+    } catch (err: any) {
+      console.error('[TrashBin] Error restoring photos:', err);
       setError('Failed to restore photos. Please try again later.');
+    } finally {
+      setIsActionLoading(false);
+      setIsSelecting(false);
+      setSelectedPhotos([]);
     }
   };
 
-  const handlePermanentlyHide = async () => {
-    if (!selectedPhotos.length) return;
+  const handlePermanentlyDelete = async () => {
+    if (!isSelecting || !selectedPhotos.length) return;
+    
     const confirmed = window.confirm(
-      "Are you sure you want to permanently hide these photos? " +
-      "They will no longer appear in your account, but will still be available for matching and other users."
+      `Are you sure you want to permanently delete ${selectedPhotos.length} photo(s)? This action cannot be undone.`
     );
     if (!confirmed) return;
+
+    setIsActionLoading(true);
+    setError(null);
     try {
-      const result = await permanentlyHidePhotos(userId, selectedPhotos);
+       console.log(`[TrashBin] Permanently deleting ${selectedPhotos.length} photos for user: ${userId}`);
+      const result = await permanentlyHidePhotos(userId, selectedPhotos); 
       if (result.success) {
+         console.log('[TrashBin] Permanent hide/delete successful');
         setAllTrashedPhotos(prev => prev.filter(photo => !selectedPhotos.includes(photo.id)));
-        setSelectedPhotos([]);
       } else {
-        setError(`Failed to permanently hide photos: ${result.error}`);
+        setError(`Failed to permanently delete photos: ${result.error || 'Unknown error'}`);
       }
-    } catch (err) {
-      console.error('Error permanently hiding photos:', err);
-      setError('Failed to permanently hide photos. Please try again later.');
+    } catch (err: any) {
+      console.error('[TrashBin] Error permanently deleting photos:', err);
+      setError('Failed to permanently delete photos. Please try again later.');
+    } finally {
+       setIsActionLoading(false);
+       setIsSelecting(false);
+       setSelectedPhotos([]);
     }
   };
 
@@ -139,6 +158,27 @@ const TrashBin = ({ userId }) => {
     }
   };
 
+  const matchedCount = useMemo(() => allTrashedPhotos.filter(photo => photo.user_id !== userId && photo.uploaded_by !== userId).length, [allTrashedPhotos, userId]);
+  const uploadedCount = useMemo(() => allTrashedPhotos.filter(photo => photo.user_id === userId || photo.uploaded_by === userId).length, [allTrashedPhotos, userId]);
+
+  const renderEmptyState = () => (
+      <div className="text-center py-16 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+          <Trash2 className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-sm font-semibold text-gray-900">Trash is Empty</h3>
+          <p className="mt-1 text-sm text-gray-500">
+              Photos moved to the trash will appear here.
+          </p>
+      </div>
+  );
+  
+   const renderSectionEmptyState = () => (
+      <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-100 mt-4">
+          <p className="text-sm text-gray-500">
+              No {activeTrashView === 'uploaded' ? 'uploaded' : 'matched'} photos in the trash.
+          </p>
+      </div>
+  );
+
   if (isLoading) {
     return <div className="loading-indicator">Loading trashed photos...</div>;
   }
@@ -148,126 +188,140 @@ const TrashBin = ({ userId }) => {
   }
 
   return (
-    <div className="trash-bin-container">
-      <div className="trash-header">
-        <h2>Trash Bin</h2>
-        <p className="trash-description">
-          Items here are hidden from your view. Restore them or delete them permanently.
-        </p>
-        <div className="trash-view-toggle">
-          <button 
-            onClick={() => setActiveTrashView('matched')}
-            className={activeTrashView === 'matched' ? 'active' : ''}
-          >
-            <ImageIcon size={16} /> Matched Photos
-            <span className="photo-count">{allTrashedPhotos.filter(photo => photo.user_id !== userId && photo.uploaded_by !== userId).length}</span>
-          </button>
-          <button 
-            onClick={() => setActiveTrashView('uploaded')}
-            className={activeTrashView === 'uploaded' ? 'active' : ''}
-          >
-             <Upload size={16} /> My Uploads
-             <span className="photo-count">{allTrashedPhotos.filter(photo => photo.user_id === userId || photo.uploaded_by === userId).length}</span>
-          </button>
-        </div>
-        <div className="trash-summary">
-          <p>Total in trash: <strong>{filteredTrashedPhotos.length}</strong> photos</p>
-        </div>
-      </div>
-      
-      <div className="toolbar">
-        <div className="selection-tools">
-          <button
-            className="btn btn-text"
-            onClick={toggleSelectAll}
-            disabled={filteredTrashedPhotos.length === 0}
-            aria-label={selectedPhotos.length === filteredTrashedPhotos.length ? 'Deselect all' : 'Select all'}
-          >
-            {selectedPhotos.length === filteredTrashedPhotos.length && filteredTrashedPhotos.length > 0 ? <FaCheckSquare /> : <FaSquare />}
-            <span>{selectedPhotos.length === filteredTrashedPhotos.length && filteredTrashedPhotos.length > 0 ? 'Deselect All' : 'Select All'}</span>
-          </button>
-          
-          <div className="selected-count">
-            {selectedPhotos.length > 0 && (
-              <span>{selectedPhotos.length} selected</span>
-            )}
-          </div>
-        </div>
-        
-        {selectedPhotos.length > 0 && (
-          <div className="action-buttons">
-             <button
-               className="btn btn-success"
-               onClick={handleRestorePhotos}
-               aria-label="Restore selected photos"
-             >
-               <FaUndo />
-               <span>Restore</span>
-             </button>
-             
-             <button
-               className="btn btn-danger"
-               onClick={handlePermanentlyHide}
-               aria-label="Permanently hide selected photos"
-             >
-               <FaTrash />
-               <span>DELETE</span>
-             </button>
-             
-             <button
-               className="btn btn-primary"
-               onClick={handleDownloadSelected}
-               aria-label="Download selected"
-             >
-               <FaDownload />
-               <span>Download</span>
-             </button>
-           </div>
-        )}
-      </div>
-      
-      {filteredTrashedPhotos.length === 0 ? (
-        <div className="no-photos-message">
-          <p>No photos in this section of the trash.</p>
-        </div>
-      ) : (
-        <div className="photo-grid">
-          {filteredTrashedPhotos.map(photo => (
-            <div
-              key={photo.id}
-              className={`photo-card ${selectedPhotos.includes(photo.id) ? 'selected' : ''}`}
-              onClick={() => togglePhotoSelection(photo.id)}
-            >
-              <div className="photo-select-checkbox">
-                <input
-                  type="checkbox"
-                  checked={selectedPhotos.includes(photo.id)}
-                  onChange={() => {}}
-                  onClick={e => e.stopPropagation()}
-                />
-              </div>
-              
-              <div className="photo-image">
-                <img
-                  src={photo.imageUrl || photo.url}
-                  alt={photo.title || 'Photo'}
-                  loading="lazy"
-                />
-              </div>
-              
-              <div className="photo-info">
-                <p className="photo-title">{photo.title || 'Untitled'}</p>
-                <p className="photo-date">
-                  {new Date(photo.createdAt || photo.created_at || Date.now()).toLocaleDateString()}
-                </p>
-                <p className="photo-visibility">
-                  Status: {visibilityMap[photo.id] || 'Unknown'}
-                </p>
-              </div>
-            </div>
-          ))}
+    <div className="space-y-6">
+       <div className="flex justify-between items-center flex-wrap gap-2">
+         <h2 className="text-xl sm:text-2xl font-semibold">
+           {isSelecting ? `${selectedPhotos.length} Selected` : "Trash"}
+         </h2>
+         {allTrashedPhotos.length > 0 && (
+            <Button 
+                 variant={isSelecting ? "destructive_outline" : "primary_outline"}
+                 size="sm"
+                 onClick={handleToggleSelectionMode}
+               >
+                 {isSelecting ? "Cancel" : <><Select size={16} className="mr-1.5"/> Select</>}
+            </Button>
+         )}
+       </div>
+
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
+            {error}
         </div>
       )}
+
+      {isLoading ? (
+         <div className="flex items-center justify-center h-48 text-sm text-gray-500">
+            <Loader className="w-5 h-5 mr-2 animate-spin"/> Loading trashed photos...
+         </div>
+      ) : allTrashedPhotos.length === 0 ? (
+          renderEmptyState()
+      ) : (
+          <div className="space-y-4">
+              <div className="flex items-center border-b border-gray-200">
+                 <button 
+                    onClick={() => setActiveTrashView('matched')}
+                    disabled={isSelecting}
+                    className={cn(
+                       "flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2",
+                       activeTrashView === 'matched' 
+                         ? "border-blue-500 text-blue-600" 
+                         : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300",
+                       isSelecting && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <ImageIcon size={16} /> Matched Photos
+                    <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                      {matchedCount}
+                    </span>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTrashView('uploaded')}
+                    disabled={isSelecting}
+                     className={cn(
+                       "flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2",
+                       activeTrashView === 'uploaded' 
+                         ? "border-blue-500 text-blue-600" 
+                         : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300",
+                        isSelecting && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                     <Upload size={16} /> My Uploads
+                     <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                      {uploadedCount}
+                    </span>
+                  </button>
+              </div>
+
+             <AnimatePresence>
+               {isSelecting && selectedPhotos.length > 0 && (
+                 <motion.div 
+                   initial={{ opacity: 0, height: 0 }} 
+                   animate={{ opacity: 1, height: 'auto' }} 
+                   exit={{ opacity: 0, height: 0 }}
+                   transition={{ duration: 0.2 }}
+                   className="p-2 sm:p-3 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-between overflow-hidden" 
+                 >
+                   <Button 
+                     variant="ghost" 
+                     size="sm"
+                     onClick={toggleSelectAllOnPage}
+                     className="text-blue-600 hover:text-blue-700 px-2 sm:px-3"
+                     aria-label={filteredTrashedPhotos.length > 0 && filteredTrashedPhotos.every(p => selectedPhotos.includes(p.id)) ? 'Deselect all on page' : 'Select all on page'}
+                   >
+                     {filteredTrashedPhotos.length > 0 && filteredTrashedPhotos.every(p => selectedPhotos.includes(p.id)) ? (
+                       <CheckSquare className="mr-1.5 h-4 w-4" />
+                     ) : (
+                       <Square className="mr-1.5 h-4 w-4" />
+                     )}
+                    {filteredTrashedPhotos.length > 0 && filteredTrashedPhotos.every(p => selectedPhotos.includes(p.id)) ? 'Deselect All' : 'Select All'}
+                   </Button>
+                   
+                   <div className="flex items-center space-x-2 sm:space-x-3">
+                     <Button 
+                       variant="ghost" 
+                       size="icon_sm" 
+                       onClick={handleRestorePhotos} 
+                       disabled={isActionLoading} 
+                       className="text-blue-600 hover:text-blue-700"
+                       aria-label="Restore selected photos"
+                       title="Restore"
+                     >
+                        {isActionLoading ? <Loader className="h-4 w-4 animate-spin"/> : <RotateCcw className="h-4 w-4" />}
+                     </Button>
+                     <Button 
+                       variant="ghost" 
+                       size="icon_sm" 
+                       onClick={handlePermanentlyDelete} 
+                       disabled={isActionLoading} 
+                       className="text-red-600 hover:text-red-700"
+                       aria-label="Permanently delete selected photos"
+                       title="Delete Permanently"
+                     >
+                        {isActionLoading ? <Loader className="h-4 w-4 animate-spin"/> : <XSquare className="h-4 w-4" />}
+                     </Button>
+                   </div>
+                 </motion.div>
+               )}
+             </AnimatePresence>
+
+              {filteredTrashedPhotos.length === 0 ? (
+                  renderSectionEmptyState()
+              ) : (
+                  <PhotoGrid 
+                    photos={filteredTrashedPhotos}
+                    selectedPhotos={selectedPhotos}
+                    onSelectPhoto={handleSelectPhoto} 
+                    isSelecting={isSelecting}
+                    onPhotoClick={(photo) => {
+                       if (!isSelecting) {
+                          console.log('Trash photo clicked (not selecting):', photo.id);
+                       }
+                     }}
+                  />
+              )}
+            </div>
+        )}
     </div>
   );
 };
