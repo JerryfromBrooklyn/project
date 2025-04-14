@@ -6,8 +6,12 @@ import { PhotoService } from '../services/PhotoService';
 import SimplePhotoInfoModal from './SimplePhotoInfoModal.jsx';
 import { cn } from '../utils/cn';
 
-export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash, selectedPhotos, onSelectPhoto }) => {
+export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash, selectedPhotos, onSelectPhoto, isSelecting, onPhotoClick }) => {
+<<<<<<< HEAD
+    const [selectedPhotoInfo, setSelectedPhotoInfo] = useState(null);
+=======
     const [selectedPhoto, setSelectedPhoto] = useState(null);
+>>>>>>> aae08b973963c9dedd5bb277aab51f8adf61505c
     const [loading, setLoading] = useState({});
     const [sharing, setSharing] = useState({});
 
@@ -64,7 +68,7 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash, sele
 
     return (_jsxs(_Fragment, { children: [
         _jsx("div", {
-            className: "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4",
+            className: "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-5",
             children: photos.map((photo) => {
                 const isSelected = selectedPhotos?.includes(photo.id);
                 const motionProps = {
@@ -75,24 +79,42 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash, sele
                     transition: { duration: 0.2, ease: "easeInOut" },
                     className: cn(
                         "relative group aspect-square rounded-apple-lg overflow-hidden shadow-md transition-all duration-200 ease-in-out",
-                        isSelected ? "ring-4 ring-blue-500 ring-offset-2 scale-[0.98]" : "hover:scale-[1.02]",
-                        "cursor-pointer"
+                        !isSelecting && "hover:scale-[1.02]",
+                        isSelecting ? "cursor-pointer" : ""
                     ),
                 };
 
                 return _jsx(motion.div, {
                     ...motionProps,
-                    onClick: () => onSelectPhoto && onSelectPhoto(photo.id),
+                    onClick: () => {
+<<<<<<< HEAD
+                        if (onSelectPhoto) {
+                            onSelectPhoto(photo.id);
+=======
+                        if (isSelecting) {
+                            onSelectPhoto && onSelectPhoto(photo.id);
+>>>>>>> aae08b973963c9dedd5bb277aab51f8adf61505c
+                        } else {
+                            onPhotoClick && onPhotoClick(photo);
+                        }
+                    },
                     children: _jsxs("div", {
                       className: "w-full h-full",
                       children: [
-                          _jsx("div", {
-                            className: cn(
-                              "absolute top-2 left-2 z-10 p-1 rounded-full transition-all duration-200",
-                              isSelected ? "bg-blue-500 text-white scale-100 opacity-100" : "bg-black/30 text-white scale-90 opacity-0 group-hover:opacity-100 group-hover:scale-100"
-                            ),
-                            children: isSelected ? _jsx(CheckCircle2, { className: "w-4 h-4 sm:w-5 sm:h-5" }) : _jsx(Circle, { className: "w-4 h-4 sm:w-5 sm:h-5" })
-                          }),
+                          isSelecting && (
+                            _jsx("div", {
+                              className: cn(
+                                "absolute top-2 left-2 z-10 p-1 rounded-full transition-all duration-200",
+                                "bg-black/40 backdrop-blur-sm",
+                                isSelected ? "text-white bg-blue-500" : "text-gray-200 hover:bg-black/60"
+                              ),
+                              onClick: (e) => {
+                                  e.stopPropagation();
+                                  onSelectPhoto && onSelectPhoto(photo.id);
+                              },
+                              children: isSelected ? _jsx(CheckCircle2, { className: "w-4 h-4 sm:w-5 sm:h-5" }) : _jsx(Circle, { className: "w-4 h-4 sm:w-5 sm:h-5" })
+                            })
+                          ),
                            _jsx("div", {
                               className: "w-full h-full",
                               children: _jsx("img", {
@@ -112,57 +134,66 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash, sele
                         })),
                           _jsx("div", {
                              onClick: (e) => e.stopPropagation(), 
-                              className: "absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent rounded-apple-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300",
+                              className: cn(
+                                "absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent rounded-apple-lg transition-opacity duration-300", 
+                                isSelecting ? "opacity-0" : "opacity-0 group-hover:opacity-100" 
+                              ),
                               children: _jsxs("div", {
-                                 className: "absolute bottom-2 left-2 right-2 flex justify-between items-center",
+                                 className: "absolute bottom-3 left-2 right-2 flex justify-between items-center", 
                                  children: [
                                       _jsxs("div", {
-                                          className: "flex space-x-1.5 sm:space-x-2",
+                                          className: "flex space-x-2",
                                           children: [
                                               _jsx("button", {
-                                                  onClick: (e) => { e.stopPropagation(); handleDownload(photo); },
-                                                  className: "p-2 sm:p-2.5 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors duration-300 shadow-lg",
+                                                  onClick: (e) => { e.stopPropagation(); handleDownload(photo); }, 
+                                                  className: "p-2.5 sm:p-3 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors duration-300 shadow-lg",
                                                   disabled: loading[photo.id],
                                                   "aria-label": "Download photo",
                                                   title: "Download",
-                                                  children: _jsx(Download, { className: "w-3.5 h-3.5 sm:w-4 sm:h-4" })
+                                                  children: _jsx(Download, { className: "w-4 h-4 sm:w-5 sm:h-5" })
                                               }),
                                               onShare && (_jsx("button", {
                                                   onClick: (e) => handleShare(photo, e),
-                                                 className: "p-2 sm:p-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors duration-300 shadow-lg",
+                                                 className: "p-2.5 sm:p-3 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors duration-300 shadow-lg",
                                                   disabled: sharing[photo.id],
                                                   "aria-label": "Share photo",
                                                   title: "Share",
-                                                  children: _jsx(Share2, { className: "w-3.5 h-3.5 sm:w-4 sm:h-4" })
+                                                  children: _jsx(Share2, { className: "w-4 h-4 sm:w-5 sm:h-5" })
                                               }))
                                           ]
                                       }),
                                       _jsxs("div", {
-                                          className: "flex space-x-1.5 sm:space-x-2",
+                                          className: "flex space-x-2",
                                           children: [
                                               _jsx("button", {
-                                                  onClick: (e) => { e.stopPropagation(); setSelectedPhoto(photo); }, 
-                                                 className: "p-2 sm:p-2.5 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-colors duration-300 shadow-lg",
+                                                  onClick: (e) => { e.stopPropagation(); setSelectedPhotoInfo(photo); }, 
+                                                  className: "p-2.5 sm:p-3 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-colors duration-300 shadow-lg",
                                                   "aria-label": "View photo details",
                                                   title: "Info",
-                                                  children: _jsx(Info, { className: "w-3.5 h-3.5 sm:w-4 sm:h-4" })
+                                                  children: _jsx(Info, { className: "w-4 h-4 sm:w-5 sm:h-5" })
                                               }),
                                               onTrash && (
+<<<<<<< HEAD
+                                                  _jsx("button", { 
+                                                      onClick: (e) => { e.stopPropagation(); onTrash(photo, e); }, 
+                                                      className: "p-2.5 sm:p-3 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg",
+=======
                                                   _jsx("button", {
-                                                      onClick: (e) => { e.stopPropagation(); onTrash(photo); }, 
+                                                      onClick: (e) => { e.stopPropagation(); onTrash(photo, e); },
                                                      className: "p-2 sm:p-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg",
+>>>>>>> aae08b973963c9dedd5bb277aab51f8adf61505c
                                                       "aria-label": "Move photo to trash",
                                                       title: "Move to Trash",
-                                                      children: _jsx(Trash2, { className: "w-3.5 h-3.5 sm:w-4 sm:h-4" })
+                                                      children: _jsx(Trash2, { className: "w-4 h-4 sm:w-5 sm:h-5" })
                                                   })
                                               ),
                                               !onTrash && onDelete && (
                                                    _jsx("button", {
                                                        onClick: (e) => {e.stopPropagation(); onDelete(photo.id);},
-                                                      className: "p-2 sm:p-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg",
+                                                      className: "p-2.5 sm:p-3 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg",
                                                        "aria-label": "Delete photo",
                                                        title: "Delete",
-                                                       children: _jsx(Trash2, { className: "w-3.5 h-3.5 sm:w-4 sm:h-4" })
+                                                       children: _jsx(Trash2, { className: "w-4 h-4 sm:w-5 sm:h-5" })
                                                    })
                                               )
                                           ]
@@ -175,6 +206,6 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash, sele
                 }, photo.id);
             })
         }),
-        _jsx(AnimatePresence, { children: selectedPhoto && (_jsx(SimplePhotoInfoModal, { photo: selectedPhoto, onClose: () => setSelectedPhoto(null) })) })
+        _jsx(AnimatePresence, { children: selectedPhotoInfo && (_jsx(SimplePhotoInfoModal, { photo: selectedPhotoInfo, onClose: () => setSelectedPhotoInfo(null) })) })
     ] }));
 };

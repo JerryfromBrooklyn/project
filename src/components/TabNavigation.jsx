@@ -49,8 +49,8 @@ const TabNavigation = ({ activeTab, onTabChange }) => {
   ];
 
   return (
-    <div className="sticky top-14 left-0 right-0 z-20 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
-      <nav className="max-w-screen-lg mx-auto flex items-center justify-around px-2 py-1" aria-label="Tabs">
+    <div className="w-full bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <nav className="max-w-screen-md mx-auto flex items-center justify-center px-4" aria-label="Tabs">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -60,30 +60,28 @@ const TabNavigation = ({ activeTab, onTabChange }) => {
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={cn(
-                'flex items-center justify-center py-2 px-3 transition-colors duration-150 relative',
-                isActive ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'
+                'flex-1 flex flex-col items-center justify-center py-2.5 px-2 sm:px-4 transition-colors duration-150 group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-100 dark:focus-visible:ring-offset-gray-800',
+                isActive 
+                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' 
+                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200'
               )}
               aria-current={isActive ? 'page' : undefined}
               title={tab.tooltip}
               role="tab"
+              aria-selected={isActive}
               tabIndex={0}
-              aria-label={tab.tooltip}
+              aria-label={tab.label}
             >
-              <div className="flex flex-col items-center">
-                <Icon className={cn(
-                  'w-5 h-5 mb-1 transition-transform',
-                  isActive ? `text-${tab.color}-500 scale-110` : 'text-gray-500 dark:text-gray-400'
+              <Icon className={cn(
+                  'w-5 h-5 mb-0.5 transition-colors',
+                  isActive ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-300'
                 )} />
-                <span className={cn(
-                  'text-xs font-medium truncate',
-                  isActive ? `text-${tab.color}-500` : 'text-gray-500 dark:text-gray-400'
+              <span className={cn(
+                  'text-xs font-medium truncate transition-colors',
+                  isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-200'
                 )}>
                   {tab.label}
                 </span>
-              </div>
-              {isActive && (
-                <span className="absolute -bottom-1 w-10 h-1 bg-blue-500 rounded-full" />
-              )}
             </button>
           );
         })}

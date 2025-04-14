@@ -493,20 +493,51 @@ export const getFaceDataForUser = async (userId) => {
         const faceData = activeRecord || sortedItems[0];
         console.log('🟢 [FaceStorage] Selected face data (record structure):', JSON.stringify(faceData, null, 2));
 
-        // Format and return the face data (access properties directly)
-        let attributes = null;
-        if (faceData.faceAttributes && typeof faceData.faceAttributes === 'string') {
-            try { attributes = JSON.parse(faceData.faceAttributes); } catch(e) { console.error('Failed to parse faceAttributes'); }
-        } else if (faceData.face_attributes && typeof faceData.face_attributes === 'string') {
-            try { attributes = JSON.parse(faceData.face_attributes); } catch(e) { console.error('Failed to parse face_attributes'); }
+        // Parse attributes and normalize keys to lowercase
+        let parsedAttributes = null;
+        const attributesString = faceData.faceAttributes || faceData.face_attributes;
+        if (attributesString && typeof attributesString === 'string') {
+            try { 
+                const rawAttributes = JSON.parse(attributesString);
+                // Normalize keys to lowercase
+                parsedAttributes = {};
+                for (const key in rawAttributes) {
+                    if (Object.prototype.hasOwnProperty.call(rawAttributes, key)) {
+                        // Handle nested objects like AgeRange correctly
+                        if (key === 'AgeRange' && typeof rawAttributes[key] === 'object') {
+                           parsedAttributes['age'] = { 
+                               low: rawAttributes[key].Low,
+                               high: rawAttributes[key].High
+                           };
+                        } else if (key === 'Emotions' && Array.isArray(rawAttributes[key])) {
+                            // Normalize emotion keys if needed (Type, Confidence)
+                             parsedAttributes['emotions'] = rawAttributes[key].map(emo => ({ 
+                                type: emo.Type, 
+                                confidence: emo.Confidence 
+                            }));
+                        } else if (typeof rawAttributes[key] === 'object' && rawAttributes[key] !== null && rawAttributes[key].hasOwnProperty('Value')){
+                           // Handle simple attribute objects { Value, Confidence }
+                           parsedAttributes[key.toLowerCase()] = {
+                               value: rawAttributes[key].Value,
+                               confidence: rawAttributes[key].Confidence
+                           };
+                        } else {
+                           // Fallback for any other unexpected structure (shouldn't happen ideally)
+                           parsedAttributes[key.toLowerCase()] = rawAttributes[key]; 
+                        }
+                    }
+                }
+                console.log('✅ [FaceStorage] Parsed and normalized face attributes:', parsedAttributes);
+            } catch(e) { 
+                console.error('❌ [FaceStorage] Failed to parse/normalize faceAttributes:', e);
+            }
         }
 
         return {
             faceId: faceData.faceId,
-            faceAttributes: attributes,
+            faceAttributes: parsedAttributes, // Return the object with lowercase keys
             imageUrl: faceData.imageUrl || faceData.public_url,
             imagePath: faceData.imagePath,
-            // Historical matches might need parsing if stored complexly, adjust if needed
             historicalMatches: faceData.historicalMatches || [], 
             createdAt: faceData.createdAt || faceData.created_at
         };
