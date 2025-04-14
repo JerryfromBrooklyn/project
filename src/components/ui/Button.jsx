@@ -10,7 +10,7 @@ import { motion } from 'framer-motion';
  * - Loading state
  * - Various style variants
  */
-const Button = ({
+export const Button = ({
   children,
   onClick,
   variant = 'primary',
@@ -101,6 +101,4 @@ const Button = ({
       </span>
     </motion.button>
   );
-};
-
-export default Button; 
+}; 
