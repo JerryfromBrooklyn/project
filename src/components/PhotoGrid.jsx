@@ -50,10 +50,10 @@ const PhotoGrid = ({
   const getColumnCount = () => {
     const width = window.innerWidth;
     
-    if (width >= 1280) return 4; // lg: 4 columns
-    if (width >= 1024) return 4; // md: 4 columns
-    if (width >= 768) return 3;  // sm: 3 columns
-    return 2;                    // default: 2 columns
+    if (width >= 1280 && columns.lg) return columns.lg;
+    if (width >= 1024 && columns.md) return columns.md;
+    if (width >= 768 && columns.sm) return columns.sm;
+    return columns.default || 2;
   };
   
   const columnCount = getColumnCount();
@@ -115,6 +115,9 @@ const PhotoGrid = ({
       </div>
     );
   }
+  
+  // Dynamic grid class based on column count
+  const gridClass = `grid gap-3 md:gap-4 grid-cols-${columnCount <= 2 ? columnCount : 2} sm:grid-cols-${columnCount <= 3 ? columnCount : 3} md:grid-cols-${columnCount <= 4 ? columnCount : 4} lg:grid-cols-${columnCount}`;
   
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6 p-4">

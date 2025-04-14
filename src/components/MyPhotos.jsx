@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import PhotoDetailsModal from './PhotoDetailsModal';
-import { Trash2, RefreshCw, User, ChevronLeft, ChevronRight, CheckSquare, Square, Select } from 'lucide-react';
+import { Trash2, RefreshCw, User, ChevronLeft, ChevronRight } from 'lucide-react';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { movePhotosToTrash } from '../services/userVisibilityService';
 import { downloadImagesAsZip, downloadSingleImage } from '../utils/downloadUtils';
@@ -9,7 +9,6 @@ import '../styles/MyPhotos.css';
 import { FaTrash, FaDownload, FaCheckSquare, FaSquare } from 'react-icons/fa';
 import { PhotoGrid } from './PhotoGrid';
 import { Button } from './ui/Button';
-import { AnimatePresence, motion } from 'framer-motion';
 
 const MyPhotos = () => {
   // Add useEffect for mount logging
@@ -18,28 +17,18 @@ const MyPhotos = () => {
   }, []);
 
   const { user } = useAuth();
-  const [photos, setPhotos] = useState<any[]>([]);
+  const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
-<<<<<<< HEAD
-  const [error, setError] = useState<string | null>(null);
-  const [selectedPhoto, setSelectedPhoto] = useState<any | null>(null);
-=======
   const [error, setError] = useState(null);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
->>>>>>> aae08b973963c9dedd5bb277aab51f8adf61505c
-  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
+  const [selectedPhotos, setSelectedPhotos] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const photosPerPage = 48; // 12 rows of 4 images
-  const [isSelecting, setIsSelecting] = useState(false);
   
-  // State for selection
-  const [isSelecting, setIsSelecting] = useState(false);
-
   // Get total matches count
-  const totalMatchesCount = useMemo(() => 
-    (photos || []).reduce((total, photo) => total + (photo.matched_users?.length || 0), 0),
-    [photos]
-  );
+  const totalMatchesCount = photos.reduce((total, photo) => {
+    return total + (photo.matched_users?.length || 0);
+  }, 0);
 
   // Use useCallback for the fetch function
   const fetchPhotos = useCallback(async (showLoading = true) => {
@@ -59,12 +48,12 @@ const MyPhotos = () => {
       console.log(`[MyPhotos] Fetching matched photos for user: ${user.id}`);
       const fetchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'matched');
       // Sort photos by date (newest first) after fetching
-      const sortedPhotos = (fetchedPhotos || []).sort((a: any, b: any) => 
-        new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      const sortedPhotos = (fetchedPhotos || []).sort((a, b) => 
+        new Date(b.created_at || 0) - new Date(a.created_at || 0)
       );
       setPhotos(sortedPhotos);
       console.log(`[MyPhotos] Successfully fetched and sorted ${sortedPhotos?.length || 0} matched photos.`);
-    } catch (err: any) {
+    } catch (err) {
       console.error('[MyPhotos] Error fetching photos:', err);
       setError(err.message || 'An error occurred while fetching photos');
       setPhotos([]); // Clear photos on error
@@ -94,7 +83,6 @@ const MyPhotos = () => {
   }, [photos, currentPage, photosPerPage]);
 
   const handleRefresh = () => {
-    if (isSelecting) return; // Don't refresh while selecting
     fetchPhotos(true);
   };
 
@@ -106,22 +94,8 @@ const MyPhotos = () => {
     setSelectedPhoto(null);
   };
 
-<<<<<<< HEAD
   // Toggle selection of a single photo
-  const handleSelectPhoto = (photoId: string) => {
-    if (!isSelecting) return; 
-=======
-  // Start or end selection mode
-  const handleToggleSelectionMode = () => {
-    setIsSelecting(!isSelecting);
-    setSelectedPhotos([]); // Clear selection when toggling mode
-  };
-
-  // Toggle selection of a single photo (only works if isSelecting is true)
-  const handleSelectPhoto = (photoId: string) => {
-    if (!isSelecting) return; // Only allow selection in selection mode
->>>>>>> aae08b973963c9dedd5bb277aab51f8adf61505c
-
+  const handleSelectPhoto = (photoId) => {
     setSelectedPhotos(prev =>
       prev.includes(photoId)
         ? prev.filter(id => id !== photoId)
@@ -129,35 +103,23 @@ const MyPhotos = () => {
     );
   };
   
-<<<<<<< HEAD
   // Toggle selection of all currently visible photos
-  const toggleSelectAllOnPage = () => {
-=======
-  // Toggle selection of all currently visible photos (only in selection mode)
   const toggleSelectAll = () => {
->>>>>>> aae08b973963c9dedd5bb277aab51f8adf61505c
-    if (!isSelecting) return;
-    
     const currentPhotoIds = currentPhotos.map(p => p.id);
-    const allVisibleSelected = currentPhotoIds.length > 0 && currentPhotoIds.every(id => selectedPhotos.includes(id));
-
-    if (allVisibleSelected) {
-      // Deselect all on the current page
+    if (selectedPhotos.length === currentPhotoIds.length && currentPhotoIds.length > 0) {
+      // If all current page photos are selected, deselect them
       setSelectedPhotos(prev => prev.filter(id => !currentPhotoIds.includes(id)));
     } else {
-<<<<<<< HEAD
-      // Select all photos on the current page, merging with any existing selections from other pages
-=======
-      // Select all photos on the current page
->>>>>>> aae08b973963c9dedd5bb277aab51f8adf61505c
+      // Otherwise, select all photos on the current page
       setSelectedPhotos(prev => [...new Set([...prev, ...currentPhotoIds])]);
     }
   };
 
-  // Move selected photos to trash (only in selection mode)
+  // Move selected photos to trash
   const handleTrashSelected = async () => {
-    if (!isSelecting || !selectedPhotos.length || !user?.id) return;
+    if (!selectedPhotos.length || !user?.id) return;
 
+    // Optional: Add a confirmation dialog
     const confirmTrash = window.confirm(`Are you sure you want to move ${selectedPhotos.length} selected photo(s) to the trash?`);
     if (!confirmTrash) return;
 
@@ -172,24 +134,22 @@ const MyPhotos = () => {
         setSelectedPhotos([]); // Clear selection after successful trash
         // Optionally show a success toast/message
       } else {
-        setError(`Failed to move photos to trash: ${result.error || 'Unknown error'}`);
+        setError(`Failed to move photos to trash: ${result.error}`);
         console.error('[MyPhotos] Error trashing selected photos:', result.error);
         // Optionally show an error toast/message
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('[MyPhotos] Exception trashing selected photos:', err);
       setError('An error occurred while moving photos to trash. Please try again.');
       // Optionally show an error toast/message
     } finally {
       setLoading(false);
-      setIsSelecting(false); // Exit selection mode after action
-      setSelectedPhotos([]); // Clear selection
     }
   };
 
   // Download selected photos (updated to use filtered list)
   const handleDownloadSelected = async () => {
-    if (!isSelecting || !selectedPhotos.length) return;
+    if (!selectedPhotos.length) return;
     const photosToDownloadData = selectedPhotos.map(id => photos.find(p => p.id === id)).filter(Boolean);
     if (photosToDownloadData.length === 0) return;
 
@@ -206,24 +166,13 @@ const MyPhotos = () => {
       }));
       await downloadImagesAsZip(downloadItems, 'my-photos-selection.zip');
     }
-    setIsSelecting(false); // Exit selection mode
-    setSelectedPhotos([]); // Clear selection
   };
 
-<<<<<<< HEAD
   // Handler for trashing a single photo
-  const handleTrashSinglePhoto = async (photo: any, event?: React.MouseEvent) => {
-    event?.stopPropagation(); // Prevent card selection when clicking the trash icon
-    if (isSelecting || !user?.id || !photo?.id) return;
-=======
-  // Handler for trashing a single photo (outside selection mode)
-  const handleTrashSinglePhoto = async (photo: any, event?: React.MouseEvent) => {
-    event?.stopPropagation(); // Prevent card click if called from button
-    if (isSelecting || !user?.id || !photo?.id) return; // Don't allow single trash in selection mode
-    const photoId = photo.id;
->>>>>>> aae08b973963c9dedd5bb277aab51f8adf61505c
+  const handleTrashSinglePhoto = async (photoId, event) => {
+    event.stopPropagation(); // Prevent card selection when clicking the trash icon
+    if (!user?.id || !photoId) return;
 
-    const photoId = photo.id;
     const confirmTrash = window.confirm("Are you sure you want to move this photo to the trash?");
     if (!confirmTrash) return;
 
@@ -238,27 +187,12 @@ const MyPhotos = () => {
         // If the trashed photo was selected, remove it from selection
         setSelectedPhotos(prevSelected => prevSelected.filter(id => id !== photoId));
       } else {
-        setError(`Failed to move photo to trash: ${result.error || 'Unknown error'}`);
+        setError(`Failed to move photo to trash: ${result.error}`);
         console.error(`[MyPhotos] Error trashing photo ${photoId}:`, result.error);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(`[MyPhotos] Exception trashing photo ${photoId}:`, err);
       setError('Failed to move photo to trash. Please try again later.');
-    }
-  };
-
-  const handleToggleSelectionMode = () => {
-    setIsSelecting(!isSelecting);
-    setSelectedPhotos([]); // Clear selection when toggling mode
-  };
-
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-      // Optionally clear selection when changing pages in selection mode
-      // if (isSelecting) {
-      //   setSelectedPhotos([]); 
-      // }
     }
   };
 
@@ -274,70 +208,16 @@ const MyPhotos = () => {
           )}
         </div>
         <div className="flex space-x-2">
-          {/* Select / Cancel Button */} 
-          <Button 
-             variant={isSelecting ? "destructive_outline" : "outline"} // Style differently in selection mode
-             size="sm"
-             onClick={handleToggleSelectionMode}
-           >
-             {isSelecting ? "Cancel" : "Select"}
-           </Button>
-          <Button 
+          <button 
             onClick={handleRefresh}
-            disabled={loading || isSelecting} // Disable refresh in selection mode
-            size="sm"
-            className="flex items-center"
+            className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
           >
-            <RefreshCw size={16} className={`mr-1 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw size={16} className="mr-1" />
             <span>Refresh</span>
-          </Button>
+          </button>
         </div>
       </div>
       
-      {/* Conditional Action Bar - Only show when isSelecting */} 
-      <AnimatePresence>
-        {isSelecting && selectedPhotos.length > 0 && (
-          <motion.div 
-             initial={{ opacity: 0, y: -10 }} 
-             animate={{ opacity: 1, y: 0 }} 
-             exit={{ opacity: 0, y: -10 }}
-             className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between sticky top-0 z-10 shadow"
-          >
-            <div className="flex items-center space-x-3">
-              <Button 
-                variant="ghost" // Less prominent style for select all
-                size="sm"
-                onClick={toggleSelectAll}
-                aria-label={currentPhotos.length > 0 && currentPhotos.every(p => selectedPhotos.includes(p.id)) ? 'Deselect all visible' : 'Select all visible'}
-              >
-                 {currentPhotos.length > 0 && currentPhotos.every(p => selectedPhotos.includes(p.id)) ? (
-                   <CheckSquare className="mr-2 h-4 w-4" />
-                 ) : (
-                   <Square className="mr-2 h-4 w-4" />
-                 )}
-                {currentPhotos.length > 0 && currentPhotos.every(p => selectedPhotos.includes(p.id)) ? 'Deselect All' : 'Select All'}
-              </Button>
-              <span className="text-sm font-medium text-blue-700">
-                {selectedPhotos.length} selected
-              </span>
-            </div>
-            <div className="flex space-x-2">
-              <Button 
-                variant="destructive"
-                size="sm"
-                onClick={handleTrashSelected} 
-                disabled={loading} // Disable while trashing
-                aria-label="Move selected photos to trash"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Move to Trash
-              </Button>
-              {/* Add Download button here if needed, ensure it also exits selection mode */}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {loading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
@@ -348,14 +228,12 @@ const MyPhotos = () => {
           <button 
             onClick={handleRefresh}
             className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
-            disabled={isSelecting}
           >
             Try again
           </button>
         </div>
       ) : currentPhotos.length > 0 ? (
         <div>
-<<<<<<< HEAD
           {/* Conditional Action Bar */}
           {selectedPhotos.length > 0 && (
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between sticky top-0 z-10 shadow">
@@ -363,15 +241,15 @@ const MyPhotos = () => {
                  <Button 
                   variant="outline"
                   size="sm"
-                  onClick={toggleSelectAllOnPage}
-                  aria-label={currentPhotos.length > 0 && currentPhotos.every(p => selectedPhotos.includes(p.id)) ? 'Deselect all on page' : 'Select all on page'}
+                  onClick={toggleSelectAll}
+                  aria-label={selectedPhotos.length === currentPhotos.length ? 'Deselect all visible' : 'Select all visible'}
                 >
-                   {currentPhotos.length > 0 && currentPhotos.every(p => selectedPhotos.includes(p.id)) ? (
-                     <CheckSquare className="mr-2 h-4 w-4" />
+                   {selectedPhotos.length === currentPhotos.length ? (
+                     <FaCheckSquare className="mr-2 h-4 w-4" />
                    ) : (
-                     <Square className="mr-2 h-4 w-4" />
+                     <FaSquare className="mr-2 h-4 w-4" />
                    )}
-                  {currentPhotos.length > 0 && currentPhotos.every(p => selectedPhotos.includes(p.id)) ? 'Deselect All' : 'Select All'}
+                  {selectedPhotos.length === currentPhotos.length ? 'Deselect All Visible' : 'Select All Visible'}
                  </Button>
                 <span className="text-sm font-medium text-blue-700">
                   {selectedPhotos.length} selected
@@ -408,23 +286,7 @@ const MyPhotos = () => {
             onTrash={handleTrashSinglePhoto}
             selectedPhotos={selectedPhotos}
             onSelectPhoto={handleSelectPhoto}
-            isSelecting={isSelecting}
-            onPhotoClick={(photo) => {
-              if (!isSelecting) {
-                setSelectedPhoto(photo);
-=======
-          <PhotoGrid 
-            photos={currentPhotos}
-            onTrash={handleTrashSinglePhoto} // For single trash icon (only works outside select mode)
-            selectedPhotos={selectedPhotos} 
-            onSelectPhoto={handleSelectPhoto} // Handles selection tapping
-            isSelecting={isSelecting} // Pass selection mode status
-            onPhotoClick={(photo) => {
-              if (!isSelecting) {
-                 setSelectedPhoto(photo); // Open detail modal if not selecting
->>>>>>> aae08b973963c9dedd5bb277aab51f8adf61505c
-              }
-            }}
+            // Pass other necessary props like onDownload, onShare if needed
           />
           
           {/* Pagination controls */}
@@ -433,7 +295,7 @@ const MyPhotos = () => {
               <nav className="flex items-center">
                 <button 
                   onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1 || isSelecting}
+                  disabled={currentPage === 1}
                   className="p-2 mr-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ChevronLeft size={18} />
@@ -457,7 +319,7 @@ const MyPhotos = () => {
                 
                 <button 
                   onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages || isSelecting}
+                  disabled={currentPage === totalPages}
                   className="p-2 ml-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ChevronRight size={18} />
