@@ -315,7 +315,7 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
         className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl animate-fadeIn flex flex-col md:flex-row"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-full md:w-1/2 lg:w-3/5 bg-black flex items-center justify-center relative h-[50vh] md:h-full">
+        <div className="w-full md:w-1/2 lg:w-3/5 bg-black flex items-center justify-center relative h-[50vh] md:h-full flex-shrink-0 md:flex-shrink">
           <img
             src={encodeURI(safePhoto.url || '')}
             alt={safePhoto.title}
@@ -333,7 +333,7 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
           )}
         </div>
 
-        <div className="w-full md:w-1/2 lg:w-2/5 flex flex-col h-[calc(90vh - 50vh - 3rem)] md:h-full">
+        <div className="w-full md:w-1/2 lg:w-2/5 flex flex-col overflow-hidden">
           <div className="relative h-12 flex items-center justify-center bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Photo Details</h2>
             <button
