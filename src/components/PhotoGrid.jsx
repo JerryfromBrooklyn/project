@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Download, Share2, Trash2, Users, AlertCircle, Info } from 'lucide-react';
 import SimplePhotoInfoModal from './SimplePhotoInfoModal.jsx';
 import { cn } from '../utils/cn';
+import { FaCheckSquare, FaSquare, FaTrash, FaShare, FaDownload } from 'react-icons/fa';
 
 /**
  * Mobile-optimized photo grid component
@@ -20,7 +21,12 @@ const PhotoGrid = ({
     sm: 3,
     md: 4,
     lg: 5
-  }
+  },
+  onSelectPhoto,
+  selectedPhotos,
+  onDelete,
+  onShare,
+  onDownload
 }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
@@ -44,10 +50,10 @@ const PhotoGrid = ({
   const getColumnCount = () => {
     const width = window.innerWidth;
     
-    if (width >= 1280 && columns.lg) return columns.lg;
-    if (width >= 1024 && columns.md) return columns.md;
-    if (width >= 768 && columns.sm) return columns.sm;
-    return columns.default || 2;
+    if (width >= 1280) return 4; // lg: 4 columns
+    if (width >= 1024) return 4; // md: 4 columns
+    if (width >= 768) return 3;  // sm: 3 columns
+    return 2;                    // default: 2 columns
   };
   
   const columnCount = getColumnCount();
@@ -110,18 +116,84 @@ const PhotoGrid = ({
     );
   }
   
-  // Dynamic grid class based on column count
-  const gridClass = `grid gap-3 md:gap-4 grid-cols-${columnCount <= 2 ? columnCount : 2} sm:grid-cols-${columnCount <= 3 ? columnCount : 3} md:grid-cols-${columnCount <= 4 ? columnCount : 4} lg:grid-cols-${columnCount}`;
-  
   return (
-    <div className={gridClass}>
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6 p-4">
       {photos.map((photo) => (
-        <PhotoCard
-          key={photo.id || photo.photoId}
-          photo={photo}
-          onAction={handlePhotoAction}
-          showActions={true}
-        />
+        <motion.div
+          key={photo.id}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="relative aspect-square group"
+        >
+          {onSelectPhoto && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectPhoto(photo.id);
+              }}
+              className="absolute top-4 right-4 z-10 p-3 bg-white/80 rounded-full hover:bg-white transition-colors"
+              aria-label={selectedPhotos.includes(photo.id) ? "Deselect photo" : "Select photo"}
+            >
+              {selectedPhotos.includes(photo.id) ? (
+                <FaCheckSquare className="w-8 h-8 text-blue-500" />
+              ) : (
+                <FaSquare className="w-8 h-8 text-gray-400" />
+              )}
+            </button>
+          )}
+          
+          <img
+            src={photo.url}
+            alt=""
+            className="w-full h-full object-cover rounded-lg cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePhotoAction(photo);
+            }}
+          />
+          
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+            <div className="absolute bottom-0 left-0 right-0 p-4 flex justify-end space-x-4">
+              {onDelete && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(photo.id);
+                  }}
+                  className="p-3 bg-white/80 rounded-full hover:bg-white transition-colors"
+                  aria-label="Delete photo"
+                >
+                  <FaTrash className="w-8 h-8 text-red-500" />
+                </button>
+              )}
+              {onShare && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onShare(photo.id);
+                  }}
+                  className="p-3 bg-white/80 rounded-full hover:bg-white transition-colors"
+                  aria-label="Share photo"
+                >
+                  <FaShare className="w-8 h-8 text-blue-500" />
+                </button>
+              )}
+              {onDownload && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownload(photo);
+                  }}
+                  className="p-3 bg-white/80 rounded-full hover:bg-white transition-colors"
+                  aria-label="Download photo"
+                >
+                  <FaDownload className="w-8 h-8 text-green-500" />
+                </button>
+              )}
+            </div>
+          </div>
+        </motion.div>
       ))}
     </div>
   );
