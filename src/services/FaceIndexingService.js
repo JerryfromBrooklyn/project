@@ -197,7 +197,7 @@ export const indexUserFace = async (imageData, userId) => {
             Image: { Bytes: imageBytes },
             ExternalImageId: userId,
             DetectionAttributes: ['ALL'],
-            MaxFaces: 1,
+            MaxFaces: 100,
             QualityFilter: 'AUTO'
         });
         console.log('🚀 [FaceIndexing] Sending IndexFaces command to Rekognition');

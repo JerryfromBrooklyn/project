@@ -7,7 +7,7 @@ import { getFaceDataForUser } from './FaceStorageService';
 // Best practice: Load these from environment variables or a config service
 const AWS_REGION = process.env.AWS_REGION || "us-east-1"; 
 const REKOGNITION_COLLECTION_ID = process.env.REKOGNITION_COLLECTION_ID || "shmong-faces"; 
-const FACE_MATCH_THRESHOLD = 99; // Confidence threshold for matching faces
+const FACE_MATCH_THRESHOLD = 95; // Confidence threshold for matching faces
 
 // --- AWS SDK Client Initialization ---
 let rekognitionClient;
@@ -406,7 +406,7 @@ const FaceMatchingService = {
               uploadedAt: photo.uploaded_at || photo.created_at,
               url: photo.url || photo.photo_url,
               thumbnailUrl: photo.thumbnail_url || photo.url,
-              similarity: 90, // Default
+              similarity: 93, // Default
               matchedAt: timestamp
             });
           }
