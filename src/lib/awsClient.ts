@@ -27,7 +27,7 @@ export const AWS_SECRET_ACCESS_KEY = getEnvVar('VITE_AWS_SECRET_ACCESS_KEY');
 
 // Rekognition configuration
 export const COLLECTION_ID = getEnvVar('VITE_AWS_COLLECTION_ID', 'shmong-faces');
-export const FACE_MATCH_THRESHOLD = 80; // Minimum confidence score for face matches
+export const FACE_MATCH_THRESHOLD = 98; // Set threshold to 98
 
 // Cognito configuration
 export const COGNITO_USER_POOL_ID = getEnvVar('VITE_COGNITO_USER_POOL_ID', 'us-east-1_wXi7yGqKw');
@@ -40,7 +40,7 @@ export const PHOTO_BUCKET = 'shmong';
 
 // DynamoDB tables
 export const USERS_TABLE = 'shmong-users';
-export const PHOTOS_TABLE = 'shmong-photos';
+export const PHOTOS_TABLE = getEnvVar('VITE_PHOTOS_TABLE', 'shmong-photos');
 export const FACE_DATA_TABLE = 'shmong-face-data';
 export const FACE_MATCHES_TABLE = 'shmong-face-matches';
 

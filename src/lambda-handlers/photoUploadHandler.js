@@ -19,7 +19,8 @@ const PHOTOS_TABLE = 'shmong-photos';
 const FACE_DATA_TABLE = 'shmong-face-data';
 const FACE_COLLECTION_ID = 'shmong-faces';
 const S3_BUCKET = process.env.PHOTOS_BUCKET || 'shmong-photos';
-const SIMILARITY_THRESHOLD = 80;
+const SIMILARITY_THRESHOLD = 98;
+const MIN_CONFIDENCE = 90;
 
 /**
  * Handles photo upload and face matching
@@ -178,9 +179,10 @@ exports.handler = async (event) => {
       const searchParams = {
         CollectionId: FACE_COLLECTION_ID,
         FaceId: faceId,
-        MaxFaces: 10,
+        MaxFaces: 1000,
         FaceMatchThreshold: SIMILARITY_THRESHOLD
       };
+      console.log('[Upload Handler] Searching for matches with params:', searchParams);
       
       const searchResult = await rekognition.searchFaces(searchParams).promise();
       const faceMatches = searchResult.FaceMatches || [];

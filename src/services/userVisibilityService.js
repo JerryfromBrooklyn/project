@@ -259,7 +259,7 @@ export const filterPhotosByVisibility = async (userId, photos, status = "VISIBLE
       return [];
     }
     
-    // Filter photos by status
+    // Filter photos by status (default is VISIBLE if no record exists)
     const filtered = photos.filter(photo => {
       if (!photo.id) {
         console.warn('[filterPhotosByVisibility] Photo missing ID:', photo);

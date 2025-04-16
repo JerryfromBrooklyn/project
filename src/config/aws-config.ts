@@ -34,7 +34,7 @@ if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
 }
 
 // Face recognition configuration
-export const FACE_MATCH_THRESHOLD = 80; // Increased threshold for better accuracy
+export const FACE_MATCH_THRESHOLD = 98; // Set threshold to 98
 export const COLLECTION_ID = getEnvVariable('VITE_AWS_COLLECTION_ID', 'shmong-faces');
 
 // Initialize S3 Client
@@ -130,3 +130,5 @@ testRekognitionConnectivity().then(result => {
     console.error('[ERROR] AWS Rekognition is not working. Face detection will be disabled.');
   }
 });
+
+export const FACE_DATA_TABLE = getEnvVariable('VITE_FACE_DATA_TABLE', 'shmong-face-data');

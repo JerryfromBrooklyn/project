@@ -83,8 +83,8 @@ export default async function handler(req, res) {
             Name: objectKey
           }
         },
-        FaceMatchThreshold: 70, // Adjust based on your requirements
-        MaxFaces: 5 // Limit to top 5 matches
+        FaceMatchThreshold: 98, // Use the 98 threshold
+        // MaxFaces: 5 // REMOVED - Find all matches above threshold
       };
 
       const searchFacesCommand = new SearchFacesByImageCommand(searchFacesParams);

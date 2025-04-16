@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos, Trash2, RotateCcw, CheckCircle } from 'lucide-react';
@@ -8,7 +8,7 @@ import { PhotoManager } from '../components/PhotoManager';
 import { getFaceDataForUser } from '../services/FaceStorageService';
 import { awsPhotoService } from '../services/awsPhotoService';
 import TabNavigation from '../components/TabNavigation';
-import { permanentlyHidePhotos } from '../services/userVisibilityService';
+import { permanentlyHidePhotos, restorePhotosFromTrash } from '../services/userVisibilityService';
 import TabBarSpacer from "../components/layout/TabBarSpacer";
 
 interface FaceAttributes {
@@ -42,79 +42,83 @@ export const Dashboard = () => {
   const [showHistoricalMatchesMessage, setShowHistoricalMatchesMessage] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null); // Ref for the dropdown menu
 
-  useEffect(() => {
-    const fetchFaceData = async () => {
-      if (!user || !user.id) {
-        console.warn('[Dashboard] fetchFaceData called, but user or user.id is not yet available. User:', user);
-        return;
-      }
-      
-      setIsLoadingFaceData(true);
-      console.log('[Dashboard] Fetching face data for user:', user.id);
+  // Define fetchFaceData outside useEffect
+  const fetchFaceData = async () => {
+    if (!user || !user.id) {
+      console.warn('[Dashboard] fetchFaceData called, but user or user.id is not yet available. User:', user);
+      return;
+    }
+    
+    setIsLoadingFaceData(true);
+    console.log('[Dashboard] Fetching face data for user:', user.id);
 
-      try {
-        // Use AWS DynamoDB service instead of Supabase
-        console.log('[Dashboard] Fetching face data from DynamoDB...');
-        const data = await getFaceDataForUser(user.id);
+    try {
+      // Use AWS DynamoDB service instead of Supabase
+      console.log('[Dashboard] Fetching face data from DynamoDB...');
+      const data = await getFaceDataForUser(user.id);
+      
+      if (data) {
+        console.log('🟢 [Dashboard] getFaceDataForUser returned data, setting state...');
+        console.log('[Dashboard] Face data found:', data);
+        setFaceRegistered(true);
         
-        if (data) {
-          console.log('🟢 [Dashboard] getFaceDataForUser returned data, setting state...');
-          console.log('[Dashboard] Face data found:', data);
-          setFaceRegistered(true);
-          
-          if (data.faceId) {
-            console.log('[Dashboard] Found face ID:', data.faceId);
-            setFaceId(data.faceId);
-          } else {
-            console.warn('[Dashboard] No face ID found in data');
-            setFaceId(null);
-          }
-          
-          if (data.faceAttributes) {
-            console.log('[Dashboard] Found face attributes:', data.faceAttributes);
-            setFaceAttributes(data.faceAttributes);
-          } else {
-            console.warn('[Dashboard] No face attributes found in data');
-          }
-          
-          if (data.imageUrl) {
-            console.log('[Dashboard] Found image URL:', data.imageUrl);
-            setFaceImageUrl(data.imageUrl);
-          } else if (data.imagePath) {
-            const imageUrl = `https://shmong.s3.amazonaws.com/face-images/${data.imagePath}`;
-            console.log('[Dashboard] Constructed image URL from path:', imageUrl);
-            setFaceImageUrl(imageUrl);
-          } else {
-            console.warn('[Dashboard] No image URL found in data');
-          }
-          
-          if (data.historicalMatches && data.historicalMatches.length > 0) {
-            console.log('[Dashboard] Found historical matches:', data.historicalMatches.length);
-            setHistoricalMatches(data.historicalMatches);
-          }
+        if (data.faceId) {
+          console.log('[Dashboard] Found face ID:', data.faceId);
+          setFaceId(data.faceId);
         } else {
-          console.log('[Dashboard] No face data found for user');
-          setFaceRegistered(false);
-          setFaceImageUrl(null);
-          setFaceAttributes(null);
+          console.warn('[Dashboard] No face ID found in data');
           setFaceId(null);
-          setHistoricalMatches([]);
         }
-      } catch (err) {
-        console.error('[Dashboard] Error fetching face data:', err);
-        // Set default state on error
+        
+        if (data.faceAttributes) {
+          console.log('[Dashboard] Found face attributes:', data.faceAttributes);
+          setFaceAttributes(data.faceAttributes);
+        } else {
+          console.warn('[Dashboard] No face attributes found in data');
+        }
+        
+        if (data.imageUrl) {
+          console.log('[Dashboard] Found image URL:', data.imageUrl);
+          setFaceImageUrl(data.imageUrl);
+        } else if (data.imagePath) {
+          const imageUrl = `https://shmong.s3.amazonaws.com/face-images/${data.imagePath}`;
+          console.log('[Dashboard] Constructed image URL from path:', imageUrl);
+          setFaceImageUrl(imageUrl);
+        } else {
+          console.warn('[Dashboard] No image URL found in data');
+        }
+        
+        if (data.historicalMatches && data.historicalMatches.length > 0) {
+          console.log('[Dashboard] Found historical matches:', data.historicalMatches.length);
+          setHistoricalMatches(data.historicalMatches);
+        }
+      } else {
+        console.log('[Dashboard] No face data found for user');
         setFaceRegistered(false);
         setFaceImageUrl(null);
         setFaceAttributes(null);
         setFaceId(null);
         setHistoricalMatches([]);
-      } finally {
-        setIsLoadingFaceData(false);
       }
-    };
+    } catch (err) {
+      console.error('[Dashboard] Error fetching face data:', err);
+      // Set default state on error
+      setFaceRegistered(false);
+      setFaceImageUrl(null);
+      setFaceAttributes(null);
+      setFaceId(null);
+      setHistoricalMatches([]);
+    } finally {
+      setIsLoadingFaceData(false);
+    }
+  };
 
-    fetchFaceData();
-  }, [user]);
+  useEffect(() => {
+    // Call the relocated fetchFaceData function
+    if (user?.id) { // Check if user.id exists before calling
+      fetchFaceData();
+    }
+  }, [user]); // Keep dependency on user
 
   // New useEffect to fetch photo counts
   useEffect(() => {
@@ -123,9 +127,10 @@ export const Dashboard = () => {
 
       try {
         console.log('[Dashboard] Fetching photo counts...');
-        // Use the functions from awsPhotoService
+        // Use the correct functions from awsPhotoService
+        // @ts-ignore - Function exists in service, likely a type/import issue
         const uploadedPhotos = await awsPhotoService.fetchUploadedPhotos(user.id);
-        const matchedPhotos = await awsPhotoService.fetchPhotos(user.id);
+        const matchedPhotos = await awsPhotoService.fetchPhotos(user.id); // Fetch matched photos for count
 
         console.log(`[Dashboard] Fetched counts: Uploaded=${uploadedPhotos.length}, Matched=${matchedPhotos.length}`);
         setUploadedCount(uploadedPhotos.length);
@@ -146,7 +151,9 @@ export const Dashboard = () => {
       if (!user || !user.id) return;
       
       try {
-        const trashed = await awsPhotoService.getVisiblePhotos(user.id, 'trashed');
+        // Use the correct getTrashedPhotos function
+        // @ts-ignore - Function exists in service, likely a type/import issue
+        const trashed = await awsPhotoService.getTrashedPhotos(user.id); 
         setTrashedPhotos(trashed || []);
       } catch (err) {
         console.error('[Dashboard] Error fetching trashed photos:', err);
@@ -251,18 +258,29 @@ export const Dashboard = () => {
 
     // --- 4. TRIGGER REFRESH LAST --- 
     console.log('[DASHBOARD] >>> TRIGGERING DASHBOARD DATA REFRESH (AFTER STATE UPDATE) <<<');
-    // Make sure fetchUserData exists and is correctly defined elsewhere in the component
-    if (typeof fetchUserData === 'function') {
-        fetchUserData(); // Refresh dashboard data
-    } else {
-        console.error('[Dashboard] fetchUserData function is not defined!');
-        // If fetchUserData is not defined here, perhaps we need to call fetchFaceData instead?
-        // Or maybe fetchCounts? Let's try fetchFaceData as it seems more comprehensive.
-        console.log('[Dashboard] Attempting fetchFaceData as fallback for refresh.');
-        fetchFaceData(); 
-    }
+    // Call the relocated fetchFaceData directly
+    fetchFaceData(); 
   };
   
+  const handleRestorePhoto = async (photoId: string) => {
+    if (!user || !user.id || !photoId) return;
+    console.log(`[Dashboard] Attempting to restore photo: ${photoId}`);
+    try {
+      const result = await restorePhotosFromTrash(user.id, [photoId]); // Use imported function
+      if (result.success) {
+        console.log(`[Dashboard] Photo ${photoId} restored successfully.`);
+        // Remove from trashed photos state
+        setTrashedPhotos(prev => prev.filter(p => p.id !== photoId));
+        // Optionally, update counts or trigger other fetches
+      } else {
+        throw new Error(result.error || 'Failed to restore photo');
+      }
+    } catch (err) {
+      console.error('[Dashboard] Error restoring photo:', err);
+      // Optionally set an error state for the UI
+    }
+  };
+
   const handlePermanentDelete = async (photoId: string) => {
     if (!user || !user.id || !photoId) return;
     

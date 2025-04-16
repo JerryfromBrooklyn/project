@@ -201,7 +201,7 @@ export const awsPhotoService = {
                                 CollectionId: COLLECTION_ID,
                                 FaceId: detectedFaceId,
                                 MaxFaces: 1000,
-                                FaceMatchThreshold: 99.0  // Set threshold back to 99
+                                FaceMatchThreshold: 98.0  // Set threshold to 98
                             };
                             
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
@@ -309,7 +309,7 @@ export const awsPhotoService = {
                                 CollectionId: COLLECTION_ID,
                                 FaceId: detectedFaceId,
                                 MaxFaces: 1000,
-                                FaceMatchThreshold: 99.0  // Set threshold back to 99
+                                FaceMatchThreshold: 98.0  // Set threshold to 98
                             };
                             
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
