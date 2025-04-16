@@ -11,7 +11,7 @@ import {
   require_dist,
   require_dist2,
   require_dist3
-} from "./chunk-GJFZQ5ET.js";
+} from "./chunk-QQN4L6SB.js";
 
 // node_modules/cross-fetch/dist/browser-ponyfill.js
 var require_browser_ponyfill = __commonJS({

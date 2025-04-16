@@ -6,11 +6,6 @@ import __process_polyfill from 'vite-plugin-node-polyfills/shims/process'
 globalThis.process = globalThis.process || __process_polyfill
 
 import {
-  NumberValue,
-  marshall,
-  unmarshall
-} from "./chunk-BP2VP2DT.js";
-import {
   BatchExecuteStatementCommand,
   BatchGetItemCommand,
   BatchWriteItemCommand,
@@ -24,24 +19,29 @@ import {
   TransactGetItemsCommand,
   TransactWriteItemsCommand,
   UpdateItemCommand
-} from "./chunk-WFOSQHNO.js";
-import "./chunk-ZCIX2HLB.js";
-import "./chunk-V333OXM4.js";
-import "./chunk-3TAN77E7.js";
-import "./chunk-W2ANHD2T.js";
+} from "./chunk-BDGT2D5N.js";
+import "./chunk-X2VDXR4Z.js";
+import {
+  NumberValue,
+  marshall,
+  unmarshall
+} from "./chunk-GAAFK2HC.js";
+import "./chunk-6OXQOSU2.js";
+import "./chunk-D2IROZXL.js";
+import "./chunk-LIMCCBU5.js";
 import {
   Client,
   Command,
   createPaginator,
   setFeature
-} from "./chunk-WLALPDKA.js";
+} from "./chunk-C5VP2YRX.js";
 import {
   __publicField,
   __toESM,
   require_dist,
   require_dist2,
   require_dist3
-} from "./chunk-GJFZQ5ET.js";
+} from "./chunk-QQN4L6SB.js";
 
 // node_modules/@aws-sdk/lib-dynamodb/dist-es/index.js
 var import_dist67 = __toESM(require_dist());

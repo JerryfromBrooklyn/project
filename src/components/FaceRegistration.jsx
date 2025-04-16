@@ -4,6 +4,7 @@ import { Camera, AlertCircle, CheckCircle, Loader, Video, User, Info } from 'luc
 import { useAuth } from '../auth/AuthContext';
 import { indexFace } from '../services/FaceIndexingService';
 import { detectFacesInImage } from '../services/FaceDetectionService';
+import { updatePhotoVisibility } from '../services/userVisibilityService';
 
 // ... existing code ...
 
@@ -363,6 +364,32 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
           result.faceAttributes,
           result.historicalMatches || []
         );
+      }
+
+      // Check if there are historical matches
+      if (result.matches && result.matches.length > 0) {
+        setHistoricalMatches(result.matches);
+        
+        // Add visibility records for all matched photos
+        try {
+          const matchedPhotoIds = result.matches.map(match => match.photoId || match.id);
+          if (matchedPhotoIds.length > 0) {
+            await updatePhotoVisibility(user.id, matchedPhotoIds, 'VISIBLE');
+            console.log(`Set visibility for ${matchedPhotoIds.length} matched photos to VISIBLE`);
+          }
+        } catch (visibilityError) {
+          console.error("Error setting visibility for matched photos:", visibilityError);
+        }
+      }
+      
+      // Update user profile to indicate face is registered
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ face_registered: true })
+        .eq('id', user.id);
+        
+      if (updateError) {
+        console.error("Error updating user profile:", updateError);
       }
 
     } catch (err) {

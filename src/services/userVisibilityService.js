@@ -205,24 +205,43 @@ export const getPhotoVisibilityMap = async (userId) => {
   try {
     if (!userId) throw new Error("User ID is required");
     
-    const params = {
-      TableName: USER_VISIBILITY_TABLE,
-      KeyConditionExpression: "userId = :userId",
-      ExpressionAttributeValues: {
-        ":userId": { S: userId }
-      }
-    };
-    
-    const result = await dynamoClient.send(new QueryCommand(params));
+    console.log(`[getPhotoVisibilityMap] Getting visibility map for user: ${userId}`);
     
     // Create a map of photoId -> status
     const visibilityMap = {};
+    let lastEvaluatedKey;
+    let totalItems = 0;
     
-    if (result.Items && result.Items.length > 0) {
-      result.Items.forEach(item => {
-        visibilityMap[item.photoId.S] = item.status.S;
-      });
-    }
+    // Implement pagination to handle large visibility maps
+    do {
+      const params = {
+        TableName: USER_VISIBILITY_TABLE,
+        KeyConditionExpression: "userId = :userId",
+        ExpressionAttributeValues: {
+          ":userId": { S: userId }
+        },
+        ExclusiveStartKey: lastEvaluatedKey
+      };
+      
+      const result = await dynamoClient.send(new QueryCommand(params));
+      
+      if (result.Items && result.Items.length > 0) {
+        result.Items.forEach(item => {
+          visibilityMap[item.photoId.S] = item.status.S;
+        });
+        totalItems += result.Items.length;
+      }
+      
+      lastEvaluatedKey = result.LastEvaluatedKey;
+      
+      // Log progress for debugging
+      if (lastEvaluatedKey) {
+        console.log(`[getPhotoVisibilityMap] Retrieved batch of ${result.Items?.length || 0} items, continuing...`);
+      }
+      
+    } while (lastEvaluatedKey);
+    
+    console.log(`[getPhotoVisibilityMap] Retrieved visibility settings for ${totalItems} photos. TRASH items: ${Object.values(visibilityMap).filter(s => s === 'TRASH').length}, HIDDEN items: ${Object.values(visibilityMap).filter(s => s === 'HIDDEN').length}`);
     
     return {
       success: true,
@@ -247,9 +266,13 @@ export const getPhotoVisibilityMap = async (userId) => {
  */
 export const filterPhotosByVisibility = async (userId, photos, status = "VISIBLE") => {
   try {
-    if (!photos || photos.length === 0) return [];
+    if (!photos || photos.length === 0) {
+      console.log(`[filterPhotosByVisibility] Empty photos array passed, returning empty array`);
+      return [];
+    }
     
     console.log(`[filterPhotosByVisibility] Starting for user ${userId}, status: ${status}, with ${photos.length} photos`);
+    console.log(`[filterPhotosByVisibility] Sample photo IDs in input: ${photos.slice(0, 3).map(p => p.id).join(', ')}${photos.length > 3 ? '...' : ''}`);
     
     // Get visibility map for this user
     const { visibilityMap, success } = await getPhotoVisibilityMap(userId);
@@ -259,6 +282,16 @@ export const filterPhotosByVisibility = async (userId, photos, status = "VISIBLE
       return [];
     }
     
+    console.log(`[filterPhotosByVisibility] Got visibility map with ${Object.keys(visibilityMap).length} entries`);
+    
+    // If looking for trash items, log all trash entries in visibility map
+    if (status === 'TRASH') {
+      const trashEntries = Object.entries(visibilityMap)
+        .filter(([_, s]) => s === 'TRASH')
+        .map(([id]) => id);
+      console.log(`[filterPhotosByVisibility] Found ${trashEntries.length} TRASH entries in visibility map: ${JSON.stringify(trashEntries)}`);
+    }
+    
     // Filter photos by status (default is VISIBLE if no record exists)
     const filtered = photos.filter(photo => {
       if (!photo.id) {
@@ -266,20 +299,42 @@ export const filterPhotosByVisibility = async (userId, photos, status = "VISIBLE
         return false;
       }
       
-      // Get the status from the map. Default to 'VISIBLE' only when querying for VISIBLE.
+      // Get the status from the map
       const photoStatusInMap = visibilityMap[photo.id]; 
       
       if (status === 'VISIBLE') {
-        // When requesting VISIBLE, allow photos that are not explicitly HIDDEN
-        // (This includes null/undefined, 'VISIBLE', and 'TRASH')
-        return photoStatusInMap !== 'HIDDEN'; 
+        // For VISIBLE status, only show photos that are explicitly VISIBLE or have no visibility record
+        return photoStatusInMap === 'VISIBLE' || photoStatusInMap === undefined;
       } else {
-        // For specific TRASH/HIDDEN queries, require an exact match in the map
-        return photoStatusInMap === status;
+        // For TRASH/HIDDEN queries, require an exact match in the map
+        const isMatch = photoStatusInMap === status;
+        if (status === 'TRASH' && isMatch) {
+          console.log(`[filterPhotosByVisibility] Found trash photo: ${photo.id}`);
+        }
+        return isMatch;
       }
     });
     
     console.log(`[filterPhotosByVisibility] Filtered to ${filtered.length} photos with status '${status}'`);
+    
+    if (filtered.length > 0) {
+      console.log(`[filterPhotosByVisibility] Returning photos: ${filtered.slice(0, 3).map(p => p.id).join(', ')}${filtered.length > 3 ? '...' : ''}`);
+    } else if (status === 'TRASH') {
+      console.log(`[filterPhotosByVisibility] No trash photos found after filtering - double check visibility map entries against scanned photos`);
+      
+      // Find which photos in the visibility map with TRASH status were not in the input array
+      const trashIdsInMap = Object.entries(visibilityMap)
+        .filter(([_, s]) => s === 'TRASH')
+        .map(([id]) => id);
+      
+      const photoIdsInInput = photos.map(p => p.id);
+      const trashIdsNotInInput = trashIdsInMap.filter(id => !photoIdsInInput.includes(id));
+      
+      if (trashIdsNotInInput.length > 0) {
+        console.log(`[filterPhotosByVisibility] Found ${trashIdsNotInInput.length} trash IDs in visibility map that were not in the input photos array: ${JSON.stringify(trashIdsNotInInput)}`);
+      }
+    }
+    
     return filtered;
   } catch (error) {
     console.error("Error filtering photos by visibility:", error);

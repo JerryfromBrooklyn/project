@@ -23,36 +23,30 @@ The trash system provides a way to temporarily hide photos instead of permanentl
 1. User can move a photo to trash in two ways:
    - From the PhotoGrid (clicking the trash icon on the photo card)
    - From the Image Viewer modal (clicking the trash/hide button in the top control bar)
-2. Photo is marked as "trashed" in the database (user_visibility[userId] = 'TRASH')
+2. Photo is marked as "trashed" in the database (visibility status = 'TRASH')
 3. Photo is removed from normal view but stored in the trash bin
 4. User can access the Trash tab in the Dashboard to:
    - View all trashed photos
-   - Toggle between "Trashed Uploads" and "Trashed Matches"
+   - Toggle between "All Photos", "Trashed Uploads" and "Trashed Matches"
    - Restore photos to their original location
    - Permanently hide selected photos
 
 ## Implementation Details
 
 ### Visibility System (DynamoDB)
-The trash system relies on a user-specific visibility map stored in DynamoDB:
+The trash system uses a dedicated visibility table in DynamoDB that maps user-photo relationships to visibility states:
 
 ```javascript
-// Example DynamoDB item structure
+// Example DynamoDB item structure in shmong-user-photo-visibility table
 {
-  "id": "photo-123",
-  "user_id": "user-who-uploaded-it",
-  "url": "https://...",
-  "faces": [...],
-  "matched_users": ["user-1", "user-2"],
-  "user_visibility": {
-    "user-1": "VISIBLE",  // This user sees the photo normally
-    "user-2": "TRASH",    // This user has moved it to trash
-    "user-3": "HIDDEN"    // This user has permanently hidden it
-  }
+  "userId": { "S": "user-123" },
+  "photoId": { "S": "photo-456" },
+  "status": { "S": "TRASH" },
+  "updatedAt": { "S": "2025-04-16T06:55:20.683Z" }
 }
 ```
 
-The `user_visibility` map allows each user to have their own view of the photo collection.
+This design allows each user to have their own visibility settings for any photo in the system.
 
 ### File Extension Requirements
 
@@ -74,11 +68,9 @@ Using incorrect extensions (like `.js` for JSX components) will cause parsing er
 #### Moving to Trash
 ```javascript
 // In userVisibilityService.js
-export const movePhotosToTrash = async (photoIds, userId) => {
+export const movePhotosToTrash = async (userId, photoIds) => {
   try {
-    // Update DynamoDB item to set user_visibility[userId] = 'TRASH'
-    // for each photo in photoIds
-    return { success: true };
+    return await updatePhotoVisibility(userId, photoIds, "TRASH");
   } catch (error) {
     console.error('Error moving photos to trash:', error);
     return { success: false, error: error.message };
@@ -90,18 +82,16 @@ export const movePhotosToTrash = async (photoIds, userId) => {
 ```javascript
 // In userVisibilityService.js
 export const restorePhotosFromTrash = async (userId, photoIds) => {
-  return updatePhotoVisibility(userId, photoIds, "VISIBLE"); // Correct function call
+  return updatePhotoVisibility(userId, photoIds, "VISIBLE");
 };
 ```
 
 #### Permanently Hiding Photos
 ```javascript
 // In userVisibilityService.js
-export const permanentlyHidePhotos = async (photoIds, userId) => {
+export const permanentlyHidePhotos = async (userId, photoIds) => {
   try {
-    // Update DynamoDB item to set user_visibility[userId] = 'HIDDEN'
-    // for each photo in photoIds
-    return { success: true };
+    return await updatePhotoVisibility(userId, photoIds, "HIDDEN");
   } catch (error) {
     console.error('Error permanently hiding photos:', error);
     return { success: false, error: error.message };
@@ -113,13 +103,34 @@ export const permanentlyHidePhotos = async (photoIds, userId) => {
 
 ```javascript
 // In awsPhotoService.js
-export const fetchPhotosByVisibility = async (userId, type, visibility) => {
+export const getTrashedPhotos = async (userId) => {
   try {
-    // Fetch photos from DynamoDB where user_visibility[userId] = visibility
-    // Filter by type ('uploaded', 'matched', 'all')
-    return photos;
+    // Step 1: Get the visibility map to find photos with TRASH status
+    const { visibilityMap } = await getPhotoVisibilityMap(userId);
+    
+    // Step 2: Filter for TRASH items
+    const trashItemIds = Object.entries(visibilityMap)
+      .filter(([_, status]) => status === 'TRASH')
+      .map(([photoId]) => photoId);
+    
+    // Step 3: Directly fetch the photos using their IDs
+    let allPhotos = [];
+    
+    // Process in batches of 10 for better performance
+    for (let i = 0; i < trashItemIds.length; i += 10) {
+      const batch = trashItemIds.slice(i, i + 10);
+      const photoPromises = batch.map(photoId => 
+        awsPhotoService.getPhotoById(photoId)
+      );
+      
+      const batchResults = await Promise.all(photoPromises);
+      const validPhotos = batchResults.filter(Boolean); // Remove null results
+      allPhotos = [...allPhotos, ...validPhotos];
+    }
+    
+    return allPhotos;
   } catch (error) {
-    console.error('Error fetching photos by visibility:', error);
+    console.error('Error fetching trashed photos:', error);
     return [];
   }
 };
@@ -131,70 +142,70 @@ The `TrashBin.jsx` component provides the UI for managing trashed photos:
 
 ```jsx
 // Key functionality in TrashBin.jsx
-const [activeView, setActiveView] = useState('uploaded'); // or 'matched'
+const [activeTrashView, setActiveTrashView] = useState('all'); // Default to showing all photos
 const [selectedPhotos, setSelectedPhotos] = useState([]);
 
-// Fetch trashed photos when component mounts or view changes
+// Fetch trashed photos when component mounts
 useEffect(() => {
-  fetchTrashedPhotos();
-}, [userId, activeView]);
-
-// Fetch all photos marked as TRASH for the current user
-const fetchTrashedPhotos = async () => {
-  const allTrashedPhotos = await awsPhotoService.fetchPhotosByVisibility(
-    userId, 
-    'all', 
-    'TRASH'
-  );
-  
-  // Filter client-side based on the activeView
-  if (activeView === 'uploaded') {
-    setPhotos(allTrashedPhotos.filter(photo => photo.user_id === userId));
-  } else {
-    setPhotos(allTrashedPhotos.filter(photo => 
-      photo.matched_users?.includes(userId) && photo.user_id !== userId
-    ));
+  if (userId) {
+    loadTrashedPhotos();
   }
+}, [userId]);
+
+// Load trash photos directly from visibility map
+const loadTrashedPhotos = async () => {
+  // Use getTrashedPhotos which properly fetches photos with TRASH visibility status
+  const photos = await awsPhotoService.getTrashedPhotos(userId);
+  setAllTrashedPhotos(photos || []);
 };
 
-// Restore selected photos
-const handleRestore = async () => {
-  // This handler likely lives in the parent component (e.g., Dashboard.tsx)
-  // It calls the service function:
-  const { restorePhotosFromTrash } = await import('../services/userVisibilityService');
-  const result = await restorePhotosFromTrash(
-    userId, // User ID from context or props
-    selectedPhotos // Array of photo IDs from state
-  );
-  
-  if (result.success) {
-    // Update local state and show success message
-    const updatedPhotos = photos.filter(
-      photo => !selectedPhotos.includes(photo.id)
-    );
-    setPhotos(updatedPhotos);
-    setSelectedPhotos([]);
+// Filter photos based on view type (all, uploaded, matched)
+const filteredTrashedPhotos = useMemo(() => {
+  if (activeTrashView === 'uploaded') {
+    return allTrashedPhotos.filter(photo => photo.user_id === userId || photo.uploaded_by === userId);
+  } else if (activeTrashView === 'matched') {
+    return allTrashedPhotos.filter(photo => photo.user_id !== userId && photo.uploaded_by !== userId);
   } else {
-    // Show error message
+    return allTrashedPhotos;
+  }
+}, [allTrashedPhotos, activeTrashView, userId]);
+
+// Restore selected photos
+const handleRestorePhotos = async () => {
+  if (!selectedPhotos.length) return;
+  try {
+    const result = await restorePhotosFromTrash(userId, selectedPhotos);
+    if (result.success) {
+      setAllTrashedPhotos(prev => prev.filter(photo => !selectedPhotos.includes(photo.id)));
+      setSelectedPhotos([]);
+    } else {
+      setError(`Failed to restore photos: ${result.error}`);
+    }
+  } catch (err) {
+    console.error('Error restoring photos:', err);
+    setError('Failed to restore photos. Please try again later.');
   }
 };
 
 // Permanently hide selected photos
-const handleDelete = async () => {
-  const result = await userVisibilityService.permanentlyHidePhotos(
-    selectedPhotos, 
-    userId
+const handlePermanentlyHide = async () => {
+  if (!selectedPhotos.length) return;
+  const confirmed = window.confirm(
+    "Are you sure you want to permanently hide these photos? " +
+    "They will no longer appear in your account, but will still be available for matching and other users."
   );
-  
-  if (result.success) {
-    // Update local state and show success message
-    const updatedPhotos = photos.filter(
-      photo => !selectedPhotos.includes(photo.id)
-    );
-    setPhotos(updatedPhotos);
-    setSelectedPhotos([]);
-  } else {
-    // Show error message
+  if (!confirmed) return;
+  try {
+    const result = await permanentlyHidePhotos(userId, selectedPhotos);
+    if (result.success) {
+      setAllTrashedPhotos(prev => prev.filter(photo => !selectedPhotos.includes(photo.id)));
+      setSelectedPhotos([]);
+    } else {
+      setError(`Failed to permanently hide photos: ${result.error}`);
+    }
+  } catch (err) {
+    console.error('Error permanently hiding photos:', err);
+    setError('Failed to permanently hide photos. Please try again later.');
   }
 };
 ```
@@ -254,18 +265,25 @@ const handleTrash = async (upload: UploadItem) => {
 
 ## User Experience
 
-1. **Trash Icon**: Consistently represented with the Trash2 icon from Lucide
-2. **Confirmation**: No confirmation is required for trash actions (optimistic UI)
-3. **Undoing**: Users can restore photos from the TrashBin component
+1. **Trash View Options**: Users can toggle between "All Photos", "Matched Photos", and "My Uploads" in the trash bin
+2. **Default View**: Trash bin defaults to showing "All Photos" to ensure users see everything in their trash
+3. **Refresh Button**: Users can manually refresh the trash bin contents
 4. **Empty State**: Shows a message when the trash is empty
 5. **Selection**: Users can select multiple photos for batch restore/delete actions
 6. **Mobile Friendly**: The trash interface works well on both desktop and mobile
+
+## Performance Considerations
+
+1. **Direct Query Approach**: The trash system uses direct queries to the visibility map and specific photo IDs rather than scanning the entire photo database
+2. **Pagination Safety**: A maximum page limit prevents infinite pagination loops
+3. **Batch Processing**: Photos are fetched in batches of 10 to optimize performance
+4. **Limit Per Page**: Database queries use a limit parameter to reduce strain on DynamoDB
 
 ## Future Enhancements
 - Batch operations directly from PhotoGrid
 - Custom retention periods per user
 - Trash collection categorization
-- Automatic trashs restoration after a set period
+- Automatic trash restoration after a set period
 - Notifications before automatic permanent deletion
 - API for admin to manage all trashed content
 

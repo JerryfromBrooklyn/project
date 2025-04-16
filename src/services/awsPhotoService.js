@@ -498,109 +498,119 @@ export const awsPhotoService = {
         try {
             // 1. Get the user's registered face IDs first
             const faceData = await getFaceDataForUser(userId);
-            const userFaceIds = faceData ? [faceData.faceId] : [];
-            
+            const userFaceIds = faceData?.faceId ? [faceData.faceId] : [];
             console.log(`[PhotoService] User ${userId} has registered face IDs:`, userFaceIds);
             
-            // 2. Scan the table to find all photos
+            // 2. Scan all photos in the database
             console.log(`[PhotoService] Scanning ${PHOTOS_TABLE} to find matches for ${userId}...`);
-            const scanCommand = new ScanCommand({ TableName: PHOTOS_TABLE });
-            const response = await docClient.send(scanCommand);
-
-            if (!response.Items || response.Items.length === 0) {
-                console.log(`[PhotoService] No photos found in scan.`);
-                return [];
-            }
-
-            console.log(`[PhotoService] Scanned ${response.Items.length} total photos.`);
             
-            // 3. Find matches in two ways:
-            // a) Photos where the user ID is in matched_users (direct)
-            // b) Photos where the user's face matches (reverse)
-            const matchedPhotos = [];
+            let allPhotos = [];
+            let lastEvaluatedKey;
             
-            for (const photo of response.Items) {
-                console.log(`[fetchPhotos DEBUG] Checking photo.id: ${photo.id}`);
-                console.log(`[fetchPhotos DEBUG]   photo.matched_users:`, JSON.stringify(photo.matched_users));
-                let isMatch = false;
-                let matchReason = '';
+            do {
+                const scanParams = {
+                    TableName: PHOTOS_TABLE,
+                    ExclusiveStartKey: lastEvaluatedKey
+                };
                 
-                // Case 1: Check if this photo has current user in matched_users
+                const response = await docClient.send(new ScanCommand(scanParams));
+                
+                if (!response.Items || response.Items.length === 0) {
+                    console.log(`[PhotoService] No photos found in scan.`);
+                    break;
+                }
+                
+                allPhotos = [...allPhotos, ...response.Items];
+                lastEvaluatedKey = response.LastEvaluatedKey;
+                
+            } while (lastEvaluatedKey);
+            
+            console.log(`[PhotoService] Scanned ${allPhotos.length} total photos.`);
+
+            // 3. Filter for photos where this user is matched
+            const matchedPhotos = allPhotos.filter(photo => {
+                // a. Check direct matches in the matched_users array
                 if (photo.matched_users) {
                     let matchedUsers = photo.matched_users;
+                    
+                    // Parse matched_users if it's a string
                     if (typeof matchedUsers === 'string') {
-                        try {
-                            matchedUsers = JSON.parse(matchedUsers);
-                        } catch (e) {
+                        try { 
+                            matchedUsers = JSON.parse(matchedUsers); 
+                        } catch(e) { 
                             console.log(`[PhotoService] Invalid JSON in matched_users for photo ${photo.id}`);
+                            return false;
                         }
                     }
                     
+                    // Handle different data structures for matched_users
                     if (Array.isArray(matchedUsers)) {
-                        // Check for matches in different formats
                         for (const match of matchedUsers) {
-                            // Direct string match
+                            // Check for matches in various formats
                             if (typeof match === 'string' && match === userId) {
-                                isMatch = true;
-                                matchReason = 'string-match';
-                                break;
-                            }
-                            
-                            // Object match with userId field
-                            if (typeof match === 'object' && match !== null) {
-                                const matchUserId = match.userId || match.user_id || '';
+                                return true;
+                            } else if (typeof match === 'object' && match !== null) {
+                                const matchUserId = match.userId || match.user_id;
                                 if (matchUserId === userId) {
-                                    isMatch = true;
-                                    matchReason = 'object-userId-match';
-                                    console.log(`[fetchPhotos DEBUG]   ✅ Match found! Reason: ${matchReason}`);
-                                    break;
+                                    console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: direct match in matched_users`);
+                                    return true;
                                 }
                             }
                         }
                     }
                 }
                 
-                // Case 3: Check for reverse matches - if photo contains faces that match user's face IDs
-                if (!isMatch && userFaceIds.length > 0 && photo.faces) {
-                    let faces = photo.faces;
-                    
-                    // If matches exist and photo's face is in our list
-                    if (Array.isArray(faces)) {
-                        for (const face of faces) {
+                // b. Check if the user is the uploader
+                if (photo.uploaded_by === userId || photo.user_id === userId || photo.uploadedBy === userId) {
+                    console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: user is uploader`);
+                    return true;
+                }
+                
+                // c. Check if there's a face match
+                if (userFaceIds.length > 0 && photo.faces && Array.isArray(photo.faces)) {
+                    for (const face of photo.faces) {
+                        if (face) {
                             const faceId = typeof face === 'object' ? face.faceId : face;
-                            if (faceId && userFaceIds.includes(faceId)) {
-                                isMatch = true;
-                                matchReason = 'face-match';
-                                break;
+                            if (userFaceIds.includes(faceId)) {
+                                console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: face match`);
+                                return true;
                             }
                         }
                     }
                 }
-                
-                // Case 4: Check if matched through historical matches in your face data
-                if (!isMatch && faceData && faceData.historicalMatches && Array.isArray(faceData.historicalMatches)) {
-                    const matchingHistorical = faceData.historicalMatches.find(match => match.id === photo.id);
-                    if (matchingHistorical) {
-                        isMatch = true;
-                        matchReason = 'historical-match';
+
+                // d. Check for historical matches
+                if (faceData && faceData.historicalMatches && Array.isArray(faceData.historicalMatches)) {
+                    if (faceData.historicalMatches.some(match => match.id === photo.id)) {
+                        console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: historical match`);
+                        return true;
                     }
                 }
-                
-                if (isMatch) {
-                    console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: ${matchReason}`);
-                    matchedPhotos.push(photo);
+
+                // e. Check raw string content anywhere (fallback for malformed data)
+                const photoString = JSON.stringify(photo);
+                if (photoString.includes(userId)) {
+                    console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: userId found in photo data`);
+                    return true;
                 }
-            }
+                
+                return false;
+            });
             
             console.log(`[PhotoService] Found ${matchedPhotos.length} potentially matched photos for user ${userId} (before visibility filter).`);
-
-            // Apply client-side filtering for visibility before returning
+            
+            // 4. Apply visibility filter
             const visibleMatchedPhotos = await filterPhotosByVisibility(userId, matchedPhotos, 'VISIBLE');
-            console.log(`[PhotoService] Returning ${visibleMatchedPhotos.length} matched photos visible to user ${userId}.`);
-
-            return visibleMatchedPhotos; // Return only visible matched photos
+            
+            // 5. Sort by creation date (newest first)
+            const sortedVisiblePhotos = visibleMatchedPhotos.sort((a, b) => {
+                return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+            });
+            
+            console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} matched photos visible to user ${userId}.`);
+            return sortedVisiblePhotos;
         } catch (error) {
-            console.error('Error fetching matched photos:', error);
+            console.error('[PhotoService] Error fetching matched photos:', error);
             return [];
         }
     },
@@ -760,6 +770,7 @@ export const awsPhotoService = {
             let command;
             const params = {
                 TableName: PHOTOS_TABLE,
+                Limit: 100, // Limit items per page to reduce strain on DynamoDB
             };
 
             console.log(`[awsPhotoService] Determining base fetch command based on type: ${type}`);
@@ -780,14 +791,35 @@ export const awsPhotoService = {
             let allItems = [];
             let lastEvaluatedKey;
             console.log(`[awsPhotoService] Executing ${command.constructor.name}...`);
+            
+            let pageCount = 0;
+            const MAX_PAGES = 20; // Safety limit to prevent infinite loops
+            
             do {
                 if (lastEvaluatedKey) {
                     params.ExclusiveStartKey = lastEvaluatedKey;
                 }
+                pageCount++;
+                console.log(`[awsPhotoService] Fetching page ${pageCount} of items...`);
+                
                 const response = await docClient.send(command);
-                allItems = allItems.concat(response.Items || []);
+                const pageItems = response.Items || [];
+                console.log(`[awsPhotoService] Page ${pageCount} returned ${pageItems.length} items`);
+                
+                allItems = allItems.concat(pageItems);
                 lastEvaluatedKey = response.LastEvaluatedKey;
+                
+                if (lastEvaluatedKey) {
+                    console.log(`[awsPhotoService] More items available, continuing with pagination (key: ${JSON.stringify(lastEvaluatedKey).substring(0, 50)}...)`);
+                }
+                
+                // Safety check to prevent infinite loops
+                if (pageCount >= MAX_PAGES) {
+                    console.warn(`[awsPhotoService] Reached maximum page limit (${MAX_PAGES}). Breaking to prevent infinite loop.`);
+                    break;
+                }
             } while (lastEvaluatedKey);
+            
             console.log(`[awsPhotoService] Fetched ${allItems.length} total items before any filtering.`);
 
             // Filter based on type ('matched') if needed, ONLY if we did a full Scan initially
@@ -832,8 +864,33 @@ export const awsPhotoService = {
 
             // Final filtering based on the desired visibility status
             console.log(`[awsPhotoService] Performing final client-side filtering for status: ${visibilityStatus}`);
+            console.log(`[awsPhotoService] Getting visibility map for user: ${userId}`);
+            
+            // Get visibility map directly before filtering
+            const { visibilityMap, success } = await getPhotoVisibilityMap(userId);
+            if (!success) {
+                console.error(`[awsPhotoService] Failed to get visibility map for user ${userId}`);
+                return [];
+            }
+            
+            console.log(`[awsPhotoService] Visibility map contains ${Object.keys(visibilityMap).length} entries`);
+            
+            if (visibilityStatus === 'TRASH') {
+                // Debug: log all trash items in the visibility map
+                const trashItems = Object.entries(visibilityMap)
+                    .filter(([_, status]) => status === 'TRASH')
+                    .map(([photoId]) => photoId);
+                console.log(`[awsPhotoService] Visibility map has ${trashItems.length} items with TRASH status: ${JSON.stringify(trashItems)}`);
+            }
+            
             const finalFilteredPhotos = await filterPhotosByVisibility(userId, typeFilteredItems, visibilityStatus);
             console.log(`[awsPhotoService] Returning ${finalFilteredPhotos.length} photos after final visibility filtering for status: ${visibilityStatus}`);
+            
+            if (finalFilteredPhotos.length > 0) {
+                console.log(`[awsPhotoService] Sample photo IDs in results: ${finalFilteredPhotos.slice(0, 3).map(p => p.id).join(', ')}${finalFilteredPhotos.length > 3 ? '...' : ''}`);
+            } else {
+                console.log(`[awsPhotoService] No photos found with visibility status: ${visibilityStatus}`);
+            }
 
             return finalFilteredPhotos;
         } catch (error) {
@@ -891,7 +948,57 @@ export const awsPhotoService = {
      * @returns {Promise<Array>} Trashed photos
      */
     getTrashedPhotos: async (userId) => {
-        return awsPhotoService.fetchPhotosByVisibility(userId, 'all', 'TRASH');
+        console.log(`[awsPhotoService] getTrashedPhotos called for user: ${userId}`);
+        if (!userId) {
+            console.error('[awsPhotoService] Cannot fetch trashed photos without userId');
+            return [];
+        }
+        
+        try {
+            // Step 1: Get the visibility map to find photos with TRASH status
+            const { getPhotoVisibilityMap } = await import('./userVisibilityService');
+            const { visibilityMap, success } = await getPhotoVisibilityMap(userId);
+            
+            if (!success) {
+                console.error('[awsPhotoService] Failed to get visibility map');
+                return [];
+            }
+            
+            // Step 2: Filter for TRASH items
+            const trashItemIds = Object.entries(visibilityMap)
+                .filter(([_, status]) => status === 'TRASH')
+                .map(([photoId]) => photoId);
+            
+            console.log(`[awsPhotoService] Found ${trashItemIds.length} items with TRASH status in visibility map`);
+            
+            if (trashItemIds.length === 0) {
+                console.log('[awsPhotoService] No trash items found, returning empty array');
+                return [];
+            }
+            
+            // Step 3: Directly fetch the photos using their IDs
+            let allPhotos = [];
+            
+            // Process in batches of 10 for better performance
+            for (let i = 0; i < trashItemIds.length; i += 10) {
+                const batch = trashItemIds.slice(i, i + 10);
+                console.log(`[awsPhotoService] Fetching batch ${Math.floor(i/10) + 1} of ${Math.ceil(trashItemIds.length/10)}`);
+                
+                const photoPromises = batch.map(photoId => 
+                    awsPhotoService.getPhotoById(photoId)
+                );
+                
+                const batchResults = await Promise.all(photoPromises);
+                const validPhotos = batchResults.filter(Boolean); // Remove null results
+                allPhotos = [...allPhotos, ...validPhotos];
+            }
+            
+            console.log(`[awsPhotoService] Successfully fetched ${allPhotos.length} trashed photos`);
+            return allPhotos;
+        } catch (error) {
+            console.error('[awsPhotoService] Error in getTrashedPhotos:', error);
+            return [];
+        }
     },
     /**
      * Get permanently hidden photos

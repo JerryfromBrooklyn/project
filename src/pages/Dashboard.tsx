@@ -10,6 +10,7 @@ import { awsPhotoService } from '../services/awsPhotoService';
 import TabNavigation from '../components/TabNavigation';
 import { permanentlyHidePhotos, restorePhotosFromTrash } from '../services/userVisibilityService';
 import TabBarSpacer from "../components/layout/TabBarSpacer";
+import TrashBin from '../components/TrashBin';
 
 interface FaceAttributes {
   age: { low: number; high: number };
@@ -150,10 +151,14 @@ export const Dashboard = () => {
     const fetchTrashedPhotos = async () => {
       if (!user || !user.id) return;
       
+      setTrashedPhotos([]); // Clear previous trash items
+      
       try {
+        console.log(`[Dashboard] Fetching trashed photos for user: ${user.id}`);
         // Use the correct getTrashedPhotos function
         // @ts-ignore - Function exists in service, likely a type/import issue
         const trashed = await awsPhotoService.getTrashedPhotos(user.id); 
+        console.log(`[Dashboard] Found ${trashed.length} trashed photos`);
         setTrashedPhotos(trashed || []);
       } catch (err) {
         console.error('[Dashboard] Error fetching trashed photos:', err);
@@ -568,48 +573,7 @@ export const Dashboard = () => {
             <p className="text-sm text-apple-gray-600 mb-6">
               Items you've hidden. They will be permanently removed after 30 days.
             </p>
-            {trashedPhotos.length > 0 ? (
-              <div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                  {trashedPhotos.map(photo => (
-                    <div key={photo.id} className="relative group">
-                      <div className="aspect-square rounded-lg overflow-hidden border border-apple-gray-100">
-                        <img 
-                          src={photo.url} 
-                          alt={photo.title || `Photo ${photo.id}`} 
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
-                        />
-                      </div>
-                      <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                        <div className="flex flex-col space-y-2">
-                          <button 
-                            onClick={() => handleRestorePhoto(photo.id)}
-                            className="bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold py-2 px-3 rounded-md transition-colors shadow flex items-center justify-center"
-                            title="Restore photo"
-                          >
-                            <RotateCcw className="w-3 h-3 mr-1" />
-                            Restore
-                          </button>
-                          <button 
-                            onClick={() => handlePermanentDelete(photo.id)}
-                            className="bg-red-500 hover:bg-red-600 text-white text-xs font-semibold py-2 px-3 rounded-md transition-colors shadow flex items-center justify-center"
-                            title="Permanently hide photo"
-                          >
-                            <Trash2 className="w-3 h-3 mr-1" />
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="text-center p-8 bg-apple-gray-50 rounded-lg border border-apple-gray-100">
-                 <Trash2 className="w-10 h-10 mx-auto text-apple-gray-400 mb-3" />
-                <p className="text-sm text-apple-gray-500">Trash is empty.</p>
-              </div>
-            )}
+            <TrashBin userId={user?.id} />
           </div>
         );
       default:

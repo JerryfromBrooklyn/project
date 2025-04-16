@@ -552,3 +552,72 @@ UI improvements include:
 The Shmong face matching system provides a comprehensive solution for photo management with facial recognition. The enhanced user interface with the modern image viewer and mobile-optimized experience delivers a seamless photo management solution for users across all devices.
 
 The combination of powerful AWS backend services with a refined React frontend creates a robust yet user-friendly application that efficiently handles photo uploads, face matching, and visibility management. 
+
+## 8. DynamoDB Implementation Considerations
+
+### 8.1 Pagination Requirements for Photo Retrieval
+
+When retrieving photos from DynamoDB, especially with face matching queries, it's critical to implement proper pagination to ensure all results are returned. DynamoDB has an inherent 1MB result size limit per query/scan operation, which means:
+
+1. **Large Data Sets Will Be Truncated**: Without pagination, DynamoDB returns only the first 1MB batch of results (typically 10-20 photos depending on metadata size)
+2. **LastEvaluatedKey Is Required**: To retrieve all results, you must use the `LastEvaluatedKey` value returned from each response to continue fetching subsequent batches
+
+```javascript
+// CORRECT implementation with pagination
+async function fetchAllPhotos() {
+  let allPhotos = [];
+  let lastEvaluatedKey;
+  
+  do {
+    const params = {
+      TableName: PHOTOS_TABLE,
+      ExclusiveStartKey: lastEvaluatedKey // Used for pagination
+    };
+    
+    const response = await docClient.send(new ScanCommand(params));
+    
+    // Add results to our collection
+    allPhotos = [...allPhotos, ...(response.Items || [])];
+    
+    // Get the key for the next page of results
+    lastEvaluatedKey = response.LastEvaluatedKey;
+    
+  } while (lastEvaluatedKey); // Continue until no more results
+  
+  return allPhotos;
+}
+
+// INCORRECT implementation (only retrieves first batch)
+async function fetchPhotosIncorrect() {
+  const params = {
+    TableName: PHOTOS_TABLE
+  };
+  
+  const response = await docClient.send(new ScanCommand(params));
+  return response.Items || [];
+}
+```
+
+### 8.2 Impact on User Experience
+
+Failure to implement proper pagination can lead to serious user experience issues:
+
+1. **Incomplete Photo Sets**: Users only see a subset of their photos (usually 10-20 items)
+2. **Inconsistent Matching Results**: Different users may see different subsets of matches
+3. **Random-Appearing Behavior**: Photos may appear to randomly "disappear" when other photos are added and push them out of the first batch
+
+### 8.3 Client-Side Filtering Considerations
+
+When implementing client-side filtering (such as the visibility filtering):
+
+1. **Filter After Full Retrieval**: Always fetch all photos first using proper pagination, then apply client-side filters
+2. **Use Appropriate DynamoDB Query Methods**: When available, use Query instead of Scan for better performance
+3. **Consider Data Size**: For extremely large collections, consider implementing server-side filtering using DynamoDB's FilterExpression
+
+### 8.4 Best Practices
+
+1. **Always Implement Pagination**: For any Scan or Query operation on DynamoDB
+2. **Log Result Counts**: Add logging to verify expected total counts versus actual counts
+3. **Implement Monitoring**: Add monitoring to detect when result counts drop unexpectedly
+4. **Use Performance Tests**: Test with large data sets to ensure pagination works correctly
+5. **Consider Query over Scan**: Use Query with indexes whenever possible for better performance 

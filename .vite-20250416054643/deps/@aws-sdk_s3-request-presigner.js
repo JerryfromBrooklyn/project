@@ -7,19 +7,19 @@ globalThis.process = globalThis.process || __process_polyfill
 
 import {
   SignatureV4MultiRegion
-} from "./chunk-XAMNCCZR.js";
+} from "./chunk-4MSSDFZW.js";
 import {
   HttpRequest,
   buildQueryString,
   getEndpointFromInstructions
-} from "./chunk-WLALPDKA.js";
+} from "./chunk-C5VP2YRX.js";
 import {
   __publicField,
   __toESM,
   require_dist,
   require_dist2,
   require_dist3
-} from "./chunk-GJFZQ5ET.js";
+} from "./chunk-QQN4L6SB.js";
 
 // node_modules/@aws-sdk/s3-request-presigner/dist-es/index.js
 var import_dist13 = __toESM(require_dist());

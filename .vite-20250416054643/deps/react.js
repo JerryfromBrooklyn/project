@@ -7,6 +7,6 @@ globalThis.process = globalThis.process || __process_polyfill
 
 import {
   require_react
-} from "./chunk-KMLDHAXH.js";
-import "./chunk-GJFZQ5ET.js";
+} from "./chunk-OUB4EOU6.js";
+import "./chunk-QQN4L6SB.js";
 export default require_react();

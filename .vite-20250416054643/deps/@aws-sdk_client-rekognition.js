@@ -9,7 +9,7 @@ import {
   WaiterState,
   checkExceptions,
   createWaiter
-} from "./chunk-ZCIX2HLB.js";
+} from "./chunk-X2VDXR4Z.js";
 import {
   DEFAULT_MAX_ATTEMPTS,
   DEFAULT_RETRY_MODE,
@@ -36,11 +36,11 @@ import {
   resolveRegionConfig,
   resolveRetryConfig,
   resolveUserAgentConfig
-} from "./chunk-V333OXM4.js";
+} from "./chunk-6OXQOSU2.js";
 import {
   v4_default
-} from "./chunk-3TAN77E7.js";
-import "./chunk-W2ANHD2T.js";
+} from "./chunk-D2IROZXL.js";
+import "./chunk-LIMCCBU5.js";
 import {
   AwsSdkSigV4Signer,
   Client,
@@ -89,14 +89,14 @@ import {
   toBase64,
   toUtf8,
   withBaseException
-} from "./chunk-WLALPDKA.js";
+} from "./chunk-C5VP2YRX.js";
 import {
   __publicField,
   __toESM,
   require_dist,
   require_dist2,
   require_dist3
-} from "./chunk-GJFZQ5ET.js";
+} from "./chunk-QQN4L6SB.js";
 
 // node_modules/@aws-sdk/client-rekognition/dist-es/index.js
 var import_dist343 = __toESM(require_dist());

@@ -377,15 +377,65 @@ const PhotoUploader = ({ onUploadComplete, onError }) => {
 
 ## Important Notes
 
-- The **Dashboard component (`Dashboard.jsx`)** acts as the main container and tab navigator.
-- **`MyPhotos.jsx`** is now responsible for displaying matched photos.
-- **`PhotoManager.js`** displays uploaded photos and overall counts.
-- **`PhotoGrid.js`** is a reusable component for displaying photo cards.
-- **`awsPhotoService.js`** and **`userVisibilityService.js`** handle core photo fetching, filtering, and visibility management.
-- Search and complex filtering have been removed from `MyPhotos` and `PhotoManager` for simplification.
-- Photo sorting (newest first) is implemented in fetching/display components.
-- Face registration includes a **synchronous historical matching** step that can be slow (planned for asynchronous improvement).
-- **File extensions**: Components using JSX syntax **must** have `.jsx` or `.tsx` extensions. Vite requires these extensions for correctly parsing JSX, otherwise build errors will occur (as seen with `LandingPage.js` vs `LandingPage.tsx`). Regular JavaScript files without JSX should use the `.js` extension. `LandingPage.js` was removed due to this requirement.
+- The **Dashboard component is the primary UI entry point** for users interacting with the face matching system
+- Multiple service implementations exist with both JavaScript and TypeScript versions
+- The application follows a service-oriented architecture with clear separation between UI components and business logic services 
+
+## Component Dependencies
+
+### Page Components
+- `LandingPage` (in `src/pages/LandingPage.tsx`)
+  - Dependencies: `AuthForms`, `Header`, UI components
+  - Description: Entry point for unauthenticated users, contains marketing content and authentication forms
+
+- `Dashboard` (in `src/pages/Dashboard.tsx`)
+  - Dependencies: `PhotoUploader`, `PhotoGrid`, `Header`, `UserMenu`, `FaceRegistration`, `TrashBin`
+  - Services: `awsPhotoService`, `userVisibilityService`
+  - Description: Main interface after login where users manage photos and face registration 
+
+## Critical Implementation Notes and Common Pitfalls
+
+### DynamoDB Pagination Requirements
+
+When working with the AWS services, especially in `awsPhotoService.js`, always implement proper pagination for DynamoDB operations:
+
+```javascript
+// CORRECT: Implementing pagination for DynamoDB scans/queries
+let allItems = [];
+let lastEvaluatedKey;
+
+do {
+  const scanParams = {
+    TableName: PHOTOS_TABLE,
+    ExclusiveStartKey: lastEvaluatedKey
+  };
+  
+  const response = await docClient.send(new ScanCommand(scanParams));
+  allItems = [...allItems, ...response.Items];
+  lastEvaluatedKey = response.LastEvaluatedKey;
+  
+} while (lastEvaluatedKey);
+```
+
+Failing to implement pagination will result in incomplete data retrieval, as DynamoDB limits each response to 1MB. This has caused issues where only a subset of photos (typically 10-20) were displayed even though users had many more matching photos in the database.
+
+### Common Pitfalls to Avoid
+
+1. **Missing DynamoDB Pagination**: Always use `LastEvaluatedKey` to fetch all results from DynamoDB operations.
+
+2. **Incorrect File Extensions**: Ensure JSX files have `.jsx` or `.tsx` extensions, not `.js`.
+
+3. **Visibility Filtering Order**: Apply visibility filtering (`filterPhotosByVisibility`) AFTER retrieving all photos, not before.
+
+4. **Missing Error Handling**: Add proper error handling, especially for asynchronous operations.
+
+5. **Inefficient Matching**: The current implementation scans the entire photos table. Consider using GSIs (Global Secondary Indexes) for more efficient querying.
+
+6. **Data Structure Inconsistencies**: Some photo objects have different property names for the same data (`user_id` vs `userId`, etc.). Normalize these or handle all variations.
+
+### Recent Fixes
+
+The `fetchPhotos` method in `awsPhotoService.js` was recently updated to properly paginate through all DynamoDB results, fixing an issue where users only saw a subset of their matched photos (typically around 14 photos instead of the full set of 50+ photos).
 
 ## Alternative Dashboards
 
@@ -402,15 +452,3 @@ The system also provides an alternative Apple-styled dashboard in `src/component
 - The **Dashboard component is the primary UI entry point** for users interacting with the face matching system
 - Multiple service implementations exist with both JavaScript and TypeScript versions
 - The application follows a service-oriented architecture with clear separation between UI components and business logic services 
-
-## Component Dependencies
-
-### Page Components
-- `LandingPage` (in `src/pages/LandingPage.tsx`)
-  - Dependencies: `AuthForms`, `Header`, UI components
-  - Description: Entry point for unauthenticated users, contains marketing content and authentication forms
-
-- `Dashboard` (in `src/pages/Dashboard.tsx`)
-  - Dependencies: `PhotoUploader`, `PhotoGrid`, `Header`, `UserMenu`, `FaceRegistration`, `TrashBin`
-  - Services: `awsPhotoService`, `userVisibilityService`
-  - Description: Main interface after login where users manage photos and face registration 

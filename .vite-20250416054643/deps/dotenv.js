@@ -8,7 +8,7 @@ globalThis.process = globalThis.process || __process_polyfill
 import {
   dist_exports,
   init_dist
-} from "./chunk-WOZX6X2B.js";
+} from "./chunk-RTRDFTYZ.js";
 import {
   __commonJS,
   __toCommonJS,
@@ -16,7 +16,7 @@ import {
   require_dist,
   require_dist2,
   require_dist3
-} from "./chunk-GJFZQ5ET.js";
+} from "./chunk-QQN4L6SB.js";
 
 // node_modules/node-stdlib-browser/cjs/mock/empty.js
 var require_empty = __commonJS({
