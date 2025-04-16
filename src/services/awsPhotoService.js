@@ -2,7 +2,7 @@ import { PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aw
 import { PutCommand, GetCommand, DeleteCommand, QueryCommand, ScanCommand, BatchGetCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { s3Client, docClient, rekognitionClient, PHOTO_BUCKET, PHOTOS_TABLE, COLLECTION_ID, AWS_REGION, FACE_DATA_BUCKET } from '../lib/awsClient';
-import { IndexFacesCommand, CompareFacesCommand, SearchFacesCommand } from '@aws-sdk/client-rekognition';
+import { IndexFacesCommand, CompareFacesCommand, SearchFacesCommand, SearchFacesByImageCommand } from '@aws-sdk/client-rekognition';
 import { getFaceDataForUser } from './FaceStorageService';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import { PutItemCommand } from '@aws-sdk/client-dynamodb';
@@ -201,7 +201,7 @@ export const awsPhotoService = {
                                 CollectionId: COLLECTION_ID,
                                 FaceId: detectedFaceId,
                                 MaxFaces: 1000,
-                                FaceMatchThreshold: 98.0  // Set threshold to 98
+                                FaceMatchThreshold: 95.0  // Set threshold to 95.0
                             };
                             
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
@@ -309,7 +309,7 @@ export const awsPhotoService = {
                                 CollectionId: COLLECTION_ID,
                                 FaceId: detectedFaceId,
                                 MaxFaces: 1000,
-                                FaceMatchThreshold: 98.0  // Set threshold to 98
+                                FaceMatchThreshold: 95.0  // Set threshold to 95.0
                             };
                             
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));

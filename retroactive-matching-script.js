@@ -203,7 +203,7 @@ async function searchFaceMatches(faceId) {
       CollectionId: COLLECTION_ID,
       FaceId: faceId,
       MaxFaces: 1000,
-      FaceMatchThreshold: 98.0
+      FaceMatchThreshold: 95.0
     };
     
     const response = await rekognition.searchFaces(searchParams).promise();

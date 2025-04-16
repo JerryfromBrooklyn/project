@@ -34,7 +34,7 @@ if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
 }
 
 // Face recognition configuration
-export const FACE_MATCH_THRESHOLD = 98; // Set threshold to 98
+export const FACE_MATCH_THRESHOLD = 95; // Set threshold to 95
 export const COLLECTION_ID = getEnvVariable('VITE_AWS_COLLECTION_ID', 'shmong-faces');
 
 // Initialize S3 Client

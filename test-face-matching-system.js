@@ -53,7 +53,7 @@ const CONFIG = {
   FACE_DATA_TABLE: 'shmong-face-data',
   
   // Test parameters
-  SIMILARITY_THRESHOLD: 80,
+  SIMILARITY_THRESHOLD: 95,
   WAIT_TIME_MS: 5000,
   
   // Test assets

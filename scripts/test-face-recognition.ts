@@ -86,7 +86,7 @@ async function testFaceRecognition() {
       CollectionId: 'shmong-faces',
       Image: { Bytes: imageBytes },
       MaxFaces: 5,
-      FaceMatchThreshold: 98
+      FaceMatchThreshold: 95
     });
 
     const searchResponse = await rekognitionClient.send(searchCommand);

@@ -48,7 +48,7 @@ export const searchFacesByImage = async (imageBytes: Uint8Array, collectionId: s
         Bytes: imageBytes
       },
       MaxFaces: 1000,
-      FaceMatchThreshold: 98
+      FaceMatchThreshold: 95
     });
 
     const response = await rekognitionClient.send(command);

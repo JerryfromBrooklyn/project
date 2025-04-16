@@ -4,7 +4,7 @@
     const REGION = "us-east-1"; // Ensure this matches your region
     const rekognition = new RekognitionClient({ region: REGION });
     const COLLECTION_ID = 'shmong-faces'; // Ensure this matches your collection ID
-    const FACE_MATCH_THRESHOLD = 80; // Confidence threshold (adjust as needed)
+    const FACE_MATCH_THRESHOLD = 95; // Confidence threshold (adjust as needed)
 
     export const handler = async (event) => {
         try {

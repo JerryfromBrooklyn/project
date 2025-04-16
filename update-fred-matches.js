@@ -49,7 +49,7 @@ async function updateFredMatches() {
       CollectionId: COLLECTION_ID,
       FaceId: fredFaceId,
       MaxFaces: 1000,
-      FaceMatchThreshold: 98.0
+      FaceMatchThreshold: 95.0
     };
     
     const searchResponse = await rekognition.searchFaces(searchParams).promise();

@@ -19,7 +19,7 @@ const PHOTOS_TABLE = 'shmong-photos';
 const FACE_DATA_TABLE = 'shmong-face-data';
 const FACE_COLLECTION_ID = 'shmong-faces';
 const S3_BUCKET = process.env.PHOTOS_BUCKET || 'shmong-photos';
-const SIMILARITY_THRESHOLD = 98;
+const SIMILARITY_THRESHOLD = 95;
 const MIN_CONFIDENCE = 90;
 
 /**
