@@ -15,7 +15,7 @@ const COLLECTION_ID = 'shmong-faces';
 const FACE_DATA_TABLE = 'shmong-face-data';
 const PHOTOS_TABLE = 'shmong-photos';
 const USER_PHOTOS_TABLE = 'shmong-user-photos';
-const FACE_MATCH_THRESHOLD = 95.0;
+const FACE_MATCH_THRESHOLD = 93.5;
 
 /**
  * API handler to update a user's photo matches

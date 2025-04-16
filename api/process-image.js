@@ -83,7 +83,7 @@ export default async function handler(req, res) {
             Name: objectKey
           }
         },
-        FaceMatchThreshold: 95, // Use the 98 threshold
+        FaceMatchThreshold: 93.5, // Use the 98 threshold
         // MaxFaces: 5 // REMOVED - Find all matches above threshold
       };
 
