@@ -1,0 +1,1 @@
+export PATH="/Users/jerry/Library/Python/3.12/bin:$PATH" 

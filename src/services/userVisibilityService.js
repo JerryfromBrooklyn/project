@@ -259,15 +259,24 @@ export const filterPhotosByVisibility = async (userId, photos, status = "VISIBLE
       return [];
     }
     
-    // Filter photos by status (default is VISIBLE if no record exists)
+    // Filter photos by status
     const filtered = photos.filter(photo => {
       if (!photo.id) {
         console.warn('[filterPhotosByVisibility] Photo missing ID:', photo);
         return false;
       }
       
-      const photoStatus = visibilityMap[photo.id] || "VISIBLE";
-      return photoStatus === status;
+      // Get the status from the map. Default to 'VISIBLE' only when querying for VISIBLE.
+      const photoStatusInMap = visibilityMap[photo.id]; 
+      
+      if (status === 'VISIBLE') {
+        // When requesting VISIBLE, allow photos that are not explicitly HIDDEN
+        // (This includes null/undefined, 'VISIBLE', and 'TRASH')
+        return photoStatusInMap !== 'HIDDEN'; 
+      } else {
+        // For specific TRASH/HIDDEN queries, require an exact match in the map
+        return photoStatusInMap === status;
+      }
     });
     
     console.log(`[filterPhotosByVisibility] Filtered to ${filtered.length} photos with status '${status}'`);
