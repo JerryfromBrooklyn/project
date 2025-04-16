@@ -5,15 +5,15 @@
 
 // Face matching threshold for AWS Rekognition
 // Higher values (0-100) require more similarity for a match
-export const FACE_MATCH_THRESHOLD = 90;
+export const FACE_MATCH_THRESHOLD = 95;
 
 // Confidence thresholds for different features
 export const CONFIDENCE_THRESHOLDS = {
   // Minimum confidence required to consider a face match valid (0-100)
-  MIN_MATCH_CONFIDENCE: 90,
+  MIN_MATCH_CONFIDENCE: 95,
   
   // Minimum confidence to consider a face detection valid (0-100)
-  MIN_DETECTION_CONFIDENCE: 90,
+  MIN_DETECTION_CONFIDENCE: 95,
   
   // Minimum confidence for identifying specific face attributes (0-100)
   FACE_ATTRIBUTES: {
@@ -36,10 +36,10 @@ export const FACE_QUALITY_SETTINGS = {
   QUALITY_FILTER: "HIGH",
   
   // Maximum number of faces to index in a single image
-  MAX_FACES_TO_INDEX: 100,
+  MAX_FACES_TO_INDEX: 10,
   
   // Maximum number of faces to return in search results
-  MAX_SEARCH_RESULTS: 1000
+  MAX_SEARCH_RESULTS: 4000
 };
 
 // Retry settings for face operations
