@@ -48,7 +48,7 @@ async function updateFredMatches() {
     const searchParams = {
       CollectionId: COLLECTION_ID,
       FaceId: fredFaceId,
-      MaxFaces: 1000,
+      MaxFaces: 150,
       FaceMatchThreshold: 95.0
     };
     

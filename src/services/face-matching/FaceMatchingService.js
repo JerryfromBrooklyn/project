@@ -245,7 +245,7 @@ export class FaceMatchingService {
         CollectionId: COLLECTION_ID,
         FaceId: faceId,
         FaceMatchThreshold: FACE_MATCH_THRESHOLD,
-        MaxFaces: 1000 // Set high to get all possible matches
+        MaxFaces: 150 // Set high to get all possible matches
       });
       
       const response = await this.executeWithRetry(() => rekognitionClient.send(command));

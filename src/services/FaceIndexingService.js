@@ -288,7 +288,7 @@ const matchAgainstExistingFaces = async (userId, faceId) => {
         const command = new SearchFacesCommand({
             CollectionId: COLLECTION_ID,
             FaceId: faceId,
-            MaxFaces: 1000, // Set high to get all possible matches
+            MaxFaces: 150, // Set high to get all possible matches
             FaceMatchThreshold: FACE_MATCH_THRESHOLD
         });
         

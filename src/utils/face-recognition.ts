@@ -47,7 +47,7 @@ export const searchFacesByImage = async (imageBytes: Uint8Array, collectionId: s
       Image: {
         Bytes: imageBytes
       },
-      MaxFaces: 1000,
+      MaxFaces: 150,
       FaceMatchThreshold: 95
     });
 

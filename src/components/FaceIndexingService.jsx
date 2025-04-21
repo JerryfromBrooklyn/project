@@ -71,8 +71,8 @@ class FaceIndexingService {
         const params = {
           CollectionId: this.faceCollectionId,
           FaceId: faceId,
-          MaxFaces: 100,
-          FaceMatchThreshold: 70 // Adjust threshold as needed
+          MaxFaces: 150,
+          FaceMatchThreshold: 95 // Adjust threshold as needed
         };
         
         // NOTE: This code uses .promise() which indicates AWS SDK v2 syntax.
@@ -118,8 +118,8 @@ class FaceIndexingService {
         const params = {
           CollectionId: this.faceCollectionId,
           FaceId: faceId,
-          MaxFaces: 100,
-          FaceMatchThreshold: 90 // Use high confidence threshold
+          MaxFaces: 150,
+          FaceMatchThreshold: 95 // Use high confidence threshold
         };
         
         const searchResults = await this.rekognition.searchFaces(params).promise();

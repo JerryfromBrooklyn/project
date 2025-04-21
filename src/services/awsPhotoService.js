@@ -200,7 +200,7 @@ export const awsPhotoService = {
                             const searchParams = {
                                 CollectionId: COLLECTION_ID,
                                 FaceId: detectedFaceId,
-                                MaxFaces: 1000,
+                                MaxFaces: 150,
                                 FaceMatchThreshold: 95.0  // Set threshold to 95.0
                             };
                             
@@ -308,7 +308,7 @@ export const awsPhotoService = {
                             const searchParams = {
                                 CollectionId: COLLECTION_ID,
                                 FaceId: detectedFaceId,
-                                MaxFaces: 1000,
+                                MaxFaces: 150,
                                 FaceMatchThreshold: 95.0  // Set threshold to 95.0
                             };
                             

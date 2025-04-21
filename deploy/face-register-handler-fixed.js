@@ -129,8 +129,8 @@ const handler = async (event) => {
     const searchParams = {
       CollectionId: FACE_COLLECTION_ID,
       FaceId: faceId,
-      MaxFaces: 100,
-      FaceMatchThreshold: 80
+      MaxFaces: 150,
+      FaceMatchThreshold: 95
     };
 
     const searchResult = await rekognition.searchFaces(searchParams).promise();

@@ -202,7 +202,7 @@ async function searchFaceMatches(faceId) {
     const searchParams = {
       CollectionId: COLLECTION_ID,
       FaceId: faceId,
-      MaxFaces: 1000,
+      MaxFaces: 150,
       FaceMatchThreshold: 95.0
     };
     

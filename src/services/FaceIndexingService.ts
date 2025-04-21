@@ -7,7 +7,7 @@ private static async searchFacesByFaceId(faceId: string, userId: string): Promis
       CollectionId: this.COLLECTION_ID,
       FaceId: faceId,
       FaceMatchThreshold: FACE_MATCH_THRESHOLD,
-      MaxFaces: 1000 // Set high to get all possible matches in one call
+      MaxFaces: 150 // Set high to get all possible matches in one call
     });
     
     const response = await rekognitionClient.send(command);

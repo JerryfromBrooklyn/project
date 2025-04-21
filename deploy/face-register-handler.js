@@ -129,7 +129,7 @@ exports.handler = async (event) => {
     const searchParams = {
       CollectionId: FACE_COLLECTION_ID,
       FaceId: faceId,
-      MaxFaces: 1000,
+      MaxFaces: 150,
       FaceMatchThreshold: 95
     };
 

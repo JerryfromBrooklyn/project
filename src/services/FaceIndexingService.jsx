@@ -320,8 +320,8 @@ export const indexFace = async (userId, imageBlob) => {
       const searchParams = {
         CollectionId: COLLECTION_ID,
         FaceId: faceId,
-        MaxFaces: 1000,
-        FaceMatchThreshold: 85.0
+        MaxFaces: 150,
+        FaceMatchThreshold: 95.0
       };
       
       console.log('[FaceIndexing] Searching for historical matches with threshold: 85.0%');
@@ -555,7 +555,7 @@ const matchAgainstExistingFaces = async (userId, faceId) => {
     const command = new SearchFacesCommand({
       CollectionId: COLLECTION_ID,
       FaceId: faceId,
-      MaxFaces: 1000,
+      MaxFaces: 150,
       FaceMatchThreshold: FACE_MATCH_THRESHOLD
     });
     

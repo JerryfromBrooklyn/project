@@ -82,7 +82,7 @@ export const searchFacesByFaceId = async (faceId: string): Promise<string[] | nu
          CollectionId: REKOGNITION_COLLECTION_ID,
          FaceId: faceId,
          FaceMatchThreshold: FACE_MATCH_THRESHOLD,
-         MaxFaces: 1000, // Increase limit
+         MaxFaces: 150, // Increase limit
      });
 
      try {
@@ -183,7 +183,7 @@ export const processUploadedPhotoForIndexingAndMatching = async (photoId: string
                 CollectionId: REKOGNITION_COLLECTION_ID,
                 FaceId: indexedFace.faceId, // Search using the *anonymous* ID just indexed
                 FaceMatchThreshold: FACE_MATCH_THRESHOLD,
-                MaxFaces: 1000, // Increase limit
+                MaxFaces: 150, // Increase limit
             });
 
             try {

@@ -79,7 +79,7 @@ export const searchFacesByFaceId = async (faceId) => {
         CollectionId: REKOGNITION_COLLECTION_ID,
         FaceId: faceId,
         FaceMatchThreshold: FACE_MATCH_THRESHOLD,
-        MaxFaces: 1000, // Adjust as needed, limits the number of matches returned *per call*
+        MaxFaces: 150, // Adjust as needed, limits the number of matches returned *per call*
     });
     try {
         console.log(`Searching for matches for FaceId: ${faceId}`);
@@ -241,8 +241,8 @@ export const updateUserMatchesWithRekognition = async (userId) => {
     const searchCommand = new SearchFacesCommand({
       CollectionId: REKOGNITION_COLLECTION_ID,
       FaceId: userFaceId,
-      FaceMatchThreshold: 80.0, // Lower threshold to catch more potential matches
-      MaxFaces: 1000  // Get as many matches as possible
+      FaceMatchThreshold: 95.0, // Lower threshold to catch more potential matches
+      MaxFaces: 150  // Get as many matches as possible
     });
     
     console.log(`🔍 [FaceMatchingService] Searching for matches in Rekognition...`);
