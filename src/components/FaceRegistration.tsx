@@ -158,7 +158,7 @@ const FaceRegistration: React.FC<FaceRegistrationProps> = ({ onSuccess, onClose 
           
           <div className={cn(
             "relative rounded-lg overflow-hidden bg-gray-100",
-            captured ? "aspect-video" : ""
+            captured ? "aspect-square" : ""
           )}>
             {!captured ? (
               <Webcam
@@ -168,13 +168,13 @@ const FaceRegistration: React.FC<FaceRegistrationProps> = ({ onSuccess, onClose 
                 videoConstraints={{
                   facingMode: "user",
                   width: { min: 480 },
-                  height: { min: 360 }
+                  height: { min: 480 }
                 }}
                 mirrored
-                className="w-full h-full object-cover aspect-video"
+                className="w-full h-full object-cover aspect-square"
               />
             ) : showPreview && imageSrc ? (
-              <div className="relative aspect-video">
+              <div className="relative aspect-square">
                 <img 
                   src={imageSrc} 
                   alt="Captured" 
