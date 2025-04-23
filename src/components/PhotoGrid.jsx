@@ -113,7 +113,7 @@ export const PhotoGrid = ({
       setErrorState('Failed to download photo');
     } finally {
       setLoadingState(prev => ({ ...prev, [photo.id]: false }));
-    }
+      }
   };
 
   // Close the info modal
@@ -277,16 +277,16 @@ export const PhotoGrid = ({
               
               {/* Hover overlay with actions */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3">
-                <div className="flex justify-end gap-1 mb-16">
+                <div className="flex justify-end gap-1 mb-10 md:mb-16">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handlePhotoAction(photo, 'info');
                     }}
-                    className="p-2 bg-white/80 hover:bg-white rounded-full text-gray-700 hover:text-indigo-600 transition-colors"
+                    className="p-1.5 md:p-2 bg-white/80 hover:bg-white rounded-full text-gray-700 hover:text-indigo-600 transition-colors"
                     aria-label="Photo info"
                   >
-                    <Info className="w-4 h-4" />
+                    <Info className="w-3.5 h-3.5 md:w-4 md:h-4" />
                   </button>
                   
                   <button
@@ -295,13 +295,13 @@ export const PhotoGrid = ({
                       handleDownload(photo);
                     }}
                     disabled={loadingState[photo.id]}
-                    className="p-2 bg-white/80 hover:bg-white rounded-full text-gray-700 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                    className="p-1.5 md:p-2 bg-white/80 hover:bg-white rounded-full text-gray-700 hover:text-indigo-600 transition-colors disabled:opacity-50"
                     aria-label="Download photo"
                   >
                     {loadingState[photo.id] ? (
-                      <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                      <div className="w-3.5 h-3.5 md:w-4 md:h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
                     ) : (
-                      <Download className="w-4 h-4" />
+                      <Download className="w-3.5 h-3.5 md:w-4 md:h-4" />
                     )}
                   </button>
                   
@@ -310,10 +310,10 @@ export const PhotoGrid = ({
                       e.stopPropagation();
                       handlePhotoAction(photo, 'trash');
                     }}
-                    className="p-2 bg-white/80 hover:bg-white rounded-full text-gray-700 hover:text-red-600 transition-colors"
+                    className="p-1.5 md:p-2 bg-white/80 hover:bg-white rounded-full text-gray-700 hover:text-red-600 transition-colors"
                     aria-label="Move to trash"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
                   </button>
                 </div>
                 
@@ -323,16 +323,16 @@ export const PhotoGrid = ({
                     e.stopPropagation();
                     handlePhotoAction(photo, 'view');
                   }}
-                  className="px-4 py-2 bg-white/90 hover:bg-white rounded-lg text-gray-800 transition-colors flex items-center justify-center font-medium text-sm"
+                  className="px-3 py-1.5 md:px-4 md:py-2 bg-white/90 hover:bg-white rounded-lg text-gray-800 transition-colors flex items-center justify-center font-medium text-xs md:text-sm"
                 >
-                  <Eye className="w-4 h-4 mr-2" />
+                  <Eye className="w-3.5 h-3.5 md:w-4 md:h-4 mr-1.5 md:mr-2" />
                   View Photo
                 </button>
               </div>
             </motion.div>
           );
         })}
-      </div>
+    </div>
       
       {/* Photo info modal */}
       <AnimatePresence>

@@ -214,21 +214,21 @@ export const getPhotoVisibilityMap = async (userId) => {
     
     // Implement pagination to handle large visibility maps
     do {
-      const params = {
-        TableName: USER_VISIBILITY_TABLE,
-        KeyConditionExpression: "userId = :userId",
-        ExpressionAttributeValues: {
-          ":userId": { S: userId }
+    const params = {
+      TableName: USER_VISIBILITY_TABLE,
+      KeyConditionExpression: "userId = :userId",
+      ExpressionAttributeValues: {
+        ":userId": { S: userId }
         },
         ExclusiveStartKey: lastEvaluatedKey
-      };
-      
-      const result = await dynamoClient.send(new QueryCommand(params));
-      
-      if (result.Items && result.Items.length > 0) {
-        result.Items.forEach(item => {
-          visibilityMap[item.photoId.S] = item.status.S;
-        });
+    };
+    
+    const result = await dynamoClient.send(new QueryCommand(params));
+    
+    if (result.Items && result.Items.length > 0) {
+      result.Items.forEach(item => {
+        visibilityMap[item.photoId.S] = item.status.S;
+      });
         totalItems += result.Items.length;
       }
       

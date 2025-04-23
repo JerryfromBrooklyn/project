@@ -103,52 +103,52 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash }) =>
                                 className: "absolute bottom-3 left-3 right-3 flex justify-between items-center", 
                                 children: [
                                     _jsxs("div", { 
-                                        className: "flex space-x-2", 
+                                        className: "flex space-x-1.5 md:space-x-2", 
                                         children: [
                                             _jsx("button", { 
                                                 onClick: (e) => { e.stopPropagation(); handleDownload(photo); }, 
-                                                className: "p-2.5 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors duration-300 shadow-lg", 
+                                                className: "p-2 md:p-2.5 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors duration-300 shadow-lg", 
                                                 disabled: loading[photo.id],
                                                 "aria-label": "Download photo", 
                                                 title: "Download",
-                                                children: _jsx(Download, { className: "w-4 h-4" })
+                                                children: _jsx(Download, { className: "w-3.5 h-3.5 md:w-4 md:h-4" })
                                             }), 
                                             onShare && (_jsx("button", { 
                                                 onClick: (e) => handleShare(photo, e), 
-                                                className: "p-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors duration-300 shadow-lg", 
+                                                className: "p-2 md:p-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors duration-300 shadow-lg", 
                                                 disabled: sharing[photo.id],
                                                 "aria-label": "Share photo", 
                                                 title: "Share",
-                                                children: _jsx(Share2, { className: "w-4 h-4" })
+                                                children: _jsx(Share2, { className: "w-3.5 h-3.5 md:w-4 md:h-4" })
                                             }))
                                         ]
                                     }), 
                                     _jsxs("div", { 
-                                        className: "flex space-x-2", 
+                                        className: "flex space-x-1.5 md:space-x-2", 
                                         children: [
                                             _jsx("button", { 
                                                 onClick: (e) => { e.stopPropagation(); setSelectedPhoto(photo); }, 
-                                                className: "p-2.5 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-colors duration-300 shadow-lg", 
+                                                className: "p-2 md:p-2.5 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-colors duration-300 shadow-lg", 
                                                 "aria-label": "View photo details", 
                                                 title: "Info",
-                                                children: _jsx(Info, { className: "w-4 h-4" })
+                                                children: _jsx(Info, { className: "w-3.5 h-3.5 md:w-4 md:h-4" })
                                             }), 
                                             onTrash && (
                                                 _jsx("button", { 
                                                     onClick: (e) => onTrash(photo.id, e),
-                                                    className: "p-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg", 
+                                                    className: "p-2 md:p-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg", 
                                                     "aria-label": "Move photo to trash", 
                                                     title: "Move to Trash",
-                                                    children: _jsx(Trash2, { className: "w-4 h-4" })
+                                                    children: _jsx(Trash2, { className: "w-3.5 h-3.5 md:w-4 md:h-4" })
                                                 })
                                             ),
                                             !onTrash && onDelete && (
                                                  _jsx("button", { 
                                                      onClick: (e) => {e.stopPropagation(); onDelete(photo.id);}, 
-                                                     className: "p-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg", 
+                                                     className: "p-2 md:p-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg", 
                                                      "aria-label": "Delete photo", 
                                                      title: "Delete",
-                                                     children: _jsx(Trash2, { className: "w-4 h-4" })
+                                                     children: _jsx(Trash2, { className: "w-3.5 h-3.5 md:w-4 md:h-4" })
                                                  })
                                             )
                                         ]
