@@ -617,106 +617,118 @@ export const Dashboard = () => {
         );
       default:
         return (
-          <>
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-              className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6"
-            >
-              
-              {showRegistrationSuccessMessage && (
-                <div className="mb-5 bg-green-50 border-l-4 border-green-500 p-3 rounded-r-md">
-                  <p className="text-sm text-green-800 flex items-center">
-                    <CheckCircle className="w-4 h-4 mr-1.5 flex-shrink-0"/>
-                    <span className="font-medium">Face registration complete!</span>
-                  </p>
-                 </div>
-              )}
-              
-              {!faceRegistered && !showRegistrationModal && (
-                 <div className="mb-5 bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-md">
-                   <p className="text-sm text-amber-800 flex items-center">
+          <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6">
+            {/* Photo Stats - always first on mobile and desktop */}
+            <div className="order-1 lg:col-start-3">
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.1 }}
+                className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-5"
+              >
+                <h2 className="text-sm font-medium text-apple-gray-500 mb-3 flex items-center">
+                  <Photos className="w-4 h-4 mr-1.5"/> Photo Stats
+                </h2>
+                <div className="grid grid-cols-2 gap-4">
+                  <button 
+                    onClick={() => setActiveTab('photos')}
+                    className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <p className="text-2xl font-semibold text-apple-green-600">{matchedCount}</p>
+                    <p className="text-xs text-apple-gray-500 mt-0.5">Photos Matched</p>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('upload')}
+                    className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <p className="text-2xl font-semibold text-apple-blue-600">{uploadedCount}</p>
+                    <p className="text-xs text-apple-gray-500 mt-0.5">Photos Uploaded</p>
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Main content with face registration - middle on mobile, main area on desktop */}
+            <div className="order-2 lg:col-span-2">
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+                className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6"
+              >
+                {showRegistrationSuccessMessage && (
+                  <div className="mb-5 bg-green-50 border-l-4 border-green-500 p-3 rounded-r-md">
+                    <p className="text-sm text-green-800 flex items-center">
+                      <CheckCircle className="w-4 h-4 mr-1.5 flex-shrink-0"/>
+                      <span className="font-medium">Face registration complete!</span>
+                    </p>
+                  </div>
+                )}
+                
+                {!faceRegistered && !showRegistrationModal && (
+                  <div className="mb-5 bg-amber-50 border-l-4 border-amber-500 p-3 rounded-r-md">
+                    <p className="text-sm text-amber-800 flex items-center">
                       <AlertCircle className="w-4 h-4 mr-1.5 flex-shrink-0"/>
-                     <span className="font-medium">Register your face to find photos.</span>
-                   </p>
-                 </div>
-              )}
+                      <span className="font-medium">Register your face to find photos.</span>
+                    </p>
+                  </div>
+                )}
 
-              {!faceRegistered && showRegistrationModal && (
-                 <div className="mb-6">
+                {!faceRegistered && showRegistrationModal && (
+                  <div className="mb-6">
                     <FaceRegistration 
-                        onSuccess={handleRegistrationSuccess} 
-                        onClose={() => setShowRegistrationModal(false)} 
-                     />
-                 </div>
-              )}
+                      onSuccess={handleRegistrationSuccess} 
+                      onClose={() => setShowRegistrationModal(false)} 
+                    />
+                  </div>
+                )}
 
-              {faceRegistered && renderFaceImageWithAttributes()}
-              
-              {!faceRegistered && !showRegistrationModal && (
-                <button
-                  onClick={() => setShowRegistrationModal(true)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors flex items-center justify-center w-full md:w-auto"
-                >
-                  <Camera className="w-4 h-4 mr-2" />
-                  Register Your Face
-                </button>
-              )}
-            </motion.div>
+                {faceRegistered && renderFaceImageWithAttributes()}
+                
+                {!faceRegistered && !showRegistrationModal && (
+                  <button
+                    onClick={() => setShowRegistrationModal(true)}
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors flex items-center justify-center w-full md:w-auto"
+                  >
+                    <Camera className="w-4 h-4 mr-2" />
+                    Register Your Face
+                  </button>
+                )}
+              </motion.div>
+            </div>
 
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 }}
-              className="space-y-6"
-            >
-               <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-5">
-                  <h2 className="text-sm font-medium text-apple-gray-500 mb-3 flex items-center">
-                    <Photos className="w-4 h-4 mr-1.5"/> Photo Stats
-                  </h2>
-                  <div className="grid grid-cols-2 gap-4">
-                     <button 
-                       onClick={() => setActiveTab('photos')}
-                       className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"
-                     >
-                       <p className="text-2xl font-semibold text-apple-green-600">{matchedCount}</p>
-                       <p className="text-xs text-apple-gray-500 mt-0.5">Photos Matched</p>
-                     </button>
-                     <button 
-                       onClick={() => setActiveTab('upload')}
-                       className="text-center p-3 rounded-lg hover:bg-gray-50 transition-colors"
-                     >
-                       <p className="text-2xl font-semibold text-apple-blue-600">{uploadedCount}</p>
-                       <p className="text-xs text-apple-gray-500 mt-0.5">Photos Uploaded</p>
-                     </button>
+            {/* Account Status - always last on mobile and desktop */}
+            <div className="order-3 lg:col-start-3">
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
+                className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-5"
+              >
+                <h2 className="text-sm font-medium text-apple-gray-500 mb-3 flex items-center">
+                  <Shield className="w-4 h-4 mr-1.5"/> Account Status
+                </h2>
+                <div className="flex items-center p-3 bg-apple-gray-50 rounded-lg mb-3 border border-apple-gray-100">
+                  <div className={`w-2.5 h-2.5 rounded-full mr-2.5 ${faceRegistered ? 'bg-green-500' : 'bg-amber-500'}`}></div>
+                  <div>
+                    <span className="text-sm font-medium text-apple-gray-800">
+                      {faceRegistered ? 'Face Registered' : 'Not Registered'}
+                    </span>
+                    <p className="text-xs text-apple-gray-500">
+                      {faceRegistered ? 'Ready for matching' : 'Complete registration'}
+                    </p>
                   </div>
-               </div>
-                 <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-5">
-                  <h2 className="text-sm font-medium text-apple-gray-500 mb-3 flex items-center">
-                    <Shield className="w-4 h-4 mr-1.5"/> Account Status
-                  </h2>
-                   <div className="flex items-center p-3 bg-apple-gray-50 rounded-lg mb-3 border border-apple-gray-100">
-                    <div className={`w-2.5 h-2.5 rounded-full mr-2.5 ${faceRegistered ? 'bg-green-500' : 'bg-amber-500'}`}></div>
-                    <div>
-                      <span className="text-sm font-medium text-apple-gray-800">
-                        {faceRegistered ? 'Face Registered' : 'Not Registered'}
-                      </span>
-                      <p className="text-xs text-apple-gray-500">
-                        {faceRegistered ? 'Ready for matching' : 'Complete registration'}
-                      </p>
-                    </div>
+                </div>
+                <div className="mt-4">
+                  <h3 className="text-xs font-medium text-apple-gray-500 mb-1">Privacy Information</h3>
+                  <div className="flex items-start text-xs text-apple-gray-500">
+                    <AlertCircle className="w-3 h-3 mr-1.5 text-apple-gray-400 flex-shrink-0 mt-0.5" />
+                    <p>Your face data is encrypted and stored securely. We never share your biometric data.</p>
                   </div>
-                   <div className="mt-4">
-                    <h3 className="text-xs font-medium text-apple-gray-500 mb-1">Privacy Information</h3>
-                    <div className="flex items-start text-xs text-apple-gray-500">
-                      <AlertCircle className="w-3 h-3 mr-1.5 text-apple-gray-400 flex-shrink-0 mt-0.5" />
-                      <p>Your face data is encrypted and stored securely. We never share your biometric data.</p>
-                    </div>
-                  </div>
-               </div>
-            </motion.div>
-          </>
+                </div>
+              </motion.div>
+            </div>
+          </div>
         );
     }
   };
@@ -788,8 +800,7 @@ export const Dashboard = () => {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <div className={cn(
-          "",
-          activeTab === 'home' ? "grid grid-cols-1 lg:grid-cols-3 gap-6" : ""
+          activeTab === 'home' ? "" : ""
         )}>
           {renderContent()}
         </div>
