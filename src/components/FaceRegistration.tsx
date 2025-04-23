@@ -158,7 +158,7 @@ const FaceRegistration: React.FC<FaceRegistrationProps> = ({ onSuccess, onClose 
           
           <div className={cn(
             "relative rounded-lg overflow-hidden bg-gray-100",
-            captured ? "min-h-[300px]" : ""
+            captured ? "aspect-video" : ""
           )}>
             {!captured ? (
               <Webcam
@@ -174,11 +174,11 @@ const FaceRegistration: React.FC<FaceRegistrationProps> = ({ onSuccess, onClose 
                 className="w-full h-full object-cover aspect-video"
               />
             ) : showPreview && imageSrc ? (
-              <div className="relative">
+              <div className="relative aspect-video">
                 <img 
                   src={imageSrc} 
                   alt="Captured" 
-                  className="w-full object-cover aspect-video"
+                  className="w-full h-full object-cover"
                 />
                 {facesDetected === 1 && !error && (
                   <div className="absolute top-2 left-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
