@@ -1,11 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { restorePhotosFromTrash, permanentlyHidePhotos, getPhotoVisibilityMap } from '../services/userVisibilityService';
 import { downloadImagesAsZip, downloadSingleImage } from '../utils/downloadUtils';
 import '../styles/TrashBin.css';
 import { FaTrash, FaDownload, FaUndo, FaCheckSquare, FaSquare } from 'react-icons/fa';
-import { AlertCircle, Trash2, Upload, Image as ImageIcon, RotateCcw, Grid, RefreshCw, Bug } from 'lucide-react';
+import { 
+  AlertCircle, Trash2, Upload, Image as ImageIcon, 
+  RotateCcw, Grid, RefreshCw, Bug, X, CheckCircle,
+  Check, Download, Square, Info, Filter, Loader
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { PhotoGrid } from './PhotoGrid.jsx';
+import { cn } from '../utils/cn';
 
 const TrashBin = ({ userId: propUserId }) => {
   // Use AuthContext to ensure userId is always available
@@ -20,6 +27,7 @@ const TrashBin = ({ userId: propUserId }) => {
   const [visibilityMap, setVisibilityMap] = useState({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [debugInfo, setDebugInfo] = useState(null);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
 
   // Debug logging when component mounts or userId changes
   useEffect(() => {
@@ -137,6 +145,7 @@ const TrashBin = ({ userId: propUserId }) => {
       
       console.log('[TrashBin DEBUG] Debug data:', debugData);
       setDebugInfo(debugData);
+      setShowDebugPanel(true);
       
     } catch (err) {
       console.error('[TrashBin DEBUG] Error in debug function:', err);
@@ -217,7 +226,7 @@ const TrashBin = ({ userId: propUserId }) => {
     setSelectedPhotos([]);
   }, [filteredTrashedPhotos]);
 
-  const togglePhotoSelection = (photoId) => {
+  const handleSelectPhoto = (photoId) => {
     setSelectedPhotos(prev => 
       prev.includes(photoId) 
         ? prev.filter(id => id !== photoId)
@@ -235,6 +244,8 @@ const TrashBin = ({ userId: propUserId }) => {
 
   const handleRestorePhotos = async () => {
     if (!selectedPhotos.length) return;
+    
+    setIsLoading(true);
     try {
       const result = await restorePhotosFromTrash(userId, selectedPhotos);
       if (result.success) {
@@ -246,16 +257,22 @@ const TrashBin = ({ userId: propUserId }) => {
     } catch (err) {
       console.error('Error restoring photos:', err);
       setError('Failed to restore photos. Please try again later.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handlePermanentlyHide = async () => {
     if (!selectedPhotos.length) return;
+    
     const confirmed = window.confirm(
       "Are you sure you want to permanently hide these photos? " +
       "They will no longer appear in your account, but will still be available for matching and other users."
     );
+    
     if (!confirmed) return;
+    
+    setIsLoading(true);
     try {
       const result = await permanentlyHidePhotos(userId, selectedPhotos);
       if (result.success) {
@@ -267,27 +284,61 @@ const TrashBin = ({ userId: propUserId }) => {
     } catch (err) {
       console.error('Error permanently hiding photos:', err);
       setError('Failed to permanently hide photos. Please try again later.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleDownloadSelected = async () => {
     if (!selectedPhotos.length) return;
-    const photosToDownloadData = selectedPhotos.map(id => allTrashedPhotos.find(p => p.id === id)).filter(Boolean);
-    if (photosToDownloadData.length === 0) return;
+    
+    setIsLoading(true);
+    try {
+      const photosToDownloadData = selectedPhotos.map(id => 
+        allTrashedPhotos.find(p => p.id === id)
+      ).filter(Boolean);
+      
+      if (photosToDownloadData.length === 0) {
+        setError('No valid photos selected for download');
+        return;
+      }
 
-    if (photosToDownloadData.length === 1) {
-      const photo = photosToDownloadData[0];
-      await downloadSingleImage(
-        photo.imageUrl || photo.url,
-        `photo-${photo.id}.jpg`
-      );
-    } else {
-      const downloadItems = photosToDownloadData.map(photo => ({
-          id: photo.id,
-          url: photo.imageUrl || photo.url
-      }));
-      await downloadImagesAsZip(downloadItems, 'selected-trashed-photos.zip');
+      if (photosToDownloadData.length === 1) {
+        const photo = photosToDownloadData[0];
+        await downloadSingleImage(
+          photo.imageUrl || photo.url,
+          `photo-${photo.id}.jpg`
+        );
+      } else {
+        const downloadItems = photosToDownloadData.map(photo => ({
+            id: photo.id,
+            url: photo.imageUrl || photo.url
+        }));
+        await downloadImagesAsZip(downloadItems, 'selected-trashed-photos.zip');
+      }
+    } catch (err) {
+      console.error('Error downloading photos:', err);
+      setError('Failed to download photos. Please try again later.');
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handlePhotoAction = (action) => {
+    if (action.type === 'trash') {
+      // No need to trash already trashed photos
+    } else if (action.type === 'download') {
+      downloadSingleImage(
+        action.photo.imageUrl || action.photo.url,
+        `photo-${action.photo.id}.jpg`
+      );
+    } else if (action.type === 'restore') {
+      handleRestorePhotos([action.photo.id]);
+    }
+  };
+
+  const closeDebugPanel = () => {
+    setShowDebugPanel(false);
   };
 
   if (isLoading) {
@@ -299,205 +350,292 @@ const TrashBin = ({ userId: propUserId }) => {
   }
 
   return (
-    <div className="trash-bin-container">
-      <div className="trash-header">
-        <div className="flex justify-between items-center mb-2">
-          <h2>Trash Bin</h2>
-          <div className="flex space-x-2">
-            <button 
-              onClick={handleDebug}
-              className="debug-button flex items-center text-sm px-3 py-1.5 bg-purple-50 hover:bg-purple-100 rounded-md transition-colors"
-            >
-              <Bug className="w-4 h-4 mr-1.5" />
-              Debug
-            </button>
-            <button 
-              onClick={handleDirectFetch}
-              className="direct-fetch-button flex items-center text-sm px-3 py-1.5 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
-            >
-              <AlertCircle className="w-4 h-4 mr-1.5" />
-              Direct Query
-            </button>
-            <button 
-              onClick={handleRefresh}
-              className="refresh-button flex items-center text-sm px-3 py-1.5 bg-apple-gray-50 hover:bg-apple-gray-100 rounded-md transition-colors"
-              disabled={isRefreshing}
-            >
-              <RefreshCw className={`w-4 h-4 mr-1.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-              {isRefreshing ? 'Refreshing...' : 'Refresh'}
-            </button>
-          </div>
-        </div>
-        <p className="trash-description">
-          Items here are hidden from your view. Restore them or delete them permanently.
-        </p>
-        <div className="trash-view-toggle">
-          <button 
-            onClick={() => setActiveTrashView('all')}
-            className={activeTrashView === 'all' ? 'active' : ''}
-          >
-            <Grid size={16} /> All Photos
-            <span className="photo-count">{allTrashedPhotos.length}</span>
-          </button>
-          <button 
-            onClick={() => setActiveTrashView('matched')}
-            className={activeTrashView === 'matched' ? 'active' : ''}
-          >
-            <ImageIcon size={16} /> Matched Photos
-            <span className="photo-count">{allTrashedPhotos.filter(photo => photo.user_id !== userId && photo.uploaded_by !== userId).length}</span>
-          </button>
-          <button 
-            onClick={() => setActiveTrashView('uploaded')}
-            className={activeTrashView === 'uploaded' ? 'active' : ''}
-          >
-             <Upload size={16} /> My Uploads
-             <span className="photo-count">{allTrashedPhotos.filter(photo => photo.user_id === userId || photo.uploaded_by === userId).length}</span>
-          </button>
-        </div>
-        <div className="trash-summary">
-          <p>Total in trash: <strong>{filteredTrashedPhotos.length}</strong> photos</p>
-        </div>
-      </div>
-      
-      {debugInfo && (
-        <div className="debug-info bg-purple-50 p-4 my-4 rounded-lg border border-purple-200 text-sm">
-          <h3 className="font-bold text-purple-800 mb-2">Debug Information</h3>
-          <p>User ID: {debugInfo.userId}</p>
-          <p>Timestamp: {debugInfo.timestamp}</p>
-          <p>Visibility Map Size: {debugInfo.visibilityMapSize}</p>
-          <p>Trash Items in Database: {debugInfo.trashCount}</p>
-          <p>Trash Items Displayed: {debugInfo.allTrashedPhotosCount}</p>
-          
-          {debugInfo.trashItems.length > 0 ? (
-            <div className="mt-3">
-              <h4 className="font-bold text-purple-700 mb-1">Trash Items:</h4>
-              <ul className="bg-white p-3 rounded border border-purple-200 max-h-60 overflow-y-auto">
-                {debugInfo.trashItems.map((item, index) => (
-                  <li key={index} className="mb-2 pb-2 border-b border-purple-100 last:border-0">
-                    <div>
-                      <span className="font-medium">Photo ID:</span> {item.photoId}
-                    </div>
-                    <div>
-                      <span className="font-medium">Status:</span> {item.status}
-                    </div>
-                    {item.photo && (
-                      <>
-                        <div>
-                          <span className="font-medium">Title:</span> {item.photo.title || 'Untitled'}
-                        </div>
-                        {item.photo.url && (
-                          <div className="mt-1">
-                            <img src={item.photo.url} alt="Thumbnail" className="w-16 h-16 object-cover rounded" />
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {item.error && (
-                      <div className="text-red-600">Error: {item.error}</div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+    <div className="max-w-7xl mx-auto">
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-6">
+        {/* Header Section */}
+        <div className="border-b border-gray-200">
+          <div className="px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between">
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center">
+                <Trash2 className="w-5 h-5 mr-2 text-gray-500" />
+                Trash Bin
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Items here are hidden from your view. Restore them or permanently delete them.
+              </p>
             </div>
-          ) : (
-            <p className="mt-2 text-red-600">No trash items found in database!</p>
-          )}
-        </div>
-      )}
-      
-      <div className="toolbar">
-        <div className="selection-tools">
-          <button
-            className="btn btn-text"
-            onClick={toggleSelectAll}
-            disabled={filteredTrashedPhotos.length === 0}
-            aria-label={selectedPhotos.length === filteredTrashedPhotos.length ? 'Deselect all' : 'Select all'}
-          >
-            {selectedPhotos.length === filteredTrashedPhotos.length && filteredTrashedPhotos.length > 0 ? <FaCheckSquare /> : <FaSquare />}
-            <span>{selectedPhotos.length === filteredTrashedPhotos.length && filteredTrashedPhotos.length > 0 ? 'Deselect All' : 'Select All'}</span>
-          </button>
-          
-          <div className="selected-count">
-            {selectedPhotos.length > 0 && (
-              <span>{selectedPhotos.length} selected</span>
-            )}
+            
+            <div className="flex flex-wrap gap-2 mt-4 md:mt-0">
+              <button 
+                onClick={handleDebug}
+                className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+              >
+                <Bug className="w-4 h-4 mr-1.5" />
+                Debug
+              </button>
+              <button 
+                onClick={handleDirectFetch}
+                className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+              >
+                <AlertCircle className="w-4 h-4 mr-1.5" />
+                Direct Query
+              </button>
+              <button 
+                onClick={handleRefresh}
+                className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`w-4 h-4 mr-1.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                {isRefreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+        
+          {/* Tabs Navigation */}
+          <div className="px-6 border-t border-gray-200">
+            <nav className="flex -mb-px">
+              {[
+                { id: 'all', label: 'All Trashed Photos', icon: Grid, count: allTrashedPhotos.length },
+                { id: 'matched', label: 'Trashed Matches', icon: ImageIcon, count: allTrashedPhotos.filter(photo => photo.user_id !== userId && photo.uploaded_by !== userId).length },
+                { id: 'uploaded', label: 'Trashed Uploads', icon: Upload, count: allTrashedPhotos.filter(photo => photo.user_id === userId || photo.uploaded_by === userId).length }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTrashView(tab.id)}
+                  className={`group inline-flex items-center px-4 py-3 border-b-2 text-sm font-medium ${
+                    activeTrashView === tab.id
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <tab.icon size={16} className="mr-2" />
+                  {tab.label}
+                  <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+                    activeTrashView === tab.id
+                      ? 'bg-indigo-100 text-indigo-800'
+                      : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </nav>
           </div>
         </div>
         
-        {selectedPhotos.length > 0 && (
-          <div className="action-buttons">
-             <button
-               className="btn btn-success"
-               onClick={handleRestorePhotos}
-               aria-label="Restore selected photos"
-             >
-               <RotateCcw className="w-3 h-3 mr-1" />
-               <span>Restore</span>
-             </button>
-             
-             <button
-               className="btn btn-danger"
-               onClick={handlePermanentlyHide}
-               aria-label="Permanently hide selected photos"
-             >
-               <Trash2 className="w-3 h-3 mr-1" />
-               <span>DELETE</span>
-             </button>
-             
-             <button
-               className="btn btn-primary"
-               onClick={handleDownloadSelected}
-               aria-label="Download selected"
-             >
-               <FaDownload />
-               <span>Download</span>
-             </button>
-           </div>
-        )}
-      </div>
-      
-      {filteredTrashedPhotos.length === 0 ? (
-        <div className="no-photos-message">
-          <p>No photos in this section of the trash.</p>
-        </div>
-      ) : (
-        <div className="photo-grid">
-          {filteredTrashedPhotos.map(photo => (
-            <div
-              key={photo.id}
-              className={`photo-card ${selectedPhotos.includes(photo.id) ? 'selected' : ''}`}
-              onClick={() => togglePhotoSelection(photo.id)}
-            >
-              <div className="photo-select-checkbox">
-                <input
-                  type="checkbox"
-                  checked={selectedPhotos.includes(photo.id)}
-                  onChange={() => {}}
-                  onClick={e => e.stopPropagation()}
-                />
-              </div>
+        {/* Action Toolbar */}
+        {filteredTrashedPhotos.length > 0 && (
+          <div className="px-6 py-3 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center">
+              <button
+                onClick={toggleSelectAll}
+                className={cn(
+                  "inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium",
+                  selectedPhotos.length === filteredTrashedPhotos.length && filteredTrashedPhotos.length > 0
+                    ? "bg-indigo-100 text-indigo-700"
+                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                )}
+              >
+                {selectedPhotos.length === filteredTrashedPhotos.length && filteredTrashedPhotos.length > 0 ? (
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Deselect All
+                  </>
+                ) : (
+                  <>
+                    <Square className="w-4 h-4 mr-2" />
+                    Select All
+                  </>
+                )}
+              </button>
               
-              <div className="photo-image">
-                <img
-                  src={photo.imageUrl || photo.url}
-                  alt={photo.title || 'Photo'}
-                  loading="lazy"
-                />
-              </div>
-              
-              <div className="photo-info">
-                <p className="photo-title">{photo.title || 'Untitled'}</p>
-                <p className="photo-date">
-                  {new Date(photo.createdAt || photo.created_at || Date.now()).toLocaleDateString()}
-                </p>
-                <p className="photo-visibility">
-                  Status: {visibilityMap[photo.id] || 'Unknown'}
-                </p>
-              </div>
+              {selectedPhotos.length > 0 && (
+                <span className="ml-3 text-sm text-gray-700">
+                  {selectedPhotos.length} selected
+                </span>
+              )}
             </div>
-          ))}
+            
+            {selectedPhotos.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleRestorePhotos}
+                  className="inline-flex items-center px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 text-sm font-medium rounded-md transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Restore
+                </button>
+                
+                <button
+                  onClick={handlePermanentlyHide}
+                  className="inline-flex items-center px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium rounded-md transition-colors"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Permanently
+                </button>
+                
+                <button
+                  onClick={handleDownloadSelected}
+                  className="inline-flex items-center px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-medium rounded-md transition-colors"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Selected
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Debug Panel */}
+        <AnimatePresence>
+          {showDebugPanel && debugInfo && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="bg-indigo-50 border-b border-indigo-100 overflow-hidden"
+            >
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-indigo-700 flex items-center">
+                    <Bug className="w-4 h-4 mr-2" />
+                    Debug Information
+                  </h3>
+                  <button 
+                    onClick={closeDebugPanel}
+                    className="p-1 rounded-full hover:bg-indigo-100 text-indigo-500"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 text-sm">
+                  <div className="bg-white p-2 rounded-md">
+                    <p className="text-gray-500">User ID</p>
+                    <p className="font-medium">{debugInfo.userId}</p>
+                  </div>
+                  <div className="bg-white p-2 rounded-md">
+                    <p className="text-gray-500">Visibility Map Size</p>
+                    <p className="font-medium">{debugInfo.visibilityMapSize}</p>
+                  </div>
+                  <div className="bg-white p-2 rounded-md">
+                    <p className="text-gray-500">Trash Count</p>
+                    <p className="font-medium">{debugInfo.trashCount}</p>
+                  </div>
+                </div>
+                
+                {debugInfo.trashItems.length > 0 ? (
+                  <div className="mt-3">
+                    <h4 className="font-bold text-indigo-700 mb-2">Trash Items:</h4>
+                    <div className="bg-white p-3 rounded-md border border-indigo-100 max-h-60 overflow-y-auto">
+                      {debugInfo.trashItems.map((item, index) => (
+                        <div key={index} className="mb-2 pb-2 border-b border-indigo-50 last:border-0 last:mb-0 last:pb-0">
+                          <div className="flex items-start">
+                            {item.photo?.url && (
+                              <div className="mr-3">
+                                <img 
+                                  src={item.photo.url} 
+                                  alt="Thumbnail" 
+                                  className="w-10 h-10 object-cover rounded"
+                                />
+                              </div>
+                            )}
+                            <div className="flex-1">
+                              <p className="text-gray-900">
+                                <span className="font-medium">Photo ID:</span> {item.photoId}
+                              </p>
+                              <p className="text-gray-700">
+                                <span className="font-medium">Status:</span> {item.status}
+                              </p>
+                              {item.photo && (
+                                <p className="text-gray-700">
+                                  <span className="font-medium">Title:</span> {item.photo.title || 'Untitled'}
+                                </p>
+                              )}
+                              {item.error && (
+                                <p className="text-red-600 text-sm mt-1">Error: {item.error}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white p-4 rounded-md text-center">
+                    <p className="text-red-600">No trash items found in database!</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
+        {/* Main Content Area */}
+        <div className="p-6">
+          {/* Loading State */}
+          {isLoading && (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-12 h-12 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin mb-4"></div>
+              <p className="text-gray-500 text-sm">Loading trashed photos...</p>
+            </div>
+          )}
+          
+          {/* Error Message */}
+          {error && !isLoading && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 flex items-start"
+            >
+              <AlertCircle className="w-5 h-5 mr-3 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium">{error}</p>
+                <button 
+                  onClick={() => setError(null)}
+                  className="text-sm text-red-600 hover:text-red-800 font-medium mt-2"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </motion.div>
+          )}
+          
+          {/* Empty State */}
+          {!isLoading && !error && filteredTrashedPhotos.length === 0 && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center justify-center py-12 text-center"
+            >
+              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 mb-4">
+                <Trash2 className="w-10 h-10" />
+              </div>
+              <h3 className="text-xl font-medium text-gray-900 mb-1">Trash is empty</h3>
+              <p className="text-gray-500 max-w-md">
+                {activeTrashView === 'all' 
+                  ? "You don't have any photos in the trash." 
+                  : activeTrashView === 'uploaded' 
+                    ? "You don't have any uploaded photos in the trash."
+                    : "You don't have any matched photos in the trash."
+                }
+              </p>
+            </motion.div>
+          )}
+          
+          {/* Photo Grid */}
+          {!isLoading && !error && filteredTrashedPhotos.length > 0 && (
+            <PhotoGrid
+              photos={filteredTrashedPhotos}
+              selectable={true}
+              selectedPhotos={selectedPhotos}
+              onSelectPhoto={handleSelectPhoto}
+              onPhotoAction={handlePhotoAction}
+              columns={{ default: 2, sm: 3, md: 4, lg: 4 }}
+            />
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };

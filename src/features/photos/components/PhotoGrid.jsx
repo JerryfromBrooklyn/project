@@ -4,8 +4,17 @@ import { usePhotos } from '../hooks/usePhotos';
 /**
  * Grid component for displaying photos
  */
-const PhotoGrid = () => {
-  const { photos, loading, error, selectPhoto } = usePhotos();
+const PhotoGrid = ({ 
+  photos = [], 
+  selectPhoto = () => {}, 
+  columns = {
+    default: 2,
+    sm: 2,
+    md: 3,
+    lg: 4
+  } 
+}) => {
+  const { loading, error } = usePhotos();
 
   if (loading) {
     return (
@@ -43,8 +52,11 @@ const PhotoGrid = () => {
     }
   };
 
+  // Dynamically generate grid classes based on columns prop
+  const gridClasses = `grid grid-cols-${columns.default} sm:grid-cols-${columns.sm} md:grid-cols-${columns.md} lg:grid-cols-${columns.lg} gap-4`;
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+    <div className={gridClasses}>
       {photos.map(photo => (
         <div 
           key={photo.id} 

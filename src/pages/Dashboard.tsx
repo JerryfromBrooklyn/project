@@ -128,10 +128,11 @@ export const Dashboard = () => {
 
       try {
         console.log('[Dashboard] Fetching photo counts...');
-        // Use the correct functions from awsPhotoService
-        // @ts-ignore - Function exists in service, likely a type/import issue
-        const uploadedPhotos = await awsPhotoService.fetchUploadedPhotos(user.id);
-        const matchedPhotos = await awsPhotoService.fetchPhotos(user.id); // Fetch matched photos for count
+        // Use the correct methods from awsPhotoService
+        // @ts-ignore - Method exists in JS implementation
+        const uploadedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'uploaded');
+        // @ts-ignore - Method exists in JS implementation
+        const matchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'matched');
 
         console.log(`[Dashboard] Fetched counts: Uploaded=${uploadedPhotos.length}, Matched=${matchedPhotos.length}`);
         setUploadedCount(uploadedPhotos.length);
@@ -231,6 +232,14 @@ export const Dashboard = () => {
     if (result?.historicalMatches && result.historicalMatches.length > 0) {
       console.log('[Dashboard] Setting historical matches:', result.historicalMatches);
       setHistoricalMatches(result.historicalMatches);
+      
+      // Update matched count immediately to reflect matches found during registration
+      // This ensures the user sees updated stats immediately without waiting for API call
+      setMatchedCount(prevCount => {
+        const newCount = result.historicalMatches.length;
+        console.log(`[Dashboard] Immediately updating matched count from ${prevCount} to ${newCount} based on registration results`);
+        return newCount;
+      });
     }
     
     // Set image URL if available from the result
@@ -263,8 +272,33 @@ export const Dashboard = () => {
 
     // --- 4. TRIGGER REFRESH LAST --- 
     console.log('[DASHBOARD] >>> TRIGGERING DASHBOARD DATA REFRESH (AFTER STATE UPDATE) <<<');
-    // Call the relocated fetchFaceData directly
-    fetchFaceData(); 
+    
+    // Refresh face data and photo counts
+    fetchFaceData();
+    
+    // Define fetchCounts function inline to ensure it's available
+    const fetchCounts = async () => {
+      if (!user || !user.id) return;
+
+      try {
+        console.log('[Dashboard] Refreshing photo counts after face registration...');
+        // Use the correct methods from awsPhotoService
+        // @ts-ignore - Method exists in JS implementation
+        const uploadedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'uploaded');
+        // @ts-ignore - Method exists in JS implementation
+        const matchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'matched');
+
+        console.log(`[Dashboard] Updated counts: Uploaded=${uploadedPhotos.length}, Matched=${matchedPhotos.length}`);
+        setUploadedCount(uploadedPhotos.length);
+        setMatchedCount(matchedPhotos.length);
+      } catch (error) {
+        console.error('[Dashboard] Error fetching photo counts after registration:', error);
+        // Don't reset counts to 0 if error occurs, keep current values
+      }
+    };
+    
+    // Execute the fetchCounts function
+    fetchCounts();
   };
   
   const handleRestorePhoto = async (photoId: string) => {
@@ -464,18 +498,27 @@ export const Dashboard = () => {
             )}
             
             {faceImageUrl ? (
-              <div className="relative aspect-square rounded-lg overflow-hidden border border-apple-gray-200 bg-apple-gray-100">
-                <img 
-                  src={encodeURI(faceImageUrl || '')}
-                  alt="Registered face" 
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    if (!e.currentTarget.classList.contains('error-image')) {
-                      e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIGZpbGw9IiM4ODg4ODgiPkZhY2UgSW1hZ2UgVW5hdmFpbGFibGU8L3RleHQ+PC9zdmc+';
-                      e.currentTarget.classList.add('error-image');
-                    }
-                  }}
-                />
+              <div className="flex flex-col">
+                <div className="relative aspect-square rounded-lg overflow-hidden border border-apple-gray-200 bg-apple-gray-100">
+                  <img 
+                    src={encodeURI(faceImageUrl || '')}
+                    alt="Registered face" 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      if (!e.currentTarget.classList.contains('error-image')) {
+                        e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIGZpbGw9IiM4ODg4ODgiPkZhY2UgSW1hZ2UgVW5hdmFpbGFibGU8L3RleHQ+PC9zdmc+';
+                        e.currentTarget.classList.add('error-image');
+                      }
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={() => setShowRegistrationModal(true)}
+                  className="mt-3 bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md text-sm transition-colors flex items-center justify-center"
+                >
+                  <Camera className="w-4 h-4 mr-2" />
+                  Update Face Registration
+                </button>
               </div>
             ) : (
               <div className="relative aspect-square rounded-lg overflow-hidden border border-apple-gray-200 bg-apple-gray-100 flex items-center justify-center">
@@ -528,10 +571,6 @@ export const Dashboard = () => {
                 <Photos className="w-5 h-5 mr-2 text-apple-gray-500" />
                 My Photos
               </h2>
-               <div className="text-center bg-apple-gray-50 px-3 py-1.5 rounded-full border border-apple-gray-200">
-                <span className="text-sm font-medium text-apple-gray-700">{matchedCount}</span>
-                <span className="text-xs text-apple-gray-500 ml-1">found</span>
-              </div>
             </div>
             <p className="text-sm text-apple-gray-600 mb-6">
               Photos where your registered face has been identified.
@@ -615,13 +654,13 @@ export const Dashboard = () => {
 
               {faceRegistered && renderFaceImageWithAttributes()}
               
-              {!showRegistrationModal && (
+              {!faceRegistered && !showRegistrationModal && (
                 <button
                   onClick={() => setShowRegistrationModal(true)}
                   className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors flex items-center justify-center w-full md:w-auto"
                 >
                   <Camera className="w-4 h-4 mr-2" />
-                  {faceRegistered ? "Update Face Registration" : "Register Your Face"}
+                  Register Your Face
                 </button>
               )}
             </motion.div>

@@ -1,0 +1,37 @@
+{
+  "hash": "45807044",
+  "configHash": "9b24fa97",
+  "lockfileHash": "d93032aa",
+  "browserHash": "916dc4cf",
+  "optimized": {
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "6160f3ea",
+      "needsInterop": true
+    },
+    "react-dom": {
+      "src": "../../node_modules/react-dom/index.js",
+      "file": "react-dom.js",
+      "fileHash": "201aaead",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "225eb852",
+      "needsInterop": true
+    },
+    "react/jsx-runtime": {
+      "src": "../../node_modules/react/jsx-runtime.js",
+      "file": "react_jsx-runtime.js",
+      "fileHash": "3def4d2d",
+      "needsInterop": true
+    }
+  },
+  "chunks": {
+    "chunk-D2SCLMDI": {
+      "file": "chunk-D2SCLMDI.js"
+    }
+  }
+}

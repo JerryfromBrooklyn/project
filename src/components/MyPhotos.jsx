@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import PhotoDetailsModal from './PhotoDetailsModal';
-import { Trash2, RefreshCw, User, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trash2, RefreshCw, User, ChevronLeft, ChevronRight, Search, Filter } from 'lucide-react';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { movePhotosToTrash } from '../services/userVisibilityService';
 import { downloadImagesAsZip, downloadSingleImage } from '../utils/downloadUtils';
 import '../styles/MyPhotos.css';
 import { FaTrash, FaDownload, FaCheckSquare, FaSquare } from 'react-icons/fa';
+import { PhotoGrid } from './PhotoGrid.jsx';
+import { motion } from 'framer-motion';
 
 const MyPhotos = () => {
   // Add useEffect for mount logging
@@ -21,6 +23,7 @@ const MyPhotos = () => {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [selectedPhotos, setSelectedPhotos] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
   const photosPerPage = 48; // 12 rows of 4 images
   
   // Get total matches count
@@ -71,14 +74,31 @@ const MyPhotos = () => {
 
   }, [fetchPhotos]); // Depend on the memoized fetchPhotos function
 
-  // Update pagination logic to use photos directly
-  const totalPages = Math.ceil(photos.length / photosPerPage);
+  // Filter photos based on search term
+  const filteredPhotos = useMemo(() => {
+    return photos.filter(photo => {
+      // Search in photo ID, description, location name, etc.
+      if (!searchTerm) return true;
+      
+      const searchFields = [
+        photo.id,
+        photo.title || '',
+        photo.description || '',
+        photo.location?.name || '',
+        ...(photo.matched_users?.map(user => user.fullName || '') || [])
+      ].join(' ').toLowerCase();
+      
+      return searchFields.includes(searchTerm.toLowerCase());
+    });
+  }, [photos, searchTerm]);
+
+  // Update pagination logic to use filteredPhotos
+  const totalPages = Math.ceil(filteredPhotos.length / photosPerPage);
   const currentPhotos = useMemo(() => {
-      const indexOfLastPhoto = currentPage * photosPerPage;
-      const indexOfFirstPhoto = indexOfLastPhoto - photosPerPage;
-      // Slice directly from photos state
-      return photos.slice(indexOfFirstPhoto, indexOfLastPhoto);
-  }, [photos, currentPage, photosPerPage]);
+    const indexOfLastPhoto = currentPage * photosPerPage;
+    const indexOfFirstPhoto = indexOfLastPhoto - photosPerPage;
+    return filteredPhotos.slice(indexOfFirstPhoto, indexOfLastPhoto);
+  }, [filteredPhotos, currentPage, photosPerPage]);
 
   const handleRefresh = () => {
     fetchPhotos(true);
@@ -92,39 +112,22 @@ const MyPhotos = () => {
     setSelectedPhoto(null);
   };
 
-  // Toggle selection of a single photo
-  const togglePhotoSelection = (photoId) => {
+  const handleSelectPhoto = (photoId) => {
     setSelectedPhotos(prev => 
       prev.includes(photoId) 
         ? prev.filter(id => id !== photoId)
         : [...prev, photoId]
     );
-    // Don't automatically open modal on selection toggle
-    // handlePhotoSelect(photos.find(p => p.id === photoId)); 
   };
 
-  // Update toggleSelectAll to use currentPhotos
-  const toggleSelectAll = () => {
-    if (selectedPhotos.length === currentPhotos.length && currentPhotos.length > 0) {
-      setSelectedPhotos([]);
-    } else {
-      setSelectedPhotos(currentPhotos.map(photo => photo.id));
-    }
-  };
-
-  // Move selected photos to trash (updated to use filtered list)
-  const handleMoveToTrash = async () => {
+  const handleTrashPhotos = async () => {
     if (!selectedPhotos.length) return;
-    const photosToTrash = selectedPhotos; // IDs are already selected
-
-    const confirmTrash = window.confirm(`Are you sure you want to move ${photosToTrash.length} photos to the trash?`);
-    if (!confirmTrash) return;
-
+    
     try {
-      const result = await movePhotosToTrash(user.id, photosToTrash);
+      const result = await movePhotosToTrash(user.id, selectedPhotos);
       if (result.success) {
-        setPhotos(prevPhotos => prevPhotos.filter(photo => !photosToTrash.includes(photo.id)));
-        setSelectedPhotos([]); // Clear selection
+        setPhotos(prev => prev.filter(photo => !selectedPhotos.includes(photo.id)));
+        setSelectedPhotos([]);
       } else {
         setError(`Failed to move photos to trash: ${result.error}`);
       }
@@ -134,233 +137,232 @@ const MyPhotos = () => {
     }
   };
 
-  // Download selected photos (updated to use filtered list)
-  const handleDownloadSelected = async () => {
-    if (!selectedPhotos.length) return;
-    const photosToDownloadData = selectedPhotos.map(id => photos.find(p => p.id === id)).filter(Boolean);
-    if (photosToDownloadData.length === 0) return;
-
-    if (photosToDownloadData.length === 1) {
-      const photo = photosToDownloadData[0];
-      await downloadSingleImage(
-        photo.url, 
-        `photo-${photo.id}.jpg`
+  const handlePhotoAction = (action) => {
+    if (action.type === 'trash') {
+      movePhotosToTrash(user.id, [action.photo.id])
+        .then((result) => {
+          if (result.success) {
+            setPhotos(prev => prev.filter(photo => photo.id !== action.photo.id));
+          }
+        })
+        .catch((err) => {
+          console.error('Error trashing photo:', err);
+          setError('Failed to move photo to trash');
+        });
+    } else if (action.type === 'download') {
+      downloadSingleImage(
+        action.photo.url || action.photo.imageUrl,
+        `photo-${action.photo.id}.jpg`
       );
-    } else {
-      const downloadItems = photosToDownloadData.map(photo => ({
-          id: photo.id,
-          url: photo.url
-      }));
-      await downloadImagesAsZip(downloadItems, 'my-photos-selection.zip');
+    } else if (action.type === 'view' || action.type === 'info') {
+      setSelectedPhoto(action.photo);
     }
   };
 
-  // Handler for trashing a single photo
-  const handleTrashSinglePhoto = async (photoId, event) => {
-    event.stopPropagation(); // Prevent card selection when clicking the trash icon
-    if (!user?.id || !photoId) return;
-
-    const confirmTrash = window.confirm("Are you sure you want to move this photo to the trash?");
-    if (!confirmTrash) return;
-
-    try {
-      console.log(`[MyPhotos] Trashing single photo: ${photoId} for user: ${user.id}`);
-      const result = await movePhotosToTrash(user.id, [photoId]);
-      
-      if (result.success) {
-        console.log(`[MyPhotos] Successfully trashed photo: ${photoId}`);
-        // Remove the trashed photo from the current view
-        setPhotos(prevPhotos => prevPhotos.filter(photo => photo.id !== photoId));
-        // If the trashed photo was selected, remove it from selection
-        setSelectedPhotos(prevSelected => prevSelected.filter(id => id !== photoId));
-      } else {
-        setError(`Failed to move photo to trash: ${result.error}`);
-        console.error(`[MyPhotos] Error trashing photo ${photoId}:`, result.error);
-      }
-    } catch (err) {
-      console.error(`[MyPhotos] Exception trashing photo ${photoId}:`, err);
-      setError('Failed to move photo to trash. Please try again later.');
-    }
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    window.scrollTo(0, 0);
   };
 
   return (
-    <div className="container mx-auto p-4">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-2xl font-bold">My Photos</h2>
-          {totalMatchesCount > 0 && (
-            <p className="text-sm text-gray-600 mt-1">
-              You have been matched with {totalMatchesCount} {totalMatchesCount === 1 ? 'photo' : 'photos'} in total
-            </p>
-          )}
+    <div className="max-w-7xl mx-auto">
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-6">
+        {/* Header Section */}
+        <div className="border-b border-gray-200">
+          <div className="px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between">
+            <div className="flex-1">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center">
+                <User className="w-5 h-5 mr-2 text-gray-500" />
+                My Photos
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Photos where you have been recognized.
+              </p>
+            </div>
+            
+            <div className="flex flex-wrap gap-2 mt-4 md:mt-0">
+              <button 
+                onClick={handleRefresh}
+                className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                disabled={loading}
+              >
+                <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+        
+          {/* Search & Filter Section */}
+          <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-grow">
+              <input
+                type="text"
+                placeholder="Search photos..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            </div>
+            <button
+              className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <Filter className="w-4 h-4 mr-2" />
+              Filter
+            </button>
+          </div>
         </div>
-        <div className="flex space-x-2">
-          <button 
-            onClick={handleRefresh}
-            className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            <RefreshCw size={16} className="mr-1" />
-            <span>Refresh</span>
-          </button>
+        
+        {/* Selected Photos Actions */}
+        {selectedPhotos.length > 0 && (
+          <div className="px-6 py-3 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-gray-700">
+              {selectedPhotos.length} photo(s) selected
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handleTrashPhotos}
+                className="inline-flex items-center px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium rounded-md transition-colors"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Move to Trash
+              </button>
+              
+              <button
+                onClick={() => setSelectedPhotos([])}
+                className="inline-flex items-center px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-700 text-sm font-medium rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* Main Content Area */}
+        <div className="p-6">
+          {/* Loading State */}
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-12 h-12 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin mb-4"></div>
+              <p className="text-gray-500 text-sm">Loading photos...</p>
+            </div>
+          )}
+          
+          {/* Error Message */}
+          {error && !loading && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 flex items-start"
+            >
+              <div className="flex-1">
+                <p className="font-medium">{error}</p>
+                <button 
+                  onClick={() => setError(null)}
+                  className="text-sm text-red-600 hover:text-red-800 font-medium mt-2"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </motion.div>
+          )}
+          
+          {/* Empty State */}
+          {!loading && !error && filteredPhotos.length === 0 && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center justify-center py-12 text-center"
+            >
+              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 mb-4">
+                <User className="w-10 h-10" />
+              </div>
+              <h3 className="text-xl font-medium text-gray-900 mb-1">No photos found</h3>
+              <p className="text-gray-500 max-w-md">
+                {searchTerm 
+                  ? "No photos match your search. Try different keywords." 
+                  : "We haven't found any photos with you yet. Try uploading more photos or check again later."}
+              </p>
+            </motion.div>
+          )}
+          
+          {/* Photo Grid */}
+          {!loading && !error && filteredPhotos.length > 0 && (
+            <>
+              <div className="text-sm text-gray-500 mb-4">
+                Showing {currentPhotos.length} of {filteredPhotos.length} photos
+              </div>
+              
+              <PhotoGrid
+                photos={currentPhotos}
+                selectable={true}
+                selectedPhotos={selectedPhotos}
+                onSelectPhoto={handleSelectPhoto}
+                onPhotoAction={handlePhotoAction}
+                columns={{ default: 2, sm: 3, md: 4, lg: 4 }}
+              />
+              
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex justify-center mt-8">
+                  <nav className="flex items-center space-x-2">
+                    <button
+                      onClick={() => handlePageChange(Math.max(currentPage - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-md border border-gray-300 disabled:opacity-50"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    
+                    <div className="flex space-x-1">
+                      {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                        // Show first page, last page, current page, and pages around current
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => handlePageChange(pageNum)}
+                            className={`w-10 h-10 rounded-md ${
+                              currentPage === pageNum
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    
+                    <button
+                      onClick={() => handlePageChange(Math.min(currentPage + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-md border border-gray-300 disabled:opacity-50"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </nav>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
       
-      {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-      ) : error ? (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-          <p>{error}</p>
-          <button 
-            onClick={handleRefresh}
-            className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
-          >
-            Try again
-          </button>
-        </div>
-      ) : currentPhotos.length > 0 ? (
-        <div>
-          <div className="toolbar">
-            <div className="selection-tools">
-              <button
-                className="btn btn-text"
-                onClick={toggleSelectAll}
-                aria-label={selectedPhotos.length === photos.length ? 'Deselect all' : 'Select all'}
-              >
-                {selectedPhotos.length === photos.length ? <FaCheckSquare /> : <FaSquare />}
-                <span>{selectedPhotos.length === photos.length ? 'Deselect All' : 'Select All'}</span>
-              </button>
-              
-              <div className="selected-count">
-                {selectedPhotos.length > 0 && (
-                  <span>{selectedPhotos.length} selected</span>
-                )}
-              </div>
-            </div>
-            
-            {selectedPhotos.length > 0 && (
-              <div className="action-buttons">
-                <button
-                  className="btn btn-danger"
-                  onClick={handleMoveToTrash}
-                  aria-label="Move to trash"
-                >
-                  <FaTrash />
-                  <span>Move to Trash</span>
-                </button>
-                
-                <button
-                  className="btn btn-primary"
-                  onClick={handleDownloadSelected}
-                  aria-label="Download selected"
-                >
-                  <FaDownload />
-                  <span>Download</span>
-                </button>
-              </div>
-            )}
-          </div>
-          
-          <div className="photo-grid">
-            {currentPhotos.map((photo) => (
-              <div
-                key={photo.id}
-                className={`photo-card ${selectedPhotos.includes(photo.id) ? 'selected' : ''}`}
-                onClick={() => {
-                  togglePhotoSelection(photo.id);
-                  handlePhotoSelect(photo);
-                }}
-              >
-                <div className="photo-select-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={selectedPhotos.includes(photo.id)}
-                    onChange={() => {}} // Handled by parent div click
-                    onClick={e => e.stopPropagation()}
-                  />
-                </div>
-                
-                {/* Add Trash Icon Button to Photo Card */}
-                <button 
-                  className="absolute top-2 right-2 p-1 bg-black bg-opacity-40 rounded-full text-white hover:bg-opacity-60 transition-opacity opacity-0 group-hover:opacity-100 z-10"
-                  onClick={(e) => handleTrashSinglePhoto(photo.id, e)}
-                  aria-label="Move photo to trash"
-                >
-                  <Trash2 size={14} />
-                </button>
-                
-                <div className="photo-image">
-                  <img
-                    src={photo.url}
-                    alt={photo.description || 'Photo'}
-                    loading="lazy"
-                  />
-                </div>
-                
-                <div className="photo-info">
-                  <p className="photo-title">{photo.description || 'Untitled'}</p>
-                  <p className="photo-date">
-                    {new Date(photo.created_at || Date.now()).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          {/* Pagination controls */}
-          {totalPages > 1 && (
-            <div className="mt-8 flex justify-center">
-              <nav className="flex items-center">
-                <button 
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="p-2 mr-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                
-                <div className="flex space-x-1">
-                  {[...Array(totalPages)].map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handlePageChange(i + 1)}
-                      className={`px-3 py-1 rounded-md ${
-                        currentPage === i + 1
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 hover:bg-gray-200'
-                      }`}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
-                </div>
-                
-                <button 
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="p-2 ml-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </nav>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center h-64 bg-gray-50 rounded-lg border border-gray-200">
-          <p className="text-gray-500 mb-2">No photos found</p>
-          <p className="text-sm text-gray-400">
-            No photos matched your face yet.
-          </p>
-        </div>
-      )}
-      
+      {/* Photo Details Modal */}
       {selectedPhoto && (
-        <PhotoDetailsModal 
-          photo={selectedPhoto}
-          onClose={handleModalClose}
-        />
+        <PhotoDetailsModal photo={selectedPhoto} onClose={handleModalClose} />
       )}
     </div>
   );

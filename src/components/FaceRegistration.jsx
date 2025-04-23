@@ -551,7 +551,7 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
             Face Registration
           </h2>
           <p className="mt-2 text-apple-gray-600">
-            Position your face in the center of the frame and ensure good lighting for the best results.
+            Please align your face in the center of the frame using the circular guide and maintain good lighting.
           </p>
         </div>
         
@@ -641,9 +641,25 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
             <div className="flex-1">
               <div className="relative aspect-video bg-black rounded-apple-lg overflow-hidden border border-apple-gray-300 shadow-inner">
                 {status === 'success' && registeredImageUrl ? (
-                  <img src={registeredImageUrl} alt="Registered Face" className="w-full h-full object-cover" />
+                  <div className="w-full h-full flex items-center justify-center">
+                    <img src={registeredImageUrl} alt="Registered Face" className="object-contain max-h-full" />
+                  </div>
                 ) : (
                   <>
+                    {/* Face positioning guides */}
+                    <div className="absolute inset-0 z-10 pointer-events-none">
+                      {/* Center circle for face alignment */}
+                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full border-2 border-dashed border-white opacity-40"></div>
+                      
+                      {/* Rule of thirds grid */}
+                      <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
+                        <div className="border-r border-white opacity-20 h-full col-start-1"></div>
+                        <div className="border-r border-white opacity-20 h-full col-start-2"></div>
+                        <div className="border-b border-white opacity-20 w-full row-start-1"></div>
+                        <div className="border-b border-white opacity-20 w-full row-start-2"></div>
+                      </div>
+                    </div>
+                    
                     {isFaceDetected && status !== 'processing' && status !== 'success' && (
                       <div className="absolute inset-0 border-4 border-green-500 rounded-apple z-10 animate-pulse opacity-70"></div>
                     )}
@@ -729,7 +745,7 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
                   <ul className="text-sm text-apple-gray-700 space-y-2">
                     <li className="flex items-start">
                       <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
-                      <span>Ensure your face is fully visible</span>
+                      <span>Center your face within the circle guide</span>
                     </li>
                     <li className="flex items-start">
                       <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />

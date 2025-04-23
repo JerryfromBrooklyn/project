@@ -154,7 +154,7 @@ const MyPhotos = () => {
                 _jsx("div", { className: "text-sm text-gray-600 mb-4", children: 
                     `Showing ${paginatedPhotos.length} of ${filteredPhotos.length} photos`
                 }),
-                _jsx("div", { className: "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6", children: 
+                _jsx("div", { className: "grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6", children: 
                     paginatedPhotos.map((photo) => (
                         _jsxs("div", { 
                             className: "border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow", 

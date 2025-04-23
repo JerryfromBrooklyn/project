@@ -64,7 +64,7 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash }) =>
 
     return (_jsxs(_Fragment, { children: [
         _jsx("div", { 
-            className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4", 
+            className: "grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4", 
             children: photos.map((photo) => {
                 const motionProps = { 
                     layout: true, 

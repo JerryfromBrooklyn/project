@@ -259,6 +259,7 @@ export const PhotoManager: React.FC<PhotoManagerProps> = ({ eventId, mode = 'upl
             photos={photos}
             onDelete={mode === 'upload' ? handlePhotoDelete : undefined}
             onShare={handleShare}
+            columns={{ default: 2, sm: 3, md: 4, lg: 4 }}
           />
         ) : (
           <div className="text-center py-12 bg-apple-gray-50 rounded-apple-xl border-2 border-dashed border-apple-gray-200">

@@ -107,68 +107,58 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
         }
     };
 
-    const handleTrashSinglePhoto = async (photoId, event) => {
-        event.stopPropagation(); // Prevent card selection/other actions
+    const handleTrashSinglePhoto = async (photoId, e) => {
+        if (e) e.stopPropagation();
         if (!user?.id || !photoId) return;
-
-        const confirmTrash = window.confirm("Are you sure you want to move this photo to the trash?");
-        if (!confirmTrash) return;
-
+        
         try {
-            console.log(`[PhotoManager] Trashing single photo: ${photoId} for user: ${user.id}`);
+            console.log(`[PhotoManager] Moving photo ${photoId} to trash for user ${user.id}`);
             const result = await movePhotosToTrash(user.id, [photoId]);
             
             if (result.success) {
-                console.log(`[PhotoManager] Successfully trashed photo: ${photoId}`);
-                // Optimistic UI update + refetch counts
+                // Remove the photo from the current view
                 setPhotos(prevPhotos => prevPhotos.filter(photo => photo.id !== photoId));
-                fetchPhotosAndCounts(false); // Refetch quietly
+                console.log(`[PhotoManager] Successfully moved photo ${photoId} to trash`);
             } else {
-                setError(`Failed to move photo to trash: ${result.error}`);
-                console.error(`[PhotoManager] Error trashing photo ${photoId}:`, result.error);
+                setError(`Failed to move photo to trash: ${result.error || 'Unknown error'}`);
+                console.error(`[PhotoManager] Error moving photo ${photoId} to trash:`, result.error);
             }
         } catch (err) {
-            console.error(`[PhotoManager] Exception trashing photo ${photoId}:`, err);
-            setError('Failed to move photo to trash. Please try again later.');
+            console.error(`[PhotoManager] Exception moving photo ${photoId} to trash:`, err);
+            setError('Failed to move photo to trash. Please try again.');
         }
     };
 
-    const handleShare = async (photoId) => {
-        if (!photoId) return;
+    const handleShare = async (photoId, e) => {
+        if (e) e.stopPropagation();
+        if (!nativeShare) return; // Only try to share if nativeShare is true
+    
+        const photo = photos.find(p => p.id === photoId);
+        if (!photo || !photo.url) {
+            console.error('[PhotoManager] Cannot share photo - no URL found');
+            return;
+        }
         
         try {
-            // Find the photo in our current photos array
-            const photo = photos.find(p => p.id === photoId);
-            if (!photo || !photo.url) {
-                console.error('[PhotoManager] Cannot share photo: No URL found');
-                return;
-            }
-            
-            console.log('[PhotoManager] Sharing photo:', photo.url);
-            
-            // Use the Web Share API if available (modern browsers/mobile)
             if (navigator.share) {
-                try {
-                    await navigator.share({
-                        title: photo.title || 'Shared Photo',
-                        text: photo.description || 'Check out this photo!',
-                        url: photo.url
-                    });
-                    console.log('[PhotoManager] Photo shared successfully via Web Share API');
-                } catch (err) {
-                    console.warn('[PhotoManager] Error using Web Share API:', err);
-                    // Fallback to download if sharing fails
-                    downloadPhoto(photo);
-                }
+                await navigator.share({
+                    title: photo.title || 'Shared Photo',
+                    text: photo.description || 'Check out this photo',
+                    url: photo.url
+                });
+                console.log('[PhotoManager] Photo shared successfully');
             } else {
-                // Fallback for browsers without Web Share API
-                downloadPhoto(photo);
+                console.warn('[PhotoManager] Web Share API not supported');
+                // Fallback: copy URL to clipboard
+                await navigator.clipboard.writeText(photo.url);
+                // Add some visual feedback
+                alert('Photo URL copied to clipboard');
             }
         } catch (err) {
             console.error('[PhotoManager] Error sharing photo:', err);
         }
     };
-    
+
     const downloadPhoto = (photo) => {
         // Create a temporary anchor element for downloading
         const link = document.createElement('a');
@@ -187,12 +177,12 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
         }
     };
 
-    // Pagination logic (using photos directly)
+    // Pagination logic
     const totalPages = Math.ceil(photos.length / photosPerPage);
+    
     const currentPhotos = useMemo(() => {
-        const indexOfLastPhoto = currentPage * photosPerPage;
-        const indexOfFirstPhoto = indexOfLastPhoto - photosPerPage;
-        return photos.slice(indexOfFirstPhoto, indexOfLastPhoto);
+        const startIndex = (currentPage - 1) * photosPerPage;
+        return photos.slice(startIndex, startIndex + photosPerPage);
     }, [photos, currentPage, photosPerPage]);
 
     if (loading) {
@@ -219,7 +209,8 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
                     photos: currentPhotos, 
                     onDelete: mode === 'upload' ? handlePhotoDelete : undefined,
                     onTrash: handleTrashSinglePhoto,
-                    onShare: handleShare 
+                    onShare: handleShare,
+                    columns: { default: 2, sm: 3, md: 4, lg: 4 }
                 }),
                 // Pagination controls (use photos.length for total count)
                 photos.length > photosPerPage && (
