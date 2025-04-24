@@ -133,11 +133,20 @@ project/
   - lambda-package-cloudwatch.zip
   - lambda-package-js.zip
 
+### Phase 6: Data File Cleanup (2024-04-24)
+- Investigated and removed redundant data files:
+  - photos.json (redundant, keeping photos_all.json as complete dataset)
+  - last100.json (redundant, keeping latest100photos.json as complete dataset)
+  - lambda-package.json (superseded by main package.json)
+- Analysis findings:
+  - photos.json vs photos_all.json: Both contained DynamoDB items, photos_all.json (26,030 lines) was more complete than photos.json (6,454 lines)
+  - last100.json vs latest100photos.json: Both contained similar data structure, latest100photos.json (26,030 lines) was more complete than last100.json (20,147 lines)
+  - lambda-package.json: Basic Lambda configuration file that was superseded by the main package.json
+
 ### Files Requiring Further Investigation
 The following files need additional verification before removal:
-- photos.json and photos_all.json (need to verify active usage)
-- last100.json and latest100photos.json (need to verify active usage)
-- lambda-package.json (need to verify deployment dependencies)
+- photos_all.json (kept as primary photo dataset)
+- latest100photos.json (kept as primary latest photos dataset)
 
 ## Decisions and Rationale
 
