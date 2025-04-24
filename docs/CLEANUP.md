@@ -119,6 +119,26 @@ project/
   - Replaced process.env references with browser-compatible configuration
   - Updated AWS SDK client initialization for browser environment
 
+### Phase 5: Recent Cleanup (2024-04-24)
+- Removed generated and unused files:
+  - index-991VdSeR.js (generated file)
+  - index-CrkEo2aN.js (generated file)
+  - lambda-test.json (redundant configuration)
+  - simulation.js (testing script)
+  - execute_fix.js (one-time fix script)
+  - clear-cache.js (functionality moved to npm scripts)
+  - s3_development.md (outdated documentation)
+  - face-matching-issue-report.md (resolved issues)
+- Attempted to remove binary files (requires manual removal):
+  - lambda-package-cloudwatch.zip
+  - lambda-package-js.zip
+
+### Files Requiring Further Investigation
+The following files need additional verification before removal:
+- photos.json and photos_all.json (need to verify active usage)
+- last100.json and latest100photos.json (need to verify active usage)
+- lambda-package.json (need to verify deployment dependencies)
+
 ## Decisions and Rationale
 
 ### File Removal Decisions
