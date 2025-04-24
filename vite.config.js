@@ -58,8 +58,8 @@ export default defineConfig({
     esbuildOptions: {
     },
   },
-  // Use a unique cache dir with timestamp to force fresh cache
-  cacheDir: `.vite-${timestamp}`,
+  // Use a static cache directory name
+  cacheDir: '.vite',
   clearScreen: true,
   
   // Add build configuration for cache busting with content hashing
