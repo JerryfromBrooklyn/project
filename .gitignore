@@ -57,15 +57,28 @@ yarn-error.log*
 *.gif
 *.ico
 *.pdf
+*.sqlite
+*.db
 
 # Temporary directories
 lambda_temp*/
 temp-lambda/
 ~/
 temp/
+lambda-functions/
+lambda-layer/
 
 # Test data
 user-face-data/
 recent-matches/
 user*.json
 test*.json
+photos*.json
+faces.json
+
+# Development files
+*.min.zip
+function*.zip
+lambda-*.zip
+face-*.zip
+login.zip

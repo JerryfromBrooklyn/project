@@ -47,7 +47,8 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
             setProcessing(true);
             // Convert base64 to Uint8Array for AWS
             const base64Data = imgSrc.split(',')[1];
-            const binaryData = Buffer.from(base64Data, 'base64');
+            const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+            
             // Use AWS Rekognition to detect faces
             const command = new DetectFacesCommand({
                 Image: {

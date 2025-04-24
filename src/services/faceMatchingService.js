@@ -2,12 +2,12 @@ import { RekognitionClient, IndexFacesCommand, SearchFacesCommand } from "@aws-s
 import { ScanCommand, UpdateCommand, QueryCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, PHOTOS_TABLE, rekognitionClient as globalRekognitionClient } from '../lib/awsClient';
 import { getFaceDataForUser } from './FaceStorageService';
+import { AWS_CONFIG } from '../config/aws-config';
 
 // --- Configuration ---
-// Best practice: Load these from environment variables or a config service
-const AWS_REGION = process.env.AWS_REGION || "us-east-1"; 
-const REKOGNITION_COLLECTION_ID = process.env.REKOGNITION_COLLECTION_ID || "shmong-faces"; 
-const FACE_MATCH_THRESHOLD = 95; // Confidence threshold for matching faces
+const AWS_REGION = AWS_CONFIG.REGION;
+const REKOGNITION_COLLECTION_ID = AWS_CONFIG.REKOGNITION_COLLECTION_ID;
+const FACE_MATCH_THRESHOLD = AWS_CONFIG.FACE_MATCH_THRESHOLD;
 
 // --- AWS SDK Client Initialization ---
 let rekognitionClient;

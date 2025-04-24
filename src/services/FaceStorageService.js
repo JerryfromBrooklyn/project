@@ -246,7 +246,6 @@ export const getFaceId = async (userId) => {
  */
 export const uploadFaceImage = async (userId, imageData, customPath = null) => {
   if (!userId || !imageData) {
-    console.error('[FaceStorage] Cannot upload face image - missing userId or imageData');
     return { success: false, error: 'Missing user ID or image data' };
   }
 
@@ -254,56 +253,29 @@ export const uploadFaceImage = async (userId, imageData, customPath = null) => {
   console.log('[FaceStorage] Image type:', typeof imageData, 
               imageData instanceof Blob ? 'is Blob' : 'not Blob',
               imageData instanceof Uint8Array ? 'is Uint8Array' : 'not Uint8Array',
-              imageData instanceof Buffer ? 'is Buffer' : 'not Buffer',
               typeof imageData === 'string' ? `string starts with: ${imageData.substring(0, 30)}...` : '');
 
   try {
-    // Convert image data to buffer
-    let buffer;
+    // Convert image data to Uint8Array
+    let binaryData;
     console.log('🔄 [FaceStorage] uploadFaceImage conversion process:');
     
-    if (hasBuffer && Buffer.isBuffer(imageData)) {
-      buffer = imageData;
-      console.log('[FaceStorage] Using Buffer directly');
-    } else if (imageData instanceof Uint8Array) {
-      buffer = hasBuffer ? Buffer.from(imageData) : imageData;
-      console.log('[FaceStorage] Converted Uint8Array to Buffer');
-    } else if (imageData instanceof Blob) {
-      const arrayBuffer = await imageData.arrayBuffer();
-      buffer = hasBuffer ? Buffer.from(arrayBuffer) : new Uint8Array(arrayBuffer);
-      console.log('[FaceStorage] Converted Blob to Buffer');
+    if (imageData instanceof Uint8Array) {
+      binaryData = imageData;
+      console.log('[FaceStorage] Using Uint8Array directly');
     } else if (typeof imageData === 'string') {
-      if (imageData.startsWith('data:image')) {
-        // Handle base64 data URL
-        const base64Data = imageData.split(',')[1];
-        buffer = hasBuffer ? Buffer.from(base64Data, 'base64') : 
-                 Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-        console.log('[FaceStorage] Converted base64 image data to Buffer');
-      } else if (imageData.startsWith('{')){
-        // This might be a stringified JSON object - not valid image data
-        console.error('[FaceStorage] Received JSON string instead of image data');
-        return { success: false, error: 'Received JSON string instead of image data' };
-      } else {
-        // Try to handle as base64 string without data URI prefix
-        try {
-          buffer = hasBuffer ? Buffer.from(imageData, 'base64') : 
-                   Uint8Array.from(atob(imageData), c => c.charCodeAt(0));
-          console.log('[FaceStorage] Converted base64 string to Buffer');
-        } catch (e) {
-          console.error('[FaceStorage] Failed to convert string to Buffer:', e);
-          return { success: false, error: 'Invalid string format for image data' };
-        }
-      }
-    } else if (imageData && imageData.buffer instanceof ArrayBuffer) {
-      // Handle array buffer view
-      buffer = hasBuffer ? Buffer.from(imageData.buffer) : new Uint8Array(imageData.buffer);
-      console.log('[FaceStorage] Converted ArrayBuffer view to Buffer');
+      // Handle base64 string
+      const base64Data = imageData.split(',')[1];
+      binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+      console.log('[FaceStorage] Converted base64 to Uint8Array');
+    } else if (imageData instanceof Blob) {
+      // Handle Blob
+      const arrayBuffer = await imageData.arrayBuffer();
+      binaryData = new Uint8Array(arrayBuffer);
+      console.log('[FaceStorage] Converted Blob to Uint8Array');
     } else {
-      console.error('[FaceStorage] Unsupported image data format:', typeof imageData);
-      return { 
-        success: false, 
-        error: 'Unsupported image data format'
-      };
+      console.error('[FaceStorage] Unsupported image data type:', typeof imageData);
+      return { success: false, error: 'Unsupported image data type' };
     }
 
     // Generate a unique path for the image
@@ -314,7 +286,7 @@ export const uploadFaceImage = async (userId, imageData, customPath = null) => {
     const s3Params = {
       Bucket: 'shmong',
       Key: `face-images/${imagePath}`,
-      Body: buffer,
+      Body: binaryData,
       ContentType: 'image/jpeg'
     };
 

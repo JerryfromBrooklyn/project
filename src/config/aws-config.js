@@ -28,7 +28,7 @@ if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
     console.error('[ERROR] AWS credentials are not properly configured. Face detection and matching will not work.');
 }
 // Face recognition configuration
-export const FACE_MATCH_THRESHOLD = 80; // Increased threshold for better accuracy
+export const FACE_MATCH_THRESHOLD = 95; // Increased threshold for better accuracy
 export const COLLECTION_ID = getEnvVariable('VITE_AWS_COLLECTION_ID', 'shmong-faces');
 // Initialize S3 Client
 export const s3Client = new S3Client({
@@ -111,3 +111,9 @@ testRekognitionConnectivity().then(result => {
         console.error('[ERROR] AWS Rekognition is not working. Face detection will be disabled.');
     }
 });
+// AWS Configuration Constants
+export const AWS_CONFIG = {
+    REGION: "us-east-1",
+    REKOGNITION_COLLECTION_ID: "shmong-faces",
+    FACE_MATCH_THRESHOLD: 95
+};

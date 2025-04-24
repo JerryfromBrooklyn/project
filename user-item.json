@@ -1,8 +1,0 @@
-{
-  "id": {"S": "2428c4a8-d0b1-70d9-0541-69e2738e46ad"},
-  "email": {"S": "jerry@jerry.net"},
-  "full_name": {"S": "asdadas"},
-  "role": {"S": "attendee"},
-  "created_at": {"S": "2025-04-04T14:35:43.408Z"},
-  "updated_at": {"S": "2025-04-04T14:35:43.408Z"}
-} 
