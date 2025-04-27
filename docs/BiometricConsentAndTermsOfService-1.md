@@ -466,6 +466,28 @@ This Biometrics Policy governs how we collect, use, store, and protect biometric
 > - We trust that when you check the box, you've truly gotten proper permission
 > - You are legally responsible if you upload someone's face without proper permission
 
+1.6. **Consent Verification and Audit Program.** To ensure the integrity of our consent certification system:
+   - SHMONG conducts periodic random audits of uploader consent records to verify compliance
+   - Selected uploaders must provide verifiable evidence of proper consent within 10 business days
+   - Uploaders agree to participate in these audits as a condition of using our Services
+   - Audits will assess both the existence and validity of consent records
+   - SHMONG will maintain detailed records of all audit processes and findings
+   - Audit frequency will be determined based on risk assessment and usage volume
+
+1.7. **Consequences of Audit Failure.** Failure to comply with audit requirements or discovery of consent violations may result in:
+   - Immediate account suspension pending investigation
+   - Permanent account termination for serious or repeated violations
+   - Removal of all Content uploaded without proper consent documentation
+   - Prohibition from creating new accounts on the platform
+   - Potential reporting to relevant regulatory authorities
+   - Legal action for indemnification as provided in the Terms of Service
+   - Additional remedial measures as required to ensure compliance
+
+> **In Plain Language:** 
+> - We will randomly check if uploaders actually have the permission forms they claimed to have
+> - If selected for audit, you must show us the permission documents within 10 business days
+> - If you can't prove you had permission or you've falsely claimed to have permission, we may suspend or terminate your account, remove your content, ban you from our platform, report you to authorities, and/or take legal action against you
+
 ## 2. STORAGE AND PROTECTION
 
 2.1. **Duration of Storage.** We retain Biometric Data until the earliest of:
