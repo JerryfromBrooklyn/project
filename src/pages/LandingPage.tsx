@@ -3,8 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AuthForms } from '../components/AuthForms';
 import { useAuth } from '../context/AuthContext';
-import { Camera, Search, Shield, Clock, Users, Image, Sparkles, ChevronRight, ExternalLink, Check, X, Zap, Lock, Timer, User, CheckCircle, Star } from 'lucide-react';
+import { Camera, Search, Shield, Clock, Users, Image, Sparkles as SparklesIcon, ChevronRight, ExternalLink, Check, X, Zap, Lock, Timer, User, CheckCircle, Star } from 'lucide-react';
 import { cn } from '../utils/cn';
+import { SparklesCore } from '../components/ui/sparkles';
+import { HeroWithMockup } from '../components/blocks/hero-with-mockup';
+import { Vortex } from '../components/ui/vortex';
 
 interface NavItem {
   label: string;
@@ -188,7 +191,7 @@ export const LandingPage: React.FC = () => {
     {
       title: "For Event Managers",
       description: "Boost your event's appeal and reach. SHMONG creates additional value for attendees while promoting your brand to a wider audience.",
-      icon: <Sparkles className="h-7 w-7" />,
+      icon: <SparklesIcon className="h-7 w-7" />,
       points: [
         "Efficiently distribute photos to all event participants",
         "Gain popularity as image details include your branding",
@@ -432,58 +435,102 @@ export const LandingPage: React.FC = () => {
         </div>
       </header>
 
-      {/* Hero Section - Adjusted text sizes, spacing, and button styles */}
-      <section className="pt-24 pb-16 md:pt-32 md:pb-24"> {/* Standardized Padding */}
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center"> {/* Increased Gap */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, ease: "easeOut" }} // Adjusted transition
-              className="text-center lg:text-left"
-            >
-              <h1 className="text-3xl md:text-5xl font-bold mb-5"> {/* Adjusted H1 size */}
-                Find <span className="bg-gradient-to-b from-blue-500 to-blue-600 text-transparent bg-clip-text">YOUR PHOTOS</span> at Events in Seconds
-              </h1>
-              <p className="text-lg text-apple-gray-600 mb-8"> {/* Adjusted P size */}
-                Never miss a moment again. SHMONG's AI technology finds all photos of you at events and gatherings - no searching required.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start mb-8"> {/* Adjusted Gap */}
-                <button
-                  onClick={handleDashboardClick}
-                  // Standard HIG Blue Primary Button
-                  className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors"
+      {/* Hero Section with Vortex */}
+      <section className="relative min-h-screen w-full flex items-center justify-center overflow-hidden">
+        <Vortex
+          backgroundColor="#030303"
+          baseHue={220}
+          particleCount={800}
+          rangeY={150}
+          className="flex items-center justify-center px-4 md:px-10 py-4 w-full h-full"
+        >
+          <div className="relative z-10 container mx-auto px-4 md:px-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+              {/* Left side - Text content */}
+              <div className="text-center lg:text-left">
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.8, delay: 0.2 }}
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.08] mb-8 md:mb-12"
                 >
-                  Find My Photos
-                </button>
-                <button
-                  onClick={() => handleNavClick('#how-it-works')}
-                  // Standard HIG Secondary Button
-                  className="bg-apple-gray-100 hover:bg-apple-gray-200 text-blue-500 font-semibold py-2.5 px-5 rounded-lg text-base transition-colors"
+                  <div className="h-2 w-2 rounded-full bg-rose-500/80"></div>
+                  <span className="text-sm text-white/60 tracking-wide">
+                    Welcome to SHMONG
+                  </span>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.8, delay: 0.4 }}
                 >
-                  See How It Works
-                </button>
+                  <h1 className="text-4xl sm:text-6xl lg:text-7xl font-bold mb-6 md:mb-8 tracking-tight">
+                    <span className="bg-clip-text text-transparent bg-gradient-to-b from-white to-white/80">
+                      Find all your photos
+                    </span>
+                    <br />
+                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-apple-blue-400 via-white/90 to-apple-purple-400">
+                      Without the search
+                    </span>
+                  </h1>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.8, delay: 0.6 }}
+                >
+                  <p className="text-base sm:text-lg text-white/40 mb-8 leading-relaxed font-light tracking-wide lg:max-w-xl">
+                    Our facial recognition technology automatically finds photos of you from events you've attended. No more hunting through galleries or asking friends for pictures.
+                  </p>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.8, delay: 0.8 }}
+                  className="flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-4 mt-6"
+                >
+                  <button
+                    onClick={handleDashboardClick}
+                    className="bg-apple-blue-500 hover:bg-apple-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors"
+                  >
+                    Find My Photos
+                  </button>
+                  <button
+                    onClick={() => handleNavClick('#how-it-works')}
+                    className="bg-white/10 hover:bg-white/20 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors"
+                  >
+                    See How It Works
+                  </button>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.8, delay: 1 }}
+                  className="mt-8 flex items-center justify-center lg:justify-start space-x-2 text-white/60"
+                >
+                  <Star className="w-5 h-5 text-amber-500" />
+                  <span className="text-sm">
+                    Already found <span className="font-bold text-amber-500">{formatNumber(photoCounter)}</span> photos for our users
+                  </span>
+                </motion.div>
               </div>
 
-              <div className="flex items-center justify-center lg:justify-start space-x-2 text-apple-gray-600">
-                <Star className="w-5 h-5 text-amber-500" /> {/* Changed Icon */}
-                <span className="text-sm">
-                  Already found <span className="font-bold text-amber-500">{formatNumber(photoCounter)}</span> photos for our users
-                </span>
-              </div>
-            </motion.div>
-
-            {/* Animated device mockup */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }} // Adjusted transition
-              className="relative flex justify-center"
-            >
-              {slides[currentSlide].content}
-            </motion.div>
+              {/* Right side - iPhone animation */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }}
+                className="relative flex justify-center lg:justify-end"
+              >
+                {slides[currentSlide].content}
+              </motion.div>
+            </div>
           </div>
-        </div>
+        </Vortex>
       </section>
 
       {/* Features Section - Adjusted padding, text sizes, card styling */}

@@ -1,63 +1,20 @@
-/* Removing the error notice since we found the correct file */
-
+/* Base Tailwind directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Add custom classes for Apple-style rounded elements */
-@layer components {
-  .rounded-apple {
-    @apply rounded-xl;
-  }
-  .rounded-apple-xl {
-    @apply rounded-2xl;
-  }
-  .rounded-apple-full {
-    @apply rounded-full;
-  }
-
-  /* Button styles that match Apple's design language */
-  .ios-button {
-    @apply inline-block px-5 py-3 text-sm font-medium rounded-full transition-all duration-300 transform focus:outline-none focus:ring-2 focus:ring-offset-2;
-  }
-
-  .ios-button-primary {
-    @apply ios-button bg-apple-blue-500 text-white;
-  }
-  .ios-button-primary:hover {
-    @apply bg-apple-blue-600 transform scale-[1.02] transition-all duration-300;
-  }
-
-  .ios-button-secondary {
-    @apply ios-button bg-white text-apple-gray-900 border border-apple-gray-200;
-  }
-  .ios-button-secondary:hover {
-    @apply bg-apple-gray-100 transform scale-[1.02] transition-all duration-300;
-  }
-
-  /* Apple-style input fields */
-  .apple-input {
-    @apply bg-apple-gray-100 rounded-apple px-4 py-3.5 w-full text-apple-gray-900 transition-all duration-300 focus:ring-2 focus:ring-apple-blue-500 focus:outline-none border border-apple-gray-200 focus:border-apple-blue-400;
-  }
-
-  /* Custom box shadow that matches Apple's design */
-  .shadow-apple-button {
-    @apply shadow-lg;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
-  }
-
-  /* Custom card styles */
-  .apple-card {
-    @apply bg-white rounded-apple-xl border border-apple-gray-200 shadow-sm overflow-hidden transition-all duration-300;
-  }
-  .apple-card:hover {
-    @apply shadow-md;
-    transform: translateY(-2px);
-  }
-}
-
-/* Apple color palette */
+/* Root variables */
 :root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --safe-area-inset-top: env(safe-area-inset-top);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom);
+  --safe-area-inset-left: env(safe-area-inset-left);
+  --safe-area-inset-right: env(safe-area-inset-right);
+
+  /* Apple color palette */
   --apple-blue-400: #5ac8fa;
   --apple-blue-500: #007aff;
   --apple-blue-600: #0062cc;
@@ -86,22 +43,52 @@
   --apple-gray-900: #f2f2f7;
 }
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-:root {
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  --safe-area-inset-top: env(safe-area-inset-top);
-  --safe-area-inset-bottom: env(safe-area-inset-bottom);
-  --safe-area-inset-left: env(safe-area-inset-left);
-  --safe-area-inset-right: env(safe-area-inset-right);
-}
-
 @layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+
   html {
     font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     scroll-behavior: smooth;
@@ -109,13 +96,63 @@
   }
 
   body {
-    @apply bg-apple-gray-50 text-apple-gray-900 antialiased;
+    @apply bg-background text-foreground antialiased;
     margin: 0;
     padding: 0;
   }
 }
 
+/* Custom components */
 @layer components {
+  .rounded-apple {
+    @apply rounded-xl;
+  }
+  .rounded-apple-xl {
+    @apply rounded-2xl;
+  }
+  .rounded-apple-full {
+    @apply rounded-full;
+  }
+
+  /* Button styles that match Apple's design language */
+  .ios-button {
+    @apply inline-block px-5 py-3 text-sm font-medium rounded-full transition-all duration-300 transform focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+
+  .ios-button-primary {
+    @apply ios-button bg-blue-500 text-white;
+  }
+  .ios-button-primary:hover {
+    @apply bg-blue-600 transform scale-[1.02] transition-all duration-300;
+  }
+
+  .ios-button-secondary {
+    @apply ios-button bg-white text-gray-900 border border-gray-200;
+  }
+  .ios-button-secondary:hover {
+    @apply bg-gray-100 transform scale-[1.02] transition-all duration-300;
+  }
+
+  /* Apple-style input fields */
+  .apple-input {
+    @apply bg-gray-100 rounded-apple px-4 py-3.5 w-full text-gray-900 transition-all duration-300 focus:ring-2 focus:ring-blue-500 focus:outline-none border border-gray-200 focus:border-blue-400;
+  }
+
+  /* Custom box shadow that matches Apple's design */
+  .shadow-apple-button {
+    @apply shadow-lg;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Custom card styles */
+  .apple-card {
+    @apply bg-white rounded-apple-xl border border-gray-200 shadow-sm overflow-hidden transition-all duration-300;
+  }
+  .apple-card:hover {
+    @apply shadow-md;
+    transform: translateY(-2px);
+  }
+
   .ios-button::after {
     content: "";
     @apply absolute inset-0 w-full h-full opacity-0 transition-opacity duration-300 bg-white;
@@ -135,7 +172,7 @@
   }
 
   .ios-card {
-    @apply bg-white rounded-apple-xl p-6 shadow-apple border border-apple-gray-100;
+    @apply bg-white rounded-apple-xl p-6 shadow-apple border border-gray-100;
   }
 
   .ios-card-elevated {
@@ -143,23 +180,23 @@
   }
 
   .ios-input::placeholder {
-    @apply text-apple-gray-500;
+    @apply text-gray-500;
   }
 
   .ios-label {
-    @apply block text-sm font-medium text-apple-gray-700 mb-2;
+    @apply block text-sm font-medium text-gray-700 mb-2;
   }
 
   .ios-divider {
-    @apply w-full h-px bg-apple-gray-200 my-6;
+    @apply w-full h-px bg-gray-200 my-6;
   }
 
   .ios-tag {
-    @apply inline-flex items-center rounded-full px-3 py-1 text-sm font-medium bg-apple-gray-100 text-apple-gray-800;
+    @apply inline-flex items-center rounded-full px-3 py-1 text-sm font-medium bg-gray-100 text-gray-800;
   }
 
   .ios-tag-blue {
-    @apply ios-tag bg-apple-blue-100 text-apple-blue-800;
+    @apply ios-tag bg-blue-100 text-blue-800;
   }
 
   .ios-tag-green {
@@ -171,7 +208,7 @@
   }
 
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-apple-blue-500 to-apple-blue-300;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-blue-300;
   }
 
   .text-gradient-primary {
@@ -179,58 +216,39 @@
   }
 
   .backdrop-navbar {
-    @apply backdrop-blur-md bg-white/90 border-b border-apple-gray-100;
+    @apply backdrop-blur-md bg-white/90 border-b border-gray-100;
   }
 }
 
-/* Apple-like focus styles */
-:focus {
-  outline: none;
-}
-
-/* Better button tap states for mobile */
-@media (hover: none) {
-  .ios-button:active::after {
-    @apply opacity-20;
-  }
-}
-
-/* iOS-style input appearance */
-input, select, textarea {
-  appearance: none;
-  border-radius: 10px;
-  -webkit-appearance: none;
-}
-
-/* Mobile responsiveness improvements */
-@media (max-width: 768px) {
-  html {
-    font-size: 15px;
-  }
-}
-
-/* iPhone and iPad specific adjustments */
-@supports (-webkit-touch-callout: none) {
-  .pt-ios-safe {
+/* Utilities */
+@layer utilities {
+  .pt-safe {
     padding-top: var(--safe-area-inset-top);
   }
-  
-  .pb-ios-safe {
+  .pb-safe {
     padding-bottom: var(--safe-area-inset-bottom);
+  }
+  .pl-safe {
+    padding-left: var(--safe-area-inset-left);
+  }
+  .pr-safe {
+    padding-right: var(--safe-area-inset-right);
   }
 }
 
-/* Animation utilities */
+/* Animations */
 .fade-in {
-  animation: fadeIn 0.5s ease-in-out forwards;
+  animation: fadeIn 0.5s ease-out forwards;
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -240,25 +258,30 @@ input, select, textarea {
 
 @keyframes slideUp {
   from {
-    transform: translateY(20px);
     opacity: 0;
+    transform: translateY(20px);
   }
   to {
-    transform: translateY(0);
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
-/* Fix for Tailwind purge and dynamic classes */
-.filter {
-  filter: var(--tw-filter);
+/* Focus styles */
+:focus {
+  outline: none;
 }
 
-.blur-3xl {
-  --tw-blur: blur(64px);
-  filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
+/* Mobile tap states */
+@media (hover: none) {
+  .ios-button:active::after {
+    @apply opacity-20;
+  }
 }
 
-[id] {
-  scroll-margin-top: 80px;
+/* Responsive styles */
+@media (max-width: 768px) {
+  html {
+    font-size: 14px;
+  }
 }

@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos, Trash2, RotateCcw, CheckCircle } from 'lucide-react';
+import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos, Trash2, RotateCcw, CheckCircle, Home, Settings } from 'lucide-react';
 import { cn } from '../utils/cn';
 import FaceRegistration from '../components/FaceRegistration';
 import { PhotoManager } from '../components/PhotoManager';
 import { getFaceDataForUser } from '../services/FaceStorageService';
 import { awsPhotoService } from '../services/awsPhotoService';
-import TabNavigation from '../components/TabNavigation';
-import { permanentlyHidePhotos } from '../services/userVisibilityService';
+import { GooeyFilterTabs } from '../components/ui/gooey-filter-tabs';
 import TabBarSpacer from "../components/layout/TabBarSpacer";
 import TrashBin from '../components/TrashBin';
 
@@ -300,10 +299,11 @@ export const Dashboard = () => {
             />
           </div>
         );
-      case 'trash':
+      case 'settings':
         return (
-          <div className="bg-white rounded-xl shadow-sm border border-apple-gray-100 p-6">
-            <TrashBin userId={user?.id} />
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold mb-4">Settings</h2>
+            {/* Add your settings component here */}
           </div>
         );
       default:
@@ -361,10 +361,19 @@ export const Dashboard = () => {
       </header>
       
       <div className="sticky top-14 z-20 bg-white border-b border-apple-gray-200 mb-6 pt-safe">
-         <TabNavigation 
-            activeTab={activeTab} 
-            onTabChange={setActiveTab} 
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <GooeyFilterTabs
+            tabs={[
+              { id: 'home', label: 'Home', icon: <Home className="w-4 h-4" /> },
+              { id: 'photos', label: 'My Photos', icon: <Photos className="w-4 h-4" /> },
+              { id: 'upload', label: 'Upload', icon: <Upload className="w-4 h-4" /> },
+              { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> }
+            ]}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            className="max-w-md mx-auto"
           />
+        </div>
       </div>
       
       <main className="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-4 pb-24">

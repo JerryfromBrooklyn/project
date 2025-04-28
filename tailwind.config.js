@@ -1,96 +1,135 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: ["class"],
   content: [
+    './pages/**/*.{ts,tsx}',
+    './components/**/*.{ts,tsx}',
+    './app/**/*.{ts,tsx}',
+    './src/**/*.{ts,tsx}',
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {
-      fontFamily: {
-        sans: [
-          'Inter',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'Roboto',
-          'Helvetica',
-          'Arial',
-          'sans-serif',
-        ],
+    container: {
+      center: true,
+      padding: "2rem",
+      screens: {
+        "2xl": "1400px",
       },
+    },
+    extend: {
       colors: {
-        'apple-blue': {
-          50: '#E3F2FD',
-          100: '#BBDEFB',
-          200: '#90CAF9',
-          300: '#64B5F6',
-          400: '#42A5F5',
-          500: '#0A84FF', // iOS blue
-          600: '#0975E4',
-          700: '#0864C7',
-          800: '#0754AB',
-          900: '#063C7B',
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
         },
-        'apple-gray': {
-          50: '#F9FAFB',
-          100: '#F2F4F6',
-          200: '#E3E5E8',
-          300: '#D1D5DB',
-          400: '#9CA3AF',
-          500: '#6B7280',
-          600: '#4B5563',
-          700: '#374151',
-          800: '#1F2937',
-          900: '#111827',
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+        brand: {
+          DEFAULT: "#3b82f6",
+          foreground: "#ffffff",
+        },
+        'apple-blue': {
+          400: '#5E9EFF',
+          500: '#0A84FF',
+          600: '#007AFF',
         },
         'apple-green': {
-          500: '#34C759', // iOS green
-        },
-        'apple-red': {
-          500: '#FF3B30', // iOS red
-        },
-        'apple-orange': {
-          500: '#FF9500', // iOS orange
-        },
-        'apple-yellow': {
-          500: '#FFCC00', // iOS yellow
+          500: '#32D74B',
+          600: '#30D158',
         },
         'apple-purple': {
-          500: '#AF52DE', // iOS purple
+          400: '#BF5AF2',
+          500: '#9F5AF2',
+          600: '#8F5AF2',
         },
-        'apple-pink': {
-          500: '#FF2D55', // iOS pink
+        'apple-gray': {
+          50: '#F9F9F9',
+          100: '#F2F2F7',
+          200: '#E5E5EA',
+          300: '#D1D1D6',
+          400: '#C7C7CC',
+          500: '#AEAEB2',
+          600: '#8E8E93',
+          700: '#636366',
+          800: '#48484A',
+          900: '#3A3A3C',
+        },
+        'apple-red': {
+          300: '#ff3b30',
+          500: '#ff3b30',
         },
       },
       borderRadius: {
-        'apple': '10px',
-        'apple-xl': '20px',
-        'apple-2xl': '28px',
-      },
-      boxShadow: {
-        'apple': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
-        'apple-md': '0 4px 8px -1px rgba(0, 0, 0, 0.07), 0 2px 6px -1px rgba(0, 0, 0, 0.05)',
-        'apple-lg': '0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.03)',
-        'apple-xl': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-        'apple-2xl': '0 25px 50px -12px rgba(0, 0, 0, 0.15)',
-        'apple-inset': 'inset 0 1px 2px rgba(0, 0, 0, 0.05)',
-      },
-      animation: {
-        'float': 'float 3s ease-in-out infinite',
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
       },
       keyframes: {
-        float: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-10px)' },
+        "accordion-down": {
+          from: { height: 0 },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: 0 },
+        },
+        appear: {
+          "0%": { opacity: 0, transform: "translateY(10px)" },
+          "100%": { opacity: 1, transform: "translateY(0)" },
+        },
+        "appear-zoom": {
+          "0%": { opacity: 0, transform: "scale(0.95)" },
+          "100%": { opacity: 1, transform: "scale(1)" },
+        },
+        noise: {
+          '0%, 100%': { transform: 'translate(0, 0)' },
+          '10%': { transform: 'translate(-5%, -5%)' },
+          '20%': { transform: 'translate(-10%, 5%)' },
+          '30%': { transform: 'translate(5%, -10%)' },
+          '40%': { transform: 'translate(-5%, 15%)' },
+          '50%': { transform: 'translate(-10%, 5%)' },
+          '60%': { transform: 'translate(15%, 0)' },
+          '70%': { transform: 'translate(0, 10%)' },
+          '80%': { transform: 'translate(-15%, 0)' },
+          '90%': { transform: 'translate(10%, 5%)' },
         },
       },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-subtle': 'linear-gradient(to right, var(--tw-gradient-stops))',
-        'grid-white': 'url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' viewBox=\'0 0 20 20\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M1 0H0V1H1V0Z\' fill=\'white\'/%3E%3C/svg%3E")',
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
+        appear: "appear 0.5s ease-out forwards",
+        "appear-zoom": "appear-zoom 0.5s ease-out forwards",
+        noise: "noise 8s infinite",
       },
     },
   },
-  plugins: [],
+  plugins: [require("tailwindcss-animate")],
 }

@@ -1,0 +1,229 @@
+{
+  "hash": "1f5129b8",
+  "configHash": "9b24fa97",
+  "lockfileHash": "797407d2",
+  "browserHash": "52b695ce",
+  "optimized": {
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "4943259e",
+      "needsInterop": true
+    },
+    "react-dom": {
+      "src": "../../node_modules/react-dom/index.js",
+      "file": "react-dom.js",
+      "fileHash": "02b13ee8",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "ac91b5ce",
+      "needsInterop": true
+    },
+    "react/jsx-runtime": {
+      "src": "../../node_modules/react/jsx-runtime.js",
+      "file": "react_jsx-runtime.js",
+      "fileHash": "badcc5c7",
+      "needsInterop": true
+    },
+    "@aws-sdk/client-cognito-identity-provider": {
+      "src": "../../node_modules/@aws-sdk/client-cognito-identity-provider/dist-es/index.js",
+      "file": "@aws-sdk_client-cognito-identity-provider.js",
+      "fileHash": "bf37f9a8",
+      "needsInterop": false
+    },
+    "@aws-sdk/client-dynamodb": {
+      "src": "../../node_modules/@aws-sdk/client-dynamodb/dist-es/index.js",
+      "file": "@aws-sdk_client-dynamodb.js",
+      "fileHash": "433a2158",
+      "needsInterop": false
+    },
+    "@aws-sdk/client-rekognition": {
+      "src": "../../node_modules/@aws-sdk/client-rekognition/dist-es/index.js",
+      "file": "@aws-sdk_client-rekognition.js",
+      "fileHash": "ad927434",
+      "needsInterop": false
+    },
+    "@aws-sdk/client-s3": {
+      "src": "../../node_modules/@aws-sdk/client-s3/dist-es/index.js",
+      "file": "@aws-sdk_client-s3.js",
+      "fileHash": "4b62f4fc",
+      "needsInterop": false
+    },
+    "@aws-sdk/lib-dynamodb": {
+      "src": "../../node_modules/@aws-sdk/lib-dynamodb/dist-es/index.js",
+      "file": "@aws-sdk_lib-dynamodb.js",
+      "fileHash": "94334621",
+      "needsInterop": false
+    },
+    "@aws-sdk/s3-request-presigner": {
+      "src": "../../node_modules/@aws-sdk/s3-request-presigner/dist-es/index.js",
+      "file": "@aws-sdk_s3-request-presigner.js",
+      "fileHash": "dbe95be0",
+      "needsInterop": false
+    },
+    "@aws-sdk/util-dynamodb": {
+      "src": "../../node_modules/@aws-sdk/util-dynamodb/dist-es/index.js",
+      "file": "@aws-sdk_util-dynamodb.js",
+      "fileHash": "3f65185b",
+      "needsInterop": false
+    },
+    "@radix-ui/react-slot": {
+      "src": "../../node_modules/@radix-ui/react-slot/dist/index.mjs",
+      "file": "@radix-ui_react-slot.js",
+      "fileHash": "4f4f517c",
+      "needsInterop": false
+    },
+    "@react-google-maps/api": {
+      "src": "../../node_modules/@react-google-maps/api/dist/esm.js",
+      "file": "@react-google-maps_api.js",
+      "fileHash": "4eaaef77",
+      "needsInterop": false
+    },
+    "axios": {
+      "src": "../../node_modules/axios/index.js",
+      "file": "axios.js",
+      "fileHash": "c251b453",
+      "needsInterop": false
+    },
+    "clsx": {
+      "src": "../../node_modules/clsx/dist/clsx.mjs",
+      "file": "clsx.js",
+      "fileHash": "cfa780d2",
+      "needsInterop": false
+    },
+    "cross-fetch": {
+      "src": "../../node_modules/cross-fetch/dist/browser-ponyfill.js",
+      "file": "cross-fetch.js",
+      "fileHash": "885fd54d",
+      "needsInterop": true
+    },
+    "dotenv": {
+      "src": "../../node_modules/dotenv/lib/main.js",
+      "file": "dotenv.js",
+      "fileHash": "118c40ab",
+      "needsInterop": true
+    },
+    "framer-motion": {
+      "src": "../../node_modules/framer-motion/dist/es/index.mjs",
+      "file": "framer-motion.js",
+      "fileHash": "00991931",
+      "needsInterop": false
+    },
+    "lucide-react": {
+      "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
+      "file": "lucide-react.js",
+      "fileHash": "463e3763",
+      "needsInterop": false
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "ed42ee57",
+      "needsInterop": true
+    },
+    "react-dropzone": {
+      "src": "../../node_modules/react-dropzone/dist/es/index.js",
+      "file": "react-dropzone.js",
+      "fileHash": "c9dc180b",
+      "needsInterop": false
+    },
+    "react-icons/fa": {
+      "src": "../../node_modules/react-icons/fa/index.mjs",
+      "file": "react-icons_fa.js",
+      "fileHash": "dfba1907",
+      "needsInterop": false
+    },
+    "react-router-dom": {
+      "src": "../../node_modules/react-router-dom/dist/index.mjs",
+      "file": "react-router-dom.js",
+      "fileHash": "edef07f1",
+      "needsInterop": false
+    },
+    "react-webcam": {
+      "src": "../../node_modules/react-webcam/dist/react-webcam.js",
+      "file": "react-webcam.js",
+      "fileHash": "3fda7249",
+      "needsInterop": true
+    },
+    "simplex-noise": {
+      "src": "../../node_modules/simplex-noise/dist/esm/simplex-noise.js",
+      "file": "simplex-noise.js",
+      "fileHash": "aa38a254",
+      "needsInterop": false
+    },
+    "tailwind-merge": {
+      "src": "../../node_modules/tailwind-merge/dist/bundle-mjs.mjs",
+      "file": "tailwind-merge.js",
+      "fileHash": "8cc791c7",
+      "needsInterop": false
+    },
+    "uuid": {
+      "src": "../../node_modules/uuid/dist/esm-browser/index.js",
+      "file": "uuid.js",
+      "fileHash": "f518e9f1",
+      "needsInterop": false
+    },
+    "vite-plugin-node-polyfills/shims/buffer": {
+      "src": "../../node_modules/vite-plugin-node-polyfills/shims/buffer/dist/index.js",
+      "file": "vite-plugin-node-polyfills_shims_buffer.js",
+      "fileHash": "e518afff",
+      "needsInterop": false
+    },
+    "vite-plugin-node-polyfills/shims/global": {
+      "src": "../../node_modules/vite-plugin-node-polyfills/shims/global/dist/index.js",
+      "file": "vite-plugin-node-polyfills_shims_global.js",
+      "fileHash": "53dea3fa",
+      "needsInterop": false
+    },
+    "vite-plugin-node-polyfills/shims/process": {
+      "src": "../../node_modules/vite-plugin-node-polyfills/shims/process/dist/index.js",
+      "file": "vite-plugin-node-polyfills_shims_process.js",
+      "fileHash": "3ef77985",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-DAFZ5B7I": {
+      "file": "chunk-DAFZ5B7I.js"
+    },
+    "chunk-BP2VP2DT": {
+      "file": "chunk-BP2VP2DT.js"
+    },
+    "chunk-HUCHNPY6": {
+      "file": "chunk-HUCHNPY6.js"
+    },
+    "chunk-WOZX6X2B": {
+      "file": "chunk-WOZX6X2B.js"
+    },
+    "chunk-R5UGORFP": {
+      "file": "chunk-R5UGORFP.js"
+    },
+    "chunk-KMLDHAXH": {
+      "file": "chunk-KMLDHAXH.js"
+    },
+    "chunk-I5A5KQST": {
+      "file": "chunk-I5A5KQST.js"
+    },
+    "chunk-ZCIX2HLB": {
+      "file": "chunk-ZCIX2HLB.js"
+    },
+    "chunk-THSADROD": {
+      "file": "chunk-THSADROD.js"
+    },
+    "chunk-3TAN77E7": {
+      "file": "chunk-3TAN77E7.js"
+    },
+    "chunk-W2ANHD2T": {
+      "file": "chunk-W2ANHD2T.js"
+    },
+    "chunk-VSJWH2EA": {
+      "file": "chunk-VSJWH2EA.js"
+    },
+    "chunk-GJFZQ5ET": {
+      "file": "chunk-GJFZQ5ET.js"
+    }
+  }
+}
