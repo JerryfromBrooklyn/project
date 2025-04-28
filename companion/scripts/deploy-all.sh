@@ -10,11 +10,24 @@ export ECR_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/companion-serve
 
 echo "🚀 Starting Companion Server Deployment..."
 
+# Load configurations from JSON files
+AUTO_SCALING_CONFIG=$(cat aws/ecs/auto-scaling.json)
+TASK_DEF_CONFIG=$(cat aws/ecs/task-definition.json)
+
+# Extract values from auto-scaling config
+MIN_CAPACITY=$(echo $AUTO_SCALING_CONFIG | jq -r '.autoScalingConfiguration.minCapacity')
+MAX_CAPACITY=$(echo $AUTO_SCALING_CONFIG | jq -r '.autoScalingConfiguration.maxCapacity')
+TARGET_VALUE=$(echo $AUTO_SCALING_CONFIG | jq -r '.autoScalingConfiguration.targetTrackingScalingPolicies[0].targetValue')
+SCALE_IN_COOLDOWN=$(echo $AUTO_SCALING_CONFIG | jq -r '.autoScalingConfiguration.targetTrackingScalingPolicies[0].scaleInCooldown')
+SCALE_OUT_COOLDOWN=$(echo $AUTO_SCALING_CONFIG | jq -r '.autoScalingConfiguration.targetTrackingScalingPolicies[0].scaleOutCooldown')
+
+# Extract values from task definition
+CPU=$(echo $TASK_DEF_CONFIG | jq -r '.cpu')
+MEMORY=$(echo $TASK_DEF_CONFIG | jq -r '.memory')
+
 # Step 1: Setup Docker buildx for cross-platform building
 echo "📦 Setting up Docker buildx..."
-# Remove existing buildx instance if it exists
 docker buildx rm multiarch || true
-# Create new buildx instance
 docker buildx create --name multiarch --driver docker-container --use
 docker buildx inspect --bootstrap
 
@@ -29,9 +42,7 @@ aws ecr create-repository --repository-name companion-server
 
 # Step 4: Build and push Docker image
 echo "🏗️ Building and pushing Docker image..."
-# Change to the companion directory where Dockerfile is located
 cd "$(dirname "$0")/.."
-# Build with explicit context
 docker buildx build \
   --platform linux/amd64 \
   --progress=plain \
@@ -94,7 +105,7 @@ aws ecs create-service \
   --cluster companion-cluster \
   --service-name companion-service \
   --task-definition companion-server \
-  --desired-count 1 \
+  --desired-count 0 \
   --launch-type FARGATE \
   --network-configuration "awsvpcConfiguration={subnets=[subnet-0f56e62621f2dc96d,subnet-038a3341a4e66d4cb,subnet-0412648d558470e24],securityGroups=[sg-08ed6c6d8da16fd10],assignPublicIp=ENABLED}" \
   --scheduling-strategy REPLICA
@@ -120,15 +131,15 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
   exit 1
 fi
 
-# Step 8: Setup auto-scaling
+# Step 8: Setup auto-scaling using values from auto-scaling.json
 echo "📈 Setting up auto-scaling..."
 # Register scalable target
 aws application-autoscaling register-scalable-target \
   --service-namespace ecs \
   --resource-id service/companion-cluster/companion-service \
   --scalable-dimension ecs:service:DesiredCount \
-  --min-capacity 0 \
-  --max-capacity 1
+  --min-capacity $MIN_CAPACITY \
+  --max-capacity $MAX_CAPACITY
 
 # Create scaling policy
 aws application-autoscaling put-scaling-policy \
@@ -137,14 +148,14 @@ aws application-autoscaling put-scaling-policy \
   --scalable-dimension ecs:service:DesiredCount \
   --policy-name CPUUtilization \
   --policy-type TargetTrackingScaling \
-  --target-tracking-scaling-policy-configuration '{
-    "TargetValue": 30.0,
-    "PredefinedMetricSpecification": {
-      "PredefinedMetricType": "ECSServiceAverageCPUUtilization"
+  --target-tracking-scaling-policy-configuration "{
+    \"TargetValue\": $TARGET_VALUE,
+    \"PredefinedMetricSpecification\": {
+      \"PredefinedMetricType\": \"ECSServiceAverageCPUUtilization\"
     },
-    "ScaleInCooldown": 300,
-    "ScaleOutCooldown": 300
-  }'
+    \"ScaleInCooldown\": $SCALE_IN_COOLDOWN,
+    \"ScaleOutCooldown\": $SCALE_OUT_COOLDOWN
+  }"
 
 # Step 9: Force new deployment
 echo "🔄 Forcing new deployment..."
@@ -167,11 +178,13 @@ TASK_COUNT=$(aws ecs describe-services --cluster companion-cluster --services co
 echo "Running tasks: $TASK_COUNT"
 
 echo "🎉 Deployment complete!"
-echo "Companion server is now deployed and will:"
-echo "- Scale to 0 when idle"
-echo "- Scale up when CPU > 30%"
-echo "- Use minimal resources"
-echo "- Auto-scale based on demand"
+echo "Companion server is now deployed with:"
+echo "- CPU: $CPU units"
+echo "- Memory: $MEMORY MB"
+echo "- Min Capacity: $MIN_CAPACITY"
+echo "- Max Capacity: $MAX_CAPACITY"
+echo "- Target CPU: $TARGET_VALUE%"
+echo "- Scale Cooldown: $SCALE_IN_COOLDOWN seconds"
 
 # Get public IP if service is running
 if [ "$TASK_COUNT" -gt 0 ]; then

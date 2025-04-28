@@ -3,6 +3,16 @@
 # Load environment variables
 source ../.env
 
+# Load auto-scaling configuration
+AUTO_SCALING_CONFIG=$(cat aws/ecs/auto-scaling.json)
+
+# Extract values from auto-scaling config
+MIN_CAPACITY=$(echo $AUTO_SCALING_CONFIG | jq -r '.autoScalingConfiguration.minCapacity')
+MAX_CAPACITY=$(echo $AUTO_SCALING_CONFIG | jq -r '.autoScalingConfiguration.maxCapacity')
+TARGET_VALUE=$(echo $AUTO_SCALING_CONFIG | jq -r '.autoScalingConfiguration.targetTrackingScalingPolicies[0].targetValue')
+SCALE_IN_COOLDOWN=$(echo $AUTO_SCALING_CONFIG | jq -r '.autoScalingConfiguration.targetTrackingScalingPolicies[0].scaleInCooldown')
+SCALE_OUT_COOLDOWN=$(echo $AUTO_SCALING_CONFIG | jq -r '.autoScalingConfiguration.targetTrackingScalingPolicies[0].scaleOutCooldown')
+
 # Set AWS region
 export AWS_REGION=us-east-1
 
@@ -23,8 +33,8 @@ aws application-autoscaling register-scalable-target \
   --service-namespace ecs \
   --resource-id service/companion-cluster/companion-service \
   --scalable-dimension ecs:service:DesiredCount \
-  --min-capacity 0 \
-  --max-capacity 1
+  --min-capacity $MIN_CAPACITY \
+  --max-capacity $MAX_CAPACITY
 
 # Create scaling policy
 echo "Creating scaling policy..."
@@ -34,13 +44,17 @@ aws application-autoscaling put-scaling-policy \
   --scalable-dimension ecs:service:DesiredCount \
   --policy-name CPUUtilization \
   --policy-type TargetTrackingScaling \
-  --target-tracking-scaling-policy-configuration '{
-    "TargetValue": 30.0,
-    "PredefinedMetricSpecification": {
-      "PredefinedMetricType": "ECSServiceAverageCPUUtilization"
+  --target-tracking-scaling-policy-configuration "{
+    \"TargetValue\": $TARGET_VALUE,
+    \"PredefinedMetricSpecification\": {
+      \"PredefinedMetricType\": \"ECSServiceAverageCPUUtilization\"
     },
-    "ScaleInCooldown": 300,
-    "ScaleOutCooldown": 300
-  }'
+    \"ScaleInCooldown\": $SCALE_IN_COOLDOWN,
+    \"ScaleOutCooldown\": $SCALE_OUT_COOLDOWN
+  }"
 
-echo "Deployment complete! Service will scale to 0 when not in use." 
+echo "Deployment complete! Service will:"
+echo "- Start with 0 instances"
+echo "- Scale between $MIN_CAPACITY and $MAX_CAPACITY instances"
+echo "- Target CPU utilization: $TARGET_VALUE%"
+echo "- Scale cooldown: $SCALE_IN_COOLDOWN seconds" 
