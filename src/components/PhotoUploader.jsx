@@ -417,7 +417,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   });
 
   return (
-    <div className="relative w-full max-w-full bg-white shadow-lg rounded-lg border border-gray-200 mb-8">
+    <div className="relative w-full max-w-full bg-white shadow-lg rounded-lg border border-gray-200 mb-8 mt-16">
       {/* Header Section */}
       <div className="p-4 md:p-6">
         <h2 className="text-xl font-semibold mb-4 text-gray-800">
@@ -435,9 +435,9 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           </div>
         </div>
 
-        {/* Uppy Dashboard */}
+        {/* Uppy Dashboard with adjusted positioning */}
         {uppy && (
-          <div className="w-full overflow-hidden rounded-lg border border-gray-200">
+          <div className="w-full overflow-hidden rounded-lg border border-gray-200 relative z-10">
             <Dashboard
               uppy={uppy}
               plugins={['ImageEditor', 'Dropbox', 'GoogleDrive', 'Url']}
@@ -455,16 +455,32 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           </div>
         )}
 
-        {/* Custom Upload Button */}
+        {/* Custom Upload Buttons */}
         {uploads.length > 0 && (
-          <div className="mt-4">
+          <div className="mt-4 flex items-center justify-start gap-4">
             <Button
               onClick={handleUploadClick}
               variant="primary"
-              size="lg"
-              className="w-full bg-green-500 hover:bg-green-600 text-white"
+              size="md"
+              className="bg-green-500 hover:bg-green-600 text-white px-6 rounded-md"
             >
               Upload {uploads.length} {uploads.length === 1 ? 'File' : 'Files'}
+            </Button>
+
+            <Button
+              onClick={() => {
+                // Reset all uploads
+                uploads.forEach(upload => {
+                  uppy?.removeFile(upload.id);
+                });
+                setUploads([]);
+                setTotalStorage(0);
+              }}
+              variant="primary"
+              size="md"
+              className="bg-red-500 hover:bg-red-600 text-white px-6 rounded-md"
+            >
+              Reset All
             </Button>
           </div>
         )}
