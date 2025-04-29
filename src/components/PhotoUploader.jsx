@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Upload, Check, AlertTriangle, Grid, List, Search, Filter, Users, X, Info, Calendar, Building, User, MapPin } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
 import { awsPhotoService } from '../services/awsPhotoService';
@@ -13,6 +13,9 @@ import Uppy from '@uppy/core';
 import { Dashboard } from '@uppy/react';
 import AwsS3Multipart from '@uppy/aws-s3-multipart';
 import ImageEditor from '@uppy/image-editor';
+import DropboxPlugin from '@uppy/dropbox';
+import GoogleDrivePlugin from '@uppy/google-drive';
+import UrlPlugin from '@uppy/url';
 
 // Import Uppy styles
 import '@uppy/core/dist/style.min.css';
@@ -44,6 +47,8 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   const [selectedUpload, setSelectedUpload] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
   const [uppy, setUppy] = useState(null);
+  const [dropboxConfigured, setDropboxConfigured] = useState(false);
+  const [googleDriveConfigured, setGoogleDriveConfigured] = useState(false);
   
   // Get auth context
   const { user } = useAuth();
@@ -59,15 +64,16 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         allowedFileTypes: ['image/*', '.jpg', '.jpeg', '.png', '.webp', '.raw', '.cr2', '.nef', '.arw', '.rw2']
       },
       meta: {
-        userId: user?.id
+        userId: user?.id || '',
+        eventId: eventId || ''
       }
     })
     .use(AwsS3Multipart, {
       limit: 6,
       retryDelays: [0, 1000, 3000, 5000],
-      companionUrl: process.env.REACT_APP_COMPANION_URL,
+      companionUrl: process.env.REACT_APP_COMPANION_URL || '',
       companionHeaders: {
-        Authorization: `Bearer ${user?.accessToken}`,
+        Authorization: `Bearer ${user?.accessToken || ''}`,
       },
       getUploadParameters: async (file) => {
         console.log('📤 [Uppy] Getting upload parameters for file:', file.name);
@@ -81,12 +87,12 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           });
 
           // Use the existing awsPhotoService.uploadPhoto method with the correct file format
-          const result = await awsPhotoService.uploadPhoto(fileData, eventId, file.meta.folderPath, {
+          const result = await awsPhotoService.uploadPhoto(fileData, eventId, file.meta?.folderPath || '', {
             ...metadata,
-            user_id: user?.id,
-            uploadedBy: user?.id,
-            uploaded_by: user?.id,
-            externalAlbumLink: metadata.albumLink
+            user_id: user?.id || '',
+            uploadedBy: user?.id || '',
+            uploaded_by: user?.id || '',
+            externalAlbumLink: metadata.albumLink || ''
           });
 
           if (!result.success) {
@@ -102,7 +108,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           // Return the upload parameters in the format Uppy expects
           return {
             method: 'PUT',
-            url: result.s3Url,
+            url: result.s3Url || '',
             fields: {},
             headers: {},
           };
@@ -120,18 +126,57 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         autoCropArea: 1,
         responsive: true
       }
+    })
+    .use(DropboxPlugin, {
+      companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+      companionHeaders: {
+        Authorization: `Bearer ${user?.accessToken || ''}`,
+      },
+      locale: {
+        strings: {
+          connectTo: 'Connect to Dropbox',
+          dropbox: 'Dropbox',
+        },
+      },
+      allowedHosts: [process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020']
+    })
+    .use(GoogleDrivePlugin, {
+      companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+      companionHeaders: {
+        Authorization: `Bearer ${user?.accessToken || ''}`,
+      },
+      locale: {
+        strings: {
+          connectTo: 'Connect to Google Drive',
+          googleDrive: 'Google Drive',
+        },
+      },
+      allowedHosts: [process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020']
+    })
+    .use(UrlPlugin, {
+      companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+      companionHeaders: {
+        Authorization: `Bearer ${user?.accessToken || ''}`,
+      },
+      allowedHosts: [process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020']
     });
 
     // Set up event listeners
     uppyInstance.on('file-added', (file) => {
+      if (!file) {
+        console.error('❌ [Uppy] No file object provided');
+        return;
+      }
+
       console.log('📎 [Uppy] File added:', {
         id: file.id,
         name: file.name,
         type: file.type,
         size: file.size
       });
+
       // Update storage usage
-      setTotalStorage(prev => prev + file.size);
+      setTotalStorage(prev => prev + (file.size || 0));
       
       // Update folder structure if file has path
       if (file.relativePath) {
@@ -155,7 +200,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       // Add to uploads list
       setUploads(prev => [...prev, {
         id: file.id,
-        file: file.data,
+        file: file.data || file,
         progress: 0,
         status: 'uploading',
         metadata: { ...metadata },
@@ -228,6 +273,15 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     uppyInstance.on('file-removed', (file) => {
       setTotalStorage(prev => prev - file.size);
       setUploads(prev => prev.filter(upload => upload.id !== file.id));
+    });
+
+    // Add event listeners for Dropbox and Google Drive
+    uppyInstance.on('dropbox:auth-success', () => {
+      setDropboxConfigured(true);
+    });
+
+    uppyInstance.on('google-drive:auth-success', () => {
+      setGoogleDriveConfigured(true);
     });
 
     setUppy(uppyInstance);
@@ -381,33 +435,34 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         Upload Photos
       </h2>
       
-      <div className="w-full">
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-apple-gray-700">Storage Usage</span>
-            <span className="text-sm text-apple-gray-500">{(totalStorage / 1024 / 1024 / 1024).toFixed(2)}GB of 10GB</span>
-          </div>
-          <div className="h-2 bg-apple-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-apple-blue-500 transition-all duration-300" style={{ width: `${(totalStorage / storageLimit) * 100}%` }}></div>
-          </div>
+      {/* Storage Usage */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-apple-gray-700">Storage Usage</span>
+          <span className="text-sm text-apple-gray-500">{(totalStorage / 1024 / 1024 / 1024).toFixed(2)}GB of 10GB</span>
         </div>
+        <div className="h-2 bg-apple-gray-100 rounded-full overflow-hidden">
+          <div className="h-full bg-apple-blue-500 transition-all duration-300" style={{ width: `${(totalStorage / storageLimit) * 100}%` }}></div>
+        </div>
+      </div>
 
-        {/* Uppy Dashboard */}
-        {uppy && (
-          <Dashboard
-            uppy={uppy}
-            plugins={['ImageEditor']}
-            width="100%"
-            height={400}
-            showProgressDetails={true}
-            proudlyDisplayPoweredByUppy={false}
-            note="Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file"
-            metaFields={[
-              { id: 'folderPath', name: 'Folder Path', placeholder: 'Optional folder path' }
-            ]}
-          />
-        )}
+      {/* Uppy Dashboard */}
+      {uppy && (
+        <Dashboard
+          uppy={uppy}
+          plugins={['ImageEditor', 'Dropbox', 'GoogleDrive', 'Url']}
+          width="100%"
+          height={400}
+          showProgressDetails={true}
+          proudlyDisplayPoweredByUppy={false}
+          note="Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file"
+          metaFields={[
+            { id: 'folderPath', name: 'Folder Path', placeholder: 'Optional folder path' }
+          ]}
+        />
+      )}
 
+      <div className="w-full">
         {/* Uploads list with touch-friendly controls */}
         {uploads.length > 0 && (
           <div className="flex items-center justify-between mb-4">
@@ -416,21 +471,21 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 onClick={() => setViewMode(prev => ({ ...prev, mode: 'grid' }))}
                 variant={viewMode.mode === 'grid' ? 'primary' : 'secondary'}
                 size="sm"
-                icon={<Grid className="w-4 h-4" />}
+                icon={<LucideIcons.Grid className="w-4 h-4" />}
                 aria-label="Grid view"
               />
               <Button
                 onClick={() => setViewMode(prev => ({ ...prev, mode: 'list' }))}
                 variant={viewMode.mode === 'list' ? 'primary' : 'secondary'}
                 size="sm"
-                icon={<List className="w-4 h-4" />}
+                icon={<LucideIcons.List className="w-4 h-4" />}
                 aria-label="List view"
               />
               
               <div className="h-6 w-px bg-apple-gray-200 mx-2"></div>
               
               <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-apple-gray-400" />
+                <LucideIcons.Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-apple-gray-400" />
                 <input
                   type="text"
                   placeholder="Search uploads..."
@@ -445,7 +500,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
               <Button
                 variant="secondary"
                 size="sm"
-                icon={<Filter className="w-4 h-4" />}
+                icon={<LucideIcons.Filter className="w-4 h-4" />}
               >
                 Filter
               </Button>
@@ -517,10 +572,10 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                         <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                       )}
                       {upload.status === 'complete' && (
-                        <Check className="w-8 h-8 text-white" />
+                        <LucideIcons.Check className="w-8 h-8 text-white" />
                       )}
                       {upload.status === 'error' && (
-                        <AlertTriangle className="w-8 h-8 text-white" />
+                        <LucideIcons.AlertTriangle className="w-8 h-8 text-white" />
                       )}
                     </div>
                   </div>
@@ -545,7 +600,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                             className="min-w-[44px] min-h-[44px] flex items-center justify-center text-apple-gray-400 hover:text-apple-gray-600"
                             aria-label="View details"
                           >
-                            <Info className="w-5 h-5" />
+                            <LucideIcons.Info className="w-5 h-5" />
                           </button>
                         )}
                         
@@ -554,7 +609,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                           className="min-w-[44px] min-h-[44px] flex items-center justify-center text-apple-gray-400 hover:text-apple-gray-600"
                           aria-label="Remove upload"
                         >
-                          <X className="w-5 h-5" />
+                          <LucideIcons.X className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
@@ -582,12 +637,12 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                         <div className="flex items-center space-x-2">
                           {upload.photoDetails.matched_users?.length ? (
                             <div className="bg-apple-green-500 text-white px-2 py-1 rounded-full text-sm flex items-center">
-                              <Users className="w-4 h-4 mr-1" />
+                              <LucideIcons.Users className="w-4 h-4 mr-1" />
                               {upload.photoDetails.matched_users.length} {upload.photoDetails.matched_users.length === 1 ? 'Match' : 'Matches'}
                             </div>
                           ) : (
                             <div className="bg-apple-gray-200 text-apple-gray-600 px-2 py-1 rounded-full text-sm flex items-center">
-                              <Users className="w-4 h-4 mr-1" />
+                              <LucideIcons.Users className="w-4 h-4 mr-1" />
                               No Matches
                             </div>
                           )}

@@ -3,6 +3,158 @@
 ## Overview
 This document outlines the integration of Uppy for file uploads and the improvements made to the existing upload flow.
 
+## UI Implementation Details
+
+### Dashboard Component
+The main UI is implemented using Uppy's Dashboard component, which provides a complete interface for file uploads:
+
+```javascript
+<Dashboard
+  uppy={uppy}
+  plugins={['ImageEditor', 'Dropbox', 'GoogleDrive', 'Url']}
+  width="100%"
+  height={400}
+  showProgressDetails={true}
+  proudlyDisplayPoweredByUppy={false}
+  note="Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file"
+  metaFields={[
+    { id: 'folderPath', name: 'Folder Path', placeholder: 'Optional folder path' }
+  ]}
+/>
+```
+
+### Cloud Storage Integration
+The application integrates with various cloud storage providers:
+
+1. **Dropbox Integration**
+```javascript
+.use(DropboxPlugin, {
+  companionUrl: process.env.REACT_APP_COMPANION_URL,
+  companionHeaders: {
+    Authorization: `Bearer ${user?.accessToken}`,
+  },
+  companionAllowedHosts: ['localhost:3020', 'localhost:3000']
+})
+```
+
+2. **Google Drive Integration**
+```javascript
+.use(GoogleDrivePlugin, {
+  companionUrl: process.env.REACT_APP_COMPANION_URL,
+  companionHeaders: {
+    Authorization: `Bearer ${user?.accessToken}`,
+  },
+  companionAllowedHosts: ['localhost:3020', 'localhost:3000']
+})
+```
+
+3. **URL Import**
+```javascript
+.use(UrlPlugin, {
+  companionUrl: process.env.REACT_APP_COMPANION_URL,
+  companionHeaders: {
+    Authorization: `Bearer ${user?.accessToken}`,
+  }
+})
+```
+
+### UI Features
+
+1. **Drag and Drop Zone**
+- Built-in drag and drop functionality
+- Visual feedback during drag
+- File type validation on drop
+- Multiple file support
+
+2. **File Browser**
+- Native file picker integration
+- Folder upload support
+- File filtering by type
+- Preview generation
+
+3. **Progress UI**
+```javascript
+// Progress tracking
+uppy.on('upload-progress', (file, progress) => {
+  const progressPercentage = (progress.bytesUploaded / progress.bytesTotal) * 100;
+  // Update UI with progress
+});
+
+// Progress bar implementation
+<div className="h-2 bg-apple-gray-100 rounded-full overflow-hidden">
+  <div 
+    className="h-full bg-apple-blue-500 transition-all duration-300"
+    style={{ width: `${progressPercentage}%` }}
+  />
+</div>
+```
+
+4. **Status Indicators**
+- Upload progress
+- Success/error states
+- File count
+- Total size
+- Remaining storage
+
+### Storage Usage Display
+```javascript
+<div className="flex items-center justify-between mb-2">
+  <span className="text-sm font-medium text-gray-700">Storage Usage</span>
+  <span className="text-sm text-gray-500">
+    {(totalStorage / 1024 / 1024 / 1024).toFixed(2)}GB of 10GB
+  </span>
+</div>
+```
+
+### View Modes
+The UI supports different view modes for uploaded files:
+1. **Grid View**
+   - Thumbnail previews
+   - Quick actions
+   - Status indicators
+
+2. **List View**
+   - Detailed file information
+   - Progress tracking
+   - Action buttons
+
+### Error Handling UI
+```javascript
+uppy.on('upload-error', (file, error) => {
+  // Display error in UI
+  <div className="bg-red-50 p-4 rounded-md">
+    <p className="text-red-700">{error.message}</p>
+  </div>
+});
+```
+
+### Companion Server Requirements
+To enable cloud integrations, the Companion server needs:
+
+1. **Environment Variables**
+```env
+COMPANION_HOST=localhost:3020
+COMPANION_PROTOCOL=http
+COMPANION_SECRET=your_secret
+DROPBOX_KEY=your_dropbox_key
+DROPBOX_SECRET=your_dropbox_secret
+GOOGLE_KEY=your_google_key
+GOOGLE_SECRET=your_google_secret
+```
+
+2. **OAuth Configuration**
+- Dropbox app configuration
+- Google Cloud project setup
+- Proper redirect URIs
+- CORS settings
+
+### Mobile Responsiveness
+The UI is fully responsive with:
+- Touch-friendly controls
+- Adaptive layouts
+- Proper spacing for touch targets
+- Mobile-optimized previews
+
 ## Current Implementation
 The current implementation uses Uppy with a hybrid approach:
 - Uppy handles the UI and file management
