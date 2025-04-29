@@ -430,109 +430,105 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   });
 
   return (
-    <div className="relative p-4 bg-white shadow-lg rounded-lg border border-gray-200 mb-8">
-      <h2 className="text-xl font-semibold mb-4 text-gray-800">
-        Upload Photos
-      </h2>
-      
-      {/* Storage Usage */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-apple-gray-700">Storage Usage</span>
-          <span className="text-sm text-apple-gray-500">{(totalStorage / 1024 / 1024 / 1024).toFixed(2)}GB of 10GB</span>
+    <div className="relative w-full max-w-full bg-white shadow-lg rounded-lg border border-gray-200 mb-8">
+      {/* Header Section */}
+      <div className="p-4 md:p-6">
+        <h2 className="text-xl font-semibold mb-4 text-gray-800">
+          Upload Photos
+        </h2>
+        
+        {/* Storage Usage */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-apple-gray-700">Storage Usage</span>
+            <span className="text-sm text-apple-gray-500">{(totalStorage / 1024 / 1024 / 1024).toFixed(2)}GB of 10GB</span>
+          </div>
+          <div className="h-2 bg-apple-gray-100 rounded-full overflow-hidden">
+            <div className="h-full bg-apple-blue-500 transition-all duration-300" style={{ width: `${(totalStorage / storageLimit) * 100}%` }}></div>
+          </div>
         </div>
-        <div className="h-2 bg-apple-gray-100 rounded-full overflow-hidden">
-          <div className="h-full bg-apple-blue-500 transition-all duration-300" style={{ width: `${(totalStorage / storageLimit) * 100}%` }}></div>
-        </div>
-      </div>
 
-      {/* Uppy Dashboard */}
-      {uppy && (
-        <Dashboard
-          uppy={uppy}
-          plugins={['ImageEditor', 'Dropbox', 'GoogleDrive', 'Url']}
-          width="100%"
-          height={400}
-          showProgressDetails={true}
-          proudlyDisplayPoweredByUppy={false}
-          note="Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file"
-          metaFields={[
-            { id: 'folderPath', name: 'Folder Path', placeholder: 'Optional folder path' }
-          ]}
-        />
-      )}
+        {/* Uppy Dashboard */}
+        {uppy && (
+          <div className="w-full overflow-hidden rounded-lg border border-gray-200">
+            <Dashboard
+              uppy={uppy}
+              plugins={['ImageEditor', 'Dropbox', 'GoogleDrive', 'Url']}
+              width="100%"
+              height="min(70vh, 600px)"
+              showProgressDetails={true}
+              proudlyDisplayPoweredByUppy={false}
+              note="Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file"
+              metaFields={[
+                { id: 'folderPath', name: 'Folder Path', placeholder: 'Optional folder path' }
+              ]}
+              className="uppy-Dashboard--adaptive"
+            />
+          </div>
+        )}
 
-      <div className="w-full">
-        {/* Uploads list with touch-friendly controls */}
+        {/* Uploads List */}
         {uploads.length > 0 && (
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <Button
-                onClick={() => setViewMode(prev => ({ ...prev, mode: 'grid' }))}
-                variant={viewMode.mode === 'grid' ? 'primary' : 'secondary'}
-                size="sm"
-                icon={<LucideIcons.Grid className="w-4 h-4" />}
-                aria-label="Grid view"
-              />
-              <Button
-                onClick={() => setViewMode(prev => ({ ...prev, mode: 'list' }))}
-                variant={viewMode.mode === 'list' ? 'primary' : 'secondary'}
-                size="sm"
-                icon={<LucideIcons.List className="w-4 h-4" />}
-                aria-label="List view"
-              />
-              
-              <div className="h-6 w-px bg-apple-gray-200 mx-2"></div>
-              
-              <div className="relative">
-                <LucideIcons.Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-apple-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search uploads..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 pr-4 py-2 rounded-md bg-apple-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-apple-blue-500"
+          <div className="mt-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div className="flex items-center space-x-2">
+                <Button
+                  onClick={() => setViewMode(prev => ({ ...prev, mode: 'grid' }))}
+                  variant={viewMode.mode === 'grid' ? 'primary' : 'secondary'}
+                  size="sm"
+                  icon={<LucideIcons.Grid className="w-4 h-4" />}
+                  aria-label="Grid view"
                 />
+                <Button
+                  onClick={() => setViewMode(prev => ({ ...prev, mode: 'list' }))}
+                  variant={viewMode.mode === 'list' ? 'primary' : 'secondary'}
+                  size="sm"
+                  icon={<LucideIcons.List className="w-4 h-4" />}
+                  aria-label="List view"
+                />
+                
+                <div className="h-6 w-px bg-apple-gray-200 mx-2"></div>
+                
+                <div className="relative flex-1 min-w-[200px]">
+                  <LucideIcons.Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-apple-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search uploads..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 rounded-md bg-apple-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-apple-blue-500"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<LucideIcons.Filter className="w-4 h-4" />}
+                >
+                  Filter
+                </Button>
+                
+                <select
+                  value={viewMode.sortBy}
+                  onChange={(e) => setViewMode(prev => ({ ...prev, sortBy: e.target.value }))}
+                  className="py-2 pl-4 pr-10 rounded-md border border-apple-gray-200 bg-white text-sm"
+                >
+                  <option value="date">Sort by Date</option>
+                  <option value="name">Sort by Name</option>
+                  <option value="size">Sort by Size</option>
+                </select>
               </div>
             </div>
-            
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<LucideIcons.Filter className="w-4 h-4" />}
-              >
-                Filter
-              </Button>
-              
-              <select
-                value={viewMode.sortBy}
-                onChange={(e) => setViewMode(prev => ({ ...prev, sortBy: e.target.value }))}
-                className="py-2 pl-4 pr-10 rounded-md border border-apple-gray-200 bg-white"
-              >
-                <option value="date">Sort by Date</option>
-                <option value="name">Sort by Name</option>
-                <option value="size">Sort by Size</option>
-              </select>
-            </div>
-          </div>
-        )}
-        
-        {/* Folder structure */}
-        {Object.keys(folderStructure).length > 0 && (
-          <div className="mb-8">
-            <h3 className="text-sm font-medium text-apple-gray-700 mb-2">Folders</h3>
-            {renderFolderStructure(folderStructure)}
-          </div>
-        )}
-        
-        {/* Upload grid with touch-friendly controls */}
-        <AnimatePresence>
-          {uploads.length > 0 && (
+
+            {/* Upload Grid/List */}
             <div 
               className={cn(
                 "grid gap-4",
-                viewMode.mode === 'grid' ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3" : "grid-cols-1"
+                viewMode.mode === 'grid' 
+                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" 
+                  : "grid-cols-1"
               )}
             >
               {filteredUploads.map((upload) => (
@@ -556,7 +552,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                       <img
                         src={URL.createObjectURL(upload.file)}
                         alt={upload.file.name}
-                        className="w-full h-full object-cover rounded-tl-lg rounded-tr-lg"
+                        className="w-full h-full object-cover rounded-tl-lg rounded-tr-lg cursor-pointer"
                         onClick={() => setPreviewImage(upload.file)}
                       />
                     )}
@@ -583,7 +579,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                   <div className="p-4 flex-1">
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="font-medium text-apple-gray-900 truncate">{upload.file.name}</p>
+                        <p className="font-medium text-apple-gray-900 truncate max-w-[200px]">{upload.file.name}</p>
                         <p className="text-sm text-apple-gray-500">
                           {upload.folderPath && (
                             <span className="text-apple-gray-400">{upload.folderPath} /</span>
@@ -653,11 +649,11 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 </motion.div>
               ))}
             </div>
-          )}
-        </AnimatePresence>
+          </div>
+        )}
       </div>
 
-      {/* Photo details dialog - using our new Dialog component */}
+      {/* Photo details dialog */}
       <Dialog
         isOpen={!!selectedUpload && !!selectedUpload.photoDetails}
         onClose={() => setSelectedUpload(null)}
@@ -678,118 +674,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         )}
       </Dialog>
 
-      {/* Metadata form dialog - using our new Dialog component */}
-      <Dialog
-        isOpen={showMetadataForm}
-        onClose={() => {
-          setShowMetadataForm(false);
-          setPendingFiles([]);
-        }}
-        title="Photo Details"
-        description="Please provide information about these photos"
-        maxWidth="max-w-3xl"
-        actions={[
-          {
-            label: "Cancel",
-            onClick: () => {
-              setShowMetadataForm(false);
-              setPendingFiles([]);
-            },
-            variant: "secondary"
-          },
-          {
-            label: "Continue Upload",
-            onClick: processUploads,
-            variant: "primary",
-            className: "bg-blue-600 text-white font-bold shadow-lg"
-          }
-        ]}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Event Name*
-            </label>
-            <input
-              type="text"
-              value={metadata.eventName}
-              onChange={(e) => setMetadata({ ...metadata, eventName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="Enter event name"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Venue Name*
-            </label>
-            <input
-              type="text"
-              value={metadata.venueName}
-              onChange={(e) => setMetadata({ ...metadata, venueName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="Enter venue name"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Promoter Name*
-            </label>
-            <input
-              type="text"
-              value={metadata.promoterName}
-              onChange={(e) => setMetadata({ ...metadata, promoterName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="Enter promoter name"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date*
-            </label>
-            <input
-              type="date"
-              value={metadata.date}
-              onChange={(e) => setMetadata({ ...metadata, date: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              required
-            />
-          </div>
-          
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Album Link (optional)
-            </label>
-            <input
-              type="url"
-              value={metadata.albumLink}
-              onChange={(e) => setMetadata({ ...metadata, albumLink: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="https://example.com/album"
-            />
-            <p className="mt-1 text-xs text-gray-500">Enter a URL to the album or event page</p>
-          </div>
-          
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Location (optional)
-            </label>
-            <GoogleMaps
-              location={metadata.location}
-              onLocationChange={(location) => setMetadata({ ...metadata, location })}
-              height="220px"
-              className="rounded overflow-hidden border border-gray-300"
-            />
-          </div>
-        </div>
-      </Dialog>
-
-      {/* Image viewer - using our new ImageViewer component */}
+      {/* Image viewer */}
       {previewImage && (
         <ImageViewer
           image={{ 
