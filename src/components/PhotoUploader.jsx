@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { v4 as uuidv4 } from 'uuid';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Upload, Check, AlertTriangle, Grid, List, Search, Filter, Users, X, Info, Calendar, Building, User, MapPin } from 'lucide-react';
 import { cn } from '../utils/cn';
@@ -8,6 +6,18 @@ import { GoogleMaps } from './GoogleMaps';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { useAuth } from '../context/AuthContext';
 import { updatePhotoVisibility } from '../services/userVisibilityService';
+import { useDropzone } from 'react-dropzone';
+
+// Import Uppy and its plugins
+import Uppy from '@uppy/core';
+import { Dashboard } from '@uppy/react';
+import AwsS3Multipart from '@uppy/aws-s3-multipart';
+import ImageEditor from '@uppy/image-editor';
+
+// Import Uppy styles
+import '@uppy/core/dist/style.min.css';
+import '@uppy/dashboard/dist/style.min.css';
+import '@uppy/image-editor/dist/style.min.css';
 
 // Import our new components with proper mobile UX
 import Dialog from './ui/Dialog.jsx';
@@ -33,9 +43,201 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   const [pendingFiles, setPendingFiles] = useState([]);
   const [selectedUpload, setSelectedUpload] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const [uppy, setUppy] = useState(null);
   
   // Get auth context
   const { user } = useAuth();
+
+  // Initialize Uppy
+  useEffect(() => {
+    console.log('🚀 [Uppy] Initializing Uppy instance');
+    const uppyInstance = new Uppy({
+      id: 'photo-uploader',
+      autoProceed: false,
+      restrictions: {
+        maxFileSize: 100 * 1024 * 1024, // 100MB
+        allowedFileTypes: ['image/*', '.jpg', '.jpeg', '.png', '.webp', '.raw', '.cr2', '.nef', '.arw', '.rw2']
+      },
+      meta: {
+        userId: user?.id
+      }
+    })
+    .use(AwsS3Multipart, {
+      limit: 6,
+      retryDelays: [0, 1000, 3000, 5000],
+      companionUrl: process.env.REACT_APP_COMPANION_URL,
+      companionHeaders: {
+        Authorization: `Bearer ${user?.accessToken}`,
+      },
+      getUploadParameters: async (file) => {
+        console.log('📤 [Uppy] Getting upload parameters for file:', file.name);
+        try {
+          // Create a new File object from Uppy's file data
+          const fileData = new File([file.data], file.name, { type: file.type });
+          console.log('📦 [Uppy] Created File object for upload:', {
+            name: fileData.name,
+            type: fileData.type,
+            size: fileData.size
+          });
+
+          // Use the existing awsPhotoService.uploadPhoto method with the correct file format
+          const result = await awsPhotoService.uploadPhoto(fileData, eventId, file.meta.folderPath, {
+            ...metadata,
+            user_id: user?.id,
+            uploadedBy: user?.id,
+            uploaded_by: user?.id,
+            externalAlbumLink: metadata.albumLink
+          });
+
+          if (!result.success) {
+            console.error('❌ [Uppy] Failed to get upload parameters:', result.error);
+            throw new Error(result.error || 'Failed to get upload parameters');
+          }
+
+          console.log('✅ [Uppy] Successfully got upload parameters:', {
+            url: result.s3Url,
+            method: 'PUT'
+          });
+
+          // Return the upload parameters in the format Uppy expects
+          return {
+            method: 'PUT',
+            url: result.s3Url,
+            fields: {},
+            headers: {},
+          };
+        } catch (error) {
+          console.error('❌ [Uppy] Error getting upload parameters:', error);
+          throw error;
+        }
+      },
+    })
+    .use(ImageEditor, {
+      quality: 0.9,
+      cropperOptions: {
+        viewMode: 1,
+        background: false,
+        autoCropArea: 1,
+        responsive: true
+      }
+    });
+
+    // Set up event listeners
+    uppyInstance.on('file-added', (file) => {
+      console.log('📎 [Uppy] File added:', {
+        id: file.id,
+        name: file.name,
+        type: file.type,
+        size: file.size
+      });
+      // Update storage usage
+      setTotalStorage(prev => prev + file.size);
+      
+      // Update folder structure if file has path
+      if (file.relativePath) {
+        const parts = file.relativePath.split('/');
+        if (parts.length > 1) {
+          setFolderStructure(prev => {
+            const newStructure = { ...prev };
+            let current = newStructure;
+            for (let i = 0; i < parts.length - 1; i++) {
+              const part = parts[i];
+              if (!current[part]) {
+                current[part] = {};
+              }
+              current = current[part];
+            }
+            return newStructure;
+          });
+        }
+      }
+
+      // Add to uploads list
+      setUploads(prev => [...prev, {
+        id: file.id,
+        file: file.data,
+        progress: 0,
+        status: 'uploading',
+        metadata: { ...metadata },
+        folderPath: file.relativePath ? file.relativePath.split('/').slice(0, -1).join('/') : null
+      }]);
+    });
+
+    uppyInstance.on('upload-progress', (file, progress) => {
+      console.log('📊 [Uppy] Upload progress:', {
+        file: file.name,
+        progress: progress.bytesUploaded / progress.bytesTotal * 100
+      });
+      const { bytesUploaded, bytesTotal } = progress;
+      const progressPercentage = (bytesUploaded / bytesTotal) * 100;
+      
+      setUploads(prev => prev.map(upload => 
+        upload.id === file.id 
+          ? { ...upload, progress: progressPercentage }
+          : upload
+      ));
+    });
+
+    uppyInstance.on('upload-success', async (file, response) => {
+      console.log('✅ [Uppy] Upload successful:', {
+        file: file.name,
+        response: response
+      });
+      try {
+        // Update photo visibility
+        if (response.photoId && user?.id) {
+          await updatePhotoVisibility(user.id, [response.photoId], 'VISIBLE');
+        }
+
+        setUploads(prev => prev.map(upload => 
+          upload.id === file.id 
+            ? { 
+                ...upload, 
+                status: 'complete',
+                progress: 100,
+                photoDetails: response
+              }
+            : upload
+        ));
+
+        if (onUploadComplete) {
+          onUploadComplete(response);
+        }
+      } catch (error) {
+        console.error('Error processing upload success:', error);
+      }
+    });
+
+    uppyInstance.on('upload-error', (file, error) => {
+      console.error('❌ [Uppy] Upload error:', {
+        file: file.name,
+        error: error
+      });
+      console.error('Upload error:', error);
+      setUploads(prev => prev.map(upload => 
+        upload.id === file.id 
+          ? { ...upload, status: 'error', error: error.message }
+          : upload
+      ));
+
+      if (onError) {
+        onError(error.message);
+      }
+    });
+
+    uppyInstance.on('file-removed', (file) => {
+      setTotalStorage(prev => prev - file.size);
+      setUploads(prev => prev.filter(upload => upload.id !== file.id));
+    });
+
+    setUppy(uppyInstance);
+    console.log('✅ [Uppy] Uppy instance initialized and configured');
+
+    return () => {
+      console.log('🧹 [Uppy] Cleaning up Uppy instance');
+      uppyInstance.destroy();
+    };
+  }, [user, eventId, metadata, onUploadComplete, onError]);
 
   const validateMetadata = () => {
     if (!metadata.eventName || !metadata.venueName || !metadata.promoterName || !metadata.date) {
@@ -61,181 +263,19 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       return;
     }
 
-    // Process pending files with metadata
-    const newUploads = pendingFiles.map(file => {
-      // Clean up folder path - don't use '.' as a folder path
-      let folderPath = null;
-      if (file.path) {
-        const pathParts = file.path.split('/').slice(0, -1);
-        if (pathParts.length > 0 && pathParts.join('/') !== '.') {
-          folderPath = pathParts.join('/');
-        }
-      }
+    if (uppy) {
+      uppy.upload();
+    }
 
-      return {
-        id: uuidv4(),
-        file,
-        progress: 0,
-        status: 'uploading',
-        metadata: { ...metadata },
-        folderPath: folderPath
-      };
-    });
-
-    setUploads(prev => [...prev, ...newUploads]);
-    setPendingFiles([]);
     setShowMetadataForm(false);
-
-    // Process uploads one by one
-    for (const upload of newUploads) {
-      try {
-        await uploadFile(upload);
-      } catch (error) {
-        console.error('Error uploading file:', error);
-        setUploads(prev => prev.map(u => 
-          u.id === upload.id 
-            ? { ...u, status: 'error', error: error.message || 'Upload failed' }
-            : u
-        ));
-
-        if (onError) {
-          onError(error);
-        }
-      }
-    }
-
-    if (onUploadComplete) {
-      onUploadComplete(newUploads);
-    }
-  };
-
-  // Upload a single file
-  const uploadFile = async (upload) => {
-    // Simulate upload progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 5;
-      setUploads(prev => prev.map(u => 
-        u.id === upload.id ? { ...u, progress: Math.min(progress, 99) } : u
-      ));
-      
-      if (progress >= 100) {
-        clearInterval(interval);
-      }
-    }, 200);
-
-    try {
-      // Use the current user from auth context
-      const userId = user?.id;
-      
-      if (!userId) {
-        console.warn("⚠️ No user ID found in auth context. Upload will proceed with unknown user.");
-      } else {
-        console.log(`👤 Using user ID from auth context: ${userId}`);
-      }
-      
-      // Call AWS photo service with user ID explicitly set
-      const result = await awsPhotoService.uploadPhoto(
-        upload.file,
-        eventId,
-        upload.folderPath,
-        {
-          ...upload.metadata,
-          user_id: userId,
-          uploadedBy: userId,
-          uploaded_by: userId,
-          externalAlbumLink: upload.metadata.albumLink
-        },
-        (progress) => {
-          setUploads(prev => prev.map(u => 
-            u.id === upload.id ? { ...u, progress: Math.min(progress, 99) } : u
-          ));
-        }
-      );
-
-      clearInterval(interval);
-
-      // Explicitly set the photo visibility to VISIBLE in the visibility table
-      if (result.success && result.photoId && userId) {
-        console.log(`Setting visibility for new photo ${result.photoId} to VISIBLE`);
-        try {
-          await updatePhotoVisibility(userId, [result.photoId], 'VISIBLE');
-          console.log(`✅ Successfully set visibility for photo ${result.photoId} to VISIBLE`);
-        } catch (visibilityError) {
-          console.error(`❌ Error setting visibility for photo ${result.photoId}:`, visibilityError);
-        }
-      }
-
-      // Update with success
-      setUploads(prev => prev.map(u => 
-        u.id === upload.id ? { 
-          ...u, 
-          status: 'complete', 
-          progress: 100,
-          photoDetails: result 
-        } : u
-      ));
-
-      return result;
-    } catch (error) {
-      clearInterval(interval);
-      throw error;
-    }
   };
 
   // Remove upload
   const removeUpload = (id) => {
-    setUploads(prev => {
-      const uploadToRemove = prev.find(u => u.id === id);
-      const newUploads = prev.filter(u => u.id !== id);
-      
-      // Update total storage calculation
-      if (uploadToRemove) {
-        setTotalStorage(prev => prev - uploadToRemove.file.size);
-      }
-      
-      return newUploads;
-    });
-  };
-
-  // Handle file drop
-  const onDrop = (acceptedFiles) => {
-    // Calculate total size
-    const newSize = acceptedFiles.reduce((acc, file) => acc + file.size, 0);
-    const projectedSize = totalStorage + newSize;
-    
-    if (projectedSize > storageLimit) {
-      alert('Uploading these files would exceed your storage limit of 10GB');
-      return;
+    const uploadToRemove = uploads.find(u => u.id === id);
+    if (uploadToRemove) {
+      uppy?.removeFile(id);
     }
-    
-    // Update total storage
-    setTotalStorage(projectedSize);
-    
-    // Update folder structure
-    const newStructure = { ...folderStructure };
-    
-    acceptedFiles.forEach(file => {
-      if (file.path) {
-        const parts = file.path.split('/');
-        if (parts.length > 1) {
-          let current = newStructure;
-          for (let i = 0; i < parts.length - 1; i++) {
-            const part = parts[i];
-            if (!current[part]) {
-              current[part] = {};
-            }
-            current = current[part];
-          }
-        }
-      }
-    });
-    
-    setFolderStructure(newStructure);
-    
-    // Show metadata form before starting upload
-    setPendingFiles(acceptedFiles);
-    setShowMetadataForm(true);
   };
 
   // Render folder structure recursively
@@ -311,6 +351,21 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     );
   };
 
+  // Handle file drops
+  const onDrop = (acceptedFiles) => {
+    acceptedFiles.forEach(file => {
+      uppy?.addFile({
+        name: file.name,
+        type: file.type,
+        data: file,
+        meta: {
+          ...metadata,
+          folderPath: file.path // If available from the file system
+        }
+      });
+    });
+  };
+
   // Dropzone hook
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
@@ -337,39 +392,22 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           </div>
         </div>
 
-        {/* File Dropzone - touch-friendly */}
-        <div 
-          {...getRootProps()} 
-          className={cn(
-            "mt-4 p-10 border-4 border-dashed rounded-xl text-center transition-colors duration-300 min-h-[200px] flex flex-col items-center justify-center", 
-            isDragActive ? "border-blue-500 bg-blue-50" : "border-blue-300 bg-blue-50",
-            uploads.length > 0 && "mb-8"
-          )}
-        >
-          <input {...getInputProps()} multiple type="file" accept="image/*" className="hidden" aria-label="Upload files" />
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-white flex items-center justify-center shadow-lg">
-            <Upload className="w-10 h-10 text-blue-500" />
-          </div>
-          <p className="text-gray-700 mb-4 text-lg font-semibold">
-            {isDragActive ? "Drop the photos or folders here" : "Drag and drop photos here"}
-          </p>
-          
-          <button 
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-lg text-lg shadow-lg transform transition hover:scale-105 flex items-center"
-            onClick={(e) => {
-              e.stopPropagation();
-              // Trigger the hidden file input click
-              document.querySelector('input[type="file"]').click();
-            }}
-            type="button"
-          >
-            <Upload className="w-6 h-6 mr-2" />
-            UPLOAD
-          </button>
-          
-          <p className="text-gray-600 text-sm mt-4">Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file</p>
-        </div>
-        
+        {/* Uppy Dashboard */}
+        {uppy && (
+          <Dashboard
+            uppy={uppy}
+            plugins={['ImageEditor']}
+            width="100%"
+            height={400}
+            showProgressDetails={true}
+            proudlyDisplayPoweredByUppy={false}
+            note="Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file"
+            metaFields={[
+              { id: 'folderPath', name: 'Folder Path', placeholder: 'Optional folder path' }
+            ]}
+          />
+        )}
+
         {/* Uploads list with touch-friendly controls */}
         {uploads.length > 0 && (
           <div className="flex items-center justify-between mb-4">
