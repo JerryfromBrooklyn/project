@@ -58,7 +58,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     console.log('🚀 [Uppy] Initializing Uppy instance');
     const uppyInstance = new Uppy({
       id: 'photo-uploader',
-      autoProceed: false,
+      autoProceed: false, // Disable auto upload
       restrictions: {
         maxFileSize: 100 * 1024 * 1024, // 100MB
         allowedFileTypes: ['image/*', '.jpg', '.jpeg', '.png', '.webp', '.raw', '.cr2', '.nef', '.arw', '.rw2']
@@ -78,34 +78,24 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       getUploadParameters: async (file) => {
         console.log('📤 [Uppy] Getting upload parameters for file:', file.name);
         try {
-          // Create a new File object from Uppy's file data
           const fileData = new File([file.data], file.name, { type: file.type });
-          console.log('📦 [Uppy] Created File object for upload:', {
-            name: fileData.name,
-            type: fileData.type,
-            size: fileData.size
-          });
-
-          // Use the existing awsPhotoService.uploadPhoto method with the correct file format
-          const result = await awsPhotoService.uploadPhoto(fileData, eventId, file.meta?.folderPath || '', {
+          
+          // Include metadata in the upload
+          const uploadMetadata = {
             ...metadata,
             user_id: user?.id || '',
             uploadedBy: user?.id || '',
             uploaded_by: user?.id || '',
             externalAlbumLink: metadata.albumLink || ''
-          });
+          };
+
+          const result = await awsPhotoService.uploadPhoto(fileData, eventId, file.meta?.folderPath || '', uploadMetadata);
 
           if (!result.success) {
             console.error('❌ [Uppy] Failed to get upload parameters:', result.error);
             throw new Error(result.error || 'Failed to get upload parameters');
           }
 
-          console.log('✅ [Uppy] Successfully got upload parameters:', {
-            url: result.s3Url,
-            method: 'PUT'
-          });
-
-          // Return the upload parameters in the format Uppy expects
           return {
             method: 'PUT',
             url: result.s3Url || '',
@@ -131,34 +121,19 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
       companionHeaders: {
         Authorization: `Bearer ${user?.accessToken || ''}`,
-      },
-      locale: {
-        strings: {
-          connectTo: 'Connect to Dropbox',
-          dropbox: 'Dropbox',
-        },
-      },
-      allowedHosts: [process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020']
+      }
     })
     .use(GoogleDrivePlugin, {
       companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
       companionHeaders: {
         Authorization: `Bearer ${user?.accessToken || ''}`,
-      },
-      locale: {
-        strings: {
-          connectTo: 'Connect to Google Drive',
-          googleDrive: 'Google Drive',
-        },
-      },
-      allowedHosts: [process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020']
+      }
     })
     .use(UrlPlugin, {
       companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
       companionHeaders: {
         Authorization: `Bearer ${user?.accessToken || ''}`,
-      },
-      allowedHosts: [process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020']
+      }
     });
 
     // Set up event listeners
@@ -175,10 +150,8 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         size: file.size
       });
 
-      // Update storage usage
       setTotalStorage(prev => prev + (file.size || 0));
       
-      // Update folder structure if file has path
       if (file.relativePath) {
         const parts = file.relativePath.split('/');
         if (parts.length > 1) {
@@ -197,12 +170,11 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         }
       }
 
-      // Add to uploads list
       setUploads(prev => [...prev, {
         id: file.id,
         file: file.data || file,
         progress: 0,
-        status: 'uploading',
+        status: 'pending',
         metadata: { ...metadata },
         folderPath: file.relativePath ? file.relativePath.split('/').slice(0, -1).join('/') : null
       }]);
@@ -218,7 +190,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       
       setUploads(prev => prev.map(upload => 
         upload.id === file.id 
-          ? { ...upload, progress: progressPercentage }
+          ? { ...upload, progress: progressPercentage, status: 'uploading' }
           : upload
       ));
     });
@@ -229,7 +201,6 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         response: response
       });
       try {
-        // Update photo visibility
         if (response.photoId && user?.id) {
           await updatePhotoVisibility(user.id, [response.photoId], 'VISIBLE');
         }
@@ -258,7 +229,6 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         file: file.name,
         error: error
       });
-      console.error('Upload error:', error);
       setUploads(prev => prev.map(upload => 
         upload.id === file.id 
           ? { ...upload, status: 'error', error: error.message }
@@ -275,29 +245,60 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       setUploads(prev => prev.filter(upload => upload.id !== file.id));
     });
 
-    // Add event listeners for Dropbox and Google Drive
-    uppyInstance.on('dropbox:auth-success', () => {
-      setDropboxConfigured(true);
-    });
-
-    uppyInstance.on('google-drive:auth-success', () => {
-      setGoogleDriveConfigured(true);
-    });
-
     setUppy(uppyInstance);
-    console.log('✅ [Uppy] Uppy instance initialized and configured');
-
+    
     return () => {
       console.log('🧹 [Uppy] Cleaning up Uppy instance');
       uppyInstance.destroy();
     };
-  }, [user, eventId, metadata, onUploadComplete, onError]);
+  }, [user, eventId, onUploadComplete, onError]);
 
   const validateMetadata = () => {
     if (!metadata.eventName || !metadata.venueName || !metadata.promoterName || !metadata.date) {
       return false;
     }
     return true;
+  };
+
+  // Handle the green button click
+  const handleUploadClick = () => {
+    console.log('Upload button clicked', { numberOfFiles: uploads.length });
+    
+    if (uploads.length === 0) {
+      console.log('No files selected');
+      alert('Please select files first');
+      return;
+    }
+    
+    console.log('Showing metadata form');
+    setShowMetadataForm(true);
+  };
+
+  // Handle the blue Continue Upload button click
+  const handleContinueUpload = () => {
+    console.log('Continue Upload clicked');
+    
+    if (!validateMetadata()) {
+      console.log('Metadata validation failed');
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    console.log('Updating uploads with metadata', metadata);
+    // Update all pending uploads with the metadata
+    setUploads(prev => prev.map(upload => ({
+      ...upload,
+      metadata: { ...metadata }
+    })));
+
+    // Start the upload process
+    if (uppy) {
+      console.log('Starting Uppy upload');
+      uppy.setMeta(metadata);
+      uppy.upload();
+    }
+
+    setShowMetadataForm(false);
   };
 
   // Storage limit in bytes (10GB)
@@ -309,20 +310,6 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     return upload.file.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
            (upload.folderPath && upload.folderPath.toLowerCase().includes(searchQuery.toLowerCase()));
   });
-
-  // Process uploads
-  const processUploads = async () => {
-    if (!validateMetadata()) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    if (uppy) {
-      uppy.upload();
-    }
-
-    setShowMetadataForm(false);
-  };
 
   // Remove upload
   const removeUpload = (id) => {
@@ -463,9 +450,136 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 { id: 'folderPath', name: 'Folder Path', placeholder: 'Optional folder path' }
               ]}
               className="uppy-Dashboard--adaptive"
+              hideUploadButton={true}
             />
           </div>
         )}
+
+        {/* Custom Upload Button */}
+        {uploads.length > 0 && (
+          <div className="mt-4">
+            <Button
+              onClick={handleUploadClick}
+              variant="primary"
+              size="lg"
+              className="w-full bg-green-500 hover:bg-green-600 text-white"
+            >
+              Upload {uploads.length} {uploads.length === 1 ? 'File' : 'Files'}
+            </Button>
+          </div>
+        )}
+
+        {/* Metadata Form Dialog */}
+        <Dialog
+          isOpen={showMetadataForm}
+          onClose={() => setShowMetadataForm(false)}
+          title="Photo Details"
+          maxWidth="max-w-2xl"
+        >
+          <div className="space-y-6">
+            <p className="text-center text-gray-600">
+              Please provide information about these photos
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Event Name*
+                </label>
+                <input
+                  type="text"
+                  value={metadata.eventName}
+                  onChange={(e) => setMetadata(prev => ({ ...prev, eventName: e.target.value }))}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="Enter event name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Venue Name*
+                </label>
+                <input
+                  type="text"
+                  value={metadata.venueName}
+                  onChange={(e) => setMetadata(prev => ({ ...prev, venueName: e.target.value }))}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="Enter venue name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Promoter Name*
+                </label>
+                <input
+                  type="text"
+                  value={metadata.promoterName}
+                  onChange={(e) => setMetadata(prev => ({ ...prev, promoterName: e.target.value }))}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="Enter promoter name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Date*
+                </label>
+                <input
+                  type="date"
+                  value={metadata.date}
+                  onChange={(e) => setMetadata(prev => ({ ...prev, date: e.target.value }))}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Album Link (optional)
+              </label>
+              <input
+                type="url"
+                value={metadata.albumLink}
+                onChange={(e) => setMetadata(prev => ({ ...prev, albumLink: e.target.value }))}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                placeholder="https://example.com/album"
+              />
+              <p className="mt-1 text-sm text-gray-500">
+                Enter a URL to the album or event page
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Location (optional)
+              </label>
+              <GoogleMaps
+                value={metadata.location}
+                onChange={(location) => setMetadata(prev => ({ ...prev, location }))}
+              />
+            </div>
+
+            <div className="flex justify-end space-x-4 mt-6">
+              <Button
+                variant="secondary"
+                onClick={() => setShowMetadataForm(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleContinueUpload}
+              >
+                Continue Upload
+              </Button>
+            </div>
+          </div>
+        </Dialog>
 
         {/* Uploads List */}
         {uploads.length > 0 && (
