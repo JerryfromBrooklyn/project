@@ -20,75 +20,59 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
     const photosPerPage = 48; // 12 rows of 4 images
     const { user } = useAuth();
 
-    const fetchPhotosAndCounts = useCallback(async (showLoading = true) => {
-        if (!user?.id) {
-            console.log(`[PhotoManager ${mode}] No user ID, skipping fetch.`);
-            if(showLoading) setLoading(false);
-            setPhotos([]);
-            setUploadedCount(0);
-            setMatchedCount(0);
-            return;
-        }
-        
-        if (showLoading) {
+    const fetchPhotos = useCallback(async (forceRefresh = false) => {
+        if (!user?.id) return;
+    
+        // If this is a force refresh, show loading state
+        if (forceRefresh) {
             setLoading(true);
+            console.log('[PhotoManager upload] Force refresh requested');
         }
-        setError(null);
         
         try {
             console.log(`[PhotoManager ${mode}] Fetching photos for mode: ${mode}`);
-            let fetchedPhotos = [];
-            if (mode === 'matches') {
-                console.log(`📥 [PhotoManager ${mode}] Fetching MATCHED photos...`);
-                fetchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'matched');
-            } else { // Assume 'upload' mode
-                console.log(`📥 [PhotoManager ${mode}] Fetching UPLOADED photos...`);
-                fetchedPhotos = await awsPhotoService.fetchUploadedPhotos(user.id);
+            
+            if (mode === 'upload') {
+                console.log('📥 [PhotoManager upload] Fetching UPLOADED photos...');
+                const uploadedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'uploaded');
+                console.log(`[PhotoManager upload] Successfully fetched ${uploadedPhotos.length} photos for current view.`);
+                setPhotos(uploadedPhotos);
+            } else if (mode === 'matches') {
+                console.log('📥 [PhotoManager matches] Fetching MATCHED photos...');
+                const matchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'matched');
+                console.log(`[PhotoManager matches] Successfully fetched ${matchedPhotos.length} photos for current view.`);
+                setPhotos(matchedPhotos);
             }
             
-            const sortedPhotos = (fetchedPhotos || []).sort((a, b) => 
-                new Date(b.created_at || 0) - new Date(a.created_at || 0)
-            );
-
-            setPhotos(sortedPhotos);
-            console.log(`[PhotoManager ${mode}] Successfully fetched ${sortedPhotos.length} photos for current view.`);
-
-            console.log(`[PhotoManager ${mode}] Fetching counts...`);
-            const [uploadedResult, matchedResult] = await Promise.all([
-                awsPhotoService.fetchUploadedPhotos(user.id).catch(err => { 
-                    console.error("[PhotoManager] Error fetching uploaded count:", err); 
-                    return [];
-                }),
-                awsPhotoService.getVisiblePhotos(user.id, 'matched').catch(err => { 
-                    console.error("[PhotoManager] Error fetching matched count:", err); 
-                    return [];
-                })
-            ]);
+            // Always fetch counts for both tabs
+            console.log('[PhotoManager upload] Fetching counts...');
+            const uploadedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'uploaded');
+            const matchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'matched');
             
-            setUploadedCount(uploadedResult.length);
-            setMatchedCount(matchedResult.length);
-            console.log(`[PhotoManager ${mode}] Counts updated: Uploaded=${uploadedResult.length}, Matched=${matchedResult.length}`);
-
+            setUploadedCount(uploadedPhotos.length);
+            setMatchedCount(matchedPhotos.length);
+            console.log(`[PhotoManager ${mode}] Counts updated: Uploaded=${uploadedPhotos.length}, Matched=${matchedPhotos.length}`);
+            
+            setLoading(false);
+            setError(null);
         } catch (err) {
-            console.error(`[PhotoManager ${mode}] Error fetching photos/counts:`, err);
-            setError(err.message || 'An error occurred while fetching data');
-            setPhotos([]);
-            setUploadedCount(0);
-            setMatchedCount(0);
-        } finally {
-            if(showLoading) setLoading(false);
+            console.error(`[PhotoManager ${mode}] Error fetching photos:`, err);
+            setError(`Failed to fetch photos: ${err.message}`);
+            setLoading(false);
         }
-    }, [user?.id, mode]); 
+    }, [user?.id, mode]);
+
+    const handlePhotoUpload = useCallback((forceRefresh = false) => {
+        console.log(`[PhotoManager] Photo upload complete${forceRefresh ? ' (force refresh requested)' : ''}`);
+        // Make sure to pass the force refresh flag to fetchPhotos
+        fetchPhotos(forceRefresh);
+    }, [fetchPhotos]);
 
     useEffect(() => {
         if (!user?.id) return;
         console.log(`🔄 [PhotoManager ${mode}] Effect triggered: mode or user changed.`);
-        fetchPhotosAndCounts();
-    }, [fetchPhotosAndCounts]);
-
-    const handlePhotoUpload = async (photoId) => {
-        await fetchPhotosAndCounts();
-    };
+        fetchPhotos();
+    }, [fetchPhotos]);
 
     const handlePhotoDelete = async (photoId) => {
         try {

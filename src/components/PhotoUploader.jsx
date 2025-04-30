@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
 import { cn } from '../utils/cn';
@@ -26,6 +26,174 @@ import '@uppy/image-editor/dist/style.min.css';
 import Dialog from './ui/Dialog.jsx';
 import ImageViewer from './ui/ImageViewer.jsx';
 import Button from './ui/Button.jsx';
+
+// Add a debounce utility function
+const debounce = (func, wait) => {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+};
+
+// Create a separate memoized form component to prevent re-renders
+const MetadataForm = React.memo(({ 
+  metadata, 
+  setMetadata, 
+  onCancel, 
+  onSubmit,
+  isValid 
+}) => {
+  // Use local state for form inputs to prevent parent re-renders
+  const [localMetadata, setLocalMetadata] = useState(metadata);
+  
+  // Update local state on props change
+  useEffect(() => {
+    setLocalMetadata(metadata);
+  }, [metadata]);
+  
+  // Create a debounced update function
+  const debouncedSetMetadata = useRef(
+    debounce((newMetadata) => {
+      setMetadata(newMetadata);
+    }, 300)
+  ).current;
+  
+  // Handle input changes locally first, then debounce the parent update
+  const handleInputChange = (field, value) => {
+    const newMetadata = { ...localMetadata, [field]: value };
+    setLocalMetadata(newMetadata);
+    debouncedSetMetadata(newMetadata);
+  };
+  
+  // Handle the submit by passing the local state
+  const handleSubmit = () => {
+    // Update the parent state one final time synchronously
+    setMetadata(localMetadata);
+    onSubmit();
+  };
+  
+  return (
+    <div className="space-y-6 p-4">
+      <div className="bg-blue-50 p-3 rounded-md mb-6">
+        <p className="text-center text-blue-700 text-sm">
+          Please provide information about these photos
+        </p>
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Event Name*
+          </label>
+          <input
+            type="text"
+            value={localMetadata.eventName}
+            onChange={(e) => handleInputChange('eventName', e.target.value)}
+            className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
+            placeholder="Enter event name"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Venue Name*
+          </label>
+          <input
+            type="text"
+            value={localMetadata.venueName}
+            onChange={(e) => handleInputChange('venueName', e.target.value)}
+            className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
+            placeholder="Enter venue name"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Promoter Name*
+          </label>
+          <input
+            type="text"
+            value={localMetadata.promoterName}
+            onChange={(e) => handleInputChange('promoterName', e.target.value)}
+            className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
+            placeholder="Enter promoter name"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Date*
+          </label>
+          <input
+            type="date"
+            value={localMetadata.date}
+            onChange={(e) => handleInputChange('date', e.target.value)}
+            className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+            required
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Album Link (optional)
+        </label>
+        <input
+          type="url"
+          value={localMetadata.albumLink}
+          onChange={(e) => handleInputChange('albumLink', e.target.value)}
+          className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
+          placeholder="https://example.com/album"
+        />
+        <p className="mt-1 text-xs text-gray-500">
+          Enter a URL to the album or event page
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Location (optional)
+        </label>
+        <input
+          type="text"
+          value={localMetadata.location?.address || ''}
+          onChange={(e) => handleInputChange('location', { address: e.target.value })}
+          className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
+          placeholder="Search for a location..."
+        />
+      </div>
+
+      <div className="flex justify-end space-x-3 mt-8 pt-4 border-t border-gray-200">
+        <Button
+          variant="secondary"
+          onClick={onCancel}
+          className="px-6 py-2 text-sm font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          onClick={handleSubmit}
+          disabled={!isValid}
+          className={`px-6 py-2 text-sm font-medium rounded-md ${isValid ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-blue-300 text-white cursor-not-allowed'}`}
+        >
+          Continue Upload
+        </Button>
+      </div>
+    </div>
+  );
+});
+
+// Add display name for React DevTools
+MetadataForm.displayName = 'MetadataForm';
 
 export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   // State variables
@@ -82,7 +250,9 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         },
         meta: {
           userId: user?.id || '',
-          eventId: eventId || ''
+          eventId: eventId || '',
+          // Add a timestamp to ensure each upload request is unique
+          timestamp: Date.now()
         }
       })
       .use(AwsS3Multipart, {
@@ -178,24 +348,41 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     return () => {
       console.log('🧹 [Uppy] Cleaning up Uppy instance');
       
-      // Only cleanup if we have an instance
+      // Only cleanup if we have an instance and we're truly unmounting
+      // (not just temporarily removing the component)
       if (uppyRef.current) {
-        const instance = uppyRef.current;
-        
         try {
-          // Remove all event listeners using the refs
+          const instance = uppyRef.current;
+          
+          // Save any complete uploads to prevent loss of upload state
+          const completedUploads = instance.getFiles()
+            .filter(f => f.progress?.uploadComplete)
+            .map(f => ({
+              id: f.id,
+              status: 'complete',
+              photoDetails: f.response?.body || {},
+              progress: 100,
+              file: f.data
+            }));
+            
+          // If we have completed uploads, trigger a final callback to ensure they're captured
+          if (completedUploads.length > 0 && onUploadComplete) {
+            console.log(`[PhotoUploader] Final cleanup with ${completedUploads.length} completed uploads.`);
+            onUploadComplete();
+          }
+          
+          // Rest of cleanup as before...
           instance.off('file-added', handlersRef.current.handleFileAdded);
           instance.off('file-removed', handlersRef.current.handleFileRemoved);
           instance.off('upload-progress', handlersRef.current.handleUploadProgress);
           instance.off('complete', handlersRef.current.handleBatchComplete);
           instance.off('error', handlersRef.current.handleUploadError);
           
-          // Close the instance - safely check if close method exists
+          // Safely close the instance
           if (typeof instance.close === 'function') {
             instance.close();
           } else {
             console.log('⚠️ [Uppy] Warning: instance.close is not a function');
-            // Alternative way to clean up if needed
             if (typeof instance.destroy === 'function') {
               instance.destroy();
             }
@@ -204,12 +391,12 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           console.error('❌ [Uppy] Error during cleanup:', cleanupError);
         }
         
-        // Reset refs but don't update state during cleanup
+        // Reset refs
         uppyRef.current = null;
         initializationCompleteRef.current = false;
       }
     };
-  }, []); // Empty dependency array - we control initialization with refs
+  }, []);
 
   // Update Uppy metadata when user or event changes
   useEffect(() => {
@@ -354,7 +541,44 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     startUploadQueueRef.current = startUploadQueue;
   }, [startUploadQueue]);
 
-  // Move handleBatchComplete after startUploadQueue is defined and use the ref
+  // Add a dedicated upload completion handling function
+  const finalizeUpload = useCallback(() => {
+    console.log('[PhotoUploader] Finalizing upload and refreshing display...');
+    
+    // Ensure we mark uploads as complete in the UI
+    const completedFiles = uppy?.getFiles().filter(f => f.progress?.uploadComplete) || [];
+    if (completedFiles.length > 0) {
+      setUploads(prev => {
+        const updatedUploads = [...prev];
+        completedFiles.forEach(file => {
+          const index = updatedUploads.findIndex(u => u.id === file.id);
+          if (index !== -1) {
+            updatedUploads[index] = {
+              ...updatedUploads[index],
+              status: 'complete',
+              progress: 100,
+              photoDetails: file.response?.body || {}
+            };
+          }
+        });
+        return updatedUploads;
+      });
+    }
+    
+    // Create a small delay to ensure backend processing completes
+    setTimeout(() => {
+      // Reset the uploader state and trigger refresh
+      if (onUploadComplete) {
+        console.log('[PhotoUploader] Calling final onUploadComplete callback with force refresh.');
+        // Pass true to indicate this should force a refresh of the photos list
+        onUploadComplete(true);
+      }
+      
+      setUploadComplete(true);
+    }, 1000); // Small delay to ensure backend processing completes
+  }, [uppy, onUploadComplete]);
+
+  // Update handleBatchComplete to use the finalizeUpload function
   const handleBatchComplete = useCallback((result) => {
     console.log('✅ [Uppy] Batch Upload Result:', result);
     
@@ -363,27 +587,61 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     const failedUploads = result.failed || [];
     console.log(`📊 [Uppy] Batch Summary: ${successfulUploads.length} successful, ${failedUploads.length} failed.`);
 
+    // Update uploads state with completion status and response data
+    if (successfulUploads.length > 0) {
+      setUploads(prev => prev.map(upload => {
+        const successfulUpload = successfulUploads.find(u => u.id === upload.id);
+        if (successfulUpload) {
+          // Extract response data from the successful upload
+          const responseData = successfulUpload.response?.body || {};
+          
+          return {
+            ...upload,
+            status: 'complete',
+            progress: 100,
+            photoDetails: {
+              id: responseData.id || successfulUpload.id,
+              url: responseData.url || successfulUpload.uploadURL,
+              matched_users: responseData.matched_users || [],
+              faces: responseData.faces || []
+            }
+          };
+        }
+        return upload;
+      }));
+    }
+
+    // Update uploads state with error information for failed uploads
+    if (failedUploads.length > 0) {
+      setUploads(prev => prev.map(upload => {
+        const failedUpload = failedUploads.find(u => u.id === upload.id);
+        if (failedUpload) {
+          return {
+            ...upload,
+            status: 'error',
+            error: failedUpload.error || 'Upload failed'
+          };
+        }
+        return upload;
+      }));
+    }
+
     // Check if there are any files that haven't even started or completed yet
     const remainingFiles = uppy?.getFiles().filter(f => !f.progress?.uploadComplete && !f.progress?.uploadStarted);
     
     if (remainingFiles && remainingFiles.length > 0) {
       console.log(`🔄 [Uppy] Batch finished, but ${remainingFiles.length} files still pending in queue. Starting next batch.`);
-      // IMPORTANT: Call the queue helper function to process the next batch using the ref
+      // Process the next batch using the ref
       if (startUploadQueueRef.current && uppy) {
         startUploadQueueRef.current(uppy);
       }
     } else {
-       console.log('✅ [Uppy] All files processed. Upload process fully complete.');
-       // Now this is using a defined state
-       setUploadComplete(true);
-       
-       // Maybe trigger a final refresh of the photo list if needed
-       if (onUploadComplete) {
-         console.log('[PhotoUploader] Calling onUploadComplete callback.');
-         onUploadComplete(); 
-       }
+      console.log('✅ [Uppy] All files processed. Upload process fully complete.');
+      
+      // Use the dedicated finalizer function
+      setTimeout(finalizeUpload, 500);
     }
-  }, [uppy, onUploadComplete]);
+  }, [uppy, finalizeUpload]);
 
   // Now that all handlers are defined, update the handlers ref
   useEffect(() => {
@@ -684,119 +942,13 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           title="Photo Details"
           maxWidth="max-w-2xl"
         >
-          <div className="space-y-6 p-4">
-            <div className="bg-blue-50 p-3 rounded-md mb-6">
-              <p className="text-center text-blue-700 text-sm">
-                Please provide information about these photos
-              </p>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Event Name*
-                </label>
-                <input
-                  type="text"
-                  value={metadata.eventName}
-                  onChange={(e) => setMetadata(prev => ({ ...prev, eventName: e.target.value }))}
-                  className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
-                  placeholder="Enter event name"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Venue Name*
-                </label>
-                <input
-                  type="text"
-                  value={metadata.venueName}
-                  onChange={(e) => setMetadata(prev => ({ ...prev, venueName: e.target.value }))}
-                  className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
-                  placeholder="Enter venue name"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Promoter Name*
-                </label>
-                <input
-                  type="text"
-                  value={metadata.promoterName}
-                  onChange={(e) => setMetadata(prev => ({ ...prev, promoterName: e.target.value }))}
-                  className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
-                  placeholder="Enter promoter name"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date*
-                </label>
-                <input
-                  type="date"
-                  value={metadata.date}
-                  onChange={(e) => setMetadata(prev => ({ ...prev, date: e.target.value }))}
-                  className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Album Link (optional)
-              </label>
-              <input
-                type="url"
-                value={metadata.albumLink}
-                onChange={(e) => setMetadata(prev => ({ ...prev, albumLink: e.target.value }))}
-                className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
-                placeholder="https://example.com/album"
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Enter a URL to the album or event page
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Location (optional)
-              </label>
-              <input
-                type="text"
-                value={metadata.location?.address || ''}
-                onChange={(e) => setMetadata(prev => ({ 
-                  ...prev, 
-                  location: { address: e.target.value } 
-                }))}
-                className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
-                placeholder="Search for a location..."
-              />
-            </div>
-
-            <div className="flex justify-end space-x-3 mt-8 pt-4 border-t border-gray-200">
-              <Button
-                variant="secondary"
-                onClick={() => setShowMetadataForm(false)}
-                className="px-6 py-2 text-sm font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleContinueUpload}
-                className="px-6 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
-              >
-                Continue Upload
-              </Button>
-            </div>
-          </div>
+          <MetadataForm
+            metadata={metadata}
+            setMetadata={setMetadata}
+            onCancel={() => setShowMetadataForm(false)}
+            onSubmit={handleContinueUpload}
+            isValid={validateMetadata()}
+          />
         </Dialog>
 
         {/* Uploads List */}
