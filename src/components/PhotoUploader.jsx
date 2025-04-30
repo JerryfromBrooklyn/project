@@ -284,17 +284,38 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       return;
     }
 
-    console.log('Updating uploads with metadata', metadata);
-    // Update all pending uploads with the metadata
+    // Format metadata for database
+    const formattedMetadata = {
+      event_details: {
+        name: metadata.eventName,
+        date: metadata.date,
+        type: 'event' // default type
+      },
+      venue: {
+        name: metadata.venueName,
+        id: null // can be updated if you have venue IDs
+      },
+      promoter: {
+        name: metadata.promoterName
+      },
+      location: metadata.location || { address: null, lat: null, lng: null },
+      externalAlbumLink: metadata.albumLink || null,
+      uploaded_by: user?.id,
+      created_at: new Date().toISOString()
+    };
+
+    console.log('Updating uploads with metadata', formattedMetadata);
+    
+    // Update all pending uploads with the formatted metadata
     setUploads(prev => prev.map(upload => ({
       ...upload,
-      metadata: { ...metadata }
+      metadata: formattedMetadata
     })));
 
     // Start the upload process
     if (uppy) {
-      console.log('Starting Uppy upload');
-      uppy.setMeta(metadata);
+      console.log('Starting Uppy upload with formatted metadata');
+      uppy.setMeta(formattedMetadata);
       uppy.upload();
     }
 
@@ -492,104 +513,114 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           title="Photo Details"
           maxWidth="max-w-2xl"
         >
-          <div className="space-y-6">
-            <p className="text-center text-gray-600">
-              Please provide information about these photos
-            </p>
+          <div className="space-y-6 p-4">
+            <div className="bg-blue-50 p-3 rounded-md mb-6">
+              <p className="text-center text-blue-700 text-sm">
+                Please provide information about these photos
+              </p>
+            </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Event Name*
                 </label>
                 <input
                   type="text"
                   value={metadata.eventName}
                   onChange={(e) => setMetadata(prev => ({ ...prev, eventName: e.target.value }))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
                   placeholder="Enter event name"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Venue Name*
                 </label>
                 <input
                   type="text"
                   value={metadata.venueName}
                   onChange={(e) => setMetadata(prev => ({ ...prev, venueName: e.target.value }))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
                   placeholder="Enter venue name"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Promoter Name*
                 </label>
                 <input
                   type="text"
                   value={metadata.promoterName}
                   onChange={(e) => setMetadata(prev => ({ ...prev, promoterName: e.target.value }))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
                   placeholder="Enter promoter name"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Date*
                 </label>
                 <input
                   type="date"
                   value={metadata.date}
                   onChange={(e) => setMetadata(prev => ({ ...prev, date: e.target.value }))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
                   required
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Album Link (optional)
               </label>
               <input
                 type="url"
                 value={metadata.albumLink}
                 onChange={(e) => setMetadata(prev => ({ ...prev, albumLink: e.target.value }))}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
                 placeholder="https://example.com/album"
               />
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-xs text-gray-500">
                 Enter a URL to the album or event page
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Location (optional)
               </label>
-              <GoogleMaps
-                value={metadata.location}
-                onChange={(location) => setMetadata(prev => ({ ...prev, location }))}
+              <input
+                type="text"
+                value={metadata.location?.address || ''}
+                onChange={(e) => setMetadata(prev => ({ 
+                  ...prev, 
+                  location: { address: e.target.value } 
+                }))}
+                className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
+                placeholder="Search for a location..."
               />
             </div>
 
-            <div className="flex justify-end space-x-4 mt-6">
+            <div className="flex justify-end space-x-3 mt-8 pt-4 border-t border-gray-200">
               <Button
                 variant="secondary"
                 onClick={() => setShowMetadataForm(false)}
+                className="px-6 py-2 text-sm font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
               >
                 Cancel
               </Button>
               <Button
                 variant="primary"
                 onClick={handleContinueUpload}
+                className="px-6 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
               >
                 Continue Upload
               </Button>
