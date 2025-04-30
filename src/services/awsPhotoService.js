@@ -201,7 +201,7 @@ export const awsPhotoService = {
                                 CollectionId: COLLECTION_ID,
                                 FaceId: detectedFaceId,
                                 MaxFaces: 150,
-                                FaceMatchThreshold: 95.0  // Set threshold to 95.0
+                                FaceMatchThreshold: 99.0  // Changed from 98.0 to 99.0 for stricter matching
                             };
                             
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
@@ -236,8 +236,8 @@ export const awsPhotoService = {
                                             continue;
                                         }
                                         
-                                        // More permissive threshold for user recognition (70%)
-                                        if (similarity >= 70) {
+                                        // More permissive threshold for user recognition (99%)
+                                        if (similarity >= 99) {
                                             // Add the uploader to matched_users
                                             console.log(`         -> Adding Uploader (${userId}) to matched_users list.`);
                                             photoMetadata.matched_users.push({
@@ -263,8 +263,8 @@ export const awsPhotoService = {
                                             continue;
                                         }
                                         
-                                        // More permissive threshold for user recognition (70%)
-                                        if (similarity >= 70) {
+                                        // More permissive threshold for user recognition (99%)
+                                        if (similarity >= 99) {
                                             // Add the uploader to matched_users
                                             console.log(`         -> Adding Uploader (${userId}) to matched_users list via ExternalImageId.`);
                                             photoMetadata.matched_users.push({
@@ -309,7 +309,7 @@ export const awsPhotoService = {
                                 CollectionId: COLLECTION_ID,
                                 FaceId: detectedFaceId,
                                 MaxFaces: 150,
-                                FaceMatchThreshold: 95.0  // Set threshold to 95.0
+                                FaceMatchThreshold: 99.0  // Changed from 98.0 to 99.0 for stricter matching
                             };
                             
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
@@ -366,7 +366,7 @@ export const awsPhotoService = {
                                         console.log(`      👤 Matched with user ${actualUserId} (${similarity.toFixed(2)}% similarity)`);
                                         
                                         // Validate that this is a realistic match by checking similarity
-                                        if (similarity < 99) { // Check against 99% threshold
+                                        if (similarity < 99) { // Check against 99% threshold (previously 98%)
                                             console.log(`      ⚠️ Skipping match with ${actualUserId} due to similarity (${similarity.toFixed(2)}%) being below threshold (99%)`);
                                             continue;
                                         }
@@ -466,8 +466,15 @@ export const awsPhotoService = {
             console.log(`   Photo ID: ${fileId}`);
             console.log(`   S3 URL: ${publicUrl}`);
             console.log(`   Detected Faces Indexed: ${photoMetadata.face_ids.length}`);
-            // Matched users is now 0 because we don't do it here
-            console.log(`   Matched Users (During Upload): ${photoMetadata.matched_users.length}`); 
+            // Add more detailed logging about matched users
+            if (photoMetadata.matched_users && photoMetadata.matched_users.length > 0) {
+                console.log(`   Matched Users (${photoMetadata.matched_users.length}):`);
+                photoMetadata.matched_users.forEach((match, idx) => {
+                    console.log(`     [${idx+1}] User: ${match.userId}, Similarity: ${match.similarity}%, FaceId: ${match.faceId}`);
+                });
+            } else {
+                console.log(`   No face matches found during upload.`);
+            }
 
             return {
                 success: true,
@@ -548,11 +555,12 @@ export const awsPhotoService = {
                         for (const match of matchedUsers) {
                             // Check for matches in various formats
                             if (typeof match === 'string' && match === userId) {
+                                console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: direct string match in matched_users`);
                                 return true;
                             } else if (typeof match === 'object' && match !== null) {
                                 const matchUserId = match.userId || match.user_id;
                                 if (matchUserId === userId) {
-                                    console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: direct match in matched_users`);
+                                    console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: direct object match in matched_users`);
                                     return true;
                                 }
                             }
@@ -560,26 +568,7 @@ export const awsPhotoService = {
                     }
                 }
                 
-                // b. Check if the user is the uploader
-                if (photo.uploaded_by === userId || photo.user_id === userId || photo.uploadedBy === userId) {
-                    console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: user is uploader`);
-                    return true;
-                }
-                
-                // c. Check if there's a face match
-                if (userFaceIds.length > 0 && photo.faces && Array.isArray(photo.faces)) {
-                    for (const face of photo.faces) {
-                        if (face) {
-                            const faceId = typeof face === 'object' ? face.faceId : face;
-                            if (userFaceIds.includes(faceId)) {
-                                console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: face match`);
-                                return true;
-                            }
-                        }
-                    }
-                }
-
-                // d. Check for historical matches
+                // c. Check for historical matches
                 if (faceData && faceData.historicalMatches && Array.isArray(faceData.historicalMatches)) {
                     if (faceData.historicalMatches.some(match => match.id === photo.id)) {
                         console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: historical match`);
@@ -587,13 +576,6 @@ export const awsPhotoService = {
                     }
                 }
 
-                // e. Check raw string content anywhere (fallback for malformed data)
-                const photoString = JSON.stringify(photo);
-                if (photoString.includes(userId)) {
-                    console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: userId found in photo data`);
-                    return true;
-                }
-                
                 return false;
             });
             
@@ -911,15 +893,15 @@ export const awsPhotoService = {
                 // Directly fetch photos with TRASH visibility status
                 return await awsPhotoService.fetchPhotosByVisibility(userId, 'all', 'TRASH');
             } else if (type === 'uploaded') {
-                // fetchUploadedPhotos already returns VISIBLE, sorted photos
-                return await awsPhotoService.fetchUploadedPhotos(userId);
+                // Use the new fetchUploadedPhotosOnly method instead
+                return await awsPhotoService.fetchUploadedPhotosOnly(userId);
             } else if (type === 'matched') {
-                 // fetchPhotos already returns VISIBLE, sorted matched photos
+                // fetchPhotos already returns VISIBLE, sorted matched photos
                 return await awsPhotoService.fetchPhotos(userId);
             } else { // type === 'all'
                 // Fetch both (they are already filtered for VISIBLE and sorted)
                 const [uploaded, matched] = await Promise.all([
-                    awsPhotoService.fetchUploadedPhotos(userId),
+                    awsPhotoService.fetchUploadedPhotosOnly(userId),
                     awsPhotoService.fetchPhotos(userId)
                 ]);
                 
@@ -1104,6 +1086,61 @@ export const awsPhotoService = {
                 success: false, 
                 error: error.message || "Failed to move photo to trash" 
             };
+        }
+    },
+    /**
+     * Fetch only user's uploaded photos
+     * @param {string} userId - The ID of the user whose uploads to fetch
+     * @returns {Promise<PhotoMetadata[]>} Array of photo metadata uploaded by the user
+     */
+    fetchUploadedPhotosOnly: async (userId) => {
+        console.log(`📥 [PhotoService] Fetching only photos uploaded by user: ${userId}`);
+        if (!userId) {
+            console.error('[PhotoService] Cannot fetch uploaded photos without userId');
+            return [];
+        }
+        try {
+            // Query DynamoDB for photos uploaded by this user
+            let allPhotos = [];
+            let lastEvaluatedKey;
+            
+            do {
+                const scanParams = {
+                    TableName: PHOTOS_TABLE,
+                    FilterExpression: 'uploaded_by = :uid OR user_id = :uid OR uploadedBy = :uid',
+                    ExpressionAttributeValues: {
+                        ':uid': userId
+                    },
+                    ExclusiveStartKey: lastEvaluatedKey
+                };
+                
+                const response = await docClient.send(new ScanCommand(scanParams));
+                
+                if (!response.Items || response.Items.length === 0) {
+                    console.log(`[PhotoService] No uploaded photos found for user ${userId}.`);
+                    break;
+                }
+                
+                allPhotos = [...allPhotos, ...response.Items];
+                lastEvaluatedKey = response.LastEvaluatedKey;
+                
+            } while (lastEvaluatedKey);
+            
+            console.log(`[PhotoService] Found ${allPhotos.length} photos uploaded by user ${userId}.`);
+            
+            // Apply visibility filter
+            const visibleUploadedPhotos = await filterPhotosByVisibility(userId, allPhotos, 'VISIBLE');
+            
+            // Sort by creation date (newest first)
+            const sortedVisiblePhotos = visibleUploadedPhotos.sort((a, b) => {
+                return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+            });
+            
+            console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} visible uploaded photos for user ${userId}.`);
+            return sortedVisiblePhotos;
+        } catch (error) {
+            console.error('[PhotoService] Error fetching uploaded photos:', error);
+            return [];
         }
     }
 };

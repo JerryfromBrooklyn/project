@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
 import { cn } from '../utils/cn';
@@ -35,6 +35,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   const [folderStructure, setFolderStructure] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [showMetadataForm, setShowMetadataForm] = useState(false);
+  const [uploadComplete, setUploadComplete] = useState(false);
   const [metadata, setMetadata] = useState({
     eventName: '',
     venueName: '',
@@ -53,205 +54,347 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   // Get auth context
   const { user } = useAuth();
 
-  // Initialize Uppy
+  // Add a proper ref for Uppy instance (for cleanup)
+  const uppyRef = useRef(null);
+
+  // Initialize an empty handlers ref (we'll populate it after the handlers are defined)
+  const handlersRef = useRef({});
+
+  // Store a flag to track if initialization has already happened
+  const initializationCompleteRef = useRef(false);
+  
+  // Initialize Uppy only once
   useEffect(() => {
-    console.log('🚀 [Uppy] Initializing Uppy instance');
-    const uppyInstance = new Uppy({
-      id: 'photo-uploader',
-      autoProceed: false, // Disable auto upload
-      restrictions: {
-        maxFileSize: 100 * 1024 * 1024, // 100MB
-        allowedFileTypes: ['image/*', '.jpg', '.jpeg', '.png', '.webp', '.raw', '.cr2', '.nef', '.arw', '.rw2']
-      },
-      meta: {
-        userId: user?.id || '',
-        eventId: eventId || ''
-      }
-    })
-    .use(AwsS3Multipart, {
-      limit: 6,
-      retryDelays: [0, 1000, 3000, 5000],
-      companionUrl: process.env.REACT_APP_COMPANION_URL || '',
-      companionHeaders: {
-        Authorization: `Bearer ${user?.accessToken || ''}`,
-      },
-      getUploadParameters: async (file) => {
-        console.log('📤 [Uppy] Getting upload parameters for file:', file.name);
-        try {
-          const fileData = new File([file.data], file.name, { type: file.type });
-          
-          // Include metadata in the upload
-          const uploadMetadata = {
-            ...metadata,
-            user_id: user?.id || '',
-            uploadedBy: user?.id || '',
-            uploaded_by: user?.id || '',
-            externalAlbumLink: metadata.albumLink || ''
-          };
-
-          const result = await awsPhotoService.uploadPhoto(fileData, eventId, file.meta?.folderPath || '', uploadMetadata);
-
-          if (!result.success) {
-            console.error('❌ [Uppy] Failed to get upload parameters:', result.error);
-            throw new Error(result.error || 'Failed to get upload parameters');
-          }
-
-          return {
-            method: 'PUT',
-            url: result.s3Url || '',
-            fields: {},
-            headers: {},
-          };
-        } catch (error) {
-          console.error('❌ [Uppy] Error getting upload parameters:', error);
-          throw error;
-        }
-      },
-    })
-    .use(ImageEditor, {
-      quality: 0.9,
-      cropperOptions: {
-        viewMode: 1,
-        background: false,
-        autoCropArea: 1,
-        responsive: true
-      }
-    })
-    .use(DropboxPlugin, {
-      companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
-      companionHeaders: {
-        Authorization: `Bearer ${user?.accessToken || ''}`,
-      }
-    })
-    .use(GoogleDrivePlugin, {
-      companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
-      companionHeaders: {
-        Authorization: `Bearer ${user?.accessToken || ''}`,
-      }
-    })
-    .use(UrlPlugin, {
-      companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
-      companionHeaders: {
-        Authorization: `Bearer ${user?.accessToken || ''}`,
-      }
-    });
-
-    // Set up event listeners
-    uppyInstance.on('file-added', (file) => {
-      if (!file) {
-        console.error('❌ [Uppy] No file object provided');
-        return;
-      }
-
-      console.log('📎 [Uppy] File added:', {
-        id: file.id,
-        name: file.name,
-        type: file.type,
-        size: file.size
-      });
-
-      setTotalStorage(prev => prev + (file.size || 0));
-      
-      if (file.relativePath) {
-        const parts = file.relativePath.split('/');
-        if (parts.length > 1) {
-          setFolderStructure(prev => {
-            const newStructure = { ...prev };
-            let current = newStructure;
-            for (let i = 0; i < parts.length - 1; i++) {
-              const part = parts[i];
-              if (!current[part]) {
-                current[part] = {};
-              }
-              current = current[part];
-            }
-            return newStructure;
-          });
-        }
-      }
-
-      setUploads(prev => [...prev, {
-        id: file.id,
-        file: file.data || file,
-        progress: 0,
-        status: 'pending',
-        metadata: { ...metadata },
-        folderPath: file.relativePath ? file.relativePath.split('/').slice(0, -1).join('/') : null
-      }]);
-    });
-
-    uppyInstance.on('upload-progress', (file, progress) => {
-      console.log('📊 [Uppy] Upload progress:', {
-        file: file.name,
-        progress: progress.bytesUploaded / progress.bytesTotal * 100
-      });
-      const { bytesUploaded, bytesTotal } = progress;
-      const progressPercentage = (bytesUploaded / bytesTotal) * 100;
-      
-      setUploads(prev => prev.map(upload => 
-        upload.id === file.id 
-          ? { ...upload, progress: progressPercentage, status: 'uploading' }
-          : upload
-      ));
-    });
-
-    uppyInstance.on('upload-success', async (file, response) => {
-      console.log('✅ [Uppy] Upload successful:', {
-        file: file.name,
-        response: response
-      });
-      try {
-        if (response.photoId && user?.id) {
-          await updatePhotoVisibility(user.id, [response.photoId], 'VISIBLE');
-        }
-
-        setUploads(prev => prev.map(upload => 
-          upload.id === file.id 
-            ? { 
-                ...upload, 
-                status: 'complete',
-                progress: 100,
-                photoDetails: response
-              }
-            : upload
-        ));
-
-        if (onUploadComplete) {
-          onUploadComplete(response);
-        }
-      } catch (error) {
-        console.error('Error processing upload success:', error);
-      }
-    });
-
-    uppyInstance.on('upload-error', (file, error) => {
-      console.error('❌ [Uppy] Upload error:', {
-        file: file.name,
-        error: error
-      });
-      setUploads(prev => prev.map(upload => 
-        upload.id === file.id 
-          ? { ...upload, status: 'error', error: error.message }
-          : upload
-      ));
-
-      if (onError) {
-        onError(error.message);
-      }
-    });
-
-    uppyInstance.on('file-removed', (file) => {
-      setTotalStorage(prev => prev - file.size);
-      setUploads(prev => prev.filter(upload => upload.id !== file.id));
-    });
-
-    setUppy(uppyInstance);
+    // Only initialize once
+    if (initializationCompleteRef.current || uppyRef.current) {
+      return;
+    }
     
+    console.log('🚀 [Uppy] Initializing Uppy instance');
+    
+    try {
+      const uppyInstance = new Uppy({
+        id: 'photo-uploader',
+        autoProceed: false, // Disable auto upload
+        restrictions: {
+          maxFileSize: 100 * 1024 * 1024, // 100MB
+          allowedFileTypes: ['image/*', '.jpg', '.jpeg', '.png', '.webp', '.raw', '.cr2', '.nef', '.arw', '.rw2']
+        },
+        meta: {
+          userId: user?.id || '',
+          eventId: eventId || ''
+        }
+      })
+      .use(AwsS3Multipart, {
+        limit: 5,
+        retryDelays: [0, 1000, 3000, 5000],
+        companionUrl: process.env.REACT_APP_COMPANION_URL || '',
+        companionHeaders: {
+          Authorization: `Bearer ${user?.accessToken || ''}`,
+        },
+        getUploadParameters: async (file) => {
+          console.log('📤 [Uppy] Getting upload parameters for file:', file.name);
+          try {
+            const fileData = new File([file.data], file.name, { type: file.type });
+            
+            // Include metadata in the upload
+            const uploadMetadata = {
+              ...metadata,
+              user_id: user?.id || '',
+              uploadedBy: user?.id || '',
+              uploaded_by: user?.id || '',
+              externalAlbumLink: metadata.albumLink || ''
+            };
+
+            const result = await awsPhotoService.uploadPhoto(fileData, eventId, file.meta?.folderPath || '', uploadMetadata);
+
+            if (!result.success) {
+              console.error('❌ [Uppy] Failed to get upload parameters:', result.error);
+              throw new Error(result.error || 'Failed to get upload parameters');
+            }
+
+            return {
+              method: 'PUT',
+              url: result.s3Url || '',
+              fields: {},
+              headers: {},
+            };
+          } catch (error) {
+            console.error('❌ [Uppy] Error getting upload parameters:', error);
+            throw error;
+          }
+        },
+      })
+      .use(ImageEditor, {
+        quality: 0.9,
+        cropperOptions: {
+          viewMode: 1,
+          background: false,
+          autoCropArea: 1,
+          responsive: true
+        }
+      })
+      .use(DropboxPlugin, {
+        companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+        companionHeaders: {
+          Authorization: `Bearer ${user?.accessToken || ''}`,
+        }
+      })
+      .use(GoogleDrivePlugin, {
+        companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+        companionHeaders: {
+          Authorization: `Bearer ${user?.accessToken || ''}`,
+        }
+      })
+      .use(UrlPlugin, {
+        companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+        companionHeaders: {
+          Authorization: `Bearer ${user?.accessToken || ''}`,
+        }
+      });
+
+      // Add listeners using the refs
+      uppyInstance.on('file-added', handlersRef.current.handleFileAdded);
+      uppyInstance.on('file-removed', handlersRef.current.handleFileRemoved);
+      uppyInstance.on('upload-progress', handlersRef.current.handleUploadProgress);
+      uppyInstance.on('complete', handlersRef.current.handleBatchComplete);
+      uppyInstance.on('error', handlersRef.current.handleUploadError);
+
+      // Save to both ref and state
+      uppyRef.current = uppyInstance;
+      
+      // Set the state in a way that doesn't trigger re-renders during initialization
+      setUppy(uppyInstance);
+      
+      // Mark initialization as complete
+      initializationCompleteRef.current = true;
+      
+      console.log('✅ [Uppy] Initialization complete');
+    } catch (error) {
+      console.error('❌ [Uppy] Error initializing Uppy:', error);
+    }
+    
+    // Proper cleanup function
     return () => {
       console.log('🧹 [Uppy] Cleaning up Uppy instance');
-      uppyInstance.destroy();
+      
+      // Only cleanup if we have an instance
+      if (uppyRef.current) {
+        const instance = uppyRef.current;
+        
+        try {
+          // Remove all event listeners using the refs
+          instance.off('file-added', handlersRef.current.handleFileAdded);
+          instance.off('file-removed', handlersRef.current.handleFileRemoved);
+          instance.off('upload-progress', handlersRef.current.handleUploadProgress);
+          instance.off('complete', handlersRef.current.handleBatchComplete);
+          instance.off('error', handlersRef.current.handleUploadError);
+          
+          // Close the instance - safely check if close method exists
+          if (typeof instance.close === 'function') {
+            instance.close();
+          } else {
+            console.log('⚠️ [Uppy] Warning: instance.close is not a function');
+            // Alternative way to clean up if needed
+            if (typeof instance.destroy === 'function') {
+              instance.destroy();
+            }
+          }
+        } catch (cleanupError) {
+          console.error('❌ [Uppy] Error during cleanup:', cleanupError);
+        }
+        
+        // Reset refs but don't update state during cleanup
+        uppyRef.current = null;
+        initializationCompleteRef.current = false;
+      }
     };
-  }, [user, eventId, onUploadComplete, onError]);
+  }, []); // Empty dependency array - we control initialization with refs
+
+  // Update Uppy metadata when user or event changes
+  useEffect(() => {
+    if (uppyRef.current && (user?.id || eventId)) {
+      uppyRef.current.setMeta({
+        userId: user?.id || '',
+        eventId: eventId || '',
+        ...metadata
+      });
+    }
+  }, [user?.id, eventId, metadata]);
+
+  // Ensure handleFileAdded, handleFileRemoved, etc. are defined with useCallback or outside the component
+  const handleFileAdded = useCallback((file) => {
+    if (!file) {
+      console.error('❌ [Uppy] handleFileAdded: No file object provided');
+      return;
+    }
+
+    console.log('📎 [Uppy] File added:', {
+      id: file.id,
+      name: file.name,
+      type: file.type,
+      size: file.size
+    });
+
+    setTotalStorage(prev => prev + (file.size || 0));
+    
+    // Basic folder structure handling (can be enhanced)
+    if (file.source === 'Client' && file.meta?.relativePath) {
+        const folderPath = file.meta.relativePath.substring(0, file.meta.relativePath.lastIndexOf('/'));
+        if (folderPath) {
+            // Logic to update folderStructure state if needed
+            // console.log(`Folder path derived: ${folderPath}`);
+        }
+    }
+
+    // Add to our internal state for rendering the list/grid
+    setUploads(prev => [...prev, {
+      id: file.id,
+      file: file.data || file, // Store the file object itself
+      progress: 0,
+      status: 'pending',
+      metadata: { ...metadata }, // Use current metadata state
+      folderPath: file.meta?.folderPath || null,
+      error: null,
+      photoDetails: null // Initialize photoDetails
+    }]);
+  }, [metadata]); // Dependency: metadata (if used inside, which it is for the initial state)
+
+  const handleFileRemoved = useCallback((file) => {
+    if (!file) {
+      console.error('❌ [Uppy] handleFileRemoved: No file object provided');
+      return;
+    }
+    console.log('🗑️ [Uppy] File removed:', { id: file.id, name: file.name });
+    setTotalStorage(prev => Math.max(0, prev - (file.size || 0))); // Prevent negative storage
+    setUploads(prev => prev.filter(upload => upload.id !== file.id));
+  }, []); // No dependencies needed
+
+  const handleUploadProgress = useCallback((file, progress) => {
+    if (!file || !progress) {
+        console.error('❌ [Uppy] handleUploadProgress: Missing file or progress object');
+        return;
+    }
+    // console.log('📊 [Uppy] Upload progress:', { file: file.name, progress: progress.bytesUploaded / progress.bytesTotal * 100 });
+    const { bytesUploaded, bytesTotal } = progress;
+    const progressPercentage = bytesTotal > 0 ? (bytesUploaded / bytesTotal) * 100 : 0;
+    
+    setUploads(prev => prev.map(upload => 
+      upload.id === file.id 
+        ? { ...upload, progress: progressPercentage, status: 'uploading' }
+        : upload
+    ));
+  }, []); // No dependencies needed
+
+  const handleUploadError = useCallback((file, error, response) => {
+     if (!file) {
+      console.error('❌ [Uppy] handleUploadError: No file object provided');
+      return;
+    }
+    console.error('❌ [Uppy] Upload error:', {
+      file: file.name,
+      error: error,
+      response: response
+    });
+    setUploads(prev => prev.map(upload => 
+      upload.id === file.id 
+        ? { ...upload, status: 'error', error: error.message || 'Upload failed' }
+        : upload
+    ));
+
+    if (onError) {
+      onError(error.message || 'An upload error occurred');
+    }
+  }, [onError]); // Dependency: onError prop
+
+  // Create a function reference that will remain stable
+  const startUploadQueueRef = useRef(null);
+
+  // Wrap startUploadQueue in useCallback
+  const startUploadQueue = useCallback((uppyInstance) => {
+    if (!uppyInstance) {
+        console.error('❌ [Uppy] startUploadQueue called without a valid Uppy instance.');
+        return;
+    }
+    console.log('🔄 [Uppy] Starting/continuing upload queue process');
+    const allFiles = uppyInstance.getFiles();
+    // Filter for files that are genuinely pending (not started, not complete, not errored)
+    const pendingFiles = allFiles.filter(f => 
+        !f.progress?.uploadComplete && 
+        !f.progress?.uploadStarted && 
+        !f.error
+    );
+    const inProgressFiles = allFiles.filter(f => 
+        f.progress?.uploadStarted && 
+        !f.progress?.uploadComplete &&
+        !f.error
+    );
+    
+    console.log(`📊 [Uppy] Queue status: ${pendingFiles.length} pending, ${inProgressFiles.length} in progress, ${allFiles.length - pendingFiles.length - inProgressFiles.length} completed/errored`);
+    
+    if (pendingFiles.length > 0) {
+      // Only start upload if there are pending files and not too many already in progress
+      // This prevents accidentally calling upload() multiple times rapidly
+      if(inProgressFiles.length < (uppyInstance.opts.limit || 5)) { // Check against the concurrency limit
+         console.log(`🚀 [Uppy] Starting upload for next batch of files (${pendingFiles.length} pending).`);
+         uppyInstance.upload().catch(error => {
+           console.error('❌ [Uppy] Error calling uppy.upload():', error);
+         });
+      } else {
+         console.log(`🚦 [Uppy] ${inProgressFiles.length} files already in progress (limit: ${uppyInstance.opts.limit || 5}). Waiting for current batch to complete.`);
+      }
+    } else if (inProgressFiles.length === 0) {
+      console.log(`✅ [Uppy] No pending files and no uploads in progress. Queue appears complete.`);
+      // You might want to set a state here indicating completion if needed
+    }
+  }, []); // Empty dependency array as it doesn't depend on component state/props
+
+  // Store the function in ref to avoid circular dependencies
+  useEffect(() => {
+    startUploadQueueRef.current = startUploadQueue;
+  }, [startUploadQueue]);
+
+  // Move handleBatchComplete after startUploadQueue is defined and use the ref
+  const handleBatchComplete = useCallback((result) => {
+    console.log('✅ [Uppy] Batch Upload Result:', result);
+    
+    // Check completion status
+    const successfulUploads = result.successful || [];
+    const failedUploads = result.failed || [];
+    console.log(`📊 [Uppy] Batch Summary: ${successfulUploads.length} successful, ${failedUploads.length} failed.`);
+
+    // Check if there are any files that haven't even started or completed yet
+    const remainingFiles = uppy?.getFiles().filter(f => !f.progress?.uploadComplete && !f.progress?.uploadStarted);
+    
+    if (remainingFiles && remainingFiles.length > 0) {
+      console.log(`🔄 [Uppy] Batch finished, but ${remainingFiles.length} files still pending in queue. Starting next batch.`);
+      // IMPORTANT: Call the queue helper function to process the next batch using the ref
+      if (startUploadQueueRef.current && uppy) {
+        startUploadQueueRef.current(uppy);
+      }
+    } else {
+       console.log('✅ [Uppy] All files processed. Upload process fully complete.');
+       // Now this is using a defined state
+       setUploadComplete(true);
+       
+       // Maybe trigger a final refresh of the photo list if needed
+       if (onUploadComplete) {
+         console.log('[PhotoUploader] Calling onUploadComplete callback.');
+         onUploadComplete(); 
+       }
+    }
+  }, [uppy, onUploadComplete]);
+
+  // Now that all handlers are defined, update the handlers ref
+  useEffect(() => {
+    handlersRef.current = {
+      handleFileAdded,
+      handleFileRemoved,
+      handleUploadProgress,
+      handleBatchComplete,
+      handleUploadError
+    };
+  }, [handleFileAdded, handleFileRemoved, handleUploadProgress, handleBatchComplete, handleUploadError]);
 
   const validateMetadata = () => {
     if (!metadata.eventName || !metadata.venueName || !metadata.promoterName || !metadata.date) {
@@ -274,7 +417,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     setShowMetadataForm(true);
   };
 
-  // Handle the blue Continue Upload button click
+  // Modify the handleContinueUpload function
   const handleContinueUpload = () => {
     console.log('Continue Upload clicked');
     
@@ -316,7 +459,14 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     if (uppy) {
       console.log('Starting Uppy upload with formatted metadata');
       uppy.setMeta(formattedMetadata);
-      uppy.upload();
+      if (startUploadQueueRef.current) {
+        startUploadQueueRef.current(uppy); // Use our new function instead of just uppy.upload()
+      } else {
+        console.error('❌ [Uppy] startUploadQueueRef.current is not available');
+        uppy.upload().catch(error => {
+          console.error('❌ [Uppy] Error calling uppy.upload():', error);
+        });
+      }
     }
 
     setShowMetadataForm(false);
@@ -436,6 +586,27 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     },
     maxSize: 100 * 1024 * 1024 // 100MB max file size
   });
+
+  // Ensure the final upload function uses the stable startUploadQueue
+  const handleFinalUpload = () => {
+    if (!uppy) { // Check uppy state variable
+      console.error('Uppy instance not available for final upload.');
+      return;
+    }
+    console.log('🚀 [Uppy] Final upload button clicked, initiating queue process.');
+    // setIsUploading(true); // Manage upload state if needed
+    // setUploadComplete(false);
+    // setError(null);
+    // Call the stable queue helper function using the ref
+    if (startUploadQueueRef.current) {
+      startUploadQueueRef.current(uppy);
+    } else {
+      console.error('❌ [Uppy] startUploadQueueRef.current is not available');
+      uppy.upload().catch(error => {
+        console.error('❌ [Uppy] Error calling uppy.upload():', error);
+      });
+    }
+  };
 
   return (
     <div className="relative w-full max-w-full bg-white shadow-lg rounded-lg border border-gray-200 mb-8 mt-16">
