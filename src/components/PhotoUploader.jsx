@@ -1,13 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { v4 as uuidv4 } from 'uuid';
+import React, { useState, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Upload, Check, AlertTriangle, Grid, List, Search, Filter, Users, X, Info, Calendar, Building, User, MapPin } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { useAuth } from '../context/AuthContext';
 import { updatePhotoVisibility } from '../services/userVisibilityService';
+import { useDropzone } from 'react-dropzone';
+
+// Import Uppy and its plugins
+import Uppy from '@uppy/core';
+import { Dashboard } from '@uppy/react';
+import AwsS3Multipart from '@uppy/aws-s3-multipart';
+import ImageEditor from '@uppy/image-editor';
+import DropboxPlugin from '@uppy/dropbox';
+import GoogleDrivePlugin from '@uppy/google-drive';
+import UrlPlugin from '@uppy/url';
+
+// Import Uppy styles
+import '@uppy/core/dist/style.min.css';
+import '@uppy/dashboard/dist/style.min.css';
+import '@uppy/image-editor/dist/style.min.css';
 
 // Import our new components with proper mobile UX
 import Dialog from './ui/Dialog.jsx';
@@ -33,15 +46,280 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   const [pendingFiles, setPendingFiles] = useState([]);
   const [selectedUpload, setSelectedUpload] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const [uppy, setUppy] = useState(null);
+  const [dropboxConfigured, setDropboxConfigured] = useState(false);
+  const [googleDriveConfigured, setGoogleDriveConfigured] = useState(false);
   
   // Get auth context
   const { user } = useAuth();
+
+  // Initialize Uppy
+  useEffect(() => {
+    console.log('🚀 [Uppy] Initializing Uppy instance');
+    const uppyInstance = new Uppy({
+      id: 'photo-uploader',
+      autoProceed: false, // Disable auto upload
+      restrictions: {
+        maxFileSize: 100 * 1024 * 1024, // 100MB
+        allowedFileTypes: ['image/*', '.jpg', '.jpeg', '.png', '.webp', '.raw', '.cr2', '.nef', '.arw', '.rw2']
+      },
+      meta: {
+        userId: user?.id || '',
+        eventId: eventId || ''
+      }
+    })
+    .use(AwsS3Multipart, {
+      limit: 6,
+      retryDelays: [0, 1000, 3000, 5000],
+      companionUrl: process.env.REACT_APP_COMPANION_URL || '',
+      companionHeaders: {
+        Authorization: `Bearer ${user?.accessToken || ''}`,
+      },
+      getUploadParameters: async (file) => {
+        console.log('📤 [Uppy] Getting upload parameters for file:', file.name);
+        try {
+          const fileData = new File([file.data], file.name, { type: file.type });
+          
+          // Include metadata in the upload
+          const uploadMetadata = {
+            ...metadata,
+            user_id: user?.id || '',
+            uploadedBy: user?.id || '',
+            uploaded_by: user?.id || '',
+            externalAlbumLink: metadata.albumLink || ''
+          };
+
+          const result = await awsPhotoService.uploadPhoto(fileData, eventId, file.meta?.folderPath || '', uploadMetadata);
+
+          if (!result.success) {
+            console.error('❌ [Uppy] Failed to get upload parameters:', result.error);
+            throw new Error(result.error || 'Failed to get upload parameters');
+          }
+
+          return {
+            method: 'PUT',
+            url: result.s3Url || '',
+            fields: {},
+            headers: {},
+          };
+        } catch (error) {
+          console.error('❌ [Uppy] Error getting upload parameters:', error);
+          throw error;
+        }
+      },
+    })
+    .use(ImageEditor, {
+      quality: 0.9,
+      cropperOptions: {
+        viewMode: 1,
+        background: false,
+        autoCropArea: 1,
+        responsive: true
+      }
+    })
+    .use(DropboxPlugin, {
+      companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+      companionHeaders: {
+        Authorization: `Bearer ${user?.accessToken || ''}`,
+      }
+    })
+    .use(GoogleDrivePlugin, {
+      companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+      companionHeaders: {
+        Authorization: `Bearer ${user?.accessToken || ''}`,
+      }
+    })
+    .use(UrlPlugin, {
+      companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+      companionHeaders: {
+        Authorization: `Bearer ${user?.accessToken || ''}`,
+      }
+    });
+
+    // Set up event listeners
+    uppyInstance.on('file-added', (file) => {
+      if (!file) {
+        console.error('❌ [Uppy] No file object provided');
+        return;
+      }
+
+      console.log('📎 [Uppy] File added:', {
+        id: file.id,
+        name: file.name,
+        type: file.type,
+        size: file.size
+      });
+
+      setTotalStorage(prev => prev + (file.size || 0));
+      
+      if (file.relativePath) {
+        const parts = file.relativePath.split('/');
+        if (parts.length > 1) {
+          setFolderStructure(prev => {
+            const newStructure = { ...prev };
+            let current = newStructure;
+            for (let i = 0; i < parts.length - 1; i++) {
+              const part = parts[i];
+              if (!current[part]) {
+                current[part] = {};
+              }
+              current = current[part];
+            }
+            return newStructure;
+          });
+        }
+      }
+
+      setUploads(prev => [...prev, {
+        id: file.id,
+        file: file.data || file,
+        progress: 0,
+        status: 'pending',
+        metadata: { ...metadata },
+        folderPath: file.relativePath ? file.relativePath.split('/').slice(0, -1).join('/') : null
+      }]);
+    });
+
+    uppyInstance.on('upload-progress', (file, progress) => {
+      console.log('📊 [Uppy] Upload progress:', {
+        file: file.name,
+        progress: progress.bytesUploaded / progress.bytesTotal * 100
+      });
+      const { bytesUploaded, bytesTotal } = progress;
+      const progressPercentage = (bytesUploaded / bytesTotal) * 100;
+      
+      setUploads(prev => prev.map(upload => 
+        upload.id === file.id 
+          ? { ...upload, progress: progressPercentage, status: 'uploading' }
+          : upload
+      ));
+    });
+
+    uppyInstance.on('upload-success', async (file, response) => {
+      console.log('✅ [Uppy] Upload successful:', {
+        file: file.name,
+        response: response
+      });
+      try {
+        if (response.photoId && user?.id) {
+          await updatePhotoVisibility(user.id, [response.photoId], 'VISIBLE');
+        }
+
+        setUploads(prev => prev.map(upload => 
+          upload.id === file.id 
+            ? { 
+                ...upload, 
+                status: 'complete',
+                progress: 100,
+                photoDetails: response
+              }
+            : upload
+        ));
+
+        if (onUploadComplete) {
+          onUploadComplete(response);
+        }
+      } catch (error) {
+        console.error('Error processing upload success:', error);
+      }
+    });
+
+    uppyInstance.on('upload-error', (file, error) => {
+      console.error('❌ [Uppy] Upload error:', {
+        file: file.name,
+        error: error
+      });
+      setUploads(prev => prev.map(upload => 
+        upload.id === file.id 
+          ? { ...upload, status: 'error', error: error.message }
+          : upload
+      ));
+
+      if (onError) {
+        onError(error.message);
+      }
+    });
+
+    uppyInstance.on('file-removed', (file) => {
+      setTotalStorage(prev => prev - file.size);
+      setUploads(prev => prev.filter(upload => upload.id !== file.id));
+    });
+
+    setUppy(uppyInstance);
+    
+    return () => {
+      console.log('🧹 [Uppy] Cleaning up Uppy instance');
+      uppyInstance.destroy();
+    };
+  }, [user, eventId, onUploadComplete, onError]);
 
   const validateMetadata = () => {
     if (!metadata.eventName || !metadata.venueName || !metadata.promoterName || !metadata.date) {
       return false;
     }
     return true;
+  };
+
+  // Handle the green button click
+  const handleUploadClick = () => {
+    console.log('Upload button clicked', { numberOfFiles: uploads.length });
+    
+    if (uploads.length === 0) {
+      console.log('No files selected');
+      alert('Please select files first');
+      return;
+    }
+    
+    console.log('Showing metadata form');
+    setShowMetadataForm(true);
+  };
+
+  // Handle the blue Continue Upload button click
+  const handleContinueUpload = () => {
+    console.log('Continue Upload clicked');
+    
+    if (!validateMetadata()) {
+      console.log('Metadata validation failed');
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    // Format metadata for database
+    const formattedMetadata = {
+      event_details: {
+        name: metadata.eventName,
+        date: metadata.date,
+        type: 'event' // default type
+      },
+      venue: {
+        name: metadata.venueName,
+        id: null // can be updated if you have venue IDs
+      },
+      promoter: {
+        name: metadata.promoterName
+      },
+      location: metadata.location || { address: null, lat: null, lng: null },
+      externalAlbumLink: metadata.albumLink || null,
+      uploaded_by: user?.id,
+      created_at: new Date().toISOString()
+    };
+
+    console.log('Updating uploads with metadata', formattedMetadata);
+    
+    // Update all pending uploads with the formatted metadata
+    setUploads(prev => prev.map(upload => ({
+      ...upload,
+      metadata: formattedMetadata
+    })));
+
+    // Start the upload process
+    if (uppy) {
+      console.log('Starting Uppy upload with formatted metadata');
+      uppy.setMeta(formattedMetadata);
+      uppy.upload();
+    }
+
+    setShowMetadataForm(false);
   };
 
   // Storage limit in bytes (10GB)
@@ -54,188 +332,12 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
            (upload.folderPath && upload.folderPath.toLowerCase().includes(searchQuery.toLowerCase()));
   });
 
-  // Process uploads
-  const processUploads = async () => {
-    if (!validateMetadata()) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    // Process pending files with metadata
-    const newUploads = pendingFiles.map(file => {
-      // Clean up folder path - don't use '.' as a folder path
-      let folderPath = null;
-      if (file.path) {
-        const pathParts = file.path.split('/').slice(0, -1);
-        if (pathParts.length > 0 && pathParts.join('/') !== '.') {
-          folderPath = pathParts.join('/');
-        }
-      }
-
-      return {
-        id: uuidv4(),
-        file,
-        progress: 0,
-        status: 'uploading',
-        metadata: { ...metadata },
-        folderPath: folderPath
-      };
-    });
-
-    setUploads(prev => [...prev, ...newUploads]);
-    setPendingFiles([]);
-    setShowMetadataForm(false);
-
-    // Process uploads one by one
-    for (const upload of newUploads) {
-      try {
-        await uploadFile(upload);
-      } catch (error) {
-        console.error('Error uploading file:', error);
-        setUploads(prev => prev.map(u => 
-          u.id === upload.id 
-            ? { ...u, status: 'error', error: error.message || 'Upload failed' }
-            : u
-        ));
-
-        if (onError) {
-          onError(error);
-        }
-      }
-    }
-
-    if (onUploadComplete) {
-      onUploadComplete(newUploads);
-    }
-  };
-
-  // Upload a single file
-  const uploadFile = async (upload) => {
-    // Simulate upload progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 5;
-      setUploads(prev => prev.map(u => 
-        u.id === upload.id ? { ...u, progress: Math.min(progress, 99) } : u
-      ));
-      
-      if (progress >= 100) {
-        clearInterval(interval);
-      }
-    }, 200);
-
-    try {
-      // Use the current user from auth context
-      const userId = user?.id;
-      
-      if (!userId) {
-        console.warn("⚠️ No user ID found in auth context. Upload will proceed with unknown user.");
-      } else {
-        console.log(`👤 Using user ID from auth context: ${userId}`);
-      }
-      
-      // Call AWS photo service with user ID explicitly set
-      const result = await awsPhotoService.uploadPhoto(
-        upload.file,
-        eventId,
-        upload.folderPath,
-        {
-          ...upload.metadata,
-          user_id: userId,
-          uploadedBy: userId,
-          uploaded_by: userId,
-          externalAlbumLink: upload.metadata.albumLink
-        },
-        (progress) => {
-          setUploads(prev => prev.map(u => 
-            u.id === upload.id ? { ...u, progress: Math.min(progress, 99) } : u
-          ));
-        }
-      );
-
-      clearInterval(interval);
-
-      // Explicitly set the photo visibility to VISIBLE in the visibility table
-      if (result.success && result.photoId && userId) {
-        console.log(`Setting visibility for new photo ${result.photoId} to VISIBLE`);
-        try {
-          await updatePhotoVisibility(userId, [result.photoId], 'VISIBLE');
-          console.log(`✅ Successfully set visibility for photo ${result.photoId} to VISIBLE`);
-        } catch (visibilityError) {
-          console.error(`❌ Error setting visibility for photo ${result.photoId}:`, visibilityError);
-        }
-      }
-
-      // Update with success
-      setUploads(prev => prev.map(u => 
-        u.id === upload.id ? { 
-          ...u, 
-          status: 'complete', 
-          progress: 100,
-          photoDetails: result 
-        } : u
-      ));
-
-      return result;
-    } catch (error) {
-      clearInterval(interval);
-      throw error;
-    }
-  };
-
   // Remove upload
   const removeUpload = (id) => {
-    setUploads(prev => {
-      const uploadToRemove = prev.find(u => u.id === id);
-      const newUploads = prev.filter(u => u.id !== id);
-      
-      // Update total storage calculation
-      if (uploadToRemove) {
-        setTotalStorage(prev => prev - uploadToRemove.file.size);
-      }
-      
-      return newUploads;
-    });
-  };
-
-  // Handle file drop
-  const onDrop = (acceptedFiles) => {
-    // Calculate total size
-    const newSize = acceptedFiles.reduce((acc, file) => acc + file.size, 0);
-    const projectedSize = totalStorage + newSize;
-    
-    if (projectedSize > storageLimit) {
-      alert('Uploading these files would exceed your storage limit of 10GB');
-      return;
+    const uploadToRemove = uploads.find(u => u.id === id);
+    if (uploadToRemove) {
+      uppy?.removeFile(id);
     }
-    
-    // Update total storage
-    setTotalStorage(projectedSize);
-    
-    // Update folder structure
-    const newStructure = { ...folderStructure };
-    
-    acceptedFiles.forEach(file => {
-      if (file.path) {
-        const parts = file.path.split('/');
-        if (parts.length > 1) {
-          let current = newStructure;
-          for (let i = 0; i < parts.length - 1; i++) {
-            const part = parts[i];
-            if (!current[part]) {
-              current[part] = {};
-            }
-            current = current[part];
-          }
-        }
-      }
-    });
-    
-    setFolderStructure(newStructure);
-    
-    // Show metadata form before starting upload
-    setPendingFiles(acceptedFiles);
-    setShowMetadataForm(true);
   };
 
   // Render folder structure recursively
@@ -311,6 +413,21 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     );
   };
 
+  // Handle file drops
+  const onDrop = (acceptedFiles) => {
+    acceptedFiles.forEach(file => {
+      uppy?.addFile({
+        name: file.name,
+        type: file.type,
+        data: file,
+        meta: {
+          ...metadata,
+          folderPath: file.path // If available from the file system
+        }
+      });
+    });
+  };
+
   // Dropzone hook
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
@@ -321,12 +438,14 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   });
 
   return (
-    <div className="relative p-4 bg-white shadow-lg rounded-lg border border-gray-200 mb-8">
-      <h2 className="text-xl font-semibold mb-4 text-gray-800">
-        Upload Photos
-      </h2>
-      
-      <div className="w-full">
+    <div className="relative w-full max-w-full bg-white shadow-lg rounded-lg border border-gray-200 mb-8 mt-16">
+      {/* Header Section */}
+      <div className="p-4 md:p-6">
+        <h2 className="text-xl font-semibold mb-4 text-gray-800">
+          Upload Photos
+        </h2>
+        
+        {/* Storage Usage */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-apple-gray-700">Storage Usage</span>
@@ -337,109 +456,240 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           </div>
         </div>
 
-        {/* File Dropzone - touch-friendly */}
-        <div 
-          {...getRootProps()} 
-          className={cn(
-            "mt-4 p-10 border-4 border-dashed rounded-xl text-center transition-colors duration-300 min-h-[200px] flex flex-col items-center justify-center", 
-            isDragActive ? "border-blue-500 bg-blue-50" : "border-blue-300 bg-blue-50",
-            uploads.length > 0 && "mb-8"
-          )}
-        >
-          <input {...getInputProps()} multiple type="file" accept="image/*" className="hidden" aria-label="Upload files" />
-          <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-white flex items-center justify-center shadow-lg">
-            <Upload className="w-10 h-10 text-blue-500" />
+        {/* Uppy Dashboard with adjusted positioning */}
+        {uppy && (
+          <div className="w-full overflow-hidden rounded-lg border border-gray-200 relative z-10">
+            <Dashboard
+              uppy={uppy}
+              plugins={['ImageEditor', 'Dropbox', 'GoogleDrive', 'Url']}
+              width="100%"
+              height="min(70vh, 600px)"
+              showProgressDetails={true}
+              proudlyDisplayPoweredByUppy={false}
+              note="Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file"
+              metaFields={[
+                { id: 'folderPath', name: 'Folder Path', placeholder: 'Optional folder path' }
+              ]}
+              className="uppy-Dashboard--adaptive"
+              hideUploadButton={true}
+            />
           </div>
-          <p className="text-gray-700 mb-4 text-lg font-semibold">
-            {isDragActive ? "Drop the photos or folders here" : "Drag and drop photos here"}
-          </p>
-          
-          <button 
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-lg text-lg shadow-lg transform transition hover:scale-105 flex items-center"
-            onClick={(e) => {
-              e.stopPropagation();
-              // Trigger the hidden file input click
-              document.querySelector('input[type="file"]').click();
-            }}
-            type="button"
-          >
-            <Upload className="w-6 h-6 mr-2" />
-            UPLOAD
-          </button>
-          
-          <p className="text-gray-600 text-sm mt-4">Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file</p>
-        </div>
-        
-        {/* Uploads list with touch-friendly controls */}
+        )}
+
+        {/* Custom Upload Buttons */}
         {uploads.length > 0 && (
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <Button
-                onClick={() => setViewMode(prev => ({ ...prev, mode: 'grid' }))}
-                variant={viewMode.mode === 'grid' ? 'primary' : 'secondary'}
-                size="sm"
-                icon={<Grid className="w-4 h-4" />}
-                aria-label="Grid view"
-              />
-              <Button
-                onClick={() => setViewMode(prev => ({ ...prev, mode: 'list' }))}
-                variant={viewMode.mode === 'list' ? 'primary' : 'secondary'}
-                size="sm"
-                icon={<List className="w-4 h-4" />}
-                aria-label="List view"
-              />
-              
-              <div className="h-6 w-px bg-apple-gray-200 mx-2"></div>
-              
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-apple-gray-400" />
+          <div className="mt-4 flex items-center justify-start gap-4">
+            <Button
+              onClick={handleUploadClick}
+              variant="primary"
+              size="md"
+              className="bg-green-500 hover:bg-green-600 text-white px-6 rounded-md"
+            >
+              Upload {uploads.length} {uploads.length === 1 ? 'File' : 'Files'}
+            </Button>
+
+            <Button
+              onClick={() => {
+                // Reset all uploads
+                uploads.forEach(upload => {
+                  uppy?.removeFile(upload.id);
+                });
+                setUploads([]);
+                setTotalStorage(0);
+              }}
+              variant="primary"
+              size="md"
+              className="bg-red-500 hover:bg-red-600 text-white px-6 rounded-md"
+            >
+              Reset All
+            </Button>
+          </div>
+        )}
+
+        {/* Metadata Form Dialog */}
+        <Dialog
+          isOpen={showMetadataForm}
+          onClose={() => setShowMetadataForm(false)}
+          title="Photo Details"
+          maxWidth="max-w-2xl"
+        >
+          <div className="space-y-6 p-4">
+            <div className="bg-blue-50 p-3 rounded-md mb-6">
+              <p className="text-center text-blue-700 text-sm">
+                Please provide information about these photos
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Event Name*
+                </label>
                 <input
                   type="text"
-                  placeholder="Search uploads..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 pr-4 py-2 rounded-md bg-apple-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-apple-blue-500"
+                  value={metadata.eventName}
+                  onChange={(e) => setMetadata(prev => ({ ...prev, eventName: e.target.value }))}
+                  className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
+                  placeholder="Enter event name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Venue Name*
+                </label>
+                <input
+                  type="text"
+                  value={metadata.venueName}
+                  onChange={(e) => setMetadata(prev => ({ ...prev, venueName: e.target.value }))}
+                  className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
+                  placeholder="Enter venue name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Promoter Name*
+                </label>
+                <input
+                  type="text"
+                  value={metadata.promoterName}
+                  onChange={(e) => setMetadata(prev => ({ ...prev, promoterName: e.target.value }))}
+                  className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
+                  placeholder="Enter promoter name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Date*
+                </label>
+                <input
+                  type="date"
+                  value={metadata.date}
+                  onChange={(e) => setMetadata(prev => ({ ...prev, date: e.target.value }))}
+                  className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+                  required
                 />
               </div>
             </div>
-            
-            <div className="flex items-center space-x-2">
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Album Link (optional)
+              </label>
+              <input
+                type="url"
+                value={metadata.albumLink}
+                onChange={(e) => setMetadata(prev => ({ ...prev, albumLink: e.target.value }))}
+                className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
+                placeholder="https://example.com/album"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Enter a URL to the album or event page
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Location (optional)
+              </label>
+              <input
+                type="text"
+                value={metadata.location?.address || ''}
+                onChange={(e) => setMetadata(prev => ({ 
+                  ...prev, 
+                  location: { address: e.target.value } 
+                }))}
+                className="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors placeholder-gray-400"
+                placeholder="Search for a location..."
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-8 pt-4 border-t border-gray-200">
               <Button
                 variant="secondary"
-                size="sm"
-                icon={<Filter className="w-4 h-4" />}
+                onClick={() => setShowMetadataForm(false)}
+                className="px-6 py-2 text-sm font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200"
               >
-                Filter
+                Cancel
               </Button>
-              
-              <select
-                value={viewMode.sortBy}
-                onChange={(e) => setViewMode(prev => ({ ...prev, sortBy: e.target.value }))}
-                className="py-2 pl-4 pr-10 rounded-md border border-apple-gray-200 bg-white"
+              <Button
+                variant="primary"
+                onClick={handleContinueUpload}
+                className="px-6 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
               >
-                <option value="date">Sort by Date</option>
-                <option value="name">Sort by Name</option>
-                <option value="size">Sort by Size</option>
-              </select>
+                Continue Upload
+              </Button>
             </div>
           </div>
-        )}
-        
-        {/* Folder structure */}
-        {Object.keys(folderStructure).length > 0 && (
-          <div className="mb-8">
-            <h3 className="text-sm font-medium text-apple-gray-700 mb-2">Folders</h3>
-            {renderFolderStructure(folderStructure)}
-          </div>
-        )}
-        
-        {/* Upload grid with touch-friendly controls */}
-        <AnimatePresence>
-          {uploads.length > 0 && (
+        </Dialog>
+
+        {/* Uploads List */}
+        {uploads.length > 0 && (
+          <div className="mt-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div className="flex items-center space-x-2">
+                <Button
+                  onClick={() => setViewMode(prev => ({ ...prev, mode: 'grid' }))}
+                  variant={viewMode.mode === 'grid' ? 'primary' : 'secondary'}
+                  size="sm"
+                  icon={<LucideIcons.Grid className="w-4 h-4" />}
+                  aria-label="Grid view"
+                />
+                <Button
+                  onClick={() => setViewMode(prev => ({ ...prev, mode: 'list' }))}
+                  variant={viewMode.mode === 'list' ? 'primary' : 'secondary'}
+                  size="sm"
+                  icon={<LucideIcons.List className="w-4 h-4" />}
+                  aria-label="List view"
+                />
+                
+                <div className="h-6 w-px bg-apple-gray-200 mx-2"></div>
+                
+                <div className="relative flex-1 min-w-[200px]">
+                  <LucideIcons.Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-apple-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search uploads..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 rounded-md bg-apple-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-apple-blue-500"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<LucideIcons.Filter className="w-4 h-4" />}
+                >
+                  Filter
+                </Button>
+                
+                <select
+                  value={viewMode.sortBy}
+                  onChange={(e) => setViewMode(prev => ({ ...prev, sortBy: e.target.value }))}
+                  className="py-2 pl-4 pr-10 rounded-md border border-apple-gray-200 bg-white text-sm"
+                >
+                  <option value="date">Sort by Date</option>
+                  <option value="name">Sort by Name</option>
+                  <option value="size">Sort by Size</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Upload Grid/List */}
             <div 
               className={cn(
                 "grid gap-4",
-                viewMode.mode === 'grid' ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3" : "grid-cols-1"
+                viewMode.mode === 'grid' 
+                  ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" 
+                  : "grid-cols-1"
               )}
             >
               {filteredUploads.map((upload) => (
@@ -463,7 +713,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                       <img
                         src={URL.createObjectURL(upload.file)}
                         alt={upload.file.name}
-                        className="w-full h-full object-cover rounded-tl-lg rounded-tr-lg"
+                        className="w-full h-full object-cover rounded-tl-lg rounded-tr-lg cursor-pointer"
                         onClick={() => setPreviewImage(upload.file)}
                       />
                     )}
@@ -479,10 +729,10 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                         <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                       )}
                       {upload.status === 'complete' && (
-                        <Check className="w-8 h-8 text-white" />
+                        <LucideIcons.Check className="w-8 h-8 text-white" />
                       )}
                       {upload.status === 'error' && (
-                        <AlertTriangle className="w-8 h-8 text-white" />
+                        <LucideIcons.AlertTriangle className="w-8 h-8 text-white" />
                       )}
                     </div>
                   </div>
@@ -490,7 +740,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                   <div className="p-4 flex-1">
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="font-medium text-apple-gray-900 truncate">{upload.file.name}</p>
+                        <p className="font-medium text-apple-gray-900 truncate max-w-[200px]">{upload.file.name}</p>
                         <p className="text-sm text-apple-gray-500">
                           {upload.folderPath && (
                             <span className="text-apple-gray-400">{upload.folderPath} /</span>
@@ -507,7 +757,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                             className="min-w-[44px] min-h-[44px] flex items-center justify-center text-apple-gray-400 hover:text-apple-gray-600"
                             aria-label="View details"
                           >
-                            <Info className="w-5 h-5" />
+                            <LucideIcons.Info className="w-5 h-5" />
                           </button>
                         )}
                         
@@ -516,7 +766,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                           className="min-w-[44px] min-h-[44px] flex items-center justify-center text-apple-gray-400 hover:text-apple-gray-600"
                           aria-label="Remove upload"
                         >
-                          <X className="w-5 h-5" />
+                          <LucideIcons.X className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
@@ -544,12 +794,12 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                         <div className="flex items-center space-x-2">
                           {upload.photoDetails.matched_users?.length ? (
                             <div className="bg-apple-green-500 text-white px-2 py-1 rounded-full text-sm flex items-center">
-                              <Users className="w-4 h-4 mr-1" />
+                              <LucideIcons.Users className="w-4 h-4 mr-1" />
                               {upload.photoDetails.matched_users.length} {upload.photoDetails.matched_users.length === 1 ? 'Match' : 'Matches'}
                             </div>
                           ) : (
                             <div className="bg-apple-gray-200 text-apple-gray-600 px-2 py-1 rounded-full text-sm flex items-center">
-                              <Users className="w-4 h-4 mr-1" />
+                              <LucideIcons.Users className="w-4 h-4 mr-1" />
                               No Matches
                             </div>
                           )}
@@ -560,11 +810,11 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 </motion.div>
               ))}
             </div>
-          )}
-        </AnimatePresence>
+          </div>
+        )}
       </div>
 
-      {/* Photo details dialog - using our new Dialog component */}
+      {/* Photo details dialog */}
       <Dialog
         isOpen={!!selectedUpload && !!selectedUpload.photoDetails}
         onClose={() => setSelectedUpload(null)}
@@ -585,118 +835,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         )}
       </Dialog>
 
-      {/* Metadata form dialog - using our new Dialog component */}
-      <Dialog
-        isOpen={showMetadataForm}
-        onClose={() => {
-          setShowMetadataForm(false);
-          setPendingFiles([]);
-        }}
-        title="Photo Details"
-        description="Please provide information about these photos"
-        maxWidth="max-w-3xl"
-        actions={[
-          {
-            label: "Cancel",
-            onClick: () => {
-              setShowMetadataForm(false);
-              setPendingFiles([]);
-            },
-            variant: "secondary"
-          },
-          {
-            label: "Continue Upload",
-            onClick: processUploads,
-            variant: "primary",
-            className: "bg-blue-600 text-white font-bold shadow-lg"
-          }
-        ]}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Event Name*
-            </label>
-            <input
-              type="text"
-              value={metadata.eventName}
-              onChange={(e) => setMetadata({ ...metadata, eventName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="Enter event name"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Venue Name*
-            </label>
-            <input
-              type="text"
-              value={metadata.venueName}
-              onChange={(e) => setMetadata({ ...metadata, venueName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="Enter venue name"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Promoter Name*
-            </label>
-            <input
-              type="text"
-              value={metadata.promoterName}
-              onChange={(e) => setMetadata({ ...metadata, promoterName: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="Enter promoter name"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date*
-            </label>
-            <input
-              type="date"
-              value={metadata.date}
-              onChange={(e) => setMetadata({ ...metadata, date: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              required
-            />
-          </div>
-          
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Album Link (optional)
-            </label>
-            <input
-              type="url"
-              value={metadata.albumLink}
-              onChange={(e) => setMetadata({ ...metadata, albumLink: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="https://example.com/album"
-            />
-            <p className="mt-1 text-xs text-gray-500">Enter a URL to the album or event page</p>
-          </div>
-          
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Location (optional)
-            </label>
-            <GoogleMaps
-              location={metadata.location}
-              onLocationChange={(location) => setMetadata({ ...metadata, location })}
-              height="220px"
-              className="rounded overflow-hidden border border-gray-300"
-            />
-          </div>
-        </div>
-      </Dialog>
-
-      {/* Image viewer - using our new ImageViewer component */}
+      {/* Image viewer */}
       {previewImage && (
         <ImageViewer
           image={{ 
