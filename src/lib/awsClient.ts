@@ -27,7 +27,7 @@ export const AWS_SECRET_ACCESS_KEY = getEnvVar('VITE_AWS_SECRET_ACCESS_KEY');
 
 // Rekognition configuration
 export const COLLECTION_ID = getEnvVar('VITE_AWS_COLLECTION_ID', 'shmong-faces');
-export const FACE_MATCH_THRESHOLD = 95; // Set threshold to 95
+export const FACE_MATCH_THRESHOLD = 95; // Set to 95% for optimal balance
 
 // Cognito configuration
 export const COGNITO_USER_POOL_ID = getEnvVar('VITE_COGNITO_USER_POOL_ID', 'us-east-1_wXi7yGqKw');

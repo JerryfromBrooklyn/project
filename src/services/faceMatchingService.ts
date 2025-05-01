@@ -9,7 +9,7 @@ const AWS_REGION = process.env.AWS_REGION || "us-east-1"; // Replace with your d
 const REKOGNITION_COLLECTION_ID = process.env.REKOGNITION_COLLECTION_ID || "shmong-faces"; // Replace with your Rekognition Collection ID
 // @ts-ignore - Ignore process error temporarily
 const S3_BUCKET = process.env.S3_BUCKET || 'shmong-photos'; // Replace with your bucket name or env var
-const FACE_MATCH_THRESHOLD = 95; // Set threshold to 95
+const FACE_MATCH_THRESHOLD = 95; // Set threshold to 95% for optimal balance
 
 // --- AWS SDK Client Initialization ---
 

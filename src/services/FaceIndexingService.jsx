@@ -30,7 +30,7 @@ import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 
 // Configure Rekognition constants
 const COLLECTION_ID = AWS_COLLECTION_ID || 'shmong-faces';
-const FACE_MATCH_THRESHOLD = 93.5;
+const FACE_MATCH_THRESHOLD = 95;
 
 // Add environment detection for browser-safe code
 const isBrowser = typeof window !== 'undefined';

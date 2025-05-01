@@ -7,7 +7,7 @@ const cloudwatch = new AWS.CloudWatch();
 const PHOTOS_TABLE = 'shmong-photos';
 const USER_PHOTOS_TABLE = 'shmong-user-photos';
 const COLLECTION_ID = 'shmong-faces';
-const FACE_MATCH_THRESHOLD = 98.0;
+const FACE_MATCH_THRESHOLD = 95.0;
 
 /**
  * Lambda handler for processing face match queue

@@ -22,7 +22,7 @@ import {
 import { supabase } from '../../lib/supabaseClient';
 
 // Constants
-const FACE_MATCH_THRESHOLD = 80; // Minimum confidence for face matches (0-100)
+const FACE_MATCH_THRESHOLD = 95; // Set to 95% for optimal balance
 const MAX_RETRIES = 3;           // Number of retries for AWS API calls
 const RETRY_DELAY = 1000;        // Delay between retries in milliseconds
 
