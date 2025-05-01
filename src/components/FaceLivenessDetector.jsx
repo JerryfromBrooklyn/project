@@ -623,13 +623,21 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto" 
         style={{ 
-          paddingTop: isIOS() ? '10px' : '16px',
-          paddingBottom: isIOS() ? 'env(safe-area-inset-bottom, 30px)' : '16px',
-          height: isIOS() ? '-webkit-fill-available' : '100%'
+          paddingTop: isIOS() ? 'env(safe-area-inset-top, 20px)' : '16px',
+          paddingBottom: isIOS() ? 'env(safe-area-inset-bottom, 40px)' : '16px',
+          paddingLeft: isIOS() ? 'env(safe-area-inset-left, 12px)' : '12px',
+          paddingRight: isIOS() ? 'env(safe-area-inset-right, 12px)' : '12px',
+          height: '100%',
+          width: '100%'
         }}
         ref={containerRef}
       >
-        <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto">
+        <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto flex flex-col"
+          style={{
+            maxHeight: isIOS() ? 'calc(100vh - 80px)' : 'calc(100vh - 60px)',
+            height: 'auto'
+          }}
+        >
           <div className="p-2 sm:p-4 bg-gray-50 border-b flex justify-between items-center">
             <h2 className="text-base sm:text-lg font-semibold">Face Verification</h2>
             <button 
@@ -643,10 +651,10 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
             </button>
           </div>
           
-          <div className="relative" style={{ 
-            height: isIOS() ? '50vh' : 'calc(100vh - 200px)', 
-            minHeight: '260px',
-            maxHeight: isIOS() ? '400px' : '500px'
+          <div className="relative flex-grow" style={{ 
+            minHeight: isIOS() ? '250px' : '300px',
+            maxHeight: isIOS() ? '500px' : '600px',
+            overflowY: 'hidden'
           }}>
             {console.log('[FaceLivenessCheck] About to render AWS FaceLivenessDetector component')}
             <FaceLivenessDetector
@@ -681,15 +689,22 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto"
         style={{ 
-          paddingTop: isIOS() ? '10px' : '16px',
-          paddingBottom: isIOS() ? 'env(safe-area-inset-bottom, 30px)' : '16px',
-          height: isIOS() ? '-webkit-fill-available' : '100%'
+          paddingTop: isIOS() ? 'env(safe-area-inset-top, 20px)' : '16px',
+          paddingBottom: isIOS() ? 'env(safe-area-inset-bottom, 40px)' : '16px',
+          paddingLeft: isIOS() ? 'env(safe-area-inset-left, 12px)' : '12px',
+          paddingRight: isIOS() ? 'env(safe-area-inset-right, 12px)' : '12px',
+          height: '100%',
+          width: '100%'
         }}
         ref={containerRef}
       >
-        <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto">
-          <div className="p-4 sm:p-6">
-            <div className="flex justify-between items-center mb-4 sm:mb-6">
+        <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto"
+          style={{
+            maxHeight: isIOS() ? 'calc(100vh - 80px)' : 'calc(100vh - 60px)'
+          }}
+        >
+          <div className="p-3 sm:p-5">
+            <div className="flex justify-between items-center mb-3 sm:mb-5">
               <h2 className="text-lg sm:text-xl font-semibold">Select Camera</h2>
               <button 
                 onClick={handleClose}
@@ -703,13 +718,13 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
             </div>
             
             {isCameraLoading ? (
-              <div className="flex flex-col items-center justify-center py-4">
+              <div className="flex flex-col items-center justify-center py-3">
                 <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 border-t-2 border-b-2 border-blue-500 mb-3 sm:mb-4"></div>
                 <p className="text-gray-600 text-sm sm:text-base">Detecting available cameras...</p>
               </div>
             ) : cameraDevices.length > 0 ? (
               <>
-                <div className="mb-4 sm:mb-6">
+                <div className="mb-4 sm:mb-5">
                   <label htmlFor="camera-select" className="block text-sm font-medium text-gray-700 mb-1 sm:mb-2">
                     Choose a camera:
                   </label>
@@ -769,14 +784,21 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto"
       style={{ 
-        paddingTop: isIOS() ? '10px' : '16px',
-        paddingBottom: isIOS() ? 'env(safe-area-inset-bottom, 30px)' : '16px',
-        height: isIOS() ? '-webkit-fill-available' : '100%'
+        paddingTop: isIOS() ? 'env(safe-area-inset-top, 20px)' : '16px',
+        paddingBottom: isIOS() ? 'env(safe-area-inset-bottom, 40px)' : '16px',
+        paddingLeft: isIOS() ? 'env(safe-area-inset-left, 12px)' : '12px',
+        paddingRight: isIOS() ? 'env(safe-area-inset-right, 12px)' : '12px',
+        height: '100%',
+        width: '100%'
       }}
       ref={containerRef}
     >
-      <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto">
-        <div className="p-4 sm:p-6">
+      <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto"
+        style={{
+          maxHeight: isIOS() ? 'calc(100vh - 80px)' : 'calc(100vh - 60px)'
+        }}
+      >
+        <div className="p-4 sm:p-5">
           <div className="flex flex-col items-center justify-center">
             {isLoading ? (
               <>
