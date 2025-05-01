@@ -396,11 +396,88 @@ window.FaceLivenessDebug = {
   },
   
   // Add a direct reference to testRekognitionConnectivity
-  testRekognitionConnection: async () => {
+  testAwsConnection: async () => {
     console.log('🔍 Testing AWS Rekognition connectivity...');
     const result = await testRekognitionConnectivity();
     console.log('📊 Rekognition connectivity result:', result);
     return result;
+  },
+  
+  // List all available cameras
+  listCameras: async () => {
+    try {
+      // First request permission
+      const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      
+      // List devices
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter(device => device.kind === 'videoinput');
+      
+      // Release camera
+      tempStream.getTracks().forEach(track => track.stop());
+      
+      console.table(cameras.map((cam, idx) => ({
+        index: idx + 1,
+        name: cam.label,
+        id: cam.deviceId.substring(0, 10) + '...'
+      })));
+      
+      return cameras;
+    } catch (error) {
+      console.error('❌ Failed to list cameras:', error);
+      return [];
+    }
+  },
+  
+  // Test Face Liveness full flow manually
+  testFaceLiveness: async (deviceId) => {
+    const { createFaceLivenessSession, getFaceLivenessSessionResults } = await import('./api/faceLivenessApi');
+    
+    try {
+      // Step 1: Test camera access
+      const cameraTest = await testCamera(deviceId);
+      if (!cameraTest.success) {
+        console.error('❌ Camera test failed - cannot proceed with Face Liveness test');
+        return false;
+      }
+      
+      // Step 2: Test AWS connectivity
+      const awsTest = await testAwsConnection();
+      if (!awsTest) {
+        console.error('❌ AWS connectivity test failed - cannot proceed with Face Liveness test');
+        return false;
+      }
+      
+      // Step 3: Create a Face Liveness session
+      console.log('🔍 Creating Face Liveness session...');
+      const userId = 'debug-test-' + Date.now();
+      const session = await createFaceLivenessSession(userId);
+      console.log('✅ Session created:', session.sessionId);
+      
+      console.log('🔍 To complete the test, you would need to manually start the Face Liveness check with this session ID');
+      console.log('🔍 After completing the liveness check, you can get results with:');
+      console.log(`FaceLivenessDebug.getSessionResults("${session.sessionId}")`);
+      
+      return session.sessionId;
+    } catch (error) {
+      console.error('❌ Face Liveness test failed:', error);
+      return false;
+    }
+  },
+  
+  // Get session results manually
+  getSessionResults: async (sessionId) => {
+    const { getFaceLivenessSessionResults } = await import('./api/faceLivenessApi');
+    
+    try {
+      console.log('🔍 Getting results for session:', sessionId);
+      const results = await getFaceLivenessSessionResults(sessionId);
+      console.log('✅ Session results:', results);
+      return results;
+    } catch (error) {
+      console.error('❌ Failed to get session results:', error);
+      return false;
+    }
   }
 };
 
@@ -412,7 +489,10 @@ console.log('- FaceLivenessDebug.debugSession("sessionId") - Debug a specific se
 console.log('- FaceLivenessDebug.listDevices() - List all media devices');
 console.log('- FaceLivenessDebug.testCameraById("deviceId") - Test specific camera');
 console.log('- FaceLivenessDebug.showAmplifyConfig() - Show Amplify configuration');
-console.log('- FaceLivenessDebug.testRekognitionConnection() - Test Rekognition API connection');
+console.log('- FaceLivenessDebug.testAwsConnection() - Test Rekognition API connection');
+console.log('- FaceLivenessDebug.listCameras() - List all available cameras');
+console.log('- FaceLivenessDebug.testFaceLiveness("deviceId") - Test Face Liveness full flow');
+console.log('- FaceLivenessDebug.getSessionResults("sessionId") - Get session results');
 
 export default window.FaceLivenessDebug;
 

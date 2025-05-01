@@ -26,141 +26,138 @@ log.info('AWS Configuration:', {
 });
 
 /**
- * Creates a Face Liveness session with AWS Rekognition
- * @param {string} userId - The ID of the user creating the session
- * @returns {Promise<Object>} The session data with sessionId
+ * Creates a Face Liveness session using AWS Rekognition
+ * 
+ * @param {string} userId - Optional user ID for the session
+ * @returns {Promise<{sessionId: string}>} - The created session ID
  */
 export const createFaceLivenessSession = async (userId) => {
+  log.info('Creating liveness session for user:', userId);
+  
   try {
-    log.info('Creating liveness session for user:', userId);
-    log.debug('Using AWS Region:', AWS_REGION);
-    log.debug('Using S3 Bucket:', S3_BUCKET);
-    
-    // Create a Face Liveness session with AWS Rekognition
-    const command = new CreateFaceLivenessSessionCommand({
-      ClientRequestToken: `session-${userId}-${Date.now()}`, // Unique identifier for this request
+    const params = {
+      ClientRequestToken: userId,  // Optional, but can help with idempotency
       Settings: {
         OutputConfig: {
           S3Bucket: S3_BUCKET,
-          // Use user ID in the S3 key prefix to organize results by user
-          S3KeyPrefix: `face-liveness/${userId}/`
+          S3KeyPrefix: `users/${userId || 'anonymous'}/sessions/`
         }
       }
-    });
+    };
     
-    log.debug('Sending CreateFaceLivenessSession command:', command);
+    log.info(`Using AWS Region: ${AWS_REGION}`);
+    log.info(`Using S3 Bucket: ${S3_BUCKET}`);
+    
+    const command = new CreateFaceLivenessSessionCommand(params);
+    log.info('Sending CreateFaceLivenessSession command:', command);
+    
+    // Add a small delay before sending the command to avoid race conditions
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     const response = await rekognitionClient.send(command);
     
-    log.info('Session created successfully:', response.SessionId);
-    
-    return {
-      success: true,
-      sessionId: response.SessionId
-    };
-  } catch (error) {
-    log.error('Error creating liveness session:', error);
-    
-    // Provide more detailed error messages based on error type
-    let errorMessage = 'Failed to create a face verification session.';
-    
-    if (error.name === 'AccessDeniedException' || error.message?.includes('Access Denied')) {
-      errorMessage = 'AWS access denied. Check your IAM permissions for Face Liveness operations.';
-      log.error('Access denied error details:', { message: error.message, code: error.code });
-    } else if (error.name === 'ResourceNotFoundException') {
-      errorMessage = 'The S3 bucket specified for Face Liveness does not exist or is not accessible.';
-      log.error('Resource not found error details:', { message: error.message, code: error.code });
-    } else if (error.name === 'ValidationException') {
-      errorMessage = `AWS validation error: ${error.message}`;
-      log.error('Validation error details:', { message: error.message, code: error.code });
-    } else if (error.name === 'ThrottlingException') {
-      errorMessage = 'AWS request rate exceeded. Please try again in a few moments.';
-      log.error('Throttling error details:', { message: error.message, code: error.code });
-    } else if (error.message?.includes('Credential') || error.message?.includes('credentials')) {
-      errorMessage = 'AWS credential error. Check your AWS access key and secret key configuration.';
-      log.error('Credential error details:', { message: error.message, code: error.code });
+    if (!response || !response.SessionId) {
+      throw new Error('No session ID returned from AWS Rekognition');
     }
     
+    log.info('Session created successfully:', response.SessionId);
+    return { 
+      sessionId: response.SessionId,
+      createdAt: new Date().toISOString()
+    };
+  } catch (error) {
+    log.error('Error creating Face Liveness session:', error);
+    
+    // Provide more detailed error info based on the error type
+    let errorMessage = 'Failed to create Face Liveness session';
+    
+    if (error.name === 'ValidationException') {
+      errorMessage = `Validation error: ${error.message}`;
+    } else if (error.name === 'ServiceQuotaExceededException') {
+      errorMessage = 'AWS service quota exceeded. Please try again later.';
+    } else if (error.name === 'AccessDeniedException') {
+      errorMessage = 'Access denied. Check AWS permissions.';
+    } else if (error.name === 'ThrottlingException') {
+      errorMessage = 'AWS request rate limit exceeded. Please try again later.';
+    }
+    
+    // Instead of throwing, return an error object in a consistent format
     return {
-      success: false,
-      error: errorMessage,
-      originalError: error.message
+      error: errorMessage || error.message,
+      errorDetails: {
+        name: error.name,
+        message: error.message,
+        code: error.code
+      }
     };
   }
 };
 
 /**
  * Gets the results of a Face Liveness session
- * @param {string} sessionId - The ID of the session to get results for
- * @param {string} userId - The ID of the user who created the session
- * @returns {Promise<Object>} The session results
+ * 
+ * @param {string} sessionId - The Face Liveness session ID
+ * @returns {Promise<{isLive: boolean, confidence: number, referenceImage: string}>} - Session results
  */
-export const getFaceLivenessResults = async (sessionId, userId) => {
+export const getFaceLivenessSessionResults = async (sessionId) => {
+  log.info('Getting results for session:', sessionId);
+  
   try {
-    log.info('Getting results for session:', sessionId);
-    
-    // Get the results of a Face Liveness session from AWS Rekognition
     const command = new GetFaceLivenessSessionResultsCommand({
       SessionId: sessionId
     });
     
-    log.debug('Sending GetFaceLivenessSessionResults command');
+    // Add a small delay to ensure session data is available
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     const response = await rekognitionClient.send(command);
     
-    log.info('Session results retrieved successfully:', {
-      status: response.Status,
-      confidence: response.Confidence,
-      referenceImageAvailable: !!response.ReferenceImage,
-      auditImagesCount: response.AuditImages?.length || 0
-    });
-    
-    // Use configured confidence threshold or default to 90
-    const confidenceThreshold = parseFloat(import.meta.env.VITE_FACE_LIVENESS_CONFIDENCE_THRESHOLD || '90');
-    log.debug('Using confidence threshold:', confidenceThreshold);
-    
-    // Extract the important fields from the response
-    const result = {
-      isLive: response.Status === 'SUCCEEDED' && response.Confidence >= confidenceThreshold,
-      confidence: response.Confidence || 0,
-      status: response.Status,
-      // Reference image: high-quality image from the session for face comparison
-      referenceImage: response.ReferenceImage?.S3ObjectKey 
-        ? `https://${S3_BUCKET}.s3.amazonaws.com/${response.ReferenceImage.S3ObjectKey}`
-        : null,
-      // Audit images: images for manual verification if needed
-      auditImages: response.AuditImages?.map(img => 
-        img.S3ObjectKey 
-          ? `https://${S3_BUCKET}.s3.amazonaws.com/${img.S3ObjectKey}`
-          : null
-      ).filter(Boolean) || []
-    };
-    
-    log.debug('Processed result:', result);
-    
-    return {
-      success: true,
-      ...result
-    };
-  } catch (error) {
-    log.error('Error getting liveness results:', error);
-    
-    let errorMessage = 'Failed to get face verification results.';
-    
-    if (error.name === 'AccessDeniedException' || error.message?.includes('Access Denied')) {
-      errorMessage = 'AWS access denied when retrieving results. Check your IAM permissions.';
-    } else if (error.name === 'ResourceNotFoundException') {
-      errorMessage = 'The face verification session was not found or has expired.';
-    } else if (error.name === 'ValidationException') {
-      errorMessage = `AWS validation error: ${error.message}`;
-    } else if (error.name === 'ThrottlingException') {
-      errorMessage = 'AWS request rate exceeded. Please try again in a few moments.';
+    if (!response) {
+      throw new Error('No response from AWS Rekognition');
     }
     
-    log.error('Error details:', { errorType: error.name, message: error.message });
+    log.info('Session results received, confidence:', response.Confidence);
+    
+    // Determine liveness based on confidence threshold
+    // AWS recommends a minimum threshold of 90 for production
+    const isLive = response.Status === 'SUCCEEDED' && (response.Confidence >= 90);
+    
+    // Extract reference image - this is a base64 encoded string
+    const referenceImage = response.ReferenceImage ? 
+      response.ReferenceImage.Bytes ? 
+        Buffer.from(response.ReferenceImage.Bytes).toString('base64') :
+        null : 
+      null;
     
     return {
-      success: false,
+      isLive,
+      confidence: response.Confidence || 0,
+      referenceImage,
+      status: response.Status,
+      auditImages: response.AuditImages || []
+    };
+  } catch (error) {
+    log.error('Error getting Face Liveness session results:', error);
+    
+    // Provide more detailed error info based on the error type
+    let errorMessage = 'Failed to get Face Liveness session results';
+    
+    if (error.name === 'ResourceNotFoundException') {
+      errorMessage = 'Session not found or expired';
+    } else if (error.name === 'AccessDeniedException') {
+      errorMessage = 'Access denied. Check AWS permissions.';
+    } else if (error.name === 'ValidationException') {
+      errorMessage = `Validation error: ${error.message}`;
+    }
+    
+    // Return error object instead of throwing
+    return {
       error: errorMessage,
-      originalError: error.message
+      errorDetails: {
+        name: error.name,
+        message: error.message,
+        code: error.code
+      }
     };
   }
 };
@@ -257,6 +254,6 @@ export const checkCameraForFaceLiveness = async () => {
 
 export default {
   createFaceLivenessSession,
-  getFaceLivenessResults,
+  getFaceLivenessSessionResults,
   checkCameraForFaceLiveness
 }; 

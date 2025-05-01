@@ -8,6 +8,7 @@ import { FaceLivenessDetector } from '@aws-amplify/ui-react-liveness';
 import '@aws-amplify/ui-react-liveness/styles.css';
 import { useAuth } from '../context/AuthContext';
 import { FaceIndexingService } from '../services/FaceIndexingService';
+import { createFaceLivenessSession, getFaceLivenessSessionResults } from '../api/faceLivenessApi';
 
 // AWS SDK clients
 import { RekognitionClient, CreateFaceLivenessSessionCommand, GetFaceLivenessSessionResultsCommand, ListCollectionsCommand } from '@aws-sdk/client-rekognition';
@@ -38,9 +39,10 @@ const getVideoInputDevices = async () => {
     return [];
   }
   
+  let testStream = null;
   try {
     // First request camera permission
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    testStream = await navigator.mediaDevices.getUserMedia({ video: true });
     
     // Then enumerate devices (this should now have device labels)
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -48,31 +50,23 @@ const getVideoInputDevices = async () => {
     
     console.log('[FaceLivenessDetector] Available video devices:', videoDevices);
     
-    // Log detailed information about each device
+    // Log each camera's details for debugging
     videoDevices.forEach((device, index) => {
-      console.log(`[FaceLivenessDetector] Camera #${index+1} details:`, {
-        deviceId: device.deviceId,
-        groupId: device.groupId,
-        kind: device.kind,
-        label: device.label
-      });
-    });
-    
-    // Important: Stop all tracks from the test stream to release the camera
-    stream.getTracks().forEach(track => {
-      console.log('[FaceLivenessDetector] Stopping test camera track:', track.label);
-      track.stop();
+      console.log(`[FaceLivenessDetector] Camera #${index + 1} details:`, device);
     });
     
     return videoDevices;
   } catch (error) {
-    console.error('[FaceLivenessDetector] Error getting video devices:', error);
-    console.error('[FaceLivenessDetector] Error details:', {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
-    });
+    console.error('[FaceLivenessDetector] Error accessing media devices:', error);
     return [];
+  } finally {
+    // Ensure we release camera resources immediately
+    if (testStream) {
+      testStream.getTracks().forEach(track => {
+        track.stop();
+        console.log(`[FaceLivenessDetector] Stopping test track: ${track.label}`);
+      });
+    }
   }
 };
 
@@ -126,6 +120,9 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [stage, setStage] = useState('init'); // init, camera-select, checking, complete, error
   
+  // State to track if a specific camera access error occurred
+  const [showCameraAccessError, setShowCameraAccessError] = useState(false);
+  
   // Camera selection state
   const [cameraDevices, setCameraDevices] = useState([]);
   const [selectedCameraId, setSelectedCameraId] = useState(null);
@@ -142,6 +139,8 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   const streamRef = useRef(null);
   const containerRef = useRef(null);
   const sessionCreatedRef = useRef(false); // Prevent multiple session creations
+  const cameraTestingRef = useRef(false);
+  const retryTimeoutRef = useRef(null);
 
   // Get user from auth context
   const { user } = useAuth();
@@ -192,80 +191,57 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Load available camera devices on mount
+  // Initialize on component mount
   useEffect(() => {
-    const loadCameraDevices = async () => {
-      setIsCameraLoading(true);
-      
-      // Make sure any existing streams are stopped before requesting new ones
-      if (streamRef.current) {
-        console.log('[FaceLivenessCheck] Stopping existing stream before detecting cameras');
-        streamRef.current.getTracks().forEach(track => {
-          console.log('[FaceLivenessCheck] Stopping track:', track.kind, track.label);
-          track.stop();
-        });
-        streamRef.current = null;
-      }
+    console.log('[FaceLivenessCheck] useEffect triggered - camera setup');
+    
+    // Function to initialize camera and create session
+    const setupCameraAndSession = async () => {
+      if (cameraTestingRef.current) return;
+      cameraTestingRef.current = true;
       
       try {
-        const devices = await getVideoInputDevices();
+        // Get list of available cameras
+        const videoDevices = await getVideoInputDevices();
+        setCameraDevices(videoDevices);
         
-        if (devices.length === 0) {
-          console.warn('[FaceLivenessCheck] No cameras detected');
-          // Check if the browser might be blocking camera access
-          if (navigator.permissions) {
-            try {
-              const permission = await navigator.permissions.query({ name: 'camera' });
-              console.log('[FaceLivenessCheck] Camera permission status:', permission.state);
-            } catch (permError) {
-              console.warn('[FaceLivenessCheck] Cannot query camera permission:', permError);
-            }
-          }
+        if (videoDevices.length === 0) {
+          console.error('[FaceLivenessCheck] No cameras found');
+          setError('No video devices detected. Please ensure your camera is connected and permissions are granted.');
+          setShowCameraAccessError(true);
+          setIsLoading(false);
+          cameraTestingRef.current = false;
+          return;
         }
         
-        setCameraDevices(devices);
+        // Auto-select the first camera
+        const firstCamera = videoDevices[0];
+        console.log('[FaceLivenessCheck] Auto-selecting first camera:', firstCamera.label);
+        setSelectedCameraId(firstCamera.deviceId);
         
-        // Auto-select the first camera if available
-        if (devices.length > 0) {
-          console.log('[FaceLivenessCheck] Auto-selecting first camera:', devices[0].label);
-          setSelectedCameraId(devices[0].deviceId);
-        }
-      } catch (err) {
-        console.error('[FaceLivenessCheck] Error loading camera devices:', err);
-      } finally {
-        setIsCameraLoading(false);
+        // Add a slight delay before starting AWS liveness check
+        // This allows for complete cleanup of previous camera resources
+        retryTimeoutRef.current = setTimeout(() => {
+          startFaceLivenessSession(firstCamera);
+        }, 500); // 500ms delay to ensure camera resources are fully released
+      } catch (error) {
+        console.error('[FaceLivenessCheck] Error during camera setup:', error);
+        setError(`Camera access failed: ${error.message}`);
+        setShowCameraAccessError(true);
+        setIsLoading(false);
+        cameraTestingRef.current = false;
       }
     };
     
-    loadCameraDevices();
+    setupCameraAndSession();
     
-    // Cleanup function to release all camera resources on unmount
+    // Clear any resources on effect cleanup
     return () => {
-      console.log('[FaceLivenessCheck] Cleanup: Component unmounting - cleaning up all camera resources');
-      
-      // Stop any active media recorder
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        console.log('[FaceLivenessCheck] Cleanup: Stopping media recorder');
-        try {
-          mediaRecorderRef.current.stop();
-        } catch (err) {
-          console.error('[FaceLivenessCheck] Error stopping media recorder:', err);
-        }
+      cameraTestingRef.current = false;
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
       }
-      
-      // Stop all camera tracks
-      if (streamRef.current) {
-        console.log('[FaceLivenessCheck] Cleanup: Stopping all camera tracks');
-        streamRef.current.getTracks().forEach(track => {
-          console.log('[FaceLivenessCheck] Cleanup: Stopping track:', track.kind, track.label);
-          track.stop();
-        });
-        streamRef.current = null;
-      }
-      
-      // Clear state
-      setSessionId(null);
-      sessionCreatedRef.current = false;
     };
   }, []);
 
@@ -304,170 +280,149 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     setSelectedCameraId(newCameraId);
   };
 
-  // Start the face liveness session with the selected camera
-  const startFaceLivenessSession = () => {
-    console.log('[FaceLivenessCheck] Starting Face Liveness session with camera ID:', selectedCameraId);
-    
-    // Find the selected camera device to log its details
-    const selectedDevice = cameraDevices.find(device => device.deviceId === selectedCameraId);
-    console.log('[FaceLivenessCheck] Selected camera device:', selectedDevice ? selectedDevice.label : 'Unknown');
-    
-    setStage('checking');
-    createFaceLivenessSession();
-  };
-
-  // Create a Face Liveness session directly with AWS
-  const createFaceLivenessSession = useCallback(async () => {
-    // Prevent multiple session creations
-    if (sessionCreatedRef.current) {
-      console.log('[FaceLivenessCheck] Session already created, skipping duplicate creation');
-      return;
-    }
-    
-    console.log('[FaceLivenessCheck] Creating Face Liveness session...');
-    setIsLoading(true);
-    setError(null);
-    
-    // Check if user is authenticated before proceeding
-    if (!user?.id) {
-      console.warn('[FaceLivenessCheck] No authenticated user found');
-      setError('You must be logged in to use face verification. Please sign in and try again.');
-      setStage('error');
+  // Start the Face Liveness session with the selected camera
+  const startFaceLivenessSession = async (camera) => {
+    if (!camera || !camera.deviceId) {
+      console.error('[FaceLivenessCheck] No camera selected for Face Liveness session');
+      setError('No camera selected');
       setIsLoading(false);
       return;
     }
     
-    // Check if camera is available before proceeding
+    console.log('[FaceLivenessCheck] Starting Face Liveness session with camera ID:', camera.deviceId);
+    console.log('[FaceLivenessCheck] Selected camera device:', camera.label);
+    
     try {
-      console.log('[FaceLivenessCheck] Checking camera availability...');
-      let cameraAvailable = false;
-      let testStream = null;
+      // Reset any previous errors
+      setError(null);
+      setShowCameraAccessError(false);
       
+      console.log('[FaceLivenessCheck] Creating Face Liveness session...');
+      
+      // Make sure we don't have multiple sessions running
+      if (sessionId) {
+        console.log('[FaceLivenessCheck] Session already exists, reusing:', sessionId);
+        return;
+      }
+      
+      // Ensure previous camera resources are fully released
+      if (streamRef.current) {
+        console.log('[FaceLivenessCheck] Stopping previous camera track: ${track.label}');
+        streamRef.current.getTracks().forEach(track => {
+          console.log('[FaceLivenessCheck] Stopping previous camera track: ${track.label}');
+          track.stop();
+        });
+        streamRef.current = null;
+      }
+      
+      console.log('[FaceLivenessCheck] Checking camera availability...');
+      
+      // Test camera access before creating the session
+      // This pre-flight check ensures the camera is available and working
       try {
-        // Try to access the camera directly with the selected device id
-        const constraints = { 
-          video: selectedCameraId ? { 
-            deviceId: { exact: selectedCameraId },
+        const constraints = {
+          video: {
+            deviceId: { exact: camera.deviceId },
             width: { ideal: 640 },
             height: { ideal: 480 }
-          } : true 
+          }
         };
         
         console.log('[FaceLivenessCheck] Using camera constraints:', JSON.stringify(constraints));
-        testStream = await navigator.mediaDevices.getUserMedia(constraints);
         
-        if (testStream) {
-          cameraAvailable = true;
-          console.log('[FaceLivenessCheck] Successfully accessed camera with constraints');
-          
-          // Log the tracks we got
-          testStream.getTracks().forEach(track => {
-            console.log('[FaceLivenessCheck] Camera test track:', {
-              kind: track.kind,
-              label: track.label,
-              id: track.id,
-              enabled: track.enabled,
-              readyState: track.readyState,
-              settings: track.getSettings ? track.getSettings() : 'Not available'
-            });
-          });
-        }
-      } catch (cameraErr) {
-        console.error('[FaceLivenessCheck] Camera check failed:', cameraErr);
-        console.error('[FaceLivenessCheck] Error details:', {
-          name: cameraErr.name,
-          message: cameraErr.message,
-          constraintName: cameraErr.constraintName
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log('[FaceLivenessCheck] Successfully accessed camera with constraints');
+        
+        // Keep reference to first video track for debugging
+        const videoTrack = stream.getVideoTracks()[0];
+        console.log('[FaceLivenessCheck] Camera test track:', videoTrack);
+        
+        // Wait briefly to ensure camera is initialized before releasing it
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Now release the camera for AWS SDK to use
+        console.log('[FaceLivenessCheck] Releasing camera test stream');
+        stream.getTracks().forEach(track => {
+          track.stop();
         });
-        cameraAvailable = false;
-      } finally {
-        // Always release the test stream
-        if (testStream) {
-          console.log('[FaceLivenessCheck] Releasing camera test stream');
-          testStream.getTracks().forEach(track => track.stop());
-        }
-      }
-      
-      // If camera is not available, show error and return
-      if (!cameraAvailable) {
-        const errorMessage = 'Camera access is required for face verification. Please ensure your camera is connected and not being used by another application, and you have granted camera permission to this site.';
-        console.error('[FaceLivenessCheck] Camera not available:', errorMessage);
-        setError(errorMessage);
-        setStage('error');
+        
+        // Wait for camera to fully release before proceeding
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        console.log('[FaceLivenessCheck] Camera is available, proceeding with session creation');
+      } catch (error) {
+        console.error('[FaceLivenessCheck] Camera pre-check failed:', error);
+        setError(`Camera access error: ${error.message}`);
+        setShowCameraAccessError(true);
         setIsLoading(false);
         return;
       }
       
-      console.log('[FaceLivenessCheck] Camera is available, proceeding with session creation');
-    } catch (err) {
-      console.error('[FaceLivenessCheck] Error checking camera:', err);
-    }
-    
-    // Now use the direct API approach instead of the server
-    try {
-      // Import the faceLivenessApi to use direct AWS SDK calls
-      const { createFaceLivenessSession } = await import('../api/faceLivenessApi');
+      console.log('[FaceLivenessCheck] Calling direct AWS SDK for session creation with userId:', user?.id);
       
-      console.log('[FaceLivenessCheck] Calling direct AWS SDK for session creation with userId:', user.id);
-      const result = await createFaceLivenessSession(user.id);
-      
-      if (result.success) {
-        console.log('[FaceLivenessCheck] Session created successfully:', result.sessionId);
-        sessionCreatedRef.current = true; // Mark that we've created a session
-        setSessionId(result.sessionId);
-        setStage('checking');
-        setIsLoading(false);
-      } else {
-        console.error('[FaceLivenessCheck] Error from API:', result.error);
-        setError(`Failed to start face verification: ${result.error}`);
+      // Create liveness session with AWS SDK
+      try {
+        // Call the API to create a session
+        const response = await createFaceLivenessSession(user?.id);
+        
+        // Check for a valid session ID in the response
+        if (response && response.sessionId) {
+          console.log('[FaceLivenessCheck] Session created successfully:', response.sessionId);
+          setSessionId(response.sessionId);
+          setStage('checking');
+          setIsLoading(false);
+        } else {
+          console.error('[FaceLivenessCheck] Invalid response from API:', response);
+          setError('Failed to create a Face Liveness session. Please try again.');
+          setStage('error');
+          setIsLoading(false);
+          
+          if (onError) {
+            console.log('[FaceLivenessCheck] Calling onError callback');
+            onError(new Error('Invalid API response'));
+          }
+        }
+      } catch (err) {
+        console.error('[FaceLivenessCheck] Error creating Face Liveness session:', err);
+        
+        // Format error message based on error type
+        let errorMessage = 'Failed to initiate face verification. Please try again.';
+        
+        if (err.name === 'AccessDeniedException' || err.message?.includes('Access Denied')) {
+          errorMessage = 'Access denied. Your AWS account may not have permissions for Face Liveness detection operations.';
+        } else if (err.name === 'ResourceNotFoundException') {
+          errorMessage = 'The S3 bucket specified for Face Liveness does not exist or is not accessible.';
+        } else if (err.name === 'ValidationException') {
+          errorMessage = `Validation error: ${err.message}`;
+        } else if (err.name === 'ThrottlingException') {
+          errorMessage = 'AWS request rate exceeded. Please try again in a few moments.';
+        } else if (err.message?.includes('identityId')) {
+          errorMessage = 'Authentication error: Unable to get valid AWS credentials. Please log in again.';
+        } else if (err.message?.includes('Credential is missing') || err.message?.includes('Missing credentials')) {
+          errorMessage = 'AWS credentials are missing. You need to set up valid AWS credentials in your .env file with VITE_AWS_ACCESS_KEY_ID and VITE_AWS_SECRET_ACCESS_KEY.';
+          console.error('[FaceLivenessCheck] Credentials are missing. Environment access key available:', !!import.meta.env.VITE_AWS_ACCESS_KEY_ID);
+        }
+        
+        setError(errorMessage);
         setStage('error');
         setIsLoading(false);
         
         if (onError) {
           console.log('[FaceLivenessCheck] Calling onError callback');
-          onError(new Error(result.error));
+          onError(err);
         }
       }
     } catch (err) {
-      console.error('[FaceLivenessCheck] Error creating Face Liveness session:', err);
-      
-      // Format error message based on error type
-      let errorMessage = 'Failed to initiate face verification. Please try again.';
-      
-      if (err.name === 'AccessDeniedException' || err.message?.includes('Access Denied')) {
-        errorMessage = 'Access denied. Your AWS account may not have permissions for Face Liveness detection operations.';
-      } else if (err.name === 'ResourceNotFoundException') {
-        errorMessage = 'The S3 bucket specified for Face Liveness does not exist or is not accessible.';
-      } else if (err.name === 'ValidationException') {
-        errorMessage = `Validation error: ${err.message}`;
-      } else if (err.name === 'ThrottlingException') {
-        errorMessage = 'AWS request rate exceeded. Please try again in a few moments.';
-      } else if (err.message?.includes('identityId')) {
-        errorMessage = 'Authentication error: Unable to get valid AWS credentials. Please log in again.';
-      } else if (err.message?.includes('Credential is missing') || err.message?.includes('Missing credentials')) {
-        errorMessage = 'AWS credentials are missing. You need to set up valid AWS credentials in your .env file with VITE_AWS_ACCESS_KEY_ID and VITE_AWS_SECRET_ACCESS_KEY.';
-        console.error('[FaceLivenessCheck] Credentials are missing. Environment access key available:', !!import.meta.env.VITE_AWS_ACCESS_KEY_ID);
-      }
-      
-      setError(errorMessage);
+      console.error('[FaceLivenessCheck] Unexpected error starting Face Liveness session:', err);
+      setError(`Unexpected error: ${err.message}`);
       setStage('error');
       setIsLoading(false);
       
       if (onError) {
-        console.log('[FaceLivenessCheck] Calling onError callback');
         onError(err);
       }
     }
-  }, [user, onError, selectedCameraId]);
-
-  // Initialize on component mount
-  useEffect(() => {
-    console.log('[FaceLivenessCheck] useEffect triggered - camera setup');
-    
-    // Don't auto-start session - wait for camera selection
-    
-    // Cleanup function - handled by the first useEffect
-  }, []);
+  };
 
   // Handle when analysis starts
   const handleAnalysisStart = useCallback(() => {
@@ -515,45 +470,48 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
       setIsLoading(true);
       
       // Use the direct API approach instead of server
-      const { getFaceLivenessResults } = await import('../api/faceLivenessApi');
-      
       console.log('[FaceLivenessCheck] Getting results for session via direct API:', sessionId);
-      const result = await getFaceLivenessResults(sessionId, user?.id);
+      const result = await getFaceLivenessSessionResults(sessionId);
       
-      if (result.success) {
-        console.log('[FaceLivenessCheck] Liveness results received:', {
-          isLive: result.isLive,
-          confidence: result.confidence,
-          status: result.status,
-          hasReferenceImage: !!result.referenceImage,
-          auditImagesCount: result.auditImages?.length || 0
-        });
+      // Check if the response contains an error
+      if (result.error) {
+        console.error('[FaceLivenessCheck] Error getting session results:', result.error);
+        setError(`Session results error: ${result.error}`);
         
-        setLivenessResult(result);
-        setReferenceImage(result.referenceImage);
-        
-        // Proceed with face registration if successful
-        if (result.isLive && result.referenceImage) {
-          console.log('[FaceLivenessCheck] Liveness check passed, proceeding with face registration');
-          await registerFace(result.referenceImage);
-        } else {
-          console.warn('[FaceLivenessCheck] Liveness check failed:', {
-            isLive: result.isLive,
-            confidence: result.confidence
-          });
-          
-          if (!result.isLive) {
-            setError('Face verification failed. The system could not verify that a live person was present.');
-            if (onError) {
-              onError(new Error('Liveness check failed with low confidence'));
-            }
-          }
-        }
-      } else {
-        console.error('[FaceLivenessCheck] Error getting results:', result.error);
-        setError(`Failed to complete verification: ${result.error}`);
         if (onError) {
           onError(new Error(result.error));
+        }
+        
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('[FaceLivenessCheck] Liveness results received:', {
+        isLive: result.isLive,
+        confidence: result.confidence,
+        status: result.status,
+        hasReferenceImage: !!result.referenceImage,
+        auditImagesCount: result.auditImages?.length || 0
+      });
+      
+      setLivenessResult(result);
+      setReferenceImage(result.referenceImage);
+      
+      // Proceed with face registration if successful
+      if (result.isLive && result.referenceImage) {
+        console.log('[FaceLivenessCheck] Liveness check passed, proceeding with face registration');
+        await registerFace(result.referenceImage);
+      } else {
+        console.warn('[FaceLivenessCheck] Liveness check failed:', {
+          isLive: result.isLive,
+          confidence: result.confidence
+        });
+        
+        if (!result.isLive) {
+          setError('Face verification failed. The system could not verify that a live person was present.');
+          if (onError) {
+            onError(new Error('Liveness check failed with low confidence'));
+          }
         }
       }
       
@@ -579,7 +537,7 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
         onError(err);
       }
     }
-  }, [sessionId, onError, user?.id]);
+  }, [sessionId, onError, onSuccess, user?.id]);
 
   // Register the face after successful liveness check
   const registerFace = async (imageUrl) => {
@@ -663,10 +621,52 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   }, []);
 
   // Handle close button click
-  const handleClose = useCallback(() => {
+  const handleCloseClick = useCallback(() => {
     console.log('[FaceLivenessCheck] Close button clicked, calling onClose callback');
     if (onClose) onClose();
   }, [onClose]);
+
+  // If we have a camera error, show a user-friendly error with retry option
+  if (showCameraAccessError) {
+    return (
+      <div className="face-liveness-container error-container">
+        <div className="error-message">
+          <h3>Camera Access Error</h3>
+          <p>{error || 'Unable to access your camera. Please ensure that:'}</p>
+          <ul>
+            <li>Your camera is connected and working</li>
+            <li>You've granted camera permission to this website</li>
+            <li>No other application is currently using your camera</li>
+          </ul>
+          <button 
+            className="retry-button" 
+            onClick={() => {
+              setShowCameraAccessError(false);
+              setIsLoading(true);
+              setError(null);
+              // Get the selected camera device
+              const selectedDevice = cameraDevices.find(device => device.deviceId === selectedCameraId);
+              if (selectedDevice) {
+                // Add delay before retry
+                setTimeout(() => {
+                  startFaceLivenessSession(selectedDevice);
+                }, 500);
+              } else {
+                setError("No camera selected. Please choose a camera first.");
+                setShowCameraAccessError(true);
+                setIsLoading(false);
+              }
+            }}
+          >
+            Retry
+          </button>
+          <button className="close-button" onClick={handleCloseClick}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Simplify the render function to prioritize the FaceLivenessDetector component
   if (sessionId) {
@@ -680,28 +680,19 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     
     return (
       <div 
-        className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999]" 
-        style={{ 
-          paddingTop: 'env(safe-area-inset-top, 16px)',
-          paddingBottom: 'env(safe-area-inset-bottom, 16px)',
-          paddingLeft: 'env(safe-area-inset-left, 16px)',
-          paddingRight: 'env(safe-area-inset-right, 16px)',
-        }}
+        className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] p-4"
         ref={containerRef}
       >
-        {/* Modal container with stricter max-height */}
+        {/* Modal container with max-height and internal scrolling */}
         <div 
-          className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto flex flex-col"
-          style={{ 
-            maxHeight: 'calc(100vh - 120px)', // Further reduced max height
-            height: 'auto'
-          }}
+          className="bg-white rounded-lg overflow-hidden w-full max-w-md shadow-xl mx-auto flex flex-col"
+          style={{ maxHeight: '85vh' }}
         >
           {/* Modal Header (fixed size) */}
           <div className="p-3 sm:p-4 bg-gray-50 border-b flex justify-between items-center flex-shrink-0">
             <h2 className="text-base sm:text-lg font-semibold">Face Verification</h2>
             <button 
-              onClick={handleClose}
+              onClick={handleCloseClick}
               className="text-gray-400 hover:text-gray-600 transition-colors"
               aria-label="Close"
             >
@@ -711,13 +702,10 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
             </button>
           </div>
           
-          {/* Scrollable Content Area with capped height */}
+          {/* Content Area with fixed height and scrolling */}
           <div 
-            className="relative flex-grow overflow-y-auto"
-            style={{ 
-              minHeight: '250px', // Minimum space
-              maxHeight: '450px' // Explicit max height for content area
-            }}
+            className="relative flex-grow overflow-y-auto" 
+            style={{ height: '450px' }}
           >
             {console.log('[FaceLivenessCheck] About to render AWS FaceLivenessDetector component')}
             <FaceLivenessDetector
@@ -730,14 +718,10 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
               disableInstructionScreen={false}
               displayDebugInfo={true}
               cameraFacing="user"
-              cameraConstraints={{
-                 deviceId: selectedCameraId ? { exact: selectedCameraId } : undefined,
-                 width: { ideal: 640 },
-                 height: { ideal: 480 }
-              }}
+              deviceId={selectedCameraId}
               style={{
                 width: '100%',
-                height: '100%', // Fill the container (up to 450px max)
+                height: '100%', 
                 position: 'relative',
                 zIndex: 1000,
                 display: 'flex',
@@ -751,34 +735,24 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     );
   }
   
-  // Camera selection screen (apply similar logic if needed)
+  // Camera selection screen (apply similar logic)
   if (stage === 'init') {
     return (
       <div 
-        className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999]" 
-        style={{ 
-          paddingTop: 'env(safe-area-inset-top, 16px)',
-          paddingBottom: 'env(safe-area-inset-bottom, 16px)',
-          paddingLeft: 'env(safe-area-inset-left, 16px)',
-          paddingRight: 'env(safe-area-inset-right, 16px)',
-        }}
+        className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] p-4"
         ref={containerRef}
       >
         {/* Modal container */}
         <div 
-          className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto flex flex-col"
-          style={{ 
-            maxHeight: 'calc(100vh - 100px)', // Keep reasonable max height
-            height: 'auto'
-          }}
+          className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto flex flex-col"
+          style={{ maxHeight: '85vh' }}
         >
           {/* Scrollable content area */}
           <div className="p-4 sm:p-5 overflow-y-auto">
-            {/* Header */}
             <div className="flex justify-between items-center mb-4 sm:mb-5 flex-shrink-0">
               <h2 className="text-lg sm:text-xl font-semibold">Select Camera</h2>
               <button 
-                onClick={handleClose}
+                onClick={handleCloseClick}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
                 aria-label="Close"
               >
@@ -788,7 +762,6 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
               </button>
             </div>
             
-            {/* Content */}
             {isCameraLoading ? (
               <div className="flex flex-col items-center justify-center py-3">
                 <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 border-t-2 border-b-2 border-blue-500 mb-3 sm:mb-4"></div>
@@ -814,7 +787,7 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
                   </select>
                 </div>
                 <button
-                  onClick={startFaceLivenessSession}
+                  onClick={() => startFaceLivenessSession(cameraDevices.find(d => d.deviceId === selectedCameraId))}
                   disabled={!selectedCameraId}
                   className="w-full px-3 py-2 sm:px-4 sm:py-2 bg-blue-600 text-white font-medium text-sm sm:text-base rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
                   aria-label="Start face verification process"
@@ -822,7 +795,6 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
                 >
                   Start Face Verification
                 </button>
-                
                 <p className="mt-3 sm:mt-4 text-xs sm:text-sm text-gray-600">
                   Please select your preferred camera and ensure it's not being used by another application.
                 </p>
@@ -854,26 +826,17 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     );
   }
   
-  // Loading state while creating session (apply similar logic if needed)
+  // Loading state while creating session (apply similar logic)
   console.log('[FaceLivenessCheck] Rendering loading state - no sessionId yet, isLoading:', isLoading);
   return (
     <div 
-      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999]" 
-      style={{ 
-        paddingTop: 'env(safe-area-inset-top, 16px)',
-        paddingBottom: 'env(safe-area-inset-bottom, 16px)',
-        paddingLeft: 'env(safe-area-inset-left, 16px)',
-        paddingRight: 'env(safe-area-inset-right, 16px)',
-      }}
+      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] p-4"
       ref={containerRef}
     >
       {/* Modal container */}
       <div 
         className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto flex flex-col"
-        style={{ 
-          maxHeight: 'calc(100vh - 100px)', // Keep reasonable max height
-          height: 'auto' 
-        }}
+        style={{ maxHeight: '85vh' }}
       >
         {/* Scrollable content area */}
         <div className="p-4 sm:p-5 overflow-y-auto">
@@ -906,6 +869,7 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
                 
                 <button
                   onClick={() => {
+                    // Log detailed diagnostic information
                     console.log('[FaceLivenessCheck] DIAGNOSTIC - Retry attempt');
                     console.log('- User authenticated:', !!user?.id);
                     console.log('- AWS Region:', AWS_REGION);
@@ -913,8 +877,12 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
                     console.log('- Environment variables:');
                     console.log('  - VITE_AWS_ACCESS_KEY_ID available:', !!import.meta.env.VITE_AWS_ACCESS_KEY_ID);
                     console.log('  - VITE_AWS_SECRET_ACCESS_KEY available:', !!import.meta.env.VITE_AWS_SECRET_ACCESS_KEY);
+                    
+                    // Get credentials status
                     const envCreds = getAwsCredentialsFromEnv();
                     console.log('- Direct env credentials available:', !!envCreds);
+                    
+                    // Reset state and try again
                     setError(null);
                     setStage('init');
                   }}
@@ -929,7 +897,7 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
             
             {!isLoading && (
               <button
-                onClick={handleClose}
+                onClick={handleCloseClick}
                 className="mt-2 px-3 py-1 sm:px-4 sm:py-2 text-gray-600 text-sm sm:text-base rounded-md hover:bg-gray-100"
                 aria-label="Cancel face verification"
                 tabIndex={0}
@@ -944,4 +912,125 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   );
 };
 
-export default FaceLivenessCheck; 
+export default FaceLivenessCheck;
+
+// Add CSS styles for the face liveness detector
+const styles = `
+.face-liveness-container {
+  position: relative;
+  width: 100%;
+  max-width: 800px;
+  min-height: 400px;
+  margin: 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  background-color: #ffffff;
+}
+
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.error-message {
+  max-width: 400px;
+}
+
+.error-message h3 {
+  color: #e53935;
+  margin-bottom: 1rem;
+}
+
+.error-message ul {
+  text-align: left;
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.error-message li {
+  margin-bottom: 0.5rem;
+}
+
+.retry-button {
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-right: 1rem;
+  margin-top: 1rem;
+  transition: background-color 0.2s;
+}
+
+.retry-button:hover {
+  background-color: #388e3c;
+}
+
+.close-button {
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-top: 1rem;
+  transition: background-color 0.2s;
+}
+
+.close-button:hover {
+  background-color: #d32f2f;
+}
+
+.absolute-top-right {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #f3f3f3;
+  border-top: 5px solid #4caf50;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+`;
+
+// Add styles to the document
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = styles;
+  document.head.appendChild(styleElement);
+} 
