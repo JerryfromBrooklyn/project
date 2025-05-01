@@ -1,801 +1,931 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+// src/components/FaceRegistration.tsx
+import { useRef, useState, useCallback, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import Webcam from 'react-webcam';
-import { Camera, AlertCircle, CheckCircle, Loader, Video, User, Info } from 'lucide-react';
-import { useAuth } from '../auth/AuthContext';
-import { indexFace } from '../services/FaceIndexingService';
-import { detectFacesInImage } from '../services/FaceDetectionService';
-import { updatePhotoVisibility } from '../services/userVisibilityService';
+import { X, Camera, RotateCcw, Check, Video, AlertTriangle, VideoIcon, MapPin } from 'lucide-react';
+import { cn } from '../utils/cn';
+import { useAuth } from '../context/AuthContext';
+import { rekognitionClient } from '../lib/awsClient';
+import { DetectFacesCommand } from '@aws-sdk/client-rekognition';
+import { FaceIndexingService } from '../services/FaceIndexingService.jsx';
+import { PHOTO_BUCKET } from '../lib/awsClient';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { s3Client } from '../lib/awsClient';
 
-// ... existing code ...
-
-// After capturing the face image and getting face attributes:
-// Find this section in handleRegister or saveFaceData
-// where the face registration is complete
-
-// Example location:
-// After the successful face registration but before the final success message
-
-// Add this code to verify face attributes were saved
-try {
-  console.log('Verifying face attributes are saved in the user profile...');
-  
-  // Use the admin function to verify face data
-  const { data: verifyResult, error: verifyError } = await supabase.rpc(
-    'admin_check_user_face_attributes',
-    { p_user_id: userId }
-  );
-  
-  if (verifyError) {
-    console.error('Error verifying face attributes:', verifyError);
-  } else {
-    console.log('Face attribute verification result:', verifyResult);
-    
-    // If verification shows missing data, try to save it directly
-    if (!verifyResult.user_data?.has_user_record || !verifyResult.face_data?.has_face_data) {
-      console.log('Face attributes not properly saved, attempting direct save...');
-      
-      // Try direct admin function
-      const { data: updateResult, error: updateError } = await supabase.rpc(
-        'admin_update_user_face_attributes',
-        {
-          p_user_id: userId,
-          p_face_id: faceId,
-          p_attributes: attributes
-        }
-      );
-      
-      if (updateError) {
-        console.error('Error saving face attributes via admin function:', updateError);
-      } else {
-        console.log('Face attributes saved successfully via admin function:', updateResult);
-      }
-    } else {
-      console.log('Face attributes already saved correctly');
-    }
-  }
-} catch (attributeError) {
-  console.error('Exception during face attribute verification:', attributeError);
-}
-
-// Continue with existing code for completion message
-// ... existing code ... 
+// Define face registration method - use default 'direct' method
+const FACE_REGISTER_METHOD = 'direct';
 
 const FaceRegistration = ({ onSuccess, onClose }) => {
-  // Component logging
-  useEffect(() => {
-    console.log('[FaceRegistration.jsx] Mounted');
-  }, []);
-
-  const [status, setStatus] = useState('idle');
-  const [error, setError] = useState(null);
-  const [imageBlob, setImageBlob] = useState(null);
-  const [isFaceDetected, setIsFaceDetected] = useState(false);
-  const [faceId, setFaceId] = useState(null);
-  const [registeredImageUrl, setRegisteredImageUrl] = useState(null);
-  const [faceAttributes, setFaceAttributes] = useState(null);
-  const [historicalMatches, setHistoricalMatches] = useState([]);
-  const [matchCount, setMatchCount] = useState(0);
-  const { user, updateUserFaceData } = useAuth();
-  const webcamRef = useRef(null);
-
-  // State for camera selection
-  const [videoDevices, setVideoDevices] = useState([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState('');
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Detect if using a mobile device
-  useEffect(() => {
-    const checkMobile = () => {
-      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-      const isMobileDevice = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
-      setIsMobile(isMobileDevice);
-      console.log('[FaceReg] Device detected as:', isMobileDevice ? 'Mobile' : 'Desktop');
-    };
+    const webcamRef = useRef(null);
+    const mediaRecorderRef = useRef(null);
+    const recordedChunksRef = useRef([]);
+    const streamRef = useRef(null);
     
-    checkMobile();
-  }, []);
+    const [processing, setProcessing] = useState(false);
+    const [captured, setCaptured] = useState(false);
+    const [imageSrc, setImageSrc] = useState(null);
+    const [error, setError] = useState(null);
+    const [facesDetected, setFacesDetected] = useState(0);
+    const [showPreview, setShowPreview] = useState(false);
+    const [isRecording, setIsRecording] = useState(false);
+    const [videoBlob, setVideoBlob] = useState(null);
+    const [webcamReady, setWebcamReady] = useState(false);
+    const [videoProcessed, setVideoProcessed] = useState(false);
+    const [locationData, setLocationData] = useState(null);
+    const [locationError, setLocationError] = useState(null);
+    const [locationPreloadEnabled] = useState(true);
+    const [locationInitialized, setLocationInitialized] = useState(false);
+    
+    const { user } = useAuth();
 
-  // Fetch video devices on mount
-  useEffect(() => {
-    const getVideoDevices = async () => {
-      try {
-        console.log('[FaceReg] Requesting camera permissions...');
-        // First request permission
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    // Handle webcam ready state
+    const handleUserMedia = useCallback((stream) => {
+        console.log('🎥 Webcam user media stream received', stream);
         
-        // Important: Store the stream temporarily so it doesn't get garbage collected
-        window.tempStream = stream;
+        // Check if audio tracks are available in the stream
+        const hasAudio = stream.getAudioTracks().length > 0;
+        console.log('🎙️ Audio tracks available:', hasAudio, stream.getAudioTracks());
         
-        console.log('[FaceReg] Camera permission granted, enumerating devices...');
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const cameras = devices.filter(device => device.kind === 'videoinput');
+        if (!hasAudio) {
+            console.warn('🎙️ No audio tracks found. Microphone may be disabled or permission denied.');
+        }
         
-        console.log('[FaceReg] Available cameras:', cameras.map(c => ({
-          deviceId: c.deviceId.substring(0, 8) + '...',
-          label: c.label || 'Unnamed camera'
-        })));
-        
-        setVideoDevices(cameras);
-        
-        if (cameras.length > 0) {
-          // On mobile, try to use the front-facing camera
-          if (isMobile) {
-            const frontCamera = cameras.find(camera => 
-              camera.label.toLowerCase().includes('front') || 
-              camera.label.toLowerCase().includes('user') ||
-              camera.label.toLowerCase().includes('selfie'));
+        // Log video track details to verify HD resolution
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+            const settings = videoTrack.getSettings();
+            console.log('🎥 Video resolution:', settings.width + 'x' + settings.height);
+            console.log('🎥 Frame rate:', settings.frameRate);
+            console.log('🎥 Using camera:', videoTrack.label);
             
-            if (frontCamera) {
-              console.log('[FaceReg] Found front camera:', frontCamera.label);
-              setSelectedDeviceId(frontCamera.deviceId);
+            // Check if we got HD or better
+            if (settings.width >= 1280 && settings.height >= 720) {
+                console.log('🎥 HD quality (720p+) confirmed');
+                if (settings.width >= 1920 && settings.height >= 1080) {
+                    console.log('🎥 Full HD quality (1080p) confirmed');
+                }
             } else {
-              setSelectedDeviceId(cameras[0].deviceId);
+                console.warn('🎥 Failed to get HD resolution, using:', settings.width + 'x' + settings.height);
             }
-          } else {
-            // On desktop, use the first camera by default
-            setSelectedDeviceId(cameras[0].deviceId);
-          }
-          
-          console.log('[FaceReg] Selected camera device:', 
-            cameras.find(c => c.deviceId === (cameras[0].deviceId))?.label || 'Default camera');
-        } else {
-          console.error('[FaceReg] No camera devices found');
-          setError('No camera devices found. Please check your camera connections and permissions.');
-          setStatus('error');
         }
         
-        // Clean up the temporary stream
-        if (window.tempStream) {
-          window.tempStream.getTracks().forEach(track => track.stop());
-          window.tempStream = null;
+        streamRef.current = stream;
+        setWebcamReady(true);
+        
+        // Success! Camera permission has been granted, now we can pre-initialize location permissions
+        // if the user wants to avoid the delay when they click capture
+        if (locationPreloadEnabled) {
+            setTimeout(() => {
+                console.log('📍 Pre-initializing location services now that camera is ready...');
+                initializeLocationServices();
+            }, 2000); // Wait 2 seconds after camera is ready before asking for location
         }
-      } catch (err) {
-        console.error("[FaceReg] Error accessing media devices:", err);
-        setError('Could not access media devices. Please check permissions and try again.');
-        setStatus('error');
-      }
+    }, []);
+
+    // Setup media recorder when webcam is ready
+    useEffect(() => {
+        if (!webcamReady || !streamRef.current) {
+            console.log('🎥 Waiting for webcam to be ready...');
+            return;
+        }
+        
+        console.log('🎥 Webcam initialized, setting up MediaRecorder...');
+        
+        try {
+            // Check browser support for MediaRecorder
+            if (!window.MediaRecorder) {
+                console.error('🎥 MediaRecorder API is not supported in this browser');
+                return;
+            }
+            
+            // Ensure audio is being captured but not played back
+            const hasAudioTracks = streamRef.current.getAudioTracks().length > 0;
+            if (hasAudioTracks) {
+                console.log('🎙️ Audio tracks detected - recording audio without playback');
+                // Mute any audio elements that might be created from this stream
+                streamRef.current.getAudioTracks().forEach(track => {
+                    console.log('🎙️ Audio track:', track.label);
+                    // Keep track enabled for recording
+                    track.enabled = true;
+                });
+            }
+            
+            // Check supported MIME types
+            const supportedTypes = ['video/webm', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/mp4'];
+            let selectedMimeType = null;
+            
+            for (const type of supportedTypes) {
+                if (MediaRecorder.isTypeSupported(type)) {
+                    selectedMimeType = type;
+                    console.log(`🎥 Found supported video MIME type: ${type}`);
+                    break;
+                }
+            }
+            
+            if (!selectedMimeType) {
+                console.error('🎥 No supported video MIME types found');
+                return;
+            }
+            
+            // Initialize MediaRecorder with the webcam stream
+            const mediaRecorder = new MediaRecorder(streamRef.current, {
+                mimeType: selectedMimeType,
+                videoBitsPerSecond: 5000000, // 5 Mbps (higher quality for 1080p)
+                audioBitsPerSecond: 128000   // 128 Kbps audio
+            });
+            
+            mediaRecorderRef.current = mediaRecorder;
+            recordedChunksRef.current = [];
+            
+            console.log('🎥 MediaRecorder initialized successfully');
+            const hasAudio = streamRef.current.getAudioTracks().length > 0;
+            console.log(`🎙️ Audio ${hasAudio ? 'IS' : 'is NOT'} being recorded (${hasAudio ? 'microphone enabled' : 'microphone disabled or permission denied'})`);
+            
+            // Event handler for when data becomes available
+            mediaRecorder.ondataavailable = (event) => {
+                console.log(`🎥 Data available event: ${event.data?.size || 0} bytes`);
+                if (event.data && event.data.size > 0) {
+                    recordedChunksRef.current.push(event.data);
+                }
+            };
+            
+            // Event handler for when recording stops
+            mediaRecorder.onstop = () => {
+                console.log('🎥 MediaRecorder stopped, processing recorded chunks...');
+                console.log(`🎥 Total chunks: ${recordedChunksRef.current.length}`);
+                
+                if (recordedChunksRef.current.length === 0) {
+                    console.error('🎥 No data recorded');
+                    return;
+                }
+                
+                // Create blob from recorded chunks
+                const recordedBlob = new Blob(recordedChunksRef.current, {
+                    type: selectedMimeType
+                });
+                
+                setVideoBlob(recordedBlob);
+                
+                // Don't create and log local blob URLs since they don't work outside the browser
+                console.log(`🎥 Video recording completed: ${recordedBlob.size} bytes`);
+                console.log('🎥 Video will be uploaded to S3 for permanent storage');
+                
+                // Log additional info for debugging
+                const videoElement = document.createElement('video');
+                videoElement.src = URL.createObjectURL(recordedBlob); // Only used temporarily for metadata
+                videoElement.onloadedmetadata = () => {
+                    console.log(`🎥 Video duration: ${videoElement.duration.toFixed(2)} seconds`);
+                    console.log(`🎥 Video dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
+                    // Revoke the object URL to free memory
+                    URL.revokeObjectURL(videoElement.src);
+                };
+            };
+            
+            // Start recording automatically
+            mediaRecorder.start(1000); // Capture in 1-second chunks
+            setIsRecording(true);
+            console.log('🎥 Video recording started');
+            
+        } catch (err) {
+            console.error('🎥 Error setting up media recorder:', err);
+        }
+        
+        // Cleanup function
+        return () => {
+            if (mediaRecorderRef.current && isRecording) {
+                console.log('🎥 Cleaning up recording on component unmount');
+                stopRecording();
+            }
+        };
+    }, [webcamReady]);
+
+    // Separate function to initialize location services
+    const initializeLocationServices = async () => {
+        if (locationInitialized) {
+            console.log('📍 Location services already initialized');
+            return;
+        }
+        
+        try {
+            console.log('📍 Requesting location permission...');
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        console.log('📍 Location permission granted!');
+                        resolve(position);
+                    },
+                    (err) => {
+                        console.log('📍 Location permission denied or error:', err.message);
+                        reject(err);
+                    },
+                    { 
+                        enableHighAccuracy: true, 
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            });
+            
+            console.log('📍 Location services initialized successfully');
+            setLocationInitialized(true);
+        } catch (error) {
+            console.log('📍 Failed to initialize location services:', error.message);
+        }
     };
 
-    getVideoDevices();
-    
-    // Cleanup function
-    return () => {
-      // Make sure to clean up any temporary streams
-      if (window.tempStream) {
-        window.tempStream.getTracks().forEach(track => track.stop());
-        window.tempStream = null;
-      }
-    };
-  }, [isMobile]);
-
-  // Add a manual camera detection function for diagnostics
-  const manualCameraDetection = async () => {
-    try {
-      console.log('[FaceReg] Manual camera detection started...');
-      setError('Detecting cameras, please wait...');
-      
-      // Stop any existing stream
-      if (window.tempStream) {
-        window.tempStream.getTracks().forEach(track => track.stop());
-        window.tempStream = null;
-      }
-      
-      // Try to get access with explicit permission request
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 1280, height: 720 } 
-      });
-      
-      window.tempStream = stream;
-      
-      // Force a re-enumeration of devices
-      const refreshedDevices = await navigator.mediaDevices.enumerateDevices();
-      const cameras = refreshedDevices.filter(device => device.kind === 'videoinput');
-      
-      console.log('[FaceReg] Manual detection found cameras:', cameras);
-      setVideoDevices(cameras);
-      
-      if (cameras.length > 0) {
-        setSelectedDeviceId(cameras[0].deviceId);
-        setError(null);
-        setStatus('idle');
-      } else {
-        setError('No cameras found even after manual detection.');
-      }
-    } catch (err) {
-      console.error('[FaceReg] Manual camera detection error:', err);
-      setError(`Camera detection failed: ${err.message}`);
-    }
-  };
-
-  // Updated video constraints based on selected device
-  const videoConstraints = {
-    width: { ideal: 640 },
-    height: { ideal: 480 },
-    facingMode: isMobile ? "user" : undefined,
-    deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined
-  };
-
-  // Handler for camera selection change
-  const handleCameraChange = (event) => {
-    setSelectedDeviceId(event.target.value);
-    // Reset capture status if camera changes
-    retakeImage(); 
-  };
-
-  const captureImage = useCallback(() => {
-    const imageSrc = webcamRef.current.getScreenshot();
-    if (!imageSrc) {
-      setError('Could not capture image.');
-      return;
-    }
-    // Convert base64 to Blob
-    fetch(imageSrc)
-      .then(res => res.blob())
-      .then(blob => {
-        // Create a File object with a proper name for easier debugging
-        const file = new File([blob], `face-registration-${Date.now()}.jpeg`, {
-          type: 'image/jpeg'
-        });
-        setImageBlob(file);
-        setStatus('captured'); // Or appropriate status
-      });
-  }, [webcamRef]);
-
-  const retakeImage = () => {
-    setImageBlob(null);
-    setRegisteredImageUrl(null); // Also clear registered image if retaking
-    setFaceAttributes(null); // Clear face attributes
-    setHistoricalMatches([]);
-    setMatchCount(0);
-    setStatus('idle'); // Reset status
-  };
-
-  const processImage = useCallback(() => {
-    if (imageBlob) {
-      processRegistration(imageBlob);
-    }
-  }, [imageBlob, user?.id]);
-
-  const processRegistration = async (blobToProcess) => {
-    if (!user || !user.id) {
-      setError('User not authenticated.');
-      setStatus('error');
-      return;
-    }
-    setStatus('processing');
-    setRegisteredImageUrl(null);
-    setFaceAttributes(null);
-    setHistoricalMatches([]);
-    setMatchCount(0);
-    console.log('[FaceReg] Starting AWS face registration process...');
-    console.log('[FaceReg] User ID:', user.id);
-    console.log('[FaceReg] Image blob size:', blobToProcess.size, 'bytes');
-
-    try {
-      console.log('[FaceReg] Indexing face with AWS Rekognition & saving to DB...');
-      // Ensure we're passing a valid image blob
-      if (!(blobToProcess instanceof Blob)) {
-        console.warn('[FaceReg] Image is not a Blob, attempting to convert...');
-        // Try to convert to Blob if needed
-        if (typeof blobToProcess === 'string' && blobToProcess.startsWith('data:')) {
-          // Convert base64 to Blob
-          const response = await fetch(blobToProcess);
-          blobToProcess = await response.blob();
-        } else {
-          throw new Error('Invalid image format for registration');
+    // Request and capture geolocation with reverse geocoding
+    const captureLocation = async () => {
+        console.log('📍 Attempting to capture location...');
+        if (!navigator.geolocation) {
+            console.log('📍 Geolocation is not supported by this browser');
+            setLocationError('Geolocation is not supported by this browser');
+            return null;
         }
-      }
-      
-      console.log(`[FaceReg] Image blob ready for processing: ${blobToProcess.size} bytes, type: ${blobToProcess.type}`);
-      
-      // This is the key function that handles face registration and historical matching
-      const result = await indexFace(user.id, blobToProcess);
 
-      if (!result.success || !result.faceId) {
-        console.error('[FaceReg] Face registration failed:', result.error);
-        setStatus('error');
-        setError(result.error || 'Failed to register face with Rekognition');
-        return;
-      }
-
-      console.log(`[FaceReg] Face indexed successfully with Face ID: ${result.faceId}`);
-      console.log('[FaceReg] Face attributes received:', JSON.stringify(result.faceAttributes, null, 2));
-      setFaceId(result.faceId);
-      setFaceAttributes(result.faceAttributes);
-
-      // Handle historical matches if they exist
-      if (result.historicalMatches && result.historicalMatches.length > 0) {
-        console.log('[FaceReg] Historical matches found:', result.historicalMatches.length);
-        console.log('[FaceReg] Historical match details:', JSON.stringify(result.historicalMatches, null, 2));
-        setHistoricalMatches(result.historicalMatches);
-        setMatchCount(result.historicalMatches.length);
-      } else {
-        console.log('[FaceReg] No historical matches found');
-      }
-
-      // Create a URL for the blob to display on success
-      if (blobToProcess instanceof Blob) {
-        console.log('[FaceReg] Creating URL for blob to display');
-        const imageUrl = URL.createObjectURL(blobToProcess);
-        setRegisteredImageUrl(imageUrl);
-        console.log('[FaceReg] Image URL created:', imageUrl);
-      } else {
-        console.warn('[FaceReg] Could not create URL for image - not a Blob');
-      }
-
-      setStatus('success');
-      console.log('[FaceReg] Registration status updated to success');
-
-      if (updateUserFaceData) {
-        try {
-          console.log('[FaceReg] Updating user face data in AuthContext with:', {
-            faceId: result.faceId,
-            attributesLength: result.faceAttributes ? Object.keys(result.faceAttributes).length : 0,
-            historicalMatches: result.historicalMatches?.length || 0
-          });
-          
-          // Call the updateUserFaceData function with all available data
-          await updateUserFaceData(
-            result.faceId, 
-            result.faceAttributes, 
-            result.historicalMatches || []
-          );
-          
-          console.log('[FaceReg] User face data updated successfully in AuthContext');
-        } catch (updateError) {
-          console.error('[FaceReg] Error updating user face data:', updateError);
-          // Continue with success flow even if there was an error updating user data
-        }
-      } else {
-        console.warn('[FaceReg] updateUserFaceData function not found in AuthContext');
-      }
-      
-      // Notify parent about successful registration
-      if (onSuccess) {
-        console.log('[FaceReg] Calling onSuccess prop in parent (Dashboard)...');
-        console.log('[FaceReg] Sending face data to Dashboard:', {
-          faceId: result.faceId,
-          attributesSize: result.faceAttributes ? Object.keys(result.faceAttributes).length : 0,
-          matches: result.historicalMatches ? result.historicalMatches.length : 0
-        });
-        
-        onSuccess(
-          result.faceId, 
-          result.faceAttributes,
-          result.historicalMatches || []
-        );
-      }
-
-      // Check if there are historical matches
-      if (result.matches && result.matches.length > 0) {
-        setHistoricalMatches(result.matches);
-        
-        // Add visibility records for all matched photos
-        try {
-          const matchedPhotoIds = result.matches.map(match => match.photoId || match.id);
-          if (matchedPhotoIds.length > 0) {
-            await updatePhotoVisibility(user.id, matchedPhotoIds, 'VISIBLE');
-            console.log(`Set visibility for ${matchedPhotoIds.length} matched photos to VISIBLE`);
-          }
-        } catch (visibilityError) {
-          console.error("Error setting visibility for matched photos:", visibilityError);
-        }
-      }
-      
-      // Update user profile to indicate face is registered
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ face_registered: true })
-        .eq('id', user.id);
-        
-      if (updateError) {
-        console.error("Error updating user profile:", updateError);
-      }
-
-    } catch (err) {
-      console.error('[FaceReg] Error during face registration:', err);
-      setStatus('error');
-      setError(err.message || 'An unexpected error occurred');
-    }
-  };
-
-  const detectFaces = useCallback(async () => {
-    if (webcamRef.current && webcamRef.current.video.readyState === 4) {
-        const imageSrc = webcamRef.current.getScreenshot();
-        if (imageSrc) {
+        // If location wasn't initialized yet, do it now
+        if (!locationInitialized) {
             try {
-                const faces = await detectFacesInImage(imageSrc);
-                setIsFaceDetected(faces.length > 0);
+                await initializeLocationServices();
             } catch (error) {
-                console.error("Error detecting faces:", error);
-                setIsFaceDetected(false); // Assume no face if detection fails
+                // Location initialization failed, but we'll still try to get the location
+                console.warn('📍 Location initialization failed, trying again...');
             }
         }
-    }
-  }, [webcamRef]);
 
-  useEffect(() => {
-      const intervalId = setInterval(() => {
-          if (status === 'idle') { 
-              detectFaces();
-          }
-      }, 1000);
+        try {
+            const position = await new Promise((resolve, reject) => {
+                console.log('📍 Requesting position from browser...');
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        console.log('📍 Position received successfully');
+                        resolve(position);
+                    },
+                    (err) => {
+                        console.error('📍 Position error code:', err.code, 'message:', err.message);
+                        reject(err);
+                    },
+                    { 
+                        enableHighAccuracy: true, 
+                        timeout: 10000, // Increased timeout to 10 seconds
+                        maximumAge: 0
+                    }
+                );
+            });
 
-      return () => clearInterval(intervalId);
-  }, [detectFaces, status]);
+            const locationInfo = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                timestamp: position.timestamp,
+                altitude: position.coords.altitude || null,
+                altitudeAccuracy: position.coords.altitudeAccuracy || null,
+                address: null // Will be populated by reverse geocoding
+            };
 
-  useEffect(() => {
-    return () => {
-      if (registeredImageUrl) {
-        URL.revokeObjectURL(registeredImageUrl);
-      }
+            console.log('📍 Raw location data:', locationInfo);
+
+            // Perform reverse geocoding to get address
+            try {
+                console.log('📍 Attempting reverse geocoding...');
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${locationInfo.latitude}&lon=${locationInfo.longitude}&zoom=18&addressdetails=1`,
+                    { headers: { 'User-Agent': 'SHMONG Face Registration' } }
+                );
+                
+                if (response.ok) {
+                    const addressData = await response.json();
+                    locationInfo.address = addressData.display_name;
+                    locationInfo.addressDetails = addressData.address;
+                    console.log('📍 Address retrieved:', locationInfo.address);
+                } else {
+                    console.warn('📍 Failed to get address:', response.statusText);
+                }
+            } catch (geocodeError) {
+                console.error('📍 Error performing reverse geocoding:', geocodeError);
+            }
+
+            console.log('📍 Final location data:', locationInfo);
+            setLocationData(locationInfo);
+            setLocationError(null);
+            return locationInfo;
+        } catch (error) {
+            console.error('📍 Location error details:', JSON.stringify({
+                code: error.code,
+                message: error.message,
+                PERMISSION_DENIED: error.code === 1,
+                POSITION_UNAVAILABLE: error.code === 2,
+                TIMEOUT: error.code === 3
+            }, null, 2));
+            
+            // Handle specific geolocation errors
+            let errorMessage = `Could not get location: ${error.message}`;
+            if (error.code === 1) {
+                errorMessage = 'Location permission denied. Please enable location access in your browser settings.';
+            } else if (error.code === 2) {
+                errorMessage = 'Location unavailable. Your device cannot determine its position right now.';
+            } else if (error.code === 3) {
+                errorMessage = 'Location request timed out. Please try again.';
+            }
+            
+            setLocationError(errorMessage);
+            console.warn('📍 Proceeding without location data');
+            return null;
+        }
     };
-  }, [registeredImageUrl]);
+    
+    // Process and save video even without photo capture
+    const processVideoOnExit = async () => {
+        // If video was already processed with a photo, don't process again
+        if (videoProcessed) {
+            return;
+        }
 
-  const handleContinue = () => {
-    if (onSuccess) {
-      onSuccess(faceId, faceAttributes, historicalMatches);
-    } else if (onClose) {
-      onClose();
-    }
-  };
+        // Check if we have video data to process
+        if (!recordedChunksRef.current.length || !user) {
+            console.log('🎥 No video data available or user not logged in, skipping video processing on exit');
+            return;
+        }
 
-  // Helper function to render face attributes in a readable format
-  const renderFaceAttributes = () => {
-    if (!faceAttributes) return null;
-    
-    const attributes = [];
-    
-    // Age range
-    if (faceAttributes.AgeRange) {
-      attributes.push({
-        label: 'Age Range',
-        value: `${faceAttributes.AgeRange.Low}-${faceAttributes.AgeRange.High} years`
-      });
-    }
-    
-    // Gender
-    if (faceAttributes.Gender) {
-      attributes.push({
-        label: 'Gender',
-        value: `${faceAttributes.Gender.Value} (${Math.round(faceAttributes.Gender.Confidence)}%)`
-      });
-    }
-    
-    // Smile
-    if (faceAttributes.Smile) {
-      attributes.push({
-        label: 'Smiling',
-        value: faceAttributes.Smile.Value ? 'Yes' : 'No'
-      });
-    }
-    
-    // Eyeglasses
-    if (faceAttributes.Eyeglasses) {
-      attributes.push({
-        label: 'Eyeglasses',
-        value: faceAttributes.Eyeglasses.Value ? 'Yes' : 'No'
-      });
-    }
-    
-    // Sunglasses
-    if (faceAttributes.Sunglasses) {
-      attributes.push({
-        label: 'Sunglasses',
-        value: faceAttributes.Sunglasses.Value ? 'Yes' : 'No'
-      });
-    }
-    
-    // Beard
-    if (faceAttributes.Beard) {
-      attributes.push({
-        label: 'Beard',
-        value: faceAttributes.Beard.Value ? 'Yes' : 'No'
-      });
-    }
-    
-    // Mustache
-    if (faceAttributes.Mustache) {
-      attributes.push({
-        label: 'Mustache',
-        value: faceAttributes.Mustache.Value ? 'Yes' : 'No'
-      });
-    }
-    
-    // Eyes open
-    if (faceAttributes.EyesOpen) {
-      attributes.push({
-        label: 'Eyes Open',
-        value: faceAttributes.EyesOpen.Value ? 'Yes' : 'No'
-      });
-    }
-    
-    // Mouth open
-    if (faceAttributes.MouthOpen) {
-      attributes.push({
-        label: 'Mouth Open',
-        value: faceAttributes.MouthOpen.Value ? 'Yes' : 'No'
-      });
-    }
-    
-    // Emotions (top emotion)
-    if (faceAttributes.Emotions && faceAttributes.Emotions.length > 0) {
-      // Sort emotions by confidence
-      const sortedEmotions = [...faceAttributes.Emotions].sort((a, b) => b.Confidence - a.Confidence);
-      const topEmotion = sortedEmotions[0];
-      
-      attributes.push({
-        label: 'Emotion',
-        value: `${topEmotion.Type} (${Math.round(topEmotion.Confidence)}%)`
-      });
-    }
-    
-    return (
-      <div className="grid grid-cols-2 gap-2 mt-4 text-sm">
-        {attributes.map((attr, index) => (
-          <div key={index} className="border border-apple-gray-200 rounded-apple p-2 bg-apple-gray-50">
-            <p className="text-apple-gray-500">{attr.label}</p>
-            <p className="font-medium text-apple-gray-800">{attr.value}</p>
-          </div>
-        ))}
-      </div>
-    );
-  };
+        // If recording is still active, stop it first
+        if (isRecording && mediaRecorderRef.current) {
+            stopRecording();
+            
+            // Need to wait for MediaRecorder.onstop to complete
+            // This is a simplified approach - in production you might need a more robust solution
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
 
-  return (
-    <div className="face-registration">
-      <div className="mx-auto max-w-3xl bg-white rounded-apple-xl shadow-sm border border-apple-gray-200 overflow-hidden">
-        <div className="p-6 bg-apple-gray-50 border-b border-apple-gray-200">
-          <h2 className="text-xl font-semibold text-apple-gray-900 flex items-center">
-            <Camera className="w-5 h-5 mr-2 text-apple-blue-500" />
-            Face Registration
-          </h2>
-          <p className="mt-2 text-apple-gray-600">
-            Please align your face in the center of the frame using the circular guide and maintain good lighting.
-          </p>
-        </div>
+        // If we have a videoBlob (either from stopping recording above or from previous stop)
+        if (videoBlob) {
+            console.log('🎥 Processing video on exit...');
+            
+            try {
+                const videoData = await uploadVideoToS3(videoBlob, user.id);
+                if (videoData) {
+                    console.log('🎥 Video saved on exit:', videoData.videoUrl);
+                    setVideoProcessed(true);
+                }
+            } catch (err) {
+                console.error('🎥 Error saving video on exit:', err);
+            }
+        } else {
+            console.log('🎥 No video blob available yet, video may not be saved');
+        }
+    };
+    
+    // Handle modal close with video processing
+    const handleClose = async () => {
+        // Process video before closing if possible
+        await processVideoOnExit();
         
-        <div className="p-6">
-          {/* WEBCAM SELECTOR - ALWAYS DISPLAYED AT THE TOP */}
-          <div className="mb-6 p-4 bg-blue-100 rounded-lg border-2 border-blue-400 shadow-md">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-base font-semibold text-blue-800 flex items-center">
-                <Video className="w-5 h-5 mr-2 text-blue-700" />
-                Select Camera Device
-              </h3>
-              {videoDevices.length > 0 && (
-                <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded-full">
-                  {videoDevices.length} camera(s) found
-                </span>
-              )}
-            </div>
+        // Then call the original onClose handler
+        onClose();
+    };
+    
+    // Function to stop recording
+    const stopRecording = () => {
+        return new Promise((resolve) => {
+            if (mediaRecorderRef.current && isRecording) {
+                try {
+                    // We need to save the original onstop handler and replace it with our own
+                    const originalOnStop = mediaRecorderRef.current.onstop;
+                    
+                    mediaRecorderRef.current.onstop = (event) => {
+                        console.log('🎥 MediaRecorder stopped, processing recorded chunks...');
+                        console.log(`🎥 Total chunks: ${recordedChunksRef.current.length}`);
+                        
+                        if (recordedChunksRef.current.length === 0) {
+                            console.error('🎥 No data recorded');
+                            resolve(null);
+                            return;
+                        }
+                        
+                        // Create blob from recorded chunks IMMEDIATELY
+                        const recordedBlob = new Blob(recordedChunksRef.current, {
+                            type: mediaRecorderRef.current.mimeType || 'video/webm'
+                        });
+                        
+                        // Set the video blob directly and immediately
+                        setVideoBlob(recordedBlob);
+                        
+                        console.log(`🎥 Video recording completed: ${recordedBlob.size} bytes`);
+                        console.log('🎥 Video blob created and ready for upload');
+                        
+                        // Log additional info for debugging
+                        const videoElement = document.createElement('video');
+                        videoElement.src = URL.createObjectURL(recordedBlob);
+                        videoElement.onloadedmetadata = () => {
+                            console.log(`🎥 Video duration: ${videoElement.duration.toFixed(2)} seconds`);
+                            console.log(`🎥 Video dimensions: ${videoElement.videoWidth}x${videoElement.videoHeight}`);
+                            URL.revokeObjectURL(videoElement.src);
+                        };
+                        
+                        // Resolve the promise with the actual blob (not a reference)
+                        resolve(recordedBlob);
+                    };
+                    
+                    mediaRecorderRef.current.stop();
+                    setIsRecording(false);
+                    console.log('🎥 Video recording stopped');
+                } catch (err) {
+                    console.error('🎥 Error stopping recording:', err);
+                    resolve(null);
+                }
+            } else {
+                console.log('🎥 No active recording to stop');
+                resolve(null);
+            }
+        });
+    };
+    
+    // Upload video to S3
+    const uploadVideoToS3 = async (blob, userId) => {
+        try {
+            // If no blob is passed, try to create one from chunks
+            if (!blob && recordedChunksRef.current && recordedChunksRef.current.length > 0) {
+                console.log('🎥 No blob provided, creating one from recorded chunks...');
+                // Check if there are audio tracks in the stream
+                const hasAudio = streamRef.current && streamRef.current.getAudioTracks().length > 0;
+                const mimeType = hasAudio ? 'video/webm;codecs=vp8,opus' : 'video/webm';
+                blob = new Blob(recordedChunksRef.current, { type: mimeType });
+                console.log(`🎥 Created blob from chunks: ${blob.size} bytes (${hasAudio ? 'with audio' : 'without audio'})`);
+            }
             
-            {videoDevices.length > 0 ? (
-              <div className="mb-2">
-                <select 
-                  id="cameraSelect"
-                  value={selectedDeviceId}
-                  onChange={handleCameraChange}
-                  className="block w-full p-3 border border-blue-400 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
-                  aria-label="Select camera device"
-                >
-                  {videoDevices.map(device => (
-                    <option key={device.deviceId} value={device.deviceId}>
-                      {device.label || `Camera ${videoDevices.indexOf(device) + 1}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-3">
-                <p className="text-sm text-red-600 font-medium flex items-center">
-                  <AlertCircle className="w-4 h-4 mr-2" />
-                  No camera devices detected
-                </p>
-                <p className="text-xs text-red-500 mt-1">
-                  Please check your camera connections and browser permissions
-                </p>
-              </div>
-            )}
+            if (!blob) {
+                console.error('🎥 No video blob available for upload');
+                return null;
+            }
             
-            <div className="flex items-center justify-between mt-2 mb-2">
-              <button 
-                onClick={manualCameraDetection}
-                className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors flex items-center"
-              >
-                <Camera className="w-3 h-3 mr-1" />
-                Detect Cameras Manually
-              </button>
-              
-              {selectedDeviceId && (
-                <div className="text-xs text-blue-600">
-                  Active camera ID: {selectedDeviceId.substring(0, 6)}...
-                </div>
-              )}
-            </div>
+            const videoId = `${userId}_face_registration_${Date.now()}.webm`;
+            const key = `face-videos/${userId}/${videoId}`;
             
-            <div className="text-xs bg-white p-2 rounded border border-blue-200 text-blue-800">
-              <p><strong>Camera Troubleshooting:</strong></p>
-              <ol className="list-decimal pl-4 mt-1 space-y-1">
-                <li>Make sure your webcam is connected and not being used by another application</li>
-                <li>Allow camera permissions when prompted by your browser</li>
-                <li>Try refreshing the page or restarting your browser</li>
-              </ol>
-            </div>
-          </div>
+            console.log(`🎥 Preparing to upload video (${(blob.size / (1024 * 1024)).toFixed(2)} MB)...`);
+            const arrayBuffer = await blob.arrayBuffer();
+            
+            const uploadParams = {
+                Bucket: PHOTO_BUCKET,
+                Key: key,
+                Body: arrayBuffer,
+                ContentType: 'video/webm'
+            };
+            
+            console.log(`🎥 Starting S3 upload to bucket: ${PHOTO_BUCKET}`);
+            
+            const uploadResult = await s3Client.send(new PutObjectCommand(uploadParams));
+            console.log('🎥 S3 upload result:', uploadResult);
+            
+            const videoUrl = `https://${PHOTO_BUCKET}.s3.amazonaws.com/${key}`;
+            
+            // Make the logs more prominent
+            console.log('=======================================================');
+            console.log(`🎥 VIDEO UPLOADED SUCCESSFULLY TO S3 🎥`);
+            console.log(`🎥 S3 VIDEO DOWNLOAD LINK: ${videoUrl}`);
+            console.log('=======================================================');
+            
+            return { videoUrl, videoId };
+        } catch (error) {
+            console.error('🎥 Error uploading video to S3:', error);
+            console.error('Full error details:', JSON.stringify(error, null, 2));
+            return null;
+        }
+    };
 
-          {status === 'error' && (
-            <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6 rounded-r">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <AlertCircle className="h-5 w-5 text-red-400" />
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-red-700">{error}</p>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <div className="flex flex-col md:flex-row gap-6">
-            <div className="flex-1">
-              <div className="relative aspect-video bg-black rounded-apple-lg overflow-hidden border border-apple-gray-300 shadow-inner">
-                {status === 'success' && registeredImageUrl ? (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <img src={registeredImageUrl} alt="Registered Face" className="object-contain max-h-full" />
-                  </div>
-                ) : (
-                  <>
-                    {/* Face positioning guides */}
-                    <div className="absolute inset-0 z-10 pointer-events-none">
-                      {/* Center circle for face alignment */}
-                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full border-2 border-dashed border-white opacity-40"></div>
-                      
-                      {/* Rule of thirds grid */}
-                      <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
-                        <div className="border-r border-white opacity-20 h-full col-start-1"></div>
-                        <div className="border-r border-white opacity-20 h-full col-start-2"></div>
-                        <div className="border-b border-white opacity-20 w-full row-start-1"></div>
-                        <div className="border-b border-white opacity-20 w-full row-start-2"></div>
-                      </div>
+    const capturePhoto = useCallback(async () => {
+        if (!webcamRef.current) {
+            console.warn('❌ Cannot capture - webcam ref is null');
+            return;
+        }
+        
+        // Reset states
+        setError(null);
+        setProcessing(true);
+        
+        console.log('📸 Starting photo capture process...');
+        
+        try {
+            // First stop recording and wait for it to complete
+            if (isRecording) {
+                console.log('🎥 Stopping video recording and waiting for processing...');
+                await stopRecording();
+                console.log('🎥 Video processing completed, blob available:', !!videoBlob);
+            }
+            
+            // Now capture photo and location
+            console.log('📸 Capturing photo and location data...');
+            const [imageSrc, locationInfo] = await Promise.all([
+                webcamRef.current.getScreenshot(),
+                captureLocation()
+            ]);
+            
+            console.log('📸 Photo capture successful:', !!imageSrc);
+            console.log('📍 Location capture result:', locationInfo ? 'succeeded' : 'failed');
+            console.log('🎥 Video status:', videoBlob ? `Available (${(videoBlob.size / (1024 * 1024)).toFixed(2)} MB)` : 'Not available');
+            
+            setImageSrc(imageSrc);
+            setCaptured(true);
+            setShowPreview(true);
+            
+            // Process the captured image for face detection 
+            if (imageSrc) {
+                console.log('🔍 Processing captured image for face detection...');
+                processCapturedImage(imageSrc);
+            } else {
+                console.error('❌ No image captured from webcam');
+                setError('Failed to capture photo. Please try again.');
+                setProcessing(false);
+            }
+        }
+        catch (err) {
+            console.error('❌ Error during photo capture:', err);
+            console.error('Stack trace:', err.stack);
+            setError('Failed to capture photo. Please try again.');
+            setProcessing(false);
+        }
+    }, [webcamRef, isRecording, videoBlob]);
+
+    const processCapturedImage = async (imgSrc) => {
+        try {
+            setProcessing(true);
+            // Convert base64 to Uint8Array for AWS
+            const base64Data = imgSrc.split(',')[1];
+            const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+            
+            // Use AWS Rekognition to detect faces
+            const command = new DetectFacesCommand({
+                Image: {
+                    Bytes: binaryData
+                },
+                Attributes: ['DEFAULT']
+            });
+            const response = await rekognitionClient.send(command);
+            const detectedFaces = response.FaceDetails || [];
+            setFacesDetected(detectedFaces.length);
+            if (detectedFaces.length === 0) {
+                setError('No faces detected. Please try again in better lighting.');
+                setCaptured(false);
+                setProcessing(false);
+                return;
+            }
+            if (detectedFaces.length > 1) {
+                setError('Multiple faces detected. Please ensure only your face is in the frame.');
+                setCaptured(false);
+                setProcessing(false);
+                return;
+            }
+
+            // Check if video blob is available now
+            console.log('🎥 Checking video availability before registration:', !!videoBlob);
+            
+            // Create a local variable to hold the video blob that will be used for upload
+            let blobForUpload = videoBlob;
+            
+            // If no blob in state but we have chunks, create it manually
+            if (!blobForUpload && recordedChunksRef.current.length > 0) {
+                console.log('🎥 Video chunks available but no blob yet, creating manually...');
+                blobForUpload = new Blob(recordedChunksRef.current, {
+                    type: 'video/webm'
+                });
+                console.log(`🎥 Manually created video blob (${(blobForUpload.size / (1024 * 1024)).toFixed(2)} MB)`);
+                
+                // Update state for future reference, but don't rely on it for immediate use
+                setVideoBlob(blobForUpload);
+            }
+            
+            // Proceed with face registration with the direct blob reference
+            if (user && FACE_REGISTER_METHOD === 'direct') {
+                await registerFace(imgSrc, user.id, blobForUpload);
+            }
+            setProcessing(false);
+        }
+        catch (err) {
+            console.error('🎥 Error processing image:', err);
+            setError('Failed to process the image. Please try again.');
+            setCaptured(false);
+            setProcessing(false);
+        }
+    };
+
+    const registerFace = async (imgSrc, userId, blobForUpload) => {
+        try {
+            setProcessing(true);
+            console.log('🎥 Registering face for user:', userId);
+            console.log('🎥 Image data type:', typeof imgSrc);
+            
+            // Upload video to S3 using recorded chunks
+            let videoData = null;
+            if (recordedChunksRef.current && recordedChunksRef.current.length > 0) {
+                console.log(`🎥 Found ${recordedChunksRef.current.length} video chunks, uploading to S3...`);
+                videoData = await uploadVideoToS3(null, userId); // Pass null to let function create blob
+                
+                if (videoData) {
+                    console.log('🎥 Video data collected for security verification:', videoData);
+                    setVideoProcessed(true);
+                } else {
+                    console.error('🎥 Video upload failed - continuing with face registration without video');
+                }
+            } else {
+                console.warn('🎥 No video chunks available for upload');
+            }
+            
+            // Log whether location data was collected
+            if (locationData) {
+                console.log('📍 Location data will be included with face registration');
+            } else {
+                console.log('📍 No location data available for face registration');
+            }
+            
+            // Create registration data object with all info
+            const registrationData = {
+                userId,
+                imageData: imgSrc,
+                locationData
+            };
+            
+            console.log('🔍 Starting face indexing with FaceIndexingService...');
+            
+            // Use FaceIndexingService to register the face with historical matching
+            const result = await FaceIndexingService.indexFace(userId, imgSrc, locationData);
+            
+            console.log('🔍 Face indexing result:', result);
+            
+            if (result.success) {
+                console.log('🎥 Face registered successfully');
+                
+                // Log any historical matches
+                if (result.historicalMatches && result.historicalMatches.length > 0) {
+                    console.log('🎥 Historical matches found:', result.historicalMatches.length);
+                    result.historicalMatches.forEach((match, index) => {
+                        console.log(`🎥 Match ${index + 1}: Similarity=${match.similarity.toFixed(2)}%`);
+                    });
+                } else {
+                    console.log('🎥 No historical matches found');
+                }
+                
+                // Add video data to the result if available
+                if (videoData) {
+                    result.videoUrl = videoData.videoUrl;
+                    result.videoId = videoData.videoId;
+                    console.log('🎥 Added video data to registration result');
+                }
+                
+                // Add location data to the result if available
+                if (locationData) {
+                    result.locationData = locationData;
+                    console.log('📍 Added location data to registration result');
+                }
+                
+                console.log('✅ Face registration complete, calling onSuccess with result');
+                onSuccess(result);
+            }
+            else {
+                console.error('❌ Face registration failed:', result.error);
+                setError(result.error || 'Failed to register face. Please try again.');
+                setCaptured(false);
+            }
+        }
+        catch (err) {
+            console.error('❌ Error registering face:', err);
+            console.error('Error details:', err.stack || JSON.stringify(err));
+            setError('Failed to register face. Please try again.');
+            setCaptured(false);
+        }
+        finally {
+            setProcessing(false);
+        }
+    };
+
+    const resetCapture = () => {
+        setCaptured(false);
+        setImageSrc(null);
+        setError(null);
+        setFacesDetected(0);
+        setShowPreview(false);
+        setVideoBlob(null);
+        setVideoProcessed(false);
+        setLocationData(null);
+        setLocationError(null);
+        
+        // Restart recording if we reset
+        if (streamRef.current) {
+            try {
+                recordedChunksRef.current = [];
+                
+                const supportedTypes = ['video/webm', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/mp4'];
+                let selectedMimeType = null;
+                
+                for (const type of supportedTypes) {
+                    if (MediaRecorder.isTypeSupported(type)) {
+                        selectedMimeType = type;
+                        break;
+                    }
+                }
+                
+                if (!selectedMimeType) {
+                    console.error('🎥 No supported video MIME types found when restarting');
+                    return;
+                }
+                
+                mediaRecorderRef.current = new MediaRecorder(streamRef.current, {
+                    mimeType: selectedMimeType,
+                    videoBitsPerSecond: 2500000
+                });
+                
+                mediaRecorderRef.current.ondataavailable = (event) => {
+                    if (event.data && event.data.size > 0) {
+                        recordedChunksRef.current.push(event.data);
+                    }
+                };
+                
+                mediaRecorderRef.current.onstop = () => {
+                    const recordedBlob = new Blob(recordedChunksRef.current, {
+                        type: selectedMimeType
+                    });
+                    setVideoBlob(recordedBlob);
+                    
+                    // Don't log local blob URLs
+                    console.log(`🎥 Video recording completed: ${recordedBlob.size} bytes`);
+                };
+                
+                mediaRecorderRef.current.start(1000);
+                setIsRecording(true);
+                console.log('🎥 Video recording restarted');
+            } catch (err) {
+                console.error('🎥 Error restarting recording:', err);
+            }
+        }
+    };
+
+    // Add AWS configuration check at component initialization
+    useEffect(() => {
+        // Check AWS configuration
+        console.log('🎥 Checking AWS configuration...');
+        console.log('🎥 S3 bucket configured as:', PHOTO_BUCKET);
+        
+        // Check that rekognition client is initialized
+        if (rekognitionClient) {
+            console.log('🎥 Rekognition client initialized');
+        } else {
+            console.error('🎥 Rekognition client not initialized');
+        }
+        
+        // Check that S3 client is initialized
+        if (s3Client) {
+            console.log('🎥 S3 client initialized');
+            
+            // Check credentials
+            const checkCredentials = async () => {
+                try {
+                    const credentials = await s3Client.config.credentials?.();
+                    if (credentials) {
+                        console.log('🎥 AWS credentials found:', credentials.accessKeyId ? '(masked for security)' : 'undefined');
+                        
+                        // Check if the bucket exists by trying a harmless operation
+                        try {
+                            console.log('🎥 Verifying S3 bucket access...');
+                            const testResult = await s3Client.send(new PutObjectCommand({
+                                Bucket: PHOTO_BUCKET,
+                                Key: 'test-permission.txt',
+                                Body: 'Test',
+                                ContentType: 'text/plain'
+                            }));
+                            console.log('🎥 S3 bucket verified successfully:', testResult);
+                        } catch (bucketErr) {
+                            console.error('🎥 S3 bucket access error:', bucketErr.message);
+                            console.error('🎥 S3 video uploads may fail due to bucket access issues');
+                        }
+                    } else {
+                        console.error('🎥 No AWS credentials found - video upload will fail');
+                    }
+                } catch (err) {
+                    console.error('🎥 Error checking AWS credentials:', err);
+                }
+            };
+            
+            checkCredentials();
+        } else {
+            console.error('🎥 S3 client not initialized - video upload will fail');
+        }
+    }, []);
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
+            <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }} 
+                animate={{ scale: 1, opacity: 1 }} 
+                exit={{ scale: 0.9, opacity: 0 }} 
+                className="relative bg-white rounded-lg shadow-xl overflow-hidden max-w-md w-full mx-4"
+            >
+                <button 
+                    onClick={handleClose} 
+                    className="absolute top-2 right-2 z-10 rounded-full p-1 bg-white/10 text-gray-400 hover:text-gray-500" 
+                    aria-label="Close registration"
+                >
+                    <X className="w-5 h-5" />
+                </button>
+                <div className="p-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Face Registration</h3>
+                    <p className="text-sm text-gray-500 mb-4">
+                        Please align your face in the center of the frame and maintain good lighting.
+                    </p>
+                    <div className={cn("relative rounded-lg overflow-hidden bg-gray-100", captured ? "aspect-square" : "")}>
+                        {!captured ? (
+                            <div className="relative">
+                                <Webcam 
+                                    audio={true}
+                                    muted={true}
+                                    ref={webcamRef} 
+                                    screenshotFormat="image/jpeg" 
+                                    videoConstraints={{
+                                        facingMode: "user",
+                                        width: { ideal: 1920, min: 1280 },
+                                        height: { ideal: 1080, min: 720 }
+                                    }} 
+                                    mirrored={true} 
+                                    className="w-full h-full object-cover aspect-square"
+                                    onUserMedia={handleUserMedia}
+                                />
+                                {isRecording && (
+                                    <div className="absolute top-2 left-2 flex items-center bg-green-500 text-white px-2 py-1 rounded-full text-xs">
+                                        <span className="animate-pulse mr-1 h-2 w-2 rounded-full bg-white"/>
+                                        Analyzing Face
+                                    </div>
+                                )}
+                            </div>
+                        ) : showPreview && imageSrc ? (
+                            <div className="relative aspect-square">
+                                <img src={imageSrc} alt="Captured" className="w-full h-full object-cover" />
+                                {facesDetected === 1 && !error && (
+                                    <div className="absolute top-2 left-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
+                                        Face detected
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-center h-64 bg-gray-100">
+                                <Video className="h-16 w-16 text-gray-400" />
+                            </div>
+                        )}
+                        {processing && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
+                                <svg className="animate-spin h-8 w-8 text-white" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                            </div>
+                        )}
                     </div>
                     
-                    {isFaceDetected && status !== 'processing' && status !== 'success' && (
-                      <div className="absolute inset-0 border-4 border-green-500 rounded-apple z-10 animate-pulse opacity-70"></div>
-                    )}
-                    <Webcam
-                      audio={false}
-                      ref={webcamRef}
-                      screenshotFormat="image/jpeg"
-                      className="w-full h-full object-cover"
-                      mirrored={true}
-                      videoConstraints={videoConstraints}
-                    />
-                  </>
-                )}
-
-                {status === 'success' && (
-                  <div className="absolute bottom-4 left-4 p-2 rounded-apple bg-white bg-opacity-90 shadow">
-                     <div className="flex items-center">
-                       <CheckCircle className="w-6 h-6 text-green-500 mr-2" />
-                       <p className="text-green-800 font-medium text-sm">Registration Complete!</p>
-                     </div>
-                   </div>
-                )}
-                {status === 'processing' && (
-                   <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70">
-                     <div className="text-center p-4">
-                       <Loader className="w-12 h-12 text-white mx-auto mb-2 animate-spin" />
-                       <p className="text-white">Processing...</p>
-                     </div>
-                   </div>
-                )}
-              </div>
-
-             {status !== 'success' && (
-               <div className="mt-4 flex items-center justify-between">
-                 <div className="flex items-center">
-                   <div className={`w-3 h-3 rounded-full mr-2 ${isFaceDetected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                   <span className="text-sm text-apple-gray-700">
-                     {isFaceDetected ? 'Face Detected' : 'No Face Detected'}
-                   </span>
-                 </div>
-                {!imageBlob && status !== 'success' && (
-                  <button
-                    onClick={captureImage}
-                    disabled={!isFaceDetected || status === 'processing'}
-                    className="px-4 py-2 bg-apple-blue-500 text-white rounded-apple font-medium hover:bg-apple-blue-600 transition-colors disabled:bg-apple-gray-300 disabled:cursor-not-allowed"
-                  >
-                    Capture Image
-                  </button>
-                )}
-
-                {imageBlob && status !== 'success' && status !== 'processing' && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={retakeImage}
-                      className="px-4 py-2 bg-apple-gray-200 text-apple-gray-700 rounded-apple font-medium hover:bg-apple-gray-300 transition-colors"
-                    >
-                      Retake
-                    </button>
-                    <button
-                      onClick={processImage}
-                      className="px-4 py-2 bg-apple-blue-500 text-white rounded-apple font-medium hover:bg-apple-blue-600 transition-colors"
-                    >
-                      Use This Image
-                    </button>
-                  </div>
-                )}
-               </div>
-             )}
-            </div>
-            
-            <div className="md:w-64">
-              {status === 'success' && faceAttributes ? (
-                <div className="bg-white p-4 rounded-apple border border-apple-gray-200">
-                  <h3 className="font-medium text-apple-gray-900 mb-2 flex items-center">
-                    <User className="w-4 h-4 text-apple-blue-500 mr-2" />
-                    Facial Attributes
-                  </h3>
-                  {renderFaceAttributes()}
-                </div>
-              ) : (
-                <div className="bg-apple-gray-50 p-4 rounded-apple border border-apple-gray-200">
-                  <h3 className="font-medium text-apple-gray-900 mb-2">Registration Tips</h3>
-                  <ul className="text-sm text-apple-gray-700 space-y-2">
-                    <li className="flex items-start">
-                      <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
-                      <span>Center your face within the circle guide</span>
-                    </li>
-                    <li className="flex items-start">
-                      <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
-                      <span>Use good lighting - avoid shadows</span>
-                    </li>
-                    <li className="flex items-start">
-                      <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
-                      <span>Remove sunglasses for best results</span>
-                    </li>
-                    <li className="flex items-start">
-                      <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
-                      <span>Look directly at the camera</span>
-                    </li>
-                  </ul>
-                </div>
-              )}
-              
-              {status === 'success' && (
-                <>
-                  <div className="mt-4 bg-green-50 p-4 rounded-apple border border-green-200">
-                    <h3 className="font-medium text-green-900 mb-2 flex items-center">
-                      <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
-                      Registration Complete
-                    </h3>
-                    <p className="text-sm text-green-800">
-                      Your face has been successfully registered. New Face ID: {faceId || 'N/A'}
-                    </p>
-                    
-                    {matchCount > 0 && (
-                      <div className="mt-2 text-sm text-green-800">
-                        <p className="font-medium">Found you in {matchCount} existing photo{matchCount !== 1 ? 's' : ''}!</p>
-                        <p className="text-xs mt-1">View them in your dashboard.</p>
-                      </div>
+                    {error && (
+                        <div className="mt-4 p-3 bg-red-50 border-l-4 border-red-500 text-red-700">
+                            <div className="flex">
+                                <div className="flex-shrink-0">
+                                    <AlertTriangle className="h-5 w-5 text-red-400" />
+                                </div>
+                                <div className="ml-3">
+                                    <p className="text-sm">{error}</p>
+                                </div>
+                            </div>
+                        </div>
                     )}
                     
-                    <button
-                      onClick={handleContinue}
-                      className="mt-3 w-full px-4 py-2 bg-green-600 text-white rounded-apple font-medium hover:bg-green-700 transition-colors"
-                    >
-                      Continue
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+                    <div className="mt-5 flex justify-center space-x-3">
+                        {!captured ? (
+                            <button 
+                                onClick={capturePhoto} 
+                                disabled={processing} 
+                                className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                            >
+                                <Camera className="w-5 h-5 mr-2" />
+                                Capture
+                            </button>
+                        ) : (
+                            <>
+                                <button 
+                                    onClick={resetCapture} 
+                                    disabled={processing} 
+                                    className="flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                                >
+                                    <RotateCcw className="w-5 h-5 mr-2" />
+                                    Retake
+                                </button>
+                                {facesDetected === 1 && !error && FACE_REGISTER_METHOD !== 'direct' && (
+                                    <button 
+                                        onClick={() => user && registerFace(imageSrc, user.id, videoBlob)} 
+                                        disabled={processing} 
+                                        className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+                                    >
+                                        <Check className="w-5 h-5 mr-2" />
+                                        Save
+                                    </button>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </div>
+            </motion.div>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default FaceRegistration;
