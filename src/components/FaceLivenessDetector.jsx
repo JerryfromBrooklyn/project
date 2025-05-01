@@ -624,7 +624,6 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
       <div 
         className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999]" 
         style={{ 
-          // Use safe area padding for the overlay container
           paddingTop: 'env(safe-area-inset-top, 16px)',
           paddingBottom: 'env(safe-area-inset-bottom, 16px)',
           paddingLeft: 'env(safe-area-inset-left, 16px)',
@@ -632,15 +631,15 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
         }}
         ref={containerRef}
       >
-        {/* Modal container with max-height and internal scrolling */}
+        {/* Modal container with stricter max-height */}
         <div 
           className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto flex flex-col"
           style={{ 
-            maxHeight: 'calc(100vh - 60px)', // Max height constraint
-            height: 'auto' // Height grows with content up to max-height
+            maxHeight: 'calc(100vh - 120px)', // Further reduced max height
+            height: 'auto'
           }}
         >
-          {/* Modal Header */}
+          {/* Modal Header (fixed size) */}
           <div className="p-3 sm:p-4 bg-gray-50 border-b flex justify-between items-center flex-shrink-0">
             <h2 className="text-base sm:text-lg font-semibold">Face Verification</h2>
             <button 
@@ -654,10 +653,13 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
             </button>
           </div>
           
-          {/* Scrollable Content Area */}
+          {/* Scrollable Content Area with capped height */}
           <div 
             className="relative flex-grow overflow-y-auto"
-            style={{ minHeight: '250px' }} // Ensure a minimum area for the detector
+            style={{ 
+              minHeight: '250px', // Minimum space
+              maxHeight: '450px' // Explicit max height for content area
+            }}
           >
             {console.log('[FaceLivenessCheck] About to render AWS FaceLivenessDetector component')}
             <FaceLivenessDetector
@@ -673,9 +675,7 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
               cameraConstraints={selectedCameraId ? { deviceId: { exact: selectedCameraId } } : undefined}
               style={{
                 width: '100%',
-                // Use min-height to allow shrinking, height 100% to fill parent
-                minHeight: '300px', 
-                height: '100%', 
+                height: '100%', // Fill the container (up to 450px max)
                 position: 'relative',
                 zIndex: 1000,
                 display: 'flex',
@@ -689,13 +689,12 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     );
   }
   
-  // Camera selection screen
+  // Camera selection screen (apply similar logic if needed)
   if (stage === 'init') {
     return (
       <div 
         className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999]" 
         style={{ 
-          // Use safe area padding for the overlay container
           paddingTop: 'env(safe-area-inset-top, 16px)',
           paddingBottom: 'env(safe-area-inset-bottom, 16px)',
           paddingLeft: 'env(safe-area-inset-left, 16px)',
@@ -703,17 +702,17 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
         }}
         ref={containerRef}
       >
-        {/* Modal container with max-height */}
+        {/* Modal container */}
         <div 
           className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto flex flex-col"
           style={{ 
-            maxHeight: 'calc(100vh - 60px)', // Max height constraint
+            maxHeight: 'calc(100vh - 100px)', // Keep reasonable max height
             height: 'auto'
           }}
         >
-          {/* Scrollable content area for camera selection */}
+          {/* Scrollable content area */}
           <div className="p-4 sm:p-5 overflow-y-auto">
-            {/* Header inside scrollable area */}
+            {/* Header */}
             <div className="flex justify-between items-center mb-4 sm:mb-5 flex-shrink-0">
               <h2 className="text-lg sm:text-xl font-semibold">Select Camera</h2>
               <button 
@@ -727,7 +726,7 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
               </button>
             </div>
             
-            {/* Camera selection content */}
+            {/* Content */}
             {isCameraLoading ? (
               <div className="flex flex-col items-center justify-center py-3">
                 <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 border-t-2 border-b-2 border-blue-500 mb-3 sm:mb-4"></div>
@@ -752,13 +751,12 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
                     ))}
                   </select>
                 </div>
-                
                 <button
                   onClick={startFaceLivenessSession}
                   disabled={!selectedCameraId}
                   className="w-full px-3 py-2 sm:px-4 sm:py-2 bg-blue-600 text-white font-medium text-sm sm:text-base rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
                   aria-label="Start face verification process"
-                  tabIndex={0} // Ensure button is focusable
+                  tabIndex={0}
                 >
                   Start Face Verification
                 </button>
@@ -794,13 +792,12 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     );
   }
   
-  // Loading state while creating session
+  // Loading state while creating session (apply similar logic if needed)
   console.log('[FaceLivenessCheck] Rendering loading state - no sessionId yet, isLoading:', isLoading);
   return (
     <div 
       className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999]" 
       style={{ 
-        // Use safe area padding for the overlay container
         paddingTop: 'env(safe-area-inset-top, 16px)',
         paddingBottom: 'env(safe-area-inset-bottom, 16px)',
         paddingLeft: 'env(safe-area-inset-left, 16px)',
@@ -810,13 +807,13 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     >
       {/* Modal container */}
       <div 
-        className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto"
+        className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto flex flex-col"
         style={{ 
-          maxHeight: 'calc(100vh - 60px)', // Max height constraint
+          maxHeight: 'calc(100vh - 100px)', // Keep reasonable max height
           height: 'auto' 
         }}
       >
-        {/* Content area for loading/error states */}
+        {/* Scrollable content area */}
         <div className="p-4 sm:p-5 overflow-y-auto">
           <div className="flex flex-col items-center justify-center">
             {isLoading ? (
@@ -847,7 +844,6 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
                 
                 <button
                   onClick={() => {
-                    // Log detailed diagnostic information
                     console.log('[FaceLivenessCheck] DIAGNOSTIC - Retry attempt');
                     console.log('- User authenticated:', !!user?.id);
                     console.log('- AWS Region:', AWS_REGION);
@@ -855,12 +851,8 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
                     console.log('- Environment variables:');
                     console.log('  - VITE_AWS_ACCESS_KEY_ID available:', !!import.meta.env.VITE_AWS_ACCESS_KEY_ID);
                     console.log('  - VITE_AWS_SECRET_ACCESS_KEY available:', !!import.meta.env.VITE_AWS_SECRET_ACCESS_KEY);
-                    
-                    // Get credentials status
                     const envCreds = getAwsCredentialsFromEnv();
                     console.log('- Direct env credentials available:', !!envCreds);
-                    
-                    // Reset state and try again
                     setError(null);
                     setStage('init');
                   }}
