@@ -31,6 +31,29 @@ const getAwsCredentialsFromEnv = () => {
   return null;
 };
 
+// Helper function to get all available video input devices
+const getVideoInputDevices = async () => {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+    console.warn('[FaceLivenessDetector] Media devices or enumerateDevices not supported');
+    return [];
+  }
+  
+  try {
+    // First request camera permission
+    await navigator.mediaDevices.getUserMedia({ video: true });
+    
+    // Then enumerate devices (this should now have device labels)
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(device => device.kind === 'videoinput');
+    
+    console.log('[FaceLivenessDetector] Available video devices:', videoDevices);
+    return videoDevices;
+  } catch (error) {
+    console.error('[FaceLivenessDetector] Error getting video devices:', error);
+    return [];
+  }
+};
+
 // Helper function to log the current environment variables
 const logEnvironmentVariables = () => {
   console.log('[FaceLivenessDetector] Environment variables:');
@@ -68,7 +91,12 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   const [sessionId, setSessionId] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [stage, setStage] = useState('init'); // init, checking, complete, error
+  const [stage, setStage] = useState('init'); // init, camera-select, checking, complete, error
+  
+  // Camera selection state
+  const [cameraDevices, setCameraDevices] = useState([]);
+  const [selectedCameraId, setSelectedCameraId] = useState(null);
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
   
   // Results state
   const [livenessResult, setLivenessResult] = useState(null);
@@ -85,6 +113,23 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
 
   // Constants from environment variables
   const FACE_LIVENESS_S3_BUCKET = import.meta.env.VITE_FACE_LIVENESS_S3_BUCKET || 'face-liveness-bucket--20250430';
+
+  // Load available camera devices on mount
+  useEffect(() => {
+    const loadCameraDevices = async () => {
+      setIsCameraLoading(true);
+      const devices = await getVideoInputDevices();
+      setCameraDevices(devices);
+      
+      // Auto-select the first camera if available
+      if (devices.length > 0) {
+        setSelectedCameraId(devices[0].deviceId);
+      }
+      setIsCameraLoading(false);
+    };
+    
+    loadCameraDevices();
+  }, []);
 
   // Debug effect to check if credentials are available
   useEffect(() => {
@@ -105,6 +150,18 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
         console.warn('[FaceLivenessCheck] DEBUG - Error checking Amplify auth session:', err);
       });
   }, []);
+
+  // Handle camera device selection
+  const handleCameraChange = (e) => {
+    setSelectedCameraId(e.target.value);
+  };
+
+  // Start the face liveness session with the selected camera
+  const startFaceLivenessSession = () => {
+    console.log('[FaceLivenessCheck] Starting Face Liveness session with camera ID:', selectedCameraId);
+    setStage('checking');
+    createFaceLivenessSession();
+  };
 
   // Create a Face Liveness session directly with AWS
   const createFaceLivenessSession = useCallback(async () => {
@@ -127,8 +184,14 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
       let cameraAvailable = false;
       
       try {
-        // Try to access the camera directly
-        const testStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        // Try to access the camera directly with the selected device id
+        const constraints = { 
+          video: selectedCameraId ? { deviceId: { exact: selectedCameraId } } : true 
+        };
+        
+        console.log('[FaceLivenessCheck] Using camera constraints:', constraints);
+        const testStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
         if (testStream) {
           cameraAvailable = true;
           // Release the camera immediately
@@ -253,7 +316,7 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
         onError(err);
       }
     }
-  }, [user, onError, AWS_REGION, FACE_LIVENESS_S3_BUCKET]);
+  }, [user, onError, AWS_REGION, FACE_LIVENESS_S3_BUCKET, selectedCameraId]);
 
   // Initialize on component mount
   useEffect(() => {
@@ -261,7 +324,8 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     
     // Add a small delay before requesting camera to ensure any previous instances are cleaned up
     const timeoutId = setTimeout(() => {
-      createFaceLivenessSession();
+      // Don't auto-start session - wait for camera selection
+      // createFaceLivenessSession();
     }, 500);
     
     // Cleanup function
@@ -507,22 +571,22 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     console.log('[FaceLivenessCheck] Rendering with sessionId:', sessionId);
     console.log('[FaceLivenessCheck] *** RENDERING FACE LIVENESS DETECTOR WITH AWS SDK COMPONENT ***');
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999]">
-        <div className="bg-white rounded-lg overflow-hidden max-w-md w-full shadow-xl">
-          <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
-            <h2 className="text-lg font-semibold">Face Verification</h2>
+      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto py-4 px-2 sm:px-4">
+        <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto">
+          <div className="p-2 sm:p-4 bg-gray-50 border-b flex justify-between items-center">
+            <h2 className="text-base sm:text-lg font-semibold">Face Verification</h2>
             <button 
               onClick={handleClose}
               className="text-gray-400 hover:text-gray-600 transition-colors"
               aria-label="Close"
             >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
           
-          <div className="relative" style={{ minHeight: '400px' }}>
+          <div className="relative" style={{ minHeight: '300px', height: 'calc(100vh - 200px)', maxHeight: '500px' }}>
             {console.log('[FaceLivenessCheck] About to render AWS FaceLivenessDetector component')}
             <FaceLivenessDetector
               sessionId={sessionId}
@@ -534,10 +598,10 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
               disableInstructionScreen={false}
               displayDebugInfo={true}
               cameraFacing="user"
+              cameraConstraints={selectedCameraId ? { deviceId: { exact: selectedCameraId } } : undefined}
               style={{
                 width: '100%',
                 height: '100%',
-                minHeight: '400px',
                 position: 'relative',
                 zIndex: 1000,
               }}
@@ -549,72 +613,155 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     );
   }
   
+  // Camera selection screen
+  if (stage === 'init') {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto py-4 px-2 sm:px-4">
+        <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto">
+          <div className="p-4 sm:p-6">
+            <div className="flex justify-between items-center mb-4 sm:mb-6">
+              <h2 className="text-lg sm:text-xl font-semibold">Select Camera</h2>
+              <button 
+                onClick={handleClose}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {isCameraLoading ? (
+              <div className="flex flex-col items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 border-t-2 border-b-2 border-blue-500 mb-3 sm:mb-4"></div>
+                <p className="text-gray-600 text-sm sm:text-base">Detecting available cameras...</p>
+              </div>
+            ) : cameraDevices.length > 0 ? (
+              <>
+                <div className="mb-4 sm:mb-6">
+                  <label htmlFor="camera-select" className="block text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                    Choose a camera:
+                  </label>
+                  <select
+                    id="camera-select"
+                    value={selectedCameraId || ''}
+                    onChange={handleCameraChange}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base"
+                  >
+                    {cameraDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || `Camera ${cameraDevices.indexOf(device) + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <button
+                  onClick={startFaceLivenessSession}
+                  disabled={!selectedCameraId}
+                  className="w-full px-3 py-2 sm:px-4 sm:py-2 bg-blue-600 text-white font-medium text-sm sm:text-base rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
+                >
+                  Start Face Verification
+                </button>
+                
+                <p className="mt-3 sm:mt-4 text-xs sm:text-sm text-gray-600">
+                  Please select your preferred camera and ensure it's not being used by another application.
+                </p>
+              </>
+            ) : (
+              <div className="text-center py-4">
+                <div className="rounded-full h-10 w-10 sm:h-12 sm:w-12 bg-red-100 flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <p className="text-red-700 font-medium mb-2 text-sm sm:text-base">No cameras detected</p>
+                <p className="text-gray-600 mb-4 text-xs sm:text-sm">
+                  Please make sure your camera is connected and you've granted permission to use it.
+                </p>
+                <button
+                  onClick={() => getVideoInputDevices().then(devices => setCameraDevices(devices))}
+                  className="mt-1 sm:mt-2 px-3 py-1 sm:px-4 sm:py-2 bg-blue-600 text-white font-medium text-sm sm:text-base rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   // Loading state while creating session
   console.log('[FaceLivenessCheck] Rendering loading state - no sessionId yet, isLoading:', isLoading);
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999]">
-      <div className="bg-white rounded-lg overflow-hidden max-w-md w-full shadow-xl p-8">
-        <div className="flex flex-col items-center justify-center">
-          {isLoading ? (
-            <>
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-              <p className="text-gray-600">Initializing face verification...</p>
-            </>
-          ) : (
-            <>
-              {error ? (
-                <>
-                  <div className="rounded-full h-12 w-12 bg-red-100 flex items-center justify-center mb-4">
-                    <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </div>
-                  <p className="text-gray-700 mb-2 text-center">{error}</p>
-                  <p className="text-gray-500 text-sm mb-4 text-center">
-                    This might be due to missing AWS credentials or permissions.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-                  <p className="text-gray-600">Waiting for verification to start...</p>
-                </>
-              )}
-              
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto py-4 px-2 sm:px-4">
+      <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto">
+        <div className="p-4 sm:p-6">
+          <div className="flex flex-col items-center justify-center">
+            {isLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-t-2 border-b-2 border-blue-500 mb-3 sm:mb-4"></div>
+                <p className="text-gray-600 text-sm sm:text-base">Initializing face verification...</p>
+              </>
+            ) : (
+              <>
+                {error ? (
+                  <>
+                    <div className="rounded-full h-10 w-10 sm:h-12 sm:w-12 bg-red-100 flex items-center justify-center mb-3 sm:mb-4">
+                      <svg className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </div>
+                    <p className="text-gray-700 mb-2 text-center text-sm sm:text-base">{error}</p>
+                    <p className="text-gray-500 text-xs sm:text-sm mb-4 text-center">
+                      This might be due to missing AWS credentials or permissions.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-t-2 border-b-2 border-blue-500 mb-3 sm:mb-4"></div>
+                    <p className="text-gray-600 text-sm sm:text-base">Waiting for verification to start...</p>
+                  </>
+                )}
+                
+                <button
+                  onClick={() => {
+                    // Log detailed diagnostic information
+                    console.log('[FaceLivenessCheck] DIAGNOSTIC - Retry attempt');
+                    console.log('- User authenticated:', !!user?.id);
+                    console.log('- AWS Region:', AWS_REGION);
+                    console.log('- S3 Bucket:', FACE_LIVENESS_S3_BUCKET);
+                    console.log('- Environment variables:');
+                    console.log('  - VITE_AWS_ACCESS_KEY_ID available:', !!import.meta.env.VITE_AWS_ACCESS_KEY_ID);
+                    console.log('  - VITE_AWS_SECRET_ACCESS_KEY available:', !!import.meta.env.VITE_AWS_SECRET_ACCESS_KEY);
+                    
+                    // Get credentials status
+                    const envCreds = getAwsCredentialsFromEnv();
+                    console.log('- Direct env credentials available:', !!envCreds);
+                    
+                    // Reset state and try again
+                    setError(null);
+                    setStage('init');
+                  }}
+                  className="mt-3 sm:mt-4 px-3 py-1 sm:px-4 sm:py-2 bg-blue-500 text-white text-sm sm:text-base rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Select a Different Camera
+                </button>
+              </>
+            )}
+            
+            {!isLoading && (
               <button
-                onClick={() => {
-                  // Log detailed diagnostic information
-                  console.log('[FaceLivenessCheck] DIAGNOSTIC - Retry attempt');
-                  console.log('- User authenticated:', !!user?.id);
-                  console.log('- AWS Region:', AWS_REGION);
-                  console.log('- S3 Bucket:', FACE_LIVENESS_S3_BUCKET);
-                  console.log('- Environment variables:');
-                  console.log('  - VITE_AWS_ACCESS_KEY_ID available:', !!import.meta.env.VITE_AWS_ACCESS_KEY_ID);
-                  console.log('  - VITE_AWS_SECRET_ACCESS_KEY available:', !!import.meta.env.VITE_AWS_SECRET_ACCESS_KEY);
-                  
-                  // Get credentials status
-                  const envCreds = getAwsCredentialsFromEnv();
-                  console.log('- Direct env credentials available:', !!envCreds);
-                  
-                  // Reset state and try again
-                  setError(null);
-                  createFaceLivenessSession();
-                }}
-                className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                onClick={handleClose}
+                className="mt-2 px-3 py-1 sm:px-4 sm:py-2 text-gray-600 text-sm sm:text-base rounded-md hover:bg-gray-100"
               >
-                Try Again
+                Cancel
               </button>
-            </>
-          )}
-          
-          {!isLoading && (
-            <button
-              onClick={handleClose}
-              className="mt-2 px-4 py-2 text-gray-600 rounded-md hover:bg-gray-100"
-            >
-              Cancel
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
