@@ -40,16 +40,38 @@ const getVideoInputDevices = async () => {
   
   try {
     // First request camera permission
-    await navigator.mediaDevices.getUserMedia({ video: true });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
     
     // Then enumerate devices (this should now have device labels)
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(device => device.kind === 'videoinput');
     
     console.log('[FaceLivenessDetector] Available video devices:', videoDevices);
+    
+    // Log detailed information about each device
+    videoDevices.forEach((device, index) => {
+      console.log(`[FaceLivenessDetector] Camera #${index+1} details:`, {
+        deviceId: device.deviceId,
+        groupId: device.groupId,
+        kind: device.kind,
+        label: device.label
+      });
+    });
+    
+    // Important: Stop all tracks from the test stream to release the camera
+    stream.getTracks().forEach(track => {
+      console.log('[FaceLivenessDetector] Stopping test camera track:', track.label);
+      track.stop();
+    });
+    
     return videoDevices;
   } catch (error) {
     console.error('[FaceLivenessDetector] Error getting video devices:', error);
+    console.error('[FaceLivenessDetector] Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
     return [];
   }
 };
@@ -92,6 +114,11 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   console.log('[FaceLivenessCheck] *** COMPONENT MOUNTED ***');
   console.log('[FaceLivenessCheck] Props received:', { hasOnSuccess: !!onSuccess, hasOnError: !!onError, hasOnClose: !!onClose });
   console.log('[FaceLivenessCheck] Running on iOS device:', isIOS());
+  console.log('[FaceLivenessCheck] Browser details:', { 
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    vendor: navigator.vendor
+  });
   
   // Basic state
   const [sessionId, setSessionId] = useState(null);
@@ -114,6 +141,7 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   const videoChunksRef = useRef(null);
   const streamRef = useRef(null);
   const containerRef = useRef(null);
+  const sessionCreatedRef = useRef(false); // Prevent multiple session creations
 
   // Get user from auth context
   const { user } = useAuth();
@@ -168,17 +196,77 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   useEffect(() => {
     const loadCameraDevices = async () => {
       setIsCameraLoading(true);
-      const devices = await getVideoInputDevices();
-      setCameraDevices(devices);
       
-      // Auto-select the first camera if available
-      if (devices.length > 0) {
-        setSelectedCameraId(devices[0].deviceId);
+      // Make sure any existing streams are stopped before requesting new ones
+      if (streamRef.current) {
+        console.log('[FaceLivenessCheck] Stopping existing stream before detecting cameras');
+        streamRef.current.getTracks().forEach(track => {
+          console.log('[FaceLivenessCheck] Stopping track:', track.kind, track.label);
+          track.stop();
+        });
+        streamRef.current = null;
       }
-      setIsCameraLoading(false);
+      
+      try {
+        const devices = await getVideoInputDevices();
+        
+        if (devices.length === 0) {
+          console.warn('[FaceLivenessCheck] No cameras detected');
+          // Check if the browser might be blocking camera access
+          if (navigator.permissions) {
+            try {
+              const permission = await navigator.permissions.query({ name: 'camera' });
+              console.log('[FaceLivenessCheck] Camera permission status:', permission.state);
+            } catch (permError) {
+              console.warn('[FaceLivenessCheck] Cannot query camera permission:', permError);
+            }
+          }
+        }
+        
+        setCameraDevices(devices);
+        
+        // Auto-select the first camera if available
+        if (devices.length > 0) {
+          console.log('[FaceLivenessCheck] Auto-selecting first camera:', devices[0].label);
+          setSelectedCameraId(devices[0].deviceId);
+        }
+      } catch (err) {
+        console.error('[FaceLivenessCheck] Error loading camera devices:', err);
+      } finally {
+        setIsCameraLoading(false);
+      }
     };
     
     loadCameraDevices();
+    
+    // Cleanup function to release all camera resources on unmount
+    return () => {
+      console.log('[FaceLivenessCheck] Cleanup: Component unmounting - cleaning up all camera resources');
+      
+      // Stop any active media recorder
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        console.log('[FaceLivenessCheck] Cleanup: Stopping media recorder');
+        try {
+          mediaRecorderRef.current.stop();
+        } catch (err) {
+          console.error('[FaceLivenessCheck] Error stopping media recorder:', err);
+        }
+      }
+      
+      // Stop all camera tracks
+      if (streamRef.current) {
+        console.log('[FaceLivenessCheck] Cleanup: Stopping all camera tracks');
+        streamRef.current.getTracks().forEach(track => {
+          console.log('[FaceLivenessCheck] Cleanup: Stopping track:', track.kind, track.label);
+          track.stop();
+        });
+        streamRef.current = null;
+      }
+      
+      // Clear state
+      setSessionId(null);
+      sessionCreatedRef.current = false;
+    };
   }, []);
 
   // Debug effect to check if credentials are available
@@ -203,18 +291,39 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
 
   // Handle camera device selection
   const handleCameraChange = (e) => {
-    setSelectedCameraId(e.target.value);
+    const newCameraId = e.target.value;
+    console.log('[FaceLivenessCheck] Selected camera changed to:', newCameraId);
+    
+    // Stop any existing stream when changing cameras
+    if (streamRef.current) {
+      console.log('[FaceLivenessCheck] Stopping existing stream before changing camera');
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    
+    setSelectedCameraId(newCameraId);
   };
 
   // Start the face liveness session with the selected camera
   const startFaceLivenessSession = () => {
     console.log('[FaceLivenessCheck] Starting Face Liveness session with camera ID:', selectedCameraId);
+    
+    // Find the selected camera device to log its details
+    const selectedDevice = cameraDevices.find(device => device.deviceId === selectedCameraId);
+    console.log('[FaceLivenessCheck] Selected camera device:', selectedDevice ? selectedDevice.label : 'Unknown');
+    
     setStage('checking');
     createFaceLivenessSession();
   };
 
   // Create a Face Liveness session directly with AWS
   const createFaceLivenessSession = useCallback(async () => {
+    // Prevent multiple session creations
+    if (sessionCreatedRef.current) {
+      console.log('[FaceLivenessCheck] Session already created, skipping duplicate creation');
+      return;
+    }
+    
     console.log('[FaceLivenessCheck] Creating Face Liveness session...');
     setIsLoading(true);
     setError(null);
@@ -232,24 +341,51 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     try {
       console.log('[FaceLivenessCheck] Checking camera availability...');
       let cameraAvailable = false;
+      let testStream = null;
       
       try {
         // Try to access the camera directly with the selected device id
         const constraints = { 
-          video: selectedCameraId ? { deviceId: { exact: selectedCameraId } } : true 
+          video: selectedCameraId ? { 
+            deviceId: { exact: selectedCameraId },
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          } : true 
         };
         
-        console.log('[FaceLivenessCheck] Using camera constraints:', constraints);
-        const testStream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log('[FaceLivenessCheck] Using camera constraints:', JSON.stringify(constraints));
+        testStream = await navigator.mediaDevices.getUserMedia(constraints);
         
         if (testStream) {
           cameraAvailable = true;
-          // Release the camera immediately
-          testStream.getTracks().forEach(track => track.stop());
+          console.log('[FaceLivenessCheck] Successfully accessed camera with constraints');
+          
+          // Log the tracks we got
+          testStream.getTracks().forEach(track => {
+            console.log('[FaceLivenessCheck] Camera test track:', {
+              kind: track.kind,
+              label: track.label,
+              id: track.id,
+              enabled: track.enabled,
+              readyState: track.readyState,
+              settings: track.getSettings ? track.getSettings() : 'Not available'
+            });
+          });
         }
       } catch (cameraErr) {
         console.error('[FaceLivenessCheck] Camera check failed:', cameraErr);
+        console.error('[FaceLivenessCheck] Error details:', {
+          name: cameraErr.name,
+          message: cameraErr.message,
+          constraintName: cameraErr.constraintName
+        });
         cameraAvailable = false;
+      } finally {
+        // Always release the test stream
+        if (testStream) {
+          console.log('[FaceLivenessCheck] Releasing camera test stream');
+          testStream.getTracks().forEach(track => track.stop());
+        }
       }
       
       // If camera is not available, show error and return
@@ -267,75 +403,31 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
       console.error('[FaceLivenessCheck] Error checking camera:', err);
     }
     
+    // Now use the direct API approach instead of the server
     try {
-      // Get AWS credentials - try Amplify Auth first, then fall back to direct AWS config
-      console.log('[FaceLivenessCheck] Attempting to get AWS credentials...');
-      let credentials;
+      // Import the faceLivenessApi to use direct AWS SDK calls
+      const { createFaceLivenessSession } = await import('../api/faceLivenessApi');
       
-      try {
-        // Try to get credentials from Amplify Auth
-        const authSession = await fetchAuthSession();
-        console.log('[FaceLivenessCheck] Auth session result:', authSession);
-        
-        if (authSession?.credentials) {
-          credentials = authSession.credentials;
-          console.log('[FaceLivenessCheck] Successfully obtained Amplify credentials');
-        } else {
-          console.log('[FaceLivenessCheck] No credentials in auth session, will use configured AWS credentials');
-        }
-      } catch (authError) {
-        console.warn('[FaceLivenessCheck] Error getting Amplify auth session:', authError);
-      }
+      console.log('[FaceLivenessCheck] Calling direct AWS SDK for session creation with userId:', user.id);
+      const result = await createFaceLivenessSession(user.id);
       
-      // Get direct environment variable credentials as a fallback
-      if (!credentials) {
-        console.log('[FaceLivenessCheck] Trying to get AWS credentials from environment variables');
-        const envCredentials = getAwsCredentialsFromEnv();
-        
-        if (envCredentials) {
-          console.log('[FaceLivenessCheck] Successfully obtained credentials from environment variables');
-          credentials = envCredentials;
-        } else {
-          console.warn('[FaceLivenessCheck] No credentials found in environment variables either');
-        }
-      }
-      
-      // Initialize Rekognition client - with or without explicit credentials
-      console.log('[FaceLivenessCheck] Initializing Rekognition client with region:', AWS_REGION);
-      const rekognitionConfig = { 
-        region: AWS_REGION
-      };
-      
-      // Only add credentials if we got them
-      if (credentials) {
-        console.log('[FaceLivenessCheck] Using explicit credentials for Rekognition client');
-        rekognitionConfig.credentials = credentials;
+      if (result.success) {
+        console.log('[FaceLivenessCheck] Session created successfully:', result.sessionId);
+        sessionCreatedRef.current = true; // Mark that we've created a session
+        setSessionId(result.sessionId);
+        setStage('checking');
+        setIsLoading(false);
       } else {
-        console.warn('[FaceLivenessCheck] No credentials available, SDK will try to use default credential provider chain');
-      }
-      
-      const rekognition = new RekognitionClient(rekognitionConfig);
-      
-      // Create session command
-      const command = new CreateFaceLivenessSessionCommand({
-        ClientRequestToken: `session-${user?.id || 'anonymous'}-${Date.now()}`,
-        Settings: {
-          OutputConfig: {
-            S3Bucket: FACE_LIVENESS_S3_BUCKET,
-            S3KeyPrefix: `face-liveness/${user?.id || 'anonymous'}/`
-          }
+        console.error('[FaceLivenessCheck] Error from API:', result.error);
+        setError(`Failed to start face verification: ${result.error}`);
+        setStage('error');
+        setIsLoading(false);
+        
+        if (onError) {
+          console.log('[FaceLivenessCheck] Calling onError callback');
+          onError(new Error(result.error));
         }
-      });
-      
-      // Send request to AWS
-      console.log('[FaceLivenessCheck] Sending CreateFaceLivenessSession request to AWS...');
-      const response = await rekognition.send(command);
-      
-      // Handle successful response
-      console.log('[FaceLivenessCheck] Session created successfully:', response);
-      setSessionId(response.SessionId);
-      setStage('checking');
-      setIsLoading(false);
+      }
     } catch (err) {
       console.error('[FaceLivenessCheck] Error creating Face Liveness session:', err);
       
@@ -366,38 +458,16 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
         onError(err);
       }
     }
-  }, [user, onError, AWS_REGION, FACE_LIVENESS_S3_BUCKET, selectedCameraId]);
+  }, [user, onError, selectedCameraId]);
 
   // Initialize on component mount
   useEffect(() => {
-    console.log('[FaceLivenessCheck] useEffect triggered - calling createFaceLivenessSession');
+    console.log('[FaceLivenessCheck] useEffect triggered - camera setup');
     
-    // Add a small delay before requesting camera to ensure any previous instances are cleaned up
-    const timeoutId = setTimeout(() => {
-      // Don't auto-start session - wait for camera selection
-      // createFaceLivenessSession();
-    }, 500);
+    // Don't auto-start session - wait for camera selection
     
-    // Cleanup function
-    return () => {
-      console.log('[FaceLivenessCheck] Component unmounting - cleaning up resources');
-      clearTimeout(timeoutId);
-      
-      if (streamRef.current) {
-        console.log('[FaceLivenessCheck] Stopping all camera tracks');
-        streamRef.current.getTracks().forEach(track => {
-          console.log('[FaceLivenessCheck] Stopping track:', track.kind);
-          track.stop();
-        });
-        streamRef.current = null;
-      }
-      
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        console.log('[FaceLivenessCheck] Stopping media recorder');
-        mediaRecorderRef.current.stop();
-      }
-    };
-  }, [createFaceLivenessSession]);
+    // Cleanup function - handled by the first useEffect
+  }, []);
 
   // Handle when analysis starts
   const handleAnalysisStart = useCallback(() => {
@@ -444,85 +514,46 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     try {
       setIsLoading(true);
       
-      // Get AWS credentials - try Amplify Auth first, then fall back to direct AWS config
-      let credentials;
+      // Use the direct API approach instead of server
+      const { getFaceLivenessResults } = await import('../api/faceLivenessApi');
       
-      try {
-        // Try to get credentials from Amplify Auth
-        const authSession = await fetchAuthSession();
-        if (authSession?.credentials) {
-          credentials = authSession.credentials;
-          console.log('[FaceLivenessCheck] Successfully obtained Amplify credentials for results');
-        } else {
-          console.log('[FaceLivenessCheck] No credentials in auth session for results, using configured AWS credentials');
-        }
-      } catch (authError) {
-        console.warn('[FaceLivenessCheck] Error getting Amplify auth session for results:', authError);
-      }
+      console.log('[FaceLivenessCheck] Getting results for session via direct API:', sessionId);
+      const result = await getFaceLivenessResults(sessionId, user?.id);
       
-      // Get direct environment variable credentials as a fallback
-      if (!credentials) {
-        console.log('[FaceLivenessCheck] Trying to get AWS credentials from environment variables for results');
-        const envCredentials = getAwsCredentialsFromEnv();
+      if (result.success) {
+        console.log('[FaceLivenessCheck] Liveness results received:', {
+          isLive: result.isLive,
+          confidence: result.confidence,
+          status: result.status,
+          hasReferenceImage: !!result.referenceImage,
+          auditImagesCount: result.auditImages?.length || 0
+        });
         
-        if (envCredentials) {
-          console.log('[FaceLivenessCheck] Successfully obtained credentials from environment variables for results');
-          credentials = envCredentials;
-        } else {
-          console.warn('[FaceLivenessCheck] No credentials found in environment variables for results');
-        }
-      }
-      
-      // Initialize Rekognition client - with or without explicit credentials
-      const rekognitionConfig = { 
-        region: AWS_REGION
-      };
-      
-      // Only add credentials if we got them
-      if (credentials) {
-        console.log('[FaceLivenessCheck] Using explicit credentials for Rekognition client in results');
-        rekognitionConfig.credentials = credentials;
-      } else {
-        console.warn('[FaceLivenessCheck] No credentials available for results, SDK will try to use default credential provider chain');
-      }
-      
-      const rekognition = new RekognitionClient(rekognitionConfig);
-      
-      // Create and send command
-      const command = new GetFaceLivenessSessionResultsCommand({
-        SessionId: sessionId
-      });
-      
-      console.log('[FaceLivenessCheck] Getting results for session:', sessionId);
-      const response = await rekognition.send(command);
-      
-      console.log('[FaceLivenessCheck] Results received:', response);
-      
-      // Process the response
-      const confidenceThreshold = parseFloat(import.meta.env.VITE_FACE_LIVENESS_CONFIDENCE_THRESHOLD || '90');
-      const result = {
-        isLive: response.Status === 'SUCCEEDED' && response.Confidence >= confidenceThreshold,
-        confidence: response.Confidence || 0,
-        status: response.Status,
-        referenceImage: response.ReferenceImage?.S3ObjectKey 
-          ? `https://${FACE_LIVENESS_S3_BUCKET}.s3.amazonaws.com/${response.ReferenceImage.S3ObjectKey}`
-          : null,
-        auditImages: response.AuditImages?.map(img => 
-          img.S3ObjectKey 
-            ? `https://${FACE_LIVENESS_S3_BUCKET}.s3.amazonaws.com/${img.S3ObjectKey}`
-            : null
-        ).filter(Boolean) || []
-      };
-      
-      console.log('[FaceLivenessCheck] Processed results:', result);
-      setLivenessResult(result);
-      setReferenceImage(result.referenceImage);
-      
-      // Proceed with face registration if successful
-      if (result.isLive && result.confidence > confidenceThreshold) {
-        console.log('[FaceLivenessCheck] Liveness check passed, proceeding with face registration');
-        if (result.referenceImage) {
+        setLivenessResult(result);
+        setReferenceImage(result.referenceImage);
+        
+        // Proceed with face registration if successful
+        if (result.isLive && result.referenceImage) {
+          console.log('[FaceLivenessCheck] Liveness check passed, proceeding with face registration');
           await registerFace(result.referenceImage);
+        } else {
+          console.warn('[FaceLivenessCheck] Liveness check failed:', {
+            isLive: result.isLive,
+            confidence: result.confidence
+          });
+          
+          if (!result.isLive) {
+            setError('Face verification failed. The system could not verify that a live person was present.');
+            if (onError) {
+              onError(new Error('Liveness check failed with low confidence'));
+            }
+          }
+        }
+      } else {
+        console.error('[FaceLivenessCheck] Error getting results:', result.error);
+        setError(`Failed to complete verification: ${result.error}`);
+        if (onError) {
+          onError(new Error(result.error));
         }
       }
       
@@ -548,7 +579,7 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
         onError(err);
       }
     }
-  }, [sessionId, onError, AWS_REGION, FACE_LIVENESS_S3_BUCKET]);
+  }, [sessionId, onError, user?.id]);
 
   // Register the face after successful liveness check
   const registerFace = async (imageUrl) => {
@@ -607,6 +638,27 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   // Save reference to the stream when camera is accessed
   const handleCameraAccessGranted = useCallback((stream) => {
     console.log('[FaceLivenessCheck] Camera access granted');
+    
+    // Stop any existing stream before assigning the new one
+    if (streamRef.current) {
+      console.log('[FaceLivenessCheck] Stopping existing stream before assigning new one');
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+    
+    // Log what we received
+    if (stream) {
+      stream.getTracks().forEach(track => {
+        console.log('[FaceLivenessCheck] Camera track granted:', {
+          kind: track.kind,
+          label: track.label,
+          id: track.id,
+          enabled: track.enabled,
+          readyState: track.readyState
+        });
+      });
+    }
+    
+    // Save the stream reference
     streamRef.current = stream;
   }, []);
 
@@ -620,6 +672,12 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   if (sessionId) {
     console.log('[FaceLivenessCheck] Rendering with sessionId:', sessionId);
     console.log('[FaceLivenessCheck] *** RENDERING FACE LIVENESS DETECTOR WITH AWS SDK COMPONENT ***');
+    console.log('[FaceLivenessCheck] Using camera constraints:', {
+      deviceId: selectedCameraId ? { exact: selectedCameraId } : undefined,
+      width: { ideal: 640 },
+      height: { ideal: 480 }
+    });
+    
     return (
       <div 
         className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999]" 
@@ -672,7 +730,11 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
               disableInstructionScreen={false}
               displayDebugInfo={true}
               cameraFacing="user"
-              cameraConstraints={selectedCameraId ? { deviceId: { exact: selectedCameraId } } : undefined}
+              cameraConstraints={{
+                 deviceId: selectedCameraId ? { exact: selectedCameraId } : undefined,
+                 width: { ideal: 640 },
+                 height: { ideal: 480 }
+              }}
               style={{
                 width: '100%',
                 height: '100%', // Fill the container (up to 450px max)

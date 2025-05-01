@@ -5,6 +5,8 @@ import {
   QueryCommand
 } from '@aws-sdk/client-dynamodb';
 import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } from './lib/awsClient';
+import { checkCameraForFaceLiveness, validateAwsConfig, debugFaceLivenessSession } from './lib/awsClient';
+import { Amplify } from 'aws-amplify';
 
 // Initialize AWS client for debugging
 const dynamoDBClient = new DynamoDBClient({
@@ -265,6 +267,138 @@ export async function testFaceAttributesStorage({ userId, faceId, testData = tru
     return { success: false, error: error.message };
   }
 }
+
+// Create a global debug namespace
+window.FaceLivenessDebug = {
+  // Test camera access with detailed logging
+  testCamera: async () => {
+    console.log('🔍 Testing camera access and capabilities...');
+    const result = await checkCameraForFaceLiveness();
+    console.log('📊 Camera test results:', result);
+    return result;
+  },
+  
+  // Check AWS configuration
+  checkAwsConfig: async () => {
+    console.log('🔍 Validating AWS configuration...');
+    const result = await validateAwsConfig();
+    console.log('📊 AWS configuration results:', result);
+    return result;
+  },
+  
+  // Debug a Face Liveness session
+  debugSession: async (sessionId) => {
+    if (!sessionId) {
+      console.error('❌ No session ID provided. Usage: FaceLivenessDebug.debugSession("your-session-id")');
+      return null;
+    }
+    
+    console.log(`🔍 Debugging Face Liveness session: ${sessionId}`);
+    const result = await debugFaceLivenessSession(sessionId);
+    console.log('📊 Session debug results:', result);
+    return result;
+  },
+  
+  // List all connected devices
+  listDevices: async () => {
+    console.log('🔍 Listing all media devices...');
+    
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      console.error('❌ This browser does not support mediaDevices API');
+      return [];
+    }
+    
+    try {
+      // Request permission first to get labels
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      
+      // Get all devices
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      
+      // Stop all tracks
+      stream.getTracks().forEach(track => track.stop());
+      
+      // Group by type
+      const result = {
+        videoinput: devices.filter(d => d.kind === 'videoinput'),
+        audioinput: devices.filter(d => d.kind === 'audioinput'),
+        audiooutput: devices.filter(d => d.kind === 'audiooutput')
+      };
+      
+      console.log('📊 Devices found:', result);
+      return result;
+    } catch (err) {
+      console.error('❌ Error accessing devices:', err);
+      return { error: err.message, name: err.name };
+    }
+  },
+  
+  // Test camera with specific ID
+  testCameraById: async (deviceId) => {
+    if (!deviceId) {
+      console.error('❌ No device ID provided. Use FaceLivenessDebug.listDevices() first to get IDs');
+      return null;
+    }
+    
+    console.log(`🔍 Testing camera with ID: ${deviceId}`);
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          deviceId: { exact: deviceId },
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        }
+      });
+      
+      const videoTracks = stream.getVideoTracks();
+      
+      const trackInfo = videoTracks.map(track => ({
+        label: track.label,
+        id: track.id,
+        kind: track.kind,
+        enabled: track.enabled,
+        readyState: track.readyState,
+        settings: track.getSettings ? track.getSettings() : null,
+        constraints: track.getConstraints ? track.getConstraints() : null
+      }));
+      
+      // Stop all tracks
+      videoTracks.forEach(track => track.stop());
+      
+      console.log('📊 Camera test results:', trackInfo);
+      return {
+        success: true,
+        tracks: trackInfo
+      };
+    } catch (err) {
+      console.error('❌ Error testing camera:', err);
+      return {
+        success: false,
+        error: err.message,
+        name: err.name
+      };
+    }
+  },
+  
+  // Display Amplify configuration
+  showAmplifyConfig: () => {
+    const config = Amplify.getConfig();
+    console.log('📊 Amplify configuration:', config);
+    return config;
+  }
+};
+
+// Log available debug tools
+console.log('🔧 Face Liveness debug tools available in console:');
+console.log('- FaceLivenessDebug.testCamera() - Test camera access');
+console.log('- FaceLivenessDebug.checkAwsConfig() - Validate AWS configuration');
+console.log('- FaceLivenessDebug.debugSession("sessionId") - Debug a specific session');
+console.log('- FaceLivenessDebug.listDevices() - List all media devices');
+console.log('- FaceLivenessDebug.testCameraById("deviceId") - Test specific camera');
+console.log('- FaceLivenessDebug.showAmplifyConfig() - Show Amplify configuration');
+
+export default window.FaceLivenessDebug;
 
 // Make these functions available globally for browser console use
 if (typeof window !== 'undefined') {
