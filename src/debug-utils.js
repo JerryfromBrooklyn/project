@@ -4,17 +4,24 @@ import {
   UpdateItemCommand,
   QueryCommand
 } from '@aws-sdk/client-dynamodb';
-import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } from './lib/awsClient';
-import { checkCameraForFaceLiveness, validateAwsConfig, debugFaceLivenessSession } from './lib/awsClient';
+import { 
+  AWS_REGION, 
+  AWS_ACCESS_KEY_ID, 
+  AWS_SECRET_ACCESS_KEY,
+  testRekognitionConnectivity,
+  validateAwsConfig,
+  debugFaceLivenessSession,
+  checkCameraForFaceLiveness
+} from './lib/awsClient';
 import { Amplify } from 'aws-amplify';
 
 // Initialize AWS client for debugging
 const dynamoDBClient = new DynamoDBClient({
   region: AWS_REGION,
-  credentials: {
+  credentials: AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY ? {
     accessKeyId: AWS_ACCESS_KEY_ID,
     secretAccessKey: AWS_SECRET_ACCESS_KEY
-  }
+  } : undefined
 });
 
 /**
@@ -386,6 +393,14 @@ window.FaceLivenessDebug = {
     const config = Amplify.getConfig();
     console.log('📊 Amplify configuration:', config);
     return config;
+  },
+  
+  // Add a direct reference to testRekognitionConnectivity
+  testRekognitionConnection: async () => {
+    console.log('🔍 Testing AWS Rekognition connectivity...');
+    const result = await testRekognitionConnectivity();
+    console.log('📊 Rekognition connectivity result:', result);
+    return result;
   }
 };
 
@@ -397,6 +412,7 @@ console.log('- FaceLivenessDebug.debugSession("sessionId") - Debug a specific se
 console.log('- FaceLivenessDebug.listDevices() - List all media devices');
 console.log('- FaceLivenessDebug.testCameraById("deviceId") - Test specific camera');
 console.log('- FaceLivenessDebug.showAmplifyConfig() - Show Amplify configuration');
+console.log('- FaceLivenessDebug.testRekognitionConnection() - Test Rekognition API connection');
 
 export default window.FaceLivenessDebug;
 

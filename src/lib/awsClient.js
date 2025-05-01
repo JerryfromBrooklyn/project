@@ -133,6 +133,21 @@ console.log('[AWS CLIENT] S3 client created successfully');
 // Function to get current credentials - useful for credentials refresh
 export const getCredentials = () => credentials;
 
+// Test AWS connectivity
+export const testRekognitionConnectivity = async () => {
+    try {
+        // Import dynamically to avoid issues with Vite/bundling
+        const { ListCollectionsCommand } = await import('@aws-sdk/client-rekognition');
+        const command = new ListCollectionsCommand({});
+        const response = await rekognitionClient.send(command);
+        return !!response.CollectionIds;
+    }
+    catch (error) {
+        console.error('[ERROR] AWS Rekognition connectivity test failed:', error);
+        return false;
+    }
+};
+
 // Add a function to validate AWS configuration is correct
 export const validateAwsConfig = async () => {
     try {
@@ -335,19 +350,4 @@ export default {
     validateAwsConfig,
     debugFaceLivenessSession,
     checkCameraForFaceLiveness
-};
-
-// Test AWS connectivity
-export const testRekognitionConnectivity = async () => {
-    try {
-        // Import dynamically to avoid issues with Vite/bundling
-        const { ListCollectionsCommand } = await import('@aws-sdk/client-rekognition');
-        const command = new ListCollectionsCommand({});
-        const response = await rekognitionClient.send(command);
-        return !!response.CollectionIds;
-    }
-    catch (error) {
-        console.error('[ERROR] AWS Rekognition connectivity test failed:', error);
-        return false;
-    }
 };
