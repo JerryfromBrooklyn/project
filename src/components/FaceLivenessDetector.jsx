@@ -621,24 +621,27 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     console.log('[FaceLivenessCheck] Rendering with sessionId:', sessionId);
     console.log('[FaceLivenessCheck] *** RENDERING FACE LIVENESS DETECTOR WITH AWS SDK COMPONENT ***');
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto" 
+      <div 
+        className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999]" 
         style={{ 
-          paddingTop: isIOS() ? 'env(safe-area-inset-top, 20px)' : '16px',
-          paddingBottom: isIOS() ? 'env(safe-area-inset-bottom, 40px)' : '16px',
-          paddingLeft: isIOS() ? 'env(safe-area-inset-left, 12px)' : '12px',
-          paddingRight: isIOS() ? 'env(safe-area-inset-right, 12px)' : '12px',
-          height: '100%',
-          width: '100%'
+          // Use safe area padding for the overlay container
+          paddingTop: 'env(safe-area-inset-top, 16px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 16px)',
+          paddingLeft: 'env(safe-area-inset-left, 16px)',
+          paddingRight: 'env(safe-area-inset-right, 16px)',
         }}
         ref={containerRef}
       >
-        <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto flex flex-col"
-          style={{
-            maxHeight: isIOS() ? 'calc(100vh - 80px)' : 'calc(100vh - 60px)',
-            height: 'auto'
+        {/* Modal container with max-height and internal scrolling */}
+        <div 
+          className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto flex flex-col"
+          style={{ 
+            maxHeight: 'calc(100vh - 60px)', // Max height constraint
+            height: 'auto' // Height grows with content up to max-height
           }}
         >
-          <div className="p-2 sm:p-4 bg-gray-50 border-b flex justify-between items-center">
+          {/* Modal Header */}
+          <div className="p-3 sm:p-4 bg-gray-50 border-b flex justify-between items-center flex-shrink-0">
             <h2 className="text-base sm:text-lg font-semibold">Face Verification</h2>
             <button 
               onClick={handleClose}
@@ -651,11 +654,11 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
             </button>
           </div>
           
-          <div className="relative flex-grow" style={{ 
-            minHeight: isIOS() ? '250px' : '300px',
-            maxHeight: isIOS() ? '500px' : '600px',
-            overflowY: 'hidden'
-          }}>
+          {/* Scrollable Content Area */}
+          <div 
+            className="relative flex-grow overflow-y-auto"
+            style={{ minHeight: '250px' }} // Ensure a minimum area for the detector
+          >
             {console.log('[FaceLivenessCheck] About to render AWS FaceLivenessDetector component')}
             <FaceLivenessDetector
               sessionId={sessionId}
@@ -670,7 +673,9 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
               cameraConstraints={selectedCameraId ? { deviceId: { exact: selectedCameraId } } : undefined}
               style={{
                 width: '100%',
-                height: '100%',
+                // Use min-height to allow shrinking, height 100% to fill parent
+                minHeight: '300px', 
+                height: '100%', 
                 position: 'relative',
                 zIndex: 1000,
                 display: 'flex',
@@ -687,24 +692,29 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   // Camera selection screen
   if (stage === 'init') {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto"
+      <div 
+        className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999]" 
         style={{ 
-          paddingTop: isIOS() ? 'env(safe-area-inset-top, 20px)' : '16px',
-          paddingBottom: isIOS() ? 'env(safe-area-inset-bottom, 40px)' : '16px',
-          paddingLeft: isIOS() ? 'env(safe-area-inset-left, 12px)' : '12px',
-          paddingRight: isIOS() ? 'env(safe-area-inset-right, 12px)' : '12px',
-          height: '100%',
-          width: '100%'
+          // Use safe area padding for the overlay container
+          paddingTop: 'env(safe-area-inset-top, 16px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 16px)',
+          paddingLeft: 'env(safe-area-inset-left, 16px)',
+          paddingRight: 'env(safe-area-inset-right, 16px)',
         }}
         ref={containerRef}
       >
-        <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto"
-          style={{
-            maxHeight: isIOS() ? 'calc(100vh - 80px)' : 'calc(100vh - 60px)'
+        {/* Modal container with max-height */}
+        <div 
+          className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto flex flex-col"
+          style={{ 
+            maxHeight: 'calc(100vh - 60px)', // Max height constraint
+            height: 'auto'
           }}
         >
-          <div className="p-3 sm:p-5">
-            <div className="flex justify-between items-center mb-3 sm:mb-5">
+          {/* Scrollable content area for camera selection */}
+          <div className="p-4 sm:p-5 overflow-y-auto">
+            {/* Header inside scrollable area */}
+            <div className="flex justify-between items-center mb-4 sm:mb-5 flex-shrink-0">
               <h2 className="text-lg sm:text-xl font-semibold">Select Camera</h2>
               <button 
                 onClick={handleClose}
@@ -717,6 +727,7 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
               </button>
             </div>
             
+            {/* Camera selection content */}
             {isCameraLoading ? (
               <div className="flex flex-col items-center justify-center py-3">
                 <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 border-t-2 border-b-2 border-blue-500 mb-3 sm:mb-4"></div>
@@ -746,6 +757,8 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
                   onClick={startFaceLivenessSession}
                   disabled={!selectedCameraId}
                   className="w-full px-3 py-2 sm:px-4 sm:py-2 bg-blue-600 text-white font-medium text-sm sm:text-base rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
+                  aria-label="Start face verification process"
+                  tabIndex={0} // Ensure button is focusable
                 >
                   Start Face Verification
                 </button>
@@ -768,6 +781,8 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
                 <button
                   onClick={() => getVideoInputDevices().then(devices => setCameraDevices(devices))}
                   className="mt-1 sm:mt-2 px-3 py-1 sm:px-4 sm:py-2 bg-blue-600 text-white font-medium text-sm sm:text-base rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  aria-label="Retry detecting cameras"
+                  tabIndex={0}
                 >
                   Retry
                 </button>
@@ -782,23 +797,27 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   // Loading state while creating session
   console.log('[FaceLivenessCheck] Rendering loading state - no sessionId yet, isLoading:', isLoading);
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto"
+    <div 
+      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999]" 
       style={{ 
-        paddingTop: isIOS() ? 'env(safe-area-inset-top, 20px)' : '16px',
-        paddingBottom: isIOS() ? 'env(safe-area-inset-bottom, 40px)' : '16px',
-        paddingLeft: isIOS() ? 'env(safe-area-inset-left, 12px)' : '12px',
-        paddingRight: isIOS() ? 'env(safe-area-inset-right, 12px)' : '12px',
-        height: '100%',
-        width: '100%'
+        // Use safe area padding for the overlay container
+        paddingTop: 'env(safe-area-inset-top, 16px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 16px)',
+        paddingLeft: 'env(safe-area-inset-left, 16px)',
+        paddingRight: 'env(safe-area-inset-right, 16px)',
       }}
       ref={containerRef}
     >
-      <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto"
-        style={{
-          maxHeight: isIOS() ? 'calc(100vh - 80px)' : 'calc(100vh - 60px)'
+      {/* Modal container */}
+      <div 
+        className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto"
+        style={{ 
+          maxHeight: 'calc(100vh - 60px)', // Max height constraint
+          height: 'auto' 
         }}
       >
-        <div className="p-4 sm:p-5">
+        {/* Content area for loading/error states */}
+        <div className="p-4 sm:p-5 overflow-y-auto">
           <div className="flex flex-col items-center justify-center">
             {isLoading ? (
               <>
@@ -846,8 +865,10 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
                     setStage('init');
                   }}
                   className="mt-3 sm:mt-4 px-3 py-1 sm:px-4 sm:py-2 bg-blue-500 text-white text-sm sm:text-base rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  aria-label="Retry face verification setup or select a different camera"
+                  tabIndex={0}
                 >
-                  Select a Different Camera
+                  Retry / Select Camera
                 </button>
               </>
             )}
@@ -856,6 +877,8 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
               <button
                 onClick={handleClose}
                 className="mt-2 px-3 py-1 sm:px-4 sm:py-2 text-gray-600 text-sm sm:text-base rounded-md hover:bg-gray-100"
+                aria-label="Cancel face verification"
+                tabIndex={0}
               >
                 Cancel
               </button>
