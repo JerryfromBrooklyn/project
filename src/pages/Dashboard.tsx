@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos, Trash2, RotateCcw, CheckCircle } from 'lucide-react';
 import { cn } from '../utils/cn';
-import FaceRegistration from '../components/FaceRegistration';
+import FaceRegistration from '../components/FaceRegistration.jsx';
 import { PhotoManager } from '../components/PhotoManager';
 import { getFaceDataForUser } from '../services/FaceStorageService';
 import { awsPhotoService } from '../services/awsPhotoService';

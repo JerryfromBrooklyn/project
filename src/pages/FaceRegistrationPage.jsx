@@ -1,5 +1,5 @@
 import React from 'react';
-import FaceRegistration from '../components/FaceRegistration';
+import FaceRegistration from '../components/FaceRegistration.jsx';
 
 const FaceRegistrationPage = () => {
   return <FaceRegistration />;

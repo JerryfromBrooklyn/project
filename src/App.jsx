@@ -6,7 +6,7 @@ import SignUp from './auth/SignUp';
 import VerifyEmail from './auth/VerifyEmail';
 import SimpleApp from './SimpleApp';
 import Dashboard from './pages/Dashboard';
-import FaceRegistration from './components/FaceRegistration';
+import FaceRegistration from './components/FaceRegistration.jsx';
 import MyPhotos from './pages/MyPhotos';
 import { PhotoUploader } from './components/PhotoUploader.jsx';
 import Notifications from './pages/Notifications';
