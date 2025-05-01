@@ -83,9 +83,15 @@ const configureAwsSdk = () => {
 // Configure AWS SDK with region
 const AWS_REGION = configureAwsSdk();
 
+// Detect iOS device
+const isIOS = () => {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+};
+
 const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   console.log('[FaceLivenessCheck] *** COMPONENT MOUNTED ***');
   console.log('[FaceLivenessCheck] Props received:', { hasOnSuccess: !!onSuccess, hasOnError: !!onError, hasOnClose: !!onClose });
+  console.log('[FaceLivenessCheck] Running on iOS device:', isIOS());
   
   // Basic state
   const [sessionId, setSessionId] = useState(null);
@@ -105,14 +111,58 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   
   // Refs
   const mediaRecorderRef = useRef(null);
-  const videoChunksRef = useRef([]);
+  const videoChunksRef = useRef(null);
   const streamRef = useRef(null);
+  const containerRef = useRef(null);
 
   // Get user from auth context
   const { user } = useAuth();
 
   // Constants from environment variables
   const FACE_LIVENESS_S3_BUCKET = import.meta.env.VITE_FACE_LIVENESS_S3_BUCKET || 'face-liveness-bucket--20250430';
+
+  // Set viewport meta tag for iOS
+  useEffect(() => {
+    if (isIOS()) {
+      // Find viewport meta tag
+      let viewportMeta = document.querySelector('meta[name="viewport"]');
+      
+      // If it doesn't exist, create it
+      if (!viewportMeta) {
+        viewportMeta = document.createElement('meta');
+        viewportMeta.name = 'viewport';
+        document.head.appendChild(viewportMeta);
+      }
+      
+      // Set content with height=device-height to ensure full viewport usage
+      viewportMeta.content = 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no';
+      
+      console.log('[FaceLivenessCheck] Set viewport meta for iOS');
+      
+      // Restore original viewport on unmount
+      return () => {
+        viewportMeta.content = 'width=device-width, initial-scale=1';
+      };
+    }
+  }, []);
+  
+  // Adjust screen when keyboard is visible on iOS
+  useEffect(() => {
+    if (!isIOS()) return;
+    
+    const handleResize = () => {
+      // Add a small delay to ensure viewport has updated
+      setTimeout(() => {
+        if (containerRef.current) {
+          // Make sure we're not cutting off content when keyboard appears
+          containerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Load available camera devices on mount
   useEffect(() => {
@@ -571,8 +621,15 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
     console.log('[FaceLivenessCheck] Rendering with sessionId:', sessionId);
     console.log('[FaceLivenessCheck] *** RENDERING FACE LIVENESS DETECTOR WITH AWS SDK COMPONENT ***');
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto py-4 px-2 sm:px-4">
-        <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto">
+      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto" 
+        style={{ 
+          paddingTop: isIOS() ? '10px' : '16px',
+          paddingBottom: isIOS() ? 'env(safe-area-inset-bottom, 30px)' : '16px',
+          height: isIOS() ? '-webkit-fill-available' : '100%'
+        }}
+        ref={containerRef}
+      >
+        <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto">
           <div className="p-2 sm:p-4 bg-gray-50 border-b flex justify-between items-center">
             <h2 className="text-base sm:text-lg font-semibold">Face Verification</h2>
             <button 
@@ -586,7 +643,11 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
             </button>
           </div>
           
-          <div className="relative" style={{ minHeight: '300px', height: 'calc(100vh - 200px)', maxHeight: '500px' }}>
+          <div className="relative" style={{ 
+            height: isIOS() ? '50vh' : 'calc(100vh - 200px)', 
+            minHeight: '260px',
+            maxHeight: isIOS() ? '400px' : '500px'
+          }}>
             {console.log('[FaceLivenessCheck] About to render AWS FaceLivenessDetector component')}
             <FaceLivenessDetector
               sessionId={sessionId}
@@ -604,6 +665,8 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
                 height: '100%',
                 position: 'relative',
                 zIndex: 1000,
+                display: 'flex',
+                flexDirection: 'column'
               }}
             />
             {console.log('[FaceLivenessCheck] AWS FaceLivenessDetector component rendered')}
@@ -616,8 +679,15 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   // Camera selection screen
   if (stage === 'init') {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto py-4 px-2 sm:px-4">
-        <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto">
+      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto"
+        style={{ 
+          paddingTop: isIOS() ? '10px' : '16px',
+          paddingBottom: isIOS() ? 'env(safe-area-inset-bottom, 30px)' : '16px',
+          height: isIOS() ? '-webkit-fill-available' : '100%'
+        }}
+        ref={containerRef}
+      >
+        <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto">
           <div className="p-4 sm:p-6">
             <div className="flex justify-between items-center mb-4 sm:mb-6">
               <h2 className="text-lg sm:text-xl font-semibold">Select Camera</h2>
@@ -697,8 +767,15 @@ const FaceLivenessCheck = ({ onSuccess, onError, onClose }) => {
   // Loading state while creating session
   console.log('[FaceLivenessCheck] Rendering loading state - no sessionId yet, isLoading:', isLoading);
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto py-4 px-2 sm:px-4">
-      <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto">
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[999] overflow-y-auto"
+      style={{ 
+        paddingTop: isIOS() ? '10px' : '16px',
+        paddingBottom: isIOS() ? 'env(safe-area-inset-bottom, 30px)' : '16px',
+        height: isIOS() ? '-webkit-fill-available' : '100%'
+      }}
+      ref={containerRef}
+    >
+      <div className="bg-white rounded-lg overflow-hidden w-full max-w-sm sm:max-w-md shadow-xl mx-auto my-auto">
         <div className="p-4 sm:p-6">
           <div className="flex flex-col items-center justify-center">
             {isLoading ? (
