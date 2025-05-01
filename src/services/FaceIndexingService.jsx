@@ -30,7 +30,9 @@ import { GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 
 // Configure Rekognition constants
 const COLLECTION_ID = AWS_COLLECTION_ID || 'shmong-faces';
-const FACE_MATCH_THRESHOLD = 93.5;
+const FACE_MATCH_THRESHOLD = 85.0;
+const MIN_MATCH_CONFIDENCE = 93.0;
+const MIN_DETECTION_CONFIDENCE = 70.0;
 
 // Add environment detection for browser-safe code
 const isBrowser = typeof window !== 'undefined';
@@ -320,11 +322,11 @@ export const indexFace = async (userId, imageBlob) => {
       const searchParams = {
         CollectionId: COLLECTION_ID,
         FaceId: faceId,
-        MaxFaces: 150,
-        FaceMatchThreshold: 95.0
+        MaxFaces: 1000,
+        FaceMatchThreshold: FACE_MATCH_THRESHOLD
       };
       
-      console.log('[FaceIndexing] Searching for historical matches with threshold: 85.0%');
+      console.log(`[FaceIndexing] Searching for historical matches with threshold: ${FACE_MATCH_THRESHOLD}%`);
       const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
       
       if (searchResponse.FaceMatches && searchResponse.FaceMatches.length > 0) {
@@ -335,73 +337,182 @@ export const indexFace = async (userId, imageBlob) => {
         });
         
         // Process each match without randomization
-        historicalMatches = await Promise.all(searchResponse.FaceMatches
-          // Filter out matches with user_ prefix - we only want matches with actual photos
-          .filter(match => match.Face.ExternalImageId && match.Face.ExternalImageId.startsWith('photo_'))
-          .map(async (match) => {
-            // Extract the actual photo ID by removing the "photo_" prefix
-            const externalId = match.Face.ExternalImageId;
-            const photoId = externalId.startsWith('photo_') ? externalId.substring(6) : externalId;
-            const similarityScore = match.Similarity;
-            
-            // Skip exact 100% self-matches
-            if (similarityScore === 100 && match.Face.FaceId === faceId) {
+        const processedMatches = await Promise.all(searchResponse.FaceMatches
+          // Skip exact self-matches where the face IDs are the same
+          .filter(match => {
+            if (match.Face.FaceId === faceId) {
               console.log(`[FaceIndexing] Skipping exact self-match with FaceId: ${match.Face.FaceId}`);
-              return null;
+              return false;
             }
             
+            return true;
+          })
+          .map(async match => {
+            // Extract the actual ID, handling various prefixes
+            const externalId = match.Face.ExternalImageId;
+            let photoId = externalId;
+            let matchType = 'unknown';
+            
+            // Determine match type and extract ID
+            if (externalId.startsWith('photo_')) {
+              photoId = externalId.substring(6);
+              matchType = 'photo';
+            }
+            else if (externalId.startsWith('user_')) {
+              photoId = externalId.substring(5);
+              matchType = 'user';
+            }
+            // Check if it's a direct photo ID (UUID format without prefix)
+            else if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(externalId)) {
+              photoId = externalId;
+              matchType = 'photo';
+            }
+            
+            const similarityScore = match.Similarity;
+            
             try {
-              // Fetch photo details from shmong-photos table using the actual photo ID
-              const { docClient } = await getAWSClients();
-              const params = {
-                TableName: PHOTOS_TABLE,
-                Key: {
-                  id: { S: photoId }
-                }
-              };
-              
-              const photoData = await docClient.send(new GetItemCommand(params));
-              
-              if (photoData && photoData.Item) {
-                const photoDetails = photoData.Item;
-                return {
-                  id: photoId,
-                  similarity: similarityScore, // No more randomization, just use the original score
-                  imageUrl: photoDetails.imageUrl?.S || photoDetails.public_url?.S || null,
-                  owner: photoDetails.userId?.S || photoDetails.user_id?.S || null,
-                  eventId: photoDetails.eventId?.S || photoDetails.event_id?.S || null,
-                  createdAt: photoDetails.createdAt?.S || photoDetails.created_at?.S || null
+              // Only try to fetch photo details if it might be a photo
+              if (matchType === 'photo' || matchType === 'unknown') {
+                // Try to fetch from photos table
+                const { docClient } = await getAWSClients();
+                const params = {
+                  TableName: PHOTOS_TABLE,
+                  Key: {
+                    id: photoId
+                  }
                 };
+                
+                const photoData = await docClient.send(new GetCommand(params));
+                
+                if (photoData && photoData.Item) {
+                  const photoDetails = photoData.Item;
+                  // Definitely a photo since we found it in the photos table
+                  return {
+                    id: photoId,
+                    similarity: similarityScore,
+                    imageUrl: photoDetails.imageUrl || photoDetails.public_url || photoDetails.url || null,
+                    owner: photoDetails.userId || photoDetails.user_id || null,
+                    eventId: photoDetails.eventId || photoDetails.event_id || null,
+                    createdAt: photoDetails.createdAt || photoDetails.created_at || new Date().toISOString(),
+                    matchType: 'photo'
+                  };
+                }
               }
               
-              // If no photo found, still return basic match info
+              // If not found or not a photo, return basic match info
               return {
                 id: photoId,
-                similarity: similarityScore
+                similarity: similarityScore,
+                matchType: matchType,
+                externalId: externalId,
+                createdAt: new Date().toISOString()
               };
             } catch (matchError) {
               console.error(`[FaceIndexing] Error fetching details for match ${photoId}:`, matchError);
               return {
                 id: photoId,
                 similarity: similarityScore,
-                error: matchError.message
+                error: matchError.message,
+                matchType: matchType,
+                externalId: externalId,
+                createdAt: new Date().toISOString()
               };
             }
           }));
         
-        // After processing all matches, filter out null values 
-        // and photos we couldn't find in the database
-        historicalMatches = historicalMatches
-          .filter(match => match !== null)
-          .filter(match => match && match.id && match.similarity);
+        // After processing all matches, group them by type and apply appropriate filtering
+        // Separate photo matches from user matches
+        const photoMatches = processedMatches
+          .filter(match => match !== null && match.matchType === 'photo')
+          .filter(match => match && match.id && match.similarity)
+          // Apply the higher confidence threshold for quality filtering
+          .filter(match => match.similarity >= MIN_MATCH_CONFIDENCE)
+          // Sort by similarity (highest first)
+          .sort((a, b) => b.similarity - a.similarity);
+          
+        const userMatches = processedMatches
+          .filter(match => match !== null && match.matchType === 'user')
+          .filter(match => match && match.id && match.similarity)
+          // Apply the higher confidence threshold for quality filtering
+          .filter(match => match.similarity >= MIN_MATCH_CONFIDENCE)
+          // Sort by similarity (highest first)
+          .sort((a, b) => b.similarity - a.similarity);
+          
+        const unknownMatches = processedMatches
+          .filter(match => match !== null && match.matchType === 'unknown')
+          .filter(match => match && match.id && match.similarity)
+          // Apply the higher confidence threshold for quality filtering
+          .filter(match => match.similarity >= MIN_MATCH_CONFIDENCE)
+          // Sort by similarity (highest first)
+          .sort((a, b) => b.similarity - a.similarity);
+          
+        console.log(`[FaceIndexing] Processed matches by type: photos=${photoMatches.length}, users=${userMatches.length}, unknown=${unknownMatches.length}`);
+        
+        // Always prioritize photo matches, then add user matches if we have space left
+        // Hard limit of 150 total for DynamoDB storage
+        const MAX_MATCHES = 150;
+        let photoLimit = Math.min(photoMatches.length, MAX_MATCHES);
+        let selectedPhotoMatches = photoMatches.slice(0, photoLimit);
+        
+        // Only add user/unknown matches if we have room left in our MAX_MATCHES limit
+        let remainingSlots = MAX_MATCHES - selectedPhotoMatches.length;
+        let combinedMatches = [...selectedPhotoMatches];
+        
+        if (remainingSlots > 0 && userMatches.length > 0) {
+          let userLimit = Math.min(userMatches.length, remainingSlots);
+          // Only take a small sample of user matches if there are a lot
+          if (userMatches.length > 20 && remainingSlots > 20) {
+            userLimit = 20; // Cap at 20 user matches max
+          }
+          combinedMatches = [...combinedMatches, ...userMatches.slice(0, userLimit)];
+          remainingSlots -= userLimit;
+        }
+        
+        if (remainingSlots > 0 && unknownMatches.length > 0) {
+          let unknownLimit = Math.min(unknownMatches.length, remainingSlots);
+          combinedMatches = [...combinedMatches, ...unknownMatches.slice(0, unknownLimit)];
+        }
+        
+        // Sort the combined list once more by similarity
+        historicalMatches = combinedMatches.sort((a, b) => b.similarity - a.similarity);
             
-        console.log('[FaceIndexing] Processed historical matches:', historicalMatches);
+        console.log('[FaceIndexing] Final processed historical matches:', 
+          historicalMatches.length > 10 
+            ? `${historicalMatches.length} total (showing first 10): ` + 
+              JSON.stringify(historicalMatches.slice(0, 10), null, 2)
+            : JSON.stringify(historicalMatches, null, 2));
+
+        // If we have too many matches, prioritize photo matches over user matches
+        // and keep only the 150 most recent ones (sorted by timestamp if available)
+        if (historicalMatches.length > 150) {
+          console.log(`[FaceIndexing] Found ${historicalMatches.length} matches, limiting to most recent 150`);
+          
+          // First sort by timestamp (most recent first) if available
+          historicalMatches.sort((a, b) => {
+            // If both have timestamps, use those for sorting
+            if (a.timestamp && b.timestamp) {
+              return new Date(b.timestamp) - new Date(a.timestamp);
+            }
+            // If only one has timestamp, prioritize the one with timestamp
+            if (a.timestamp) return -1;
+            if (b.timestamp) return 1;
+            // Fall back to similarity if no timestamps
+            return b.similarity - a.similarity;
+          });
+          
+          // Limit to most recent 150
+          historicalMatches = historicalMatches.slice(0, 150);
+        }
         
         // Step 5.5: Update the shmong-photos table to add this user to matched_users
         // for each photo that was matched
         console.log('[FaceIndexing] Updating matched photos to include current user...');
         if (historicalMatches.length > 0) {
-          const photoIdsToUpdate = [...new Set(historicalMatches.map(match => match.id))];
+          // Only try to update actual photo records, not user records
+          const photoIdsToUpdate = historicalMatches
+            .filter(match => match.matchType === 'photo') // Only include photo matches
+            .map(match => match.id);
+            
           console.log(`[FaceIndexing] Found ${photoIdsToUpdate.length} unique photos to update with user ID: ${userId}`);
           
           // Add retry logic configuration
@@ -500,6 +611,92 @@ export const indexFace = async (userId, imageBlob) => {
             }
           }
           console.log('[FaceIndexing] Finished updating all matched photos with current user ID');
+          
+          // Verification step - double check for any photos we might have missed
+          try {
+            // Wait 500ms to allow any eventual consistency issues to resolve
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            console.log('[FaceIndexing] Running verification check to ensure all photos were updated...');
+            
+            // Count types of matches for reporting
+            const matchTypes = {};
+            historicalMatches.forEach(match => {
+              matchTypes[match.matchType] = (matchTypes[match.matchType] || 0) + 1;
+            });
+            console.log(`[FaceIndexing] Match type breakdown: ${JSON.stringify(matchTypes)}`);
+            
+            // Only verify actual photo matches
+            const photoMatches = historicalMatches.filter(match => match.matchType === 'photo');
+            console.log(`[FaceIndexing] Verifying ${photoMatches.length} photo matches out of ${historicalMatches.length} total matches`);
+            
+            let missingUpdates = 0;
+            
+            for (const match of photoMatches) {
+              const photoId = match.id;
+              try {
+                const verifyCommand = new GetCommand({
+                  TableName: PHOTOS_TABLE,
+                  Key: { id: photoId }
+                });
+                
+                const photoData = await docClient.send(verifyCommand);
+                
+                if (!photoData || !photoData.Item) {
+                  continue;
+                }
+                
+                // Check if user is in matched_users
+                const matchedUsers = photoData.Item.matched_users || [];
+                const userIncluded = matchedUsers.some(match => {
+                  if (typeof match === 'object' && match !== null) {
+                    return (match.userId === userId || match.user_id === userId);
+                  } else if (typeof match === 'string') {
+                    return match === userId;
+                  }
+                  return false;
+                });
+                
+                if (!userIncluded) {
+                  missingUpdates++;
+                  console.log(`[FaceIndexing] ⚠️ User ${userId} missing from matched_users for photo ${photoId} - fixing`);
+                  
+                  // Add the user to matched_users
+                  const matchInfo = historicalMatches.find(match => match.id === photoId);
+                  const newMatchEntry = {
+                    userId: userId,
+                    faceId: faceId,
+                    similarity: matchInfo ? matchInfo.similarity : 99, // Default if similarity not found
+                    matchedAt: new Date().toISOString()
+                  };
+                  
+                  matchedUsers.push(newMatchEntry);
+                  
+                  // Update the photo
+                  const updateCommand = new PutCommand({
+                    TableName: PHOTOS_TABLE,
+                    Item: {
+                      ...photoData.Item,
+                      matched_users: matchedUsers,
+                      updated_at: new Date().toISOString()
+                    }
+                  });
+                  
+                  await docClient.send(updateCommand);
+                }
+              } catch (verifyError) {
+                console.error(`[FaceIndexing] Error verifying photo ${photoId}:`, verifyError);
+              }
+            }
+            
+            if (missingUpdates > 0) {
+              console.log(`[FaceIndexing] Fixed ${missingUpdates} photos that were missing the user in matched_users`);
+            } else {
+              console.log('[FaceIndexing] ✅ All photos correctly updated with user in matched_users');
+            }
+          } catch (verifyError) {
+            console.error('[FaceIndexing] Error during verification step:', verifyError);
+          }
         }
       } else {
         console.log('[FaceIndexing] No historical matches found');

@@ -118,7 +118,7 @@ export const awsPhotoService = {
             const publicUrl = `https://${PHOTO_BUCKET}.s3.amazonaws.com/${path}`;
             console.log(`🔗 [Upload ${uploadId}] Generated Public URL: ${publicUrl}`);
 
-            const photoMetadata = {
+            let photoMetadata = {
                 id: fileId,
                 user_id: userId,
                 storage_path: path,
@@ -146,6 +146,28 @@ export const awsPhotoService = {
             };
             console.log(`📝 [Upload ${uploadId}] Prepared initial metadata for DynamoDB.`);
             progressCallback(60);
+
+            // Add consistency check for user ID fields
+            const ensureUserIdConsistency = (metadata) => {
+              if (!metadata) return metadata;
+              
+              // Make sure these fields are all consistently set with the same value
+              const userId = metadata.user_id || metadata.userId || metadata.uploadedBy || metadata.uploaded_by;
+              
+              if (userId) {
+                metadata.user_id = userId;
+                metadata.userId = userId;
+                metadata.uploadedBy = userId;
+                metadata.uploaded_by = userId;
+                
+                console.log(`[PhotoService] Ensuring consistent user ID fields for upload: ${userId}`);
+              }
+              
+              return metadata;
+            };
+            
+            // Apply to initial metadata preparation
+            photoMetadata = ensureUserIdConsistency(photoMetadata);
 
             // --- Rekognition Face Indexing & Comparison --- 
             console.groupCollapsed(`🔄 [Upload ${uploadId}] Running Rekognition Face Indexing & Comparison...`);
@@ -200,8 +222,8 @@ export const awsPhotoService = {
                             const searchParams = {
                                 CollectionId: COLLECTION_ID,
                                 FaceId: detectedFaceId,
-                                MaxFaces: 150,
-                                FaceMatchThreshold: 99.0  // Changed from 98.0 to 99.0 for stricter matching
+                                MaxFaces: 1000, // Increased from 50 to 1000
+                                FaceMatchThreshold: 95.0
                             };
                             
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
@@ -214,13 +236,13 @@ export const awsPhotoService = {
                                   console.log(`        Match #${idx+1}: Face ID: ${match.Face.FaceId}, External ID: ${match.Face.ExternalImageId}, Similarity: ${match.Similarity.toFixed(2)}%`);
                                 });
                                 
-                                // Method 1: Check if user's registered faceId is directly in the matches
+                                // Process each match
                                 for (const match of searchResponse.FaceMatches) {
                                     const matchedExternalId = match.Face.ExternalImageId;
                                     const matchedFaceId = match.Face.FaceId;
                                     let similarity = match.Similarity;
                                     
-                                    // Skip exact self-matches (same face ID with 100% similarity or matching photo ID)
+                                    // Skip exact self-matches (same face ID or matching photo ID)
                                     if ((matchedFaceId === detectedFaceId || `photo_${fileId}` === matchedExternalId) && similarity >= 99.9) {
                                         console.log(`      ⚠️ Skipping self-match: FaceId=${matchedFaceId}, ExternalId=${matchedExternalId}`);
                                         continue;
@@ -229,12 +251,6 @@ export const awsPhotoService = {
                                     // Method 1: Check for direct face ID match (rarely works because of how Rekognition works)
                                     if (matchedFaceId === registeredFaceId) {
                                         console.log(`      ✅ Exact uploader face match found! Similarity: ${similarity.toFixed(2)}%`);
-                                        
-                                        // Skip suspiciously perfect matches 
-                                        if (similarity === 100) {
-                                            console.log(`      ⚠️ Skipping suspicious perfect 100% match with uploader`);
-                                            continue;
-                                        }
                                         
                                         // More permissive threshold for user recognition (99%)
                                         if (similarity >= 99) {
@@ -256,12 +272,6 @@ export const awsPhotoService = {
                                     // Method 2: Check for user ID in external image ID (more reliable)
                                     if (matchedExternalId && matchedExternalId === `user_${userId}`) {
                                         console.log(`      ✅ Uploader match found by ExternalImageId! Similarity: ${similarity.toFixed(2)}%`);
-                                        
-                                        // Skip suspiciously perfect matches 
-                                        if (similarity === 100) {
-                                            console.log(`      ⚠️ Skipping suspicious perfect 100% match with uploader by ExternalImageId`);
-                                            continue;
-                                        }
                                         
                                         // More permissive threshold for user recognition (99%)
                                         if (similarity >= 99) {
@@ -308,8 +318,8 @@ export const awsPhotoService = {
                             const searchParams = {
                                 CollectionId: COLLECTION_ID,
                                 FaceId: detectedFaceId,
-                                MaxFaces: 150,
-                                FaceMatchThreshold: 99.0  // Changed from 98.0 to 99.0 for stricter matching
+                                MaxFaces: 1000, // Increased from 50 to 1000
+                                FaceMatchThreshold: 95.0
                             };
                             
                             const searchResponse = await rekognitionClient.send(new SearchFacesCommand(searchParams));
@@ -328,7 +338,7 @@ export const awsPhotoService = {
                                     
                                     // Skip exact self-matches (same face ID with 100% similarity or matching photo ID)
                                     if ((matchedFaceId === detectedFaceId || `photo_${fileId}` === matchedExternalId) && similarity >= 99.9) {
-                                        console.log(`      ⚠️ Skipping self-match: FaceId=${matchedFaceId}, ExternalId=${matchedExternalId}`);
+                                        console.log(`      ⚠️ Skipping true self-match: FaceId=${matchedFaceId}, ExternalId=${matchedExternalId}`);
                                         continue;
                                     }
                                     
@@ -476,6 +486,12 @@ export const awsPhotoService = {
                 console.log(`   No face matches found during upload.`);
             }
 
+            // Apply again before final DynamoDB save to ensure consistency
+            console.log('[PhotoService] Final consistency check for user ID fields before DynamoDB save');
+            photoMetadata = ensureUserIdConsistency(photoMetadata);
+            
+            console.log(`[PhotoService] Photo assigned to user: ${photoMetadata.user_id} (uploaded_by: ${photoMetadata.uploaded_by})`);
+
             return {
                 success: true,
                 photoId: fileId,
@@ -568,14 +584,20 @@ export const awsPhotoService = {
                     }
                 }
                 
-                // c. Check for historical matches
+                // b. Check historical matches from face data
                 if (faceData && faceData.historicalMatches && Array.isArray(faceData.historicalMatches)) {
-                    if (faceData.historicalMatches.some(match => match.id === photo.id)) {
+                    // Only match with items that have "photo" matchType or have valid image URLs
+                    const validPhotoMatches = faceData.historicalMatches.filter(match => 
+                        (match.matchType === 'photo' || match.imageUrl) && 
+                        match.id === photo.id
+                    );
+                    
+                    if (validPhotoMatches.length > 0) {
                         console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: historical match`);
                         return true;
                     }
                 }
-
+                
                 return false;
             });
             
@@ -1100,44 +1122,57 @@ export const awsPhotoService = {
             return [];
         }
         try {
-            // Query DynamoDB for photos uploaded by this user
-            let allPhotos = [];
-            let lastEvaluatedKey;
+            // When querying for uploaded photos, check both user_id and uploaded_by fields
+            console.log(`📥 [PhotoService] Fetching only photos uploaded by user: ${userId}`);
             
-            do {
-                const scanParams = {
-                    TableName: PHOTOS_TABLE,
-                    FilterExpression: 'uploaded_by = :uid OR user_id = :uid OR uploadedBy = :uid',
-                    ExpressionAttributeValues: {
-                        ':uid': userId
-                    },
-                    ExclusiveStartKey: lastEvaluatedKey
-                };
+            const filterExpressions = [];
+            const expressionAttributeValues = {};
+            
+            // Check for user_id match
+            filterExpressions.push('user_id = :userId');
+            expressionAttributeValues[':userId'] = userId;
+            
+            // Check for uploaded_by match (as a fallback)
+            filterExpressions.push('uploaded_by = :uploadedBy');
+            expressionAttributeValues[':uploadedBy'] = userId;
+            
+            // Create filter expression with OR condition
+            const filterExpression = filterExpressions.join(' OR ');
+            
+            console.log(`[PhotoService] Using filter expression: ${filterExpression}`);
+            
+            const params = {
+                TableName: PHOTOS_TABLE,
+                FilterExpression: filterExpression,
+                ExpressionAttributeValues: expressionAttributeValues
+            };
+            
+            try {
+                const scanResults = [];
+                let items;
                 
-                const response = await docClient.send(new ScanCommand(scanParams));
+                do {
+                    items = await docClient.send(new ScanCommand(params));
+                    items.Items.forEach((item) => scanResults.push(item));
+                    params.ExclusiveStartKey = items.LastEvaluatedKey;
+                } while (typeof items.LastEvaluatedKey !== 'undefined');
                 
-                if (!response.Items || response.Items.length === 0) {
-                    console.log(`[PhotoService] No uploaded photos found for user ${userId}.`);
-                    break;
-                }
+                console.log(`[PhotoService] Found ${scanResults.length} photos uploaded by user ${userId}.`);
                 
-                allPhotos = [...allPhotos, ...response.Items];
-                lastEvaluatedKey = response.LastEvaluatedKey;
+                // Apply visibility filter
+                const visibleUploadedPhotos = await filterPhotosByVisibility(userId, scanResults, 'VISIBLE');
                 
-            } while (lastEvaluatedKey);
-            
-            console.log(`[PhotoService] Found ${allPhotos.length} photos uploaded by user ${userId}.`);
-            
-            // Apply visibility filter
-            const visibleUploadedPhotos = await filterPhotosByVisibility(userId, allPhotos, 'VISIBLE');
-            
-            // Sort by creation date (newest first)
-            const sortedVisiblePhotos = visibleUploadedPhotos.sort((a, b) => {
-                return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-            });
-            
-            console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} visible uploaded photos for user ${userId}.`);
-            return sortedVisiblePhotos;
+                // Sort by creation date (newest first)
+                const sortedVisiblePhotos = visibleUploadedPhotos.sort((a, b) => {
+                    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+                });
+                
+                console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} visible uploaded photos for user ${userId}.`);
+                return sortedVisiblePhotos;
+            } catch (error) {
+                console.error('[PhotoService] Error fetching uploaded photos:', error);
+                return [];
+            }
         } catch (error) {
             console.error('[PhotoService] Error fetching uploaded photos:', error);
             return [];

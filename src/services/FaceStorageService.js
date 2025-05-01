@@ -12,6 +12,9 @@ import { PutCommand as DocPutCommand, QueryCommand as DocQueryCommand, GetComman
 // S3 Bucket name for face data
 const FACE_BUCKET_NAME = 'shmong';
 
+// Feature flag for face verification
+const ENABLE_FACE_VERIFICATION = false; // Set to false by default until fully tested
+
 // Ensure Buffer exists in the environment - critical fix for browser compatibility
 const isBrowser = typeof window !== 'undefined';
 const hasBuffer = typeof Buffer !== 'undefined';
@@ -47,6 +50,31 @@ export const storeFaceId = async (userId, faceId, imageData, imagePath, faceAttr
   console.log('[FaceStorage] Storing face ID and metadata for user:', userId);
   
   try {
+    // Verify the face ID exists in Rekognition before proceeding
+    if (ENABLE_FACE_VERIFICATION) {
+      try {
+        // Use the already imported AWS clients instead of dynamic imports
+        const AWS = require('aws-sdk');
+        const rekognition = new AWS.Rekognition({ region: 'us-east-1' });
+        
+        console.log(`[FaceStorage] Verifying face ID ${faceId} in Rekognition collection...`);
+        const verifyResponse = await rekognition.describeFaces({
+          CollectionId: 'shmong-faces',
+          FaceIds: [faceId]
+        }).promise();
+        
+        if (!verifyResponse.Faces || verifyResponse.Faces.length === 0) {
+          console.warn(`[FaceStorage] ⚠️ Face ID ${faceId} not found in Rekognition collection, but continuing storage process`);
+          // Don't exit - continue with storage even if verification fails
+        } else {
+          console.log(`[FaceStorage] ✅ Face ID ${faceId} verified in Rekognition collection`);
+        }
+      } catch (verifyError) {
+        console.error(`[FaceStorage] Error verifying face ID in Rekognition - continuing anyway:`, verifyError);
+        // Continue anyway, as this is just a verification step
+      }
+    }
+    
     // Upload image to S3 if provided
     let imageUrl = null;
     if (imageData) {
@@ -69,7 +97,18 @@ export const storeFaceId = async (userId, faceId, imageData, imagePath, faceAttr
     let processedMatches = [];
     if (historicalMatches && historicalMatches.length > 0) {
       console.log('[FaceStorage] Processing historical matches for storage:', historicalMatches.length);
-      processedMatches = historicalMatches
+      
+      // Ensure we're working with an array and handle potential very large arrays
+      const matchArray = Array.isArray(historicalMatches) ? historicalMatches : [];
+      
+      if (matchArray.length > 150) {
+        console.log(`[FaceStorage] Warning: Large number of matches (${matchArray.length}). Limiting to top 150 by similarity.`);
+        // Sort by similarity and take top 150
+        matchArray.sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
+        matchArray.splice(150); // Keep only first 150 items
+      }
+      
+      processedMatches = matchArray
         .filter(match => match && match.id && match.similarity != null) // Ensure basic required fields exist
         .map(match => ({
           M: { // Explicitly define as a Map
@@ -81,6 +120,8 @@ export const storeFaceId = async (userId, faceId, imageData, imagePath, faceAttr
             createdAt: match.createdAt ? { S: match.createdAt } : { S: timestamp }
           }
         }));
+        
+      console.log(`[FaceStorage] Processed ${processedMatches.length} matches for DynamoDB storage`);
     }
     
     // Prepare DynamoDB item
