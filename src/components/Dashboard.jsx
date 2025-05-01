@@ -6,7 +6,7 @@ import { docClient } from '../lib/awsClient';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { motion, AnimatePresence } from 'framer-motion';
-import FaceRegistration from './FaceRegistration';
+import FaceRegistration from '../components/FaceLivenessDetector';
 import {
   User, LogOut, Camera, Image as ImageIcon, Upload, Trash2,
   Check, AlertTriangle, RefreshCw, Search, Info
@@ -26,6 +26,7 @@ const Dashboard = () => {
   const [registeredFace, setRegisteredFace] = useState(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
+  const [showFaceLiveness, setShowFaceLiveness] = useState(false);
 
   // Fetch user's face data and matched photos on load
   useEffect(() => {
@@ -91,7 +92,7 @@ const Dashboard = () => {
   };
 
   const navigateToFaceRegistration = () => {
-    navigate('/register-face');
+    setShowFaceLiveness(true);
   };
 
   const navigateToPhotos = () => {
@@ -417,7 +418,19 @@ const Dashboard = () => {
                       <p className="text-gray-700 mb-4">
                         You haven't registered your face yet. Register to find photos of you!
                       </p>
-                      <FaceRegistration onSuccess={handleRegistrationSuccess} />
+                      <button
+                        onClick={() => setShowFaceLiveness(true)}
+                        className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      >
+                        <Camera size={16} className="mr-2" />
+                        Register Face
+                      </button>
+                      {showFaceLiveness && (
+                        <FaceRegistration 
+                          onSuccess={handleRegistrationSuccess} 
+                          onClose={() => setShowFaceLiveness(false)}
+                        />
+                      )}
                     </div>
                   )}
 

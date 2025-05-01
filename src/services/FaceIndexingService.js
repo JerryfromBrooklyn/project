@@ -8,7 +8,8 @@ import { FACE_MATCH_THRESHOLD } from '../lib/awsClient';
 import { storeFaceData, storeFaceMatch } from './database-utils';
 import { storeFaceId } from './FaceStorageService';
 import { normalizeToS3Url } from '../utils/s3Utils';
-import { QueryCommand, PutItemCommand, GetItemCommand, UpdateItemCommand, marshall, unmarshall } from '@aws-sdk/lib-dynamodb';
+import { QueryCommand, PutCommand, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { docClient } from '../lib/awsClient';
 // Add environment detection for browser-safe code
 const isBrowser = typeof window !== 'undefined';
@@ -346,9 +347,9 @@ const matchAgainstExistingFaces = async (userId, faceId) => {
                 };
                 
                 // 3. Store match in shmong-face-matches table
-                await docClient.send(new PutItemCommand({
+                await docClient.send(new PutCommand({
                     TableName: 'shmong-face-matches',
-                    Item: marshall(matchData)
+                    Item: matchData
                 }));
                 
                 matches.push(matchData);
@@ -360,9 +361,9 @@ const matchAgainstExistingFaces = async (userId, faceId) => {
         
         for (const photoId of matchedPhotoIds) {
             // Get current photo data
-            const { Item: photo } = await docClient.send(new GetItemCommand({
+            const { Item: photo } = await docClient.send(new GetCommand({
                 TableName: 'Photos',
-                Key: { photoId: { S: photoId } }
+                Key: { photoId: photoId }
             }));
             
             if (!photo) {
@@ -371,20 +372,20 @@ const matchAgainstExistingFaces = async (userId, faceId) => {
             }
             
             // Update photo with the new user match
-            const matchedUsers = photo.matchedUsers ? unmarshall(photo.matchedUsers) : [];
+            const matchedUsers = photo.matchedUsers || [];
             matchedUsers.push({
                 userId,
                 faceId,
                 matchedAt: new Date().toISOString()
             });
             
-            await docClient.send(new UpdateItemCommand({
+            await docClient.send(new UpdateCommand({
                 TableName: 'Photos',
-                Key: { photoId: { S: photoId } },
+                Key: { photoId: photoId },
                 UpdateExpression: 'SET matchedUsers = :matchedUsers, updatedAt = :updatedAt',
                 ExpressionAttributeValues: {
-                    ':matchedUsers': marshall(matchedUsers),
-                    ':updatedAt': { S: new Date().toISOString() }
+                    ':matchedUsers': matchedUsers,
+                    ':updatedAt': new Date().toISOString()
                 }
             }));
         }
@@ -522,19 +523,19 @@ const sendHistoricalMatchNotification = async (userId, matchCount) => {
         };
         
         // Store in DynamoDB notifications table
-        await docClient.send(new PutItemCommand({
+        await docClient.send(new PutCommand({
             TableName: 'shmong-notifications',
-            Item: marshall(notification)
+            Item: notification
         }));
         
         // Update user record to include notification count
-        await docClient.send(new UpdateItemCommand({
+        await docClient.send(new UpdateCommand({
             TableName: 'Users',
-            Key: { userId: { S: userId } },
+            Key: { userId: userId },
             UpdateExpression: 'SET unreadNotifications = if_not_exists(unreadNotifications, :zero) + :one',
             ExpressionAttributeValues: {
-                ':zero': { N: '0' },
-                ':one': { N: '1' }
+                ':zero': 0,
+                ':one': 1
             }
         }));
         

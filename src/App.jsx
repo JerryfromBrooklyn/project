@@ -1,12 +1,12 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import SignUp from './auth/SignUp';
 import VerifyEmail from './auth/VerifyEmail';
 import SimpleApp from './SimpleApp';
 import Dashboard from './pages/Dashboard';
-import FaceRegistration from './components/FaceRegistration';
+import FaceLivenessDetector from './components/FaceLivenessDetector';
 import MyPhotos from './pages/MyPhotos';
 import { PhotoUploader } from './components/PhotoUploader.jsx';
 import Notifications from './pages/Notifications';
@@ -30,7 +30,29 @@ if (!process.env.REACT_APP_REKOGNITION_COLLECTION) {
   process.env.REACT_APP_REKOGNITION_COLLECTION = 'user-faces'; // Your Rekognition collection
 }
 
-console.log('[APP] Initializing App component');
+console.log('[APP.JSX] Loading fixed version with direct FaceLivenessDetector import');
+
+// Create a wrapper for FaceLivenessDetector when used as a standalone page
+const FaceLivenessPage = () => {
+  const navigate = useNavigate();
+  console.log('[APP] Rendering FaceLivenessPage wrapper');
+  
+  return (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      <FaceLivenessDetector 
+        onSuccess={(result) => {
+          console.log('[FaceLivenessPage] Registration successful:', result);
+          // Return to dashboard after success
+          navigate('/dashboard');
+        }}
+        onClose={() => {
+          console.log('[FaceLivenessPage] Closed, returning to dashboard');
+          navigate('/dashboard');
+        }}
+      />
+    </div>
+  );
+};
 
 const App = () => {
   console.log('[APP] Rendering App component');
@@ -54,7 +76,7 @@ const App = () => {
               <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
               <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
               <Route path="/app" element={<PrivateRoute><SimpleApp /></PrivateRoute>} />
-              <Route path="/register-face" element={<PrivateRoute><FaceRegistration /></PrivateRoute>} />
+              <Route path="/register-face" element={<PrivateRoute><FaceLivenessPage /></PrivateRoute>} />
               <Route path="/my-photos" element={<PrivateRoute><MyPhotos /></PrivateRoute>} />
               <Route path="/upload" element={<PrivateRoute><PhotoUploader /></PrivateRoute>} />
               <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />

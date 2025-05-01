@@ -1,9 +1,12 @@
+console.log('[UPDATED_DASHBOARD_TSX] This file is being loaded');
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, Camera, User, Calendar, Image, Search, Shield, AlertCircle, ChevronDown, Smile, Eye, Ruler, Upload, Ghost as Photos, Trash2, RotateCcw, CheckCircle } from 'lucide-react';
 import { cn } from '../utils/cn';
-import FaceRegistration from '../components/FaceRegistration';
+import FaceLivenessDetector from '../components/FaceLivenessDetector';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { PhotoManager } from '../components/PhotoManager';
 import { getFaceDataForUser } from '../services/FaceStorageService';
 import { awsPhotoService } from '../services/awsPhotoService';
@@ -11,6 +14,9 @@ import TabNavigation from '../components/TabNavigation';
 import { permanentlyHidePhotos, restorePhotosFromTrash } from '../services/userVisibilityService';
 import TabBarSpacer from "../components/layout/TabBarSpacer";
 import TrashBin from '../components/TrashBin';
+
+// Console log to confirm this is the correct file being edited
+console.log('[UPDATED_DASHBOARD_TSX] Dashboard.tsx file loaded with FaceLivenessDetector import instead of FaceRegistration');
 
 interface FaceAttributes {
   age: { low: number; high: number };
@@ -45,6 +51,7 @@ export const Dashboard = () => {
 
   // Define fetchFaceData outside useEffect
   const fetchFaceData = async () => {
+    console.log('[Dashboard] fetchFaceData CALLED'); // Log entry
     if (!user || !user.id) {
       console.warn('[Dashboard] fetchFaceData called, but user or user.id is not yet available. User:', user);
       return;
@@ -62,6 +69,7 @@ export const Dashboard = () => {
         console.log('🟢 [Dashboard] getFaceDataForUser returned data, setting state...');
         console.log('[Dashboard] Face data found:', data);
         setFaceRegistered(true);
+        console.log('[Dashboard] fetchFaceData SETTING faceRegistered = true'); // Log true set
         
         if (data.faceId) {
           console.log('[Dashboard] Found face ID:', data.faceId);
@@ -96,6 +104,7 @@ export const Dashboard = () => {
       } else {
         console.log('[Dashboard] No face data found for user');
         setFaceRegistered(false);
+        console.log('[Dashboard] fetchFaceData SETTING faceRegistered = false'); // Log false set
         setFaceImageUrl(null);
         setFaceAttributes(null);
         setFaceId(null);
@@ -105,6 +114,7 @@ export const Dashboard = () => {
       console.error('[Dashboard] Error fetching face data:', err);
       // Set default state on error
       setFaceRegistered(false);
+      console.log('[Dashboard] fetchFaceData SETTING faceRegistered = false (due to error)'); // Log false set
       setFaceImageUrl(null);
       setFaceAttributes(null);
       setFaceId(null);
@@ -117,9 +127,10 @@ export const Dashboard = () => {
   useEffect(() => {
     // Call the relocated fetchFaceData function
     if (user?.id) { // Check if user.id exists before calling
+      console.log('[Dashboard] useEffect triggered: Fetching face data because user.id exists.');
       fetchFaceData();
     }
-  }, [user]); // Keep dependency on user
+  }, [user?.id]); // <-- CHANGE DEPENDENCY: Only run when user.id changes, not the whole user object.
 
   // New useEffect to fetch photo counts
   useEffect(() => {
@@ -676,7 +687,7 @@ export const Dashboard = () => {
 
                 {!faceRegistered && showRegistrationModal && (
                   <div className="mb-6">
-                    <FaceRegistration 
+                    <FaceLivenessDetector 
                       onSuccess={handleRegistrationSuccess} 
                       onClose={() => setShowRegistrationModal(false)} 
                     />
@@ -808,25 +819,33 @@ export const Dashboard = () => {
 
       <AnimatePresence>
         {showRegistrationModal && (
-           <motion.div
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-md z-40 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/70 backdrop-blur-md z-[90] flex items-center justify-center p-4"
+            onAnimationStart={() => console.log('[Dashboard] Registration modal animation STARTING')}
+            onAnimationComplete={() => console.log('[Dashboard] Registration modal animation COMPLETE')}
           >
-             <motion.div 
-               initial={{ scale: 0.9, opacity: 0 }}
-               animate={{ scale: 1, opacity: 1 }}
-               exit={{ scale: 0.9, opacity: 0 }}
-               transition={{ type: "spring", damping: 20, stiffness: 200 }}
-               className="relative w-full max-w-2xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden"
-             >
-               <FaceRegistration
-                 onSuccess={handleRegistrationSuccess}
-                 onClose={() => setShowRegistrationModal(false)}
-               />
-             </motion.div>
-           </motion.div>
+            {console.log('[Dashboard] Rendering registration modal wrapper because showRegistrationModal is true')}
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", damping: 20, stiffness: 200 }}
+              className="relative w-full max-w-2xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden"
+            >
+              <ErrorBoundary>
+                <FaceLivenessDetector
+                  onSuccess={handleRegistrationSuccess}
+                  onClose={() => {
+                    console.log('[Dashboard] FaceLivenessDetector onClose triggered!');
+                    setShowRegistrationModal(false);
+                  }}
+                />
+              </ErrorBoundary>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

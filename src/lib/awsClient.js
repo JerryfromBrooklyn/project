@@ -5,35 +5,53 @@ import { S3Client } from '@aws-sdk/client-s3';
 import { CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider';
 // Only import dotenv in Node.js environments
 import 'cross-fetch';
+import dotenv from 'dotenv';
 
-// Load environment variables in Node.js environment (not browser)
-if (typeof process !== 'undefined' && !process.browser && typeof require !== 'undefined') {
+// Detect environment
+const isNode = typeof process !== 'undefined' && 
+               process.versions != null && 
+               process.versions.node != null;
+const isBrowser = typeof window !== 'undefined';
+
+// Load environment variables synchronously in Node.js environment
+if (isNode) {
     try {
-        // Dynamic import for dotenv in Node.js only
-        const dotenv = require('dotenv');
         dotenv.config();
+        console.log('Loaded environment variables with dotenv');
     } catch (e) {
         console.warn('Could not load dotenv in Node.js environment:', e);
     }
 }
 
+// Debug log environment variables (but mask sensitive values) - Only in Node environment
+if (isNode) {
+    console.log('[ENV DEBUG] Environment variables loaded:');
+    console.log('[ENV DEBUG] AWS_REGION:', process.env.AWS_REGION || process.env.VITE_AWS_REGION || '(not set)');
+    console.log('[ENV DEBUG] AWS_ACCESS_KEY_ID:', process.env.AWS_ACCESS_KEY_ID || process.env.VITE_AWS_ACCESS_KEY_ID ? '(set)' : '(not set)');
+    console.log('[ENV DEBUG] AWS_SECRET_ACCESS_KEY:', process.env.AWS_SECRET_ACCESS_KEY || process.env.VITE_AWS_SECRET_ACCESS_KEY ? '(set)' : '(not set)');
+}
+
 // Helper function to get environment variables from either Vite or Node.js process
 const getEnvVar = (key, defaultValue = '') => {
-    // For Vite
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-        return import.meta.env[key] || process.env[key] || defaultValue;
+    // For Vite in browser
+    if (isBrowser && typeof import.meta !== 'undefined' && import.meta.env) {
+        return import.meta.env[key] || defaultValue;
     }
-    // For Node.js
-    return process.env[key] || defaultValue;
+    // For Node.js 
+    if (isNode) {
+        return process.env[key] || defaultValue;
+    }
+    // Fallback
+    return defaultValue;
 };
 
-// Environment variables
-export const AWS_REGION = getEnvVar('VITE_AWS_REGION', 'us-east-1');
-export const AWS_ACCESS_KEY_ID = getEnvVar('VITE_AWS_ACCESS_KEY_ID');
-export const AWS_SECRET_ACCESS_KEY = getEnvVar('VITE_AWS_SECRET_ACCESS_KEY');
+// Try both VITE_* and non-VITE_* versions of environment variables
+export const AWS_REGION = getEnvVar('VITE_AWS_REGION') || getEnvVar('AWS_REGION') || 'us-east-1';
+export const AWS_ACCESS_KEY_ID = getEnvVar('VITE_AWS_ACCESS_KEY_ID') || getEnvVar('AWS_ACCESS_KEY_ID');
+export const AWS_SECRET_ACCESS_KEY = getEnvVar('VITE_AWS_SECRET_ACCESS_KEY') || getEnvVar('AWS_SECRET_ACCESS_KEY');
 
 // Rekognition configuration
-export const COLLECTION_ID = getEnvVar('VITE_AWS_COLLECTION_ID', 'shmong-faces');
+export const COLLECTION_ID = getEnvVar('VITE_AWS_COLLECTION_ID') || getEnvVar('REKOGNITION_COLLECTION_ID') || 'shmong-faces';
 export const FACE_MATCH_THRESHOLD = 80; // Minimum confidence score for face matches
 
 // Cognito configuration

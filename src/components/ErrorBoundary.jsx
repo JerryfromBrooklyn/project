@@ -7,36 +7,34 @@ class ErrorBoundary extends React.Component {
   }
 
   static getDerivedStateFromError(error) {
-    // Update state so the next render will show the fallback UI
-    return { hasError: true, error };
+    // Update state so the next render will show the fallback UI.
+    return { hasError: true };
   }
 
   componentDidCatch(error, errorInfo) {
     // You can also log the error to an error reporting service
-    console.error('ErrorBoundary caught an error', error, errorInfo);
-    this.setState({ errorInfo });
+    console.error("[ErrorBoundary] Caught an error:", error, errorInfo);
+    this.setState({ error, errorInfo });
   }
 
   render() {
     if (this.state.hasError) {
       // You can render any custom fallback UI
       return (
-        <div className="p-6 bg-red-50 border border-red-200 rounded-lg text-red-800">
-          <h2 className="text-lg font-bold mb-2">Something went wrong</h2>
-          <details className="whitespace-pre-wrap">
-            <summary className="cursor-pointer font-medium text-red-700">
-              View error details
-            </summary>
-            <p className="mt-2">{this.state.error && this.state.error.toString()}</p>
-            <pre className="mt-2 text-xs bg-red-100 p-2 rounded overflow-auto">
+        <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+          <h1 className="font-bold mb-2">Something went wrong rendering this component.</h1>
+          <p className="text-sm">Please check the console for detailed error information.</p>
+          {/* Optional: Display error details for debugging */}
+          {/*
+          <details className="mt-2 text-xs">
+            <summary>Error Details</summary>
+            <pre className="mt-1 whitespace-pre-wrap">
+              {this.state.error && this.state.error.toString()}
+              <br />
               {this.state.errorInfo && this.state.errorInfo.componentStack}
             </pre>
           </details>
-          {this.props.fallback || 
-            <div className="mt-4">
-              <p>Please try refreshing the page or contact support if the problem persists.</p>
-            </div>
-          }
+          */}
         </div>
       );
     }
