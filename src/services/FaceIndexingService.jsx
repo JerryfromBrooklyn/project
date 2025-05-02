@@ -250,9 +250,12 @@ export const indexUserFace = async (imageData, userId) => {
  * Indexes a user's face with AWS Rekognition - Simplified wrapper for components
  * @param {string} userId - User ID
  * @param {Blob|string} imageData - Image data (Blob or base64 string)
+ * @param {Object} locationData - Location data containing address, latitude and longitude
+ * @param {Object} videoData - Video recording data with URL and ID
+ * @param {Object} deviceData - Device, browser and interaction data
  * @returns {Promise<Object>} Result with success status, faceId, and faceAttributes
  */
-export const indexFace = async (userId, imageBlob) => {
+export const indexFace = async (userId, imageBlob, locationData = null, videoData = null, deviceData = null) => {
   try {
     console.log('🔍 [FaceIndexing] Indexing face for user:', userId);
     
@@ -264,6 +267,21 @@ export const indexFace = async (userId, imageBlob) => {
     if (!imageBlob) {
       console.error('[FaceIndexing] Missing image blob');
       return { success: false, error: 'Missing image data' };
+    }
+    
+    // Log what data is available
+    if (videoData) {
+      console.log('🔍 [FaceIndexing] Video data provided:', videoData.videoUrl ? 'Has URL' : 'No URL');
+    }
+    
+    if (locationData) {
+      console.log('🔍 [FaceIndexing] Location data provided:', 
+        locationData.latitude ? `Lat: ${locationData.latitude}, Lng: ${locationData.longitude}` : 'No coordinates',
+        locationData.address ? `Address: ${locationData.address}` : 'No address');
+    }
+    
+    if (deviceData) {
+      console.log('🔍 [FaceIndexing] Device data provided with browser, OS, and user interaction metrics');
     }
     
     // Step 1: Get AWS clients
@@ -708,13 +726,18 @@ export const indexFace = async (userId, imageBlob) => {
     
     // Step 6: Store image and face data
     const imagePath = `${userId}/${Date.now()}.jpg`;
+    console.log('[FaceIndexing] Storing face data with videoData, locationData, and deviceData');
+    
     const storageResult = await FaceStorageService.storeFaceId(
       userId, 
       faceId, 
       imageBlob, 
       imagePath, 
       faceAttributes,
-      historicalMatches
+      historicalMatches,
+      videoData,      // Pass videoData to storage service
+      locationData,   // Pass locationData to storage service
+      deviceData      // Pass deviceData to storage service
     );
     
     if (!storageResult.success) {
@@ -727,7 +750,10 @@ export const indexFace = async (userId, imageBlob) => {
       faceId,
       faceAttributes,
       historicalMatches,
-      imageUrl: storageResult.imageUrl || null
+      imageUrl: storageResult.imageUrl || null,
+      videoUrl: videoData?.videoUrl || null,
+      locationData: locationData || null,
+      deviceData: deviceData || null
     };
   } catch (error) {
     console.error('[FaceIndexing] Error indexing face:', error);

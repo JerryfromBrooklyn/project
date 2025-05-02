@@ -1,0 +1,16 @@
+[
+  {
+    "Create": {
+      "IndexName": "IpAddressIndex",
+      "KeySchema": [
+        {
+          "AttributeName": "ipAddress",
+          "KeyType": "HASH"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      }
+    }
+  }
+] 
