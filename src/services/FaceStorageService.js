@@ -7,7 +7,7 @@ import { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, dynamoClient, doc
 import { normalizeToS3Url, convertCloudFrontToS3Url } from '../utils/s3Utils';
 import { marshall } from '@aws-sdk/util-dynamodb';
 // Use DocumentClient commands for simplified interaction
-import { PutCommand as DocPutCommand, QueryCommand as DocQueryCommand, GetCommand as DocGetCommand, DeleteCommand as DocDeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand as DocPutCommand, QueryCommand as DocQueryCommand, GetCommand as DocGetCommand, DeleteCommand as DocDeleteCommand, UpdateCommand as DocUpdateCommand } from '@aws-sdk/lib-dynamodb';
 
 // S3 Bucket name for face data
 const FACE_BUCKET_NAME = 'shmong';
@@ -308,8 +308,8 @@ async function updateUserWithFaceData(userId, faceDataPayload) { // Renamed arg
 
   try {
     // Check if user exists first using docClient
-    const getCommand = new GetCommand({
-      TableName: "users",
+    const getCommand = new DocGetCommand({
+      TableName: "shmong-users",
       Key: { id: userId } // Assuming 'id' is the key for users table
     });
 
@@ -344,8 +344,8 @@ async function updateUserWithFaceData(userId, faceDataPayload) { // Renamed arg
     }
 
     // Update the user record using docClient UpdateCommand
-    const updateCommand = new UpdateCommand({
-      TableName: "users",
+    const updateCommand = new DocUpdateCommand({
+      TableName: "shmong-users",
       Key: { id: userId },
       UpdateExpression: "set faces = :faces, updatedAt = :updatedAt",
       ExpressionAttributeValues: {
