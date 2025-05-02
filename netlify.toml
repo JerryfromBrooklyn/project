@@ -2,15 +2,11 @@
 
 [build]
   # The build command Netlify will run
-  command = "npm install && npm run build"
+  command = "npm install && npm install --no-save vite@6.2.5 @vitejs/plugin-react@4.3.4 vite-plugin-node-polyfills@0.23.0 && npm run build"
   # The directory with compiled assets Netlify will serve
   publish = "dist"
   # Environment variables
   environment = { NODE_VERSION = "20", NPM_FLAGS = "--legacy-peer-deps" }
-
-# Register custom build plugin
-[[plugins]]
-  package = "/netlify/build-plugins/ensure-vite"
 
 # SPA redirect - serve index.html for all paths (for React Router)
 [[redirects]]
@@ -27,17 +23,17 @@
 
 # Production context settings
 [context.production]
-  command = "npm install && npm run build"
+  command = "npm install && npm install --no-save vite@6.2.5 @vitejs/plugin-react@4.3.4 vite-plugin-node-polyfills@0.23.0 && npm run build"
   environment = { NODE_ENV = "production" }
 
 # Deploy Preview context settings (for PRs)
 [context.deploy-preview]
-  command = "npm install && npm run build"
+  command = "npm install && npm install --no-save vite@6.2.5 @vitejs/plugin-react@4.3.4 vite-plugin-node-polyfills@0.23.0 && npm run build"
   environment = { NODE_ENV = "production" }
 
 # Branch Deploy context settings (for branches besides main/master)
 [context.branch-deploy]
-  command = "npm install && npm run build"
+  command = "npm install && npm install --no-save vite@6.2.5 @vitejs/plugin-react@4.3.4 vite-plugin-node-polyfills@0.23.0 && npm run build"
   environment = { NODE_ENV = "production" }
 
 # Cache optimization

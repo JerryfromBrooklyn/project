@@ -1,0 +1,8 @@
+{
+  "name": "netlify-plugin-ensure-vite",
+  "version": "1.0.0",
+  "description": "Netlify plugin to ensure Vite is properly installed",
+  "main": "index.js",
+  "author": "",
+  "license": "ISC"
+} 
