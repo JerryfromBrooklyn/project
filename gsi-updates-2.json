@@ -1,0 +1,16 @@
+[
+  {
+    "Create": {
+      "IndexName": "BrowserIndex",
+      "KeySchema": [
+        {
+          "AttributeName": "browser",
+          "KeyType": "HASH"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      }
+    }
+  }
+] 

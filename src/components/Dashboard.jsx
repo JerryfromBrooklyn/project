@@ -6,7 +6,7 @@ import { docClient } from '../lib/awsClient';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { motion, AnimatePresence } from 'framer-motion';
-import FaceRegistration from './FaceRegistration';
+import FaceRegistration from './FaceRegistration.jsx';
 import {
   User, LogOut, Camera, Image as ImageIcon, Upload, Trash2,
   Check, AlertTriangle, RefreshCw, Search, Info
