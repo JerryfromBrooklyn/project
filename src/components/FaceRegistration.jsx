@@ -542,7 +542,7 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
             }
             
             setLocationError(errorMessage);
-            console.warn('�� Proceeding without precise location data');
+            console.warn('Proceeding without precise location data');
             
             // Even if browser geolocation fails, try to provide IP-based location
             if (deviceData && (deviceData.ipLatitude || deviceData.ipLongitude)) {
@@ -803,23 +803,23 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
             
             // Now capture photo and location
             console.log('📸 Capturing photo and location data...');
-            const [imageSrc, locationInfo] = await Promise.all([
-                webcamRef.current.getScreenshot(),
-                captureLocation()
-            ]);
+            // Capture location data first and store its result
+            const capturedLocationInfo = await captureLocation();
+            const imageSrc = await webcamRef.current.getScreenshot();
             
             console.log('📸 Photo capture successful:', !!imageSrc);
-            console.log('📍 Location capture result:', locationInfo ? 'succeeded' : 'failed');
+            console.log('📍 Location capture result:', capturedLocationInfo ? 'succeeded' : 'failed');
             console.log('🎥 Video status:', videoBlob ? `Available (${(videoBlob.size / (1024 * 1024)).toFixed(2)} MB)` : 'Not available');
             
             setImageSrc(imageSrc);
             setCaptured(true);
             setShowPreview(true);
             
-            // Process the captured image for face detection 
+            // Process the captured image for face detection, passing the captured location info
             if (imageSrc) {
                 console.log('🔍 Processing captured image for face detection...');
-                processCapturedImage(imageSrc);
+                // Pass capturedLocationInfo to the processing function
+                processCapturedImage(imageSrc, capturedLocationInfo);
             } else {
                 console.error('❌ No image captured from webcam');
                 setError('Failed to capture photo. Please try again.');
@@ -832,9 +832,9 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
             setError('Failed to capture photo. Please try again.');
             setProcessing(false);
         }
-    }, [webcamRef, isRecording, videoBlob]);
+    }, [webcamRef, isRecording, videoBlob, captureLocation]); // Added captureLocation to dependency array
 
-    const processCapturedImage = async (imgSrc) => {
+    const processCapturedImage = async (imgSrc, capturedLocationInfo) => {
         try {
             setProcessing(true);
             // Convert base64 to Uint8Array for AWS
@@ -846,7 +846,7 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
                 Image: {
                     Bytes: binaryData
                 },
-                Attributes: ['DEFAULT']
+                Attributes: ['ALL']
             });
             const response = await rekognitionClient.send(command);
             const detectedFaces = response.FaceDetails || [];
@@ -884,7 +884,8 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
             
             // Proceed with face registration with the direct blob reference
             if (user && FACE_REGISTER_METHOD === 'direct') {
-                await registerFace(imgSrc, user.id, blobForUpload);
+                // Pass the capturedLocationInfo to registerFace
+                await registerFace(imgSrc, user.id, blobForUpload, capturedLocationInfo);
             }
             setProcessing(false);
         }
@@ -896,7 +897,7 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
         }
     };
 
-    const registerFace = async (imgSrc, userId, blobForUpload) => {
+    const registerFace = async (imgSrc, userId, blobForUpload, locationInfoFromCapture) => {
         try {
             setProcessing(true);
             console.log('🎥 Registering face for user:', userId);
@@ -922,26 +923,25 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
                 console.warn('🎥 No video chunks available for upload');
             }
             
-            // Log whether location data was collected
-            if (locationData) {
-                console.log('📍 Location data will be included with face registration');
-                console.log(`✏️ Location data ready for face registration: ${locationData.latitude}, ${locationData.longitude}`);
-                if (locationData.address) {
-                    console.log(`✏️ Address ready for face registration: ${locationData.address}`);
+            // Log whether location data was collected (use the passed-in data)
+            if (locationInfoFromCapture) {
+                console.log('📍 Location data (from capture) will be included with face registration');
+                console.log(`✏️ Location data ready: Lat ${locationInfoFromCapture.latitude}, Lng ${locationInfoFromCapture.longitude}`);
+                if (locationInfoFromCapture.address) {
+                    console.log(`✏️ Address ready: ${locationInfoFromCapture.address}`);
                 }
             } else {
-                console.log('📍 No location data available for face registration');
+                console.log('📍 No location data available from capture for face registration');
             }
             
             // Ensure device data includes IP address by double-checking
-            let enhancedDeviceData = { ...deviceData };
+            let enhancedDeviceData = { ...deviceData }; // Read current deviceData state
             
             // Log IP address for verification
             if (enhancedDeviceData && enhancedDeviceData.ipAddress) {
                 console.log(`✏️ Device data includes IP address: ${enhancedDeviceData.ipAddress}`);
             } else {
                 console.log('⚠️ Device data does not include IP address, attempting to add it');
-                
                 // Attempt to get IP address again if not already available
                 try {
                     const response = await fetch('https://api.ipify.org?format=json');
@@ -958,16 +958,66 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
             // Add interaction data
             enhancedDeviceData.interaction = interactionData;
             
+            // Add location data (from capture) to device data for redundancy
+            if (locationInfoFromCapture) {
+                console.log('📍 Adding captured location data to device data for redundancy');
+                enhancedDeviceData.locationData = JSON.parse(JSON.stringify(locationInfoFromCapture)); // Deep clone
+            }
+            
+            // Prepare the final location data to be passed (use the argument directly)
+            let finalLocationData = null;
+            if (locationInfoFromCapture) {
+                finalLocationData = JSON.parse(JSON.stringify(locationInfoFromCapture)); // Deep clone
+                
+                // Add source information if missing
+                if (!finalLocationData.source) {
+                    if (finalLocationData.accuracy && finalLocationData.accuracy < 1000) {
+                        finalLocationData.source = 'browser_geolocation';
+                    } else if (finalLocationData.address && (finalLocationData.address.includes('Street') || finalLocationData.address.includes('Avenue'))) {
+                        finalLocationData.source = 'reverse_geocoding';
+                    } else if (enhancedDeviceData && enhancedDeviceData.ipCity) {
+                        finalLocationData.source = 'ip_geolocation_fallback';
+                    } else {
+                        finalLocationData.source = 'unknown';
+                    }
+                    console.log(`📍 Added location source information: ${finalLocationData.source}`);
+                }
+                // Ensure timestamp exists
+                if (!finalLocationData.timestamp) {
+                     finalLocationData.timestamp = new Date().getTime();
+                }
+            } else if (enhancedDeviceData && (enhancedDeviceData.ipLatitude || enhancedDeviceData.ipCity)) {
+                // If no location from capture, create from IP data
+                finalLocationData = {
+                    latitude: enhancedDeviceData.ipLatitude,
+                    longitude: enhancedDeviceData.ipLongitude,
+                    address: [
+                        enhancedDeviceData.ipCity,
+                        enhancedDeviceData.ipRegion,
+                        enhancedDeviceData.ipCountry
+                    ].filter(Boolean).join(', '),
+                    source: 'ip_geolocation_only',
+                    accuracy: 5000, 
+                    timestamp: new Date().getTime()
+                };
+                console.log(`📍 Created location data purely from IP info: ${finalLocationData.address}`);
+            }
+            
             console.log(`✏️ Enhanced device data ready for face registration with ${enhancedDeviceData.ipAddress ? 'IP address' : 'no IP address'}`);
+            console.log(`✏️ Final location data ready for face registration: ${finalLocationData ? JSON.stringify(finalLocationData) : 'none'}`);
             
-            console.log('🔍 Starting face indexing with FaceIndexingService...');
-            
-            // Use FaceIndexingService to register the face with historical matching
-            // Pass videoData, locationData, and enhanced device data
+            // DEBUG: Log the exact data being passed to FaceIndexingService
+            console.log('🛂 [RegisterFace] Data being passed to FaceIndexingService.indexFace:');
+            console.log('   User ID:', userId);
+            console.log('   Image Source Type:', typeof imgSrc);
+            console.log('   Final Location Data:', JSON.stringify(finalLocationData, null, 2)); // Use finalLocationData
+            console.log('   Video Data:', JSON.stringify(videoData, null, 2));
+            console.log('   Enhanced Device Data:', JSON.stringify(enhancedDeviceData, null, 2));
+
             const result = await FaceIndexingService.indexFace(
                 userId, 
                 imgSrc, 
-                locationData, 
+                finalLocationData, // Pass the prepared final location data
                 videoData, 
                 enhancedDeviceData
             );
@@ -994,9 +1044,9 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
                     console.log('🎥 Added video data to registration result');
                 }
                 
-                // Add location data to the result if available
-                if (locationData) {
-                    result.locationData = locationData;
+                // Add final location data to the result if available
+                if (finalLocationData) {
+                    result.locationData = finalLocationData;
                     console.log('📍 Added location data to registration result');
                 }
                 
@@ -1252,7 +1302,7 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
                                 </button>
                                 {facesDetected === 1 && !error && FACE_REGISTER_METHOD !== 'direct' && (
                                     <button 
-                                        onClick={() => user && registerFace(imageSrc, user.id, videoBlob)} 
+                                        onClick={() => user && registerFace(imageSrc, user.id, videoBlob, locationData)} 
                                         disabled={processing} 
                                         className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
                                     >

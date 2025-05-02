@@ -739,12 +739,16 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
       locationData,   // Pass locationData to storage service
       deviceData      // Pass deviceData to storage service
     );
-    
+
+    // If storage failed, return the error immediately
     if (!storageResult.success) {
-      console.warn('[FaceIndexing] Warning: Face indexed but storage failed:', storageResult.error);
-      // Still return success since the face was indexed, just with a warning
+      console.error('❌ [FaceIndexing] Face storage failed:', storageResult.error);
+      // Propagate the failure from storage service
+      return { success: false, error: storageResult.error }; 
     }
-    
+
+    // Storage succeeded, now construct the final success response
+    console.log('✅ [FaceIndexing] Face indexed and stored successfully.');
     return {
       success: true,
       faceId,

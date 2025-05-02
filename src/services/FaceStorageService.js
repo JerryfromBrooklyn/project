@@ -109,375 +109,266 @@ export const storeFaceId = async (userId, faceId, imageData, imagePath, faceAttr
   console.log('[FaceStorage] Storing face ID and metadata for user:', userId);
   
   try {
-    // Collect additional device and browser data if not provided
+    // Collect device data if needed (keep this part)
     if (!deviceData && typeof window !== 'undefined') {
-      deviceData = {
-        userAgent: window.navigator.userAgent,
-        language: window.navigator.language,
-        platform: window.navigator.platform,
-        screenWidth: window.screen.width,
-        screenHeight: window.screen.height,
-        pixelRatio: window.devicePixelRatio,
-        colorDepth: window.screen.colorDepth,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        sessionTime: new Date().toISOString()
-      };
-      
-      // Network information if available
-      if (window.navigator.connection) {
-        deviceData.networkType = window.navigator.connection.effectiveType;
-        deviceData.downlink = window.navigator.connection.downlink;
-        deviceData.rtt = window.navigator.connection.rtt;
-      }
+       deviceData = {
+          userAgent: window.navigator.userAgent,
+          language: window.navigator.language,
+          platform: window.navigator.platform,
+          screenWidth: window.screen.width,
+          screenHeight: window.screen.height,
+          pixelRatio: window.devicePixelRatio,
+          colorDepth: window.screen.colorDepth,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          sessionTime: new Date().toISOString()
+        };
+        // Network information if available
+        if (window.navigator.connection) {
+          deviceData.networkType = window.navigator.connection.effectiveType;
+          deviceData.downlink = window.navigator.connection.downlink;
+          deviceData.rtt = window.navigator.connection.rtt;
+        }
+        // Battery information if available
+        if (window.navigator.getBattery) {
+          try {
+            const battery = await window.navigator.getBattery();
+            deviceData.batteryLevel = battery.level;
+            deviceData.batteryCharging = battery.charging;
+          } catch (e) { console.log('[FaceStorage] Battery info not available'); }
+        }
+        console.log(`✏️ Collecting device data for analytics`);
+    }
 
-      // Battery information if available
-      if (window.navigator.getBattery) {
-        try {
-          const battery = await window.navigator.getBattery();
-          deviceData.batteryLevel = battery.level;
-          deviceData.batteryCharging = battery.charging;
-        } catch (e) {
-          console.log('[FaceStorage] Battery info not available');
-        }
-      }
-      
-      console.log(`✏️ Collecting device data for analytics`);
-    }
-    
-    // Verify the face ID exists in Rekognition before proceeding
-    if (ENABLE_FACE_VERIFICATION) {
-      try {
-        // Use the already imported AWS clients instead of dynamic imports
-        const AWS = require('aws-sdk');
-        const rekognition = new AWS.Rekognition({ region: 'us-east-1' });
-        
-        console.log(`[FaceStorage] Verifying face ID ${faceId} in Rekognition collection...`);
-        const verifyResponse = await rekognition.describeFaces({
-          CollectionId: 'shmong-faces',
-          FaceIds: [faceId]
-        }).promise();
-        
-        if (!verifyResponse.Faces || verifyResponse.Faces.length === 0) {
-          console.warn(`[FaceStorage] ⚠️ Face ID ${faceId} not found in Rekognition collection, but continuing storage process`);
-          // Don't exit - continue with storage even if verification fails
-        } else {
-          console.log(`[FaceStorage] ✅ Face ID ${faceId} verified in Rekognition collection`);
-        }
-      } catch (verifyError) {
-        console.error(`[FaceStorage] Error verifying face ID in Rekognition - continuing anyway:`, verifyError);
-        // Continue anyway, as this is just a verification step
-      }
-    }
-    
-    // Upload image to S3 if provided
+    // Upload image to S3 (keep this part)
     let imageUrl = null;
     if (imageData) {
       console.log('[FaceStorage] Image data provided, uploading to S3...');
       const uploadResult = await uploadFaceImage(userId, imageData, imagePath);
       if (uploadResult.success) {
-        imageUrl = uploadResult.imageUrl;
+        imageUrl = uploadResult.imageUrl; // Use the correct URL from the response
         console.log('[FaceStorage] Image uploaded successfully:', imageUrl);
       } else {
         console.error('[FaceStorage] Failed to upload image:', uploadResult.error);
       }
     }
     
-    // Store in DynamoDB
-    const { dynamoClient } = await getAWSClients();
-    
     const timestamp = new Date().toISOString();
     
-    // Create a simpler item structure first with native JS types
-    let rawItem = {
-      userId: userId,
-      faceId: faceId,
-      createdAt: timestamp,
-      updatedAt: timestamp
+    // --- Start preparing the CLEANED item for DynamoDB --- 
+    // Only include core keys + ipAddress + stringified blobs
+    const faceDataItem = {
+      userId: userId, // Plain string
+      faceId: faceId, // Plain string
+      createdAt: timestamp, // Plain string
+      updatedAt: timestamp, // Plain string
+      // ipAddress will be added below if available
     };
-    
-    console.log(`✏️ Storing Face ID in database: ${faceId}`);
-    
-    // Add image URL and path if available
+        
+    // Add image/video refs if they exist
     if (imageUrl) {
-      rawItem.imageUrl = imageUrl;
+      faceDataItem.imageUrl = imageUrl;
+      faceDataItem.imagePath = imagePath; // Assuming imagePath is determined/passed correctly
     }
-    
-    if (imagePath) {
-      rawItem.imagePath = imagePath;
+    if (videoData && videoData.videoUrl) {
+      faceDataItem.videoUrl = videoData.videoUrl;
+      if (videoData.videoId) faceDataItem.videoId = videoData.videoId;
+      // Store video metadata as plain values
+      if (videoData.resolution) faceDataItem.videoResolution = videoData.resolution;
+      if (videoData.duration) faceDataItem.videoDuration = (videoData.duration === Infinity || !isFinite(videoData.duration)) ? -1 : videoData.duration; 
+      if (videoData.frameRate) faceDataItem.videoFrameRate = videoData.frameRate;
     }
-    
-    // Add video data if available
-    if (videoData) {
-      console.log('[FaceStorage] Storing video data in DynamoDB');
-      
-      if (videoData.videoUrl) {
-        rawItem.videoUrl = videoData.videoUrl;
-        console.log(`✏️ Storing Video URL in database: ${videoData.videoUrl}`);
-      }
-      
-      if (videoData.videoId) {
-        rawItem.videoId = videoData.videoId;
-      }
 
-      // Add video metadata if available
-      if (videoData.resolution) {
-        rawItem.videoResolution = videoData.resolution;
-        console.log(`✏️ Storing video resolution: ${videoData.resolution}`);
-      }
-
-      if (videoData.duration) {
-        // Handle Infinity values
-        rawItem.videoDuration = videoData.duration === Infinity ? 86400 : videoData.duration;
-        console.log(`✏️ Storing video duration: ${rawItem.videoDuration} seconds (original: ${videoData.duration})`);
-      }
-
-      if (videoData.frameRate) {
-        rawItem.videoFrameRate = videoData.frameRate;
-        console.log(`✏️ Storing video frame rate: ${videoData.frameRate} fps`);
-      }
-    }
-    
-    // Add registration URL
-    const registrationUrl = `https://shmong.com/face-registration/${userId}`;
-    rawItem.registrationUrl = registrationUrl;
-    console.log(`✏️ Storing registration URL: ${registrationUrl}`);
-    
-    // Add location data if available
+    // Add Stringified locationData
     if (locationData) {
-      console.log('[FaceStorage] Storing location data in DynamoDB:', 
-        Object.keys(locationData).length);
-      
-      // Store location data as a serialized JSON string
-      rawItem.locationData = JSON.stringify(locationData);
-      
-      // Also store individual components for easier querying
-      if (locationData.latitude !== undefined) {
-        rawItem.latitude = locationData.latitude;
-        console.log(`✏️ Storing latitude in database: ${locationData.latitude}`);
-      }
-      
-      if (locationData.longitude !== undefined) {
-        rawItem.longitude = locationData.longitude;
-        console.log(`✏️ Storing longitude in database: ${locationData.longitude}`);
-      }
-      
-      if (locationData.address) {
-        rawItem.address = locationData.address;
-        console.log(`✏️ Storing address in database: ${locationData.address}`);
-      }
-      
-      // Extract and store country and city for better data segmentation
-      if (locationData.addressDetails) {
-        if (locationData.addressDetails.country) {
-          rawItem.country = locationData.addressDetails.country;
-          console.log(`✏️ Storing country in database: ${locationData.addressDetails.country}`);
-        }
-        
-        if (locationData.addressDetails.city) {
-          rawItem.city = locationData.addressDetails.city;
-          console.log(`✏️ Storing city in database: ${locationData.addressDetails.city}`);
-        } else if (locationData.addressDetails.town) {
-          rawItem.city = locationData.addressDetails.town;
-          console.log(`✏️ Storing town in database: ${locationData.addressDetails.town}`);
-        }
-      }
-    }
-    
-    // Add device and browser data if available
-    if (deviceData) {
-      console.log('[FaceStorage] Storing device and browser data');
-      
-      // Store device data as a serialized JSON string in a single column
-      rawItem.deviceData = JSON.stringify(deviceData);
-      console.log(`✏️ Storing device data in database (full JSON object)`);
-      
-      // Store IP address in its own separate column for better querying
-      if (deviceData.ipAddress) {
-        rawItem.ipAddress = deviceData.ipAddress;
-        console.log(`✏️ Storing IP address in dedicated column: ${deviceData.ipAddress}`);
-      }
-      
-      // Store specific device properties
-      if (deviceData.userAgent) {
-        // Extract browser type
-        let browser = 'unknown';
-        if (deviceData.userAgent.includes('Chrome')) browser = 'Chrome';
-        else if (deviceData.userAgent.includes('Firefox')) browser = 'Firefox';
-        else if (deviceData.userAgent.includes('Safari')) browser = 'Safari';
-        else if (deviceData.userAgent.includes('Edge')) browser = 'Edge';
-        
-        rawItem.browser = browser;
-        console.log(`✏️ Storing browser type in dedicated column: ${browser}`);
-        
-        // Extract OS
-        let os = 'unknown';
-        if (deviceData.userAgent.includes('Windows')) os = 'Windows';
-        else if (deviceData.userAgent.includes('Mac OS')) os = 'Mac OS';
-        else if (deviceData.userAgent.includes('iPhone')) os = 'iOS';
-        else if (deviceData.userAgent.includes('Android')) os = 'Android';
-        else if (deviceData.userAgent.includes('Linux')) os = 'Linux';
-        
-        rawItem.operatingSystem = os;
-        console.log(`✏️ Storing operating system in dedicated column: ${os}`);
-      }
-      
-      // Store other device properties
-      if (deviceData.language) {
-        rawItem.language = deviceData.language;
-      }
-      
-      if (deviceData.timezone) {
-        rawItem.timezone = deviceData.timezone;
-      }
-      
-      if (deviceData.networkType) {
-        rawItem.networkType = deviceData.networkType;
-      }
-      
-      // Store geolocation data from IP if device location not available
-      if (!locationData && deviceData.ipCountry) {
-        if (deviceData.ipCountry) rawItem.country = deviceData.ipCountry;
-        if (deviceData.ipCity) rawItem.city = deviceData.ipCity;
-        if (deviceData.ipLatitude) rawItem.latitude = deviceData.ipLatitude;
-        if (deviceData.ipLongitude) rawItem.longitude = deviceData.ipLongitude;
-        console.log(`✏️ Storing IP-based location in dedicated columns: ${deviceData.ipCity}, ${deviceData.ipCountry}`);
-      }
-      
-      // Store ISP/organization
-      if (deviceData.ipOrganization) {
-        rawItem.isp = deviceData.ipOrganization;
-      }
-    }
-    
-    // Add face attributes if available
-    if (faceAttributes) {
-      console.log('[FaceStorage] Storing face attributes in DynamoDB:', 
-        Object.keys(faceAttributes).length);
-      
-      // Store the full face attributes object as a JSON string in one column
-      rawItem.faceAttributes = JSON.stringify(faceAttributes);
-      
-      // Store landmarks in their own column if available
-      if (faceAttributes.Landmarks && faceAttributes.Landmarks.length > 0) {
-        rawItem.faceLandmarks = JSON.stringify(faceAttributes.Landmarks);
-        console.log(`✏️ Storing facial landmarks in dedicated column (${faceAttributes.Landmarks.length} points)`);
-      }
-      
-      // Store age range in dedicated columns for easier filtering and querying
-      if (faceAttributes.AgeRange) {
-        if (faceAttributes.AgeRange.Low !== undefined) {
-          rawItem.ageRangeLow = faceAttributes.AgeRange.Low;
-        }
-        if (faceAttributes.AgeRange.High !== undefined) {
-          rawItem.ageRangeHigh = faceAttributes.AgeRange.High;
-        }
-        console.log(`✏️ Storing age range in dedicated columns: ${faceAttributes.AgeRange.Low}-${faceAttributes.AgeRange.High}`);
-      }
-      
-      // Store gender in its own column for demographic filtering
-      if (faceAttributes.Gender && faceAttributes.Gender.Value) {
-        rawItem.gender = faceAttributes.Gender.Value;
-        console.log(`✏️ Storing gender in dedicated column: ${faceAttributes.Gender.Value}`);
-      }
-      
-      // Store emotions if available in dedicated column
-      if (faceAttributes.Emotions && faceAttributes.Emotions.length > 0) {
-        // Get the dominant emotion (highest confidence)
-        const dominantEmotion = faceAttributes.Emotions.sort((a, b) => b.Confidence - a.Confidence)[0];
-        if (dominantEmotion) {
-          rawItem.emotion = dominantEmotion.Type;
-          rawItem.emotionConfidence = dominantEmotion.Confidence;
-          console.log(`✏️ Storing dominant emotion in dedicated column: ${dominantEmotion.Type}`);
-        }
-      }
-    }
-    
-    // Process historical matches data
-    if (historicalMatches && Array.isArray(historicalMatches) && historicalMatches.length > 0) {
-      console.log(`[FaceStorage] Processing ${historicalMatches.length} historical matches`);
-      
-      // Instead of complex format, store them in a way that's easier for DynamoDB
-      let simplifiedMatches = historicalMatches
-        .filter(match => match && typeof match === 'object' && match.id)
-        .slice(0, 150) // Limit to 150 matches
-        .map(match => ({
-          id: String(match.id),
-          similarity: typeof match.similarity === 'number' ? match.similarity : parseFloat(match.similarity) || 0,
-          matchType: match.matchType || 'unknown',
-          imageUrl: match.imageUrl || null,
-          owner: match.owner || null,
-          eventId: match.eventId || null,
-          createdAt: match.createdAt || timestamp
-        }));
-      
-      // Store as JSON string to avoid serialization issues
-      rawItem.historicalMatchesJson = JSON.stringify(simplifiedMatches);
-      rawItem.historicalMatchCount = simplifiedMatches.length;
-      console.log(`✏️ Storing historical match count: ${simplifiedMatches.length}`);
-    }
-    
-    // Use the marshall function from AWS SDK to convert the item to DynamoDB format
-    const marshalledItem = marshall(rawItem, {
-      convertEmptyValues: true,
-      removeUndefinedValues: true
-    });
-    
-    // Save to DynamoDB
-    const params = {
-      TableName: 'shmong-face-data',
-      Item: marshalledItem
-    };
-    
-    console.log('[FaceStorage] Storing face data in DynamoDB:', Object.keys(rawItem).length, 'fields');
-    console.log('[FaceStorage] Data storage structure:');
-    console.log('  - JSON data stored in columns: deviceData, locationData, faceAttributes, historicalMatchesJson');
-    console.log('  - Key demographic/analytical data stored in individual columns for efficient querying');
-    
-    try {
-      await dynamoClient.send(new PutItemCommand(params));
-      console.log('✏️ Successfully stored all data in database');
-    } catch (putError) {
-      console.error('[FaceStorage] DynamoDB PutItem error:', putError);
-      // Fall back to a safer method with just the essential fields
       try {
-        console.log('[FaceStorage] Attempting to store minimal dataset as fallback...');
-        const minimalItem = marshall({
-          userId: userId,
-          faceId: faceId,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-          imageUrl: imageUrl || null,
-          imagePath: imagePath || null
-        }, {
-          removeUndefinedValues: true,
-          convertEmptyValues: true
-        });
-        
-        await dynamoClient.send(new PutItemCommand({
-          TableName: 'shmong-face-data',
-          Item: minimalItem
-        }));
-        console.log('[FaceStorage] Successfully stored minimal face data as fallback');
-      } catch (fallbackError) {
-        console.error('[FaceStorage] Even fallback storage failed:', fallbackError);
-        throw fallbackError;
+        console.log('[FaceStorage] Stringifying locationData...');
+        const locationDataString = JSON.stringify(locationData); 
+        faceDataItem.locationData = locationDataString;
+        console.log(`📍✅ [FaceStorage] OK: Stringified locationData. Length: ${locationDataString.length}.`);
+      } catch (e) {
+        console.error(`❌💥 [FaceStorage] FAILED to stringify locationData:`, e);
+        faceDataItem.locationDataError = e.message;
+      }
+    } else {
+      console.log(`📍 [FaceStorage] No location data object provided.`);
+    }
+
+    // Prepare finalDeviceData (including redundant locationData)
+    let finalDeviceDataForBlob = deviceData ? { ...deviceData } : {};
+    if (locationData) {
+      try {
+        finalDeviceDataForBlob.locationData = JSON.parse(JSON.stringify(locationData)); 
+      } catch (cloneError) {
+        console.error('❌💥 [FaceStorage] FAILED to deep clone locationData for deviceData:', cloneError);
+        finalDeviceDataForBlob.locationData = { error: 'Cloning failed', originalData: locationData }; 
       }
     }
     
-    return {
-      success: true,
-      faceId,
-      imageUrl,
-      videoUrl: videoData?.videoUrl,
-      locationData: locationData,
-      deviceData: deviceData,
-      faceAttributes: faceAttributes ? JSON.parse(JSON.stringify(faceAttributes)) : null
-    };
+    // Add Stringified deviceData and the top-level ipAddress
+    if (Object.keys(finalDeviceDataForBlob).length > 0) {
+      try {
+        console.log('[FaceStorage] Stringifying finalDeviceDataForBlob...');
+        const deviceDataString = JSON.stringify(finalDeviceDataForBlob);
+        faceDataItem.deviceData = deviceDataString;
+        console.log(`📱✅ [FaceStorage] OK: Stringified finalDeviceData. Length: ${deviceDataString.length}.`);
+        // Add top-level ipAddress (plain string) as it's in the schema
+        if (finalDeviceDataForBlob.ipAddress) {
+          faceDataItem.ipAddress = finalDeviceDataForBlob.ipAddress; // Use plain string value
+        }
+      } catch (e) {
+        console.error(`❌💥 [FaceStorage] FAILED to stringify finalDeviceData:`, e);
+        faceDataItem.deviceDataError = e.message;
+        if (finalDeviceDataForBlob.ipAddress) faceDataItem.ipAddress = finalDeviceDataForBlob.ipAddress; // Use plain string value
+      }
+    } else {
+       console.log(`📱 [FaceStorage] No device data object provided.`);
+    }
+
+    // Add Stringified faceAttributes
+    if (faceAttributes) {
+       try {
+         console.log('[FaceStorage] Stringifying faceAttributes...');
+         const attributesString = JSON.stringify(faceAttributes);
+         faceDataItem.faceAttributes = attributesString;
+         console.log(`😊✅ [FaceStorage] OK: Stringified faceAttributes. Length: ${attributesString.length}.`);
+       } catch (e) {
+         console.error(`❌💥 [FaceStorage] FAILED to stringify faceAttributes:`, e);
+         faceDataItem.faceAttributesError = e.message;
+       }
+    }
+
+    // Add Stringified historicalMatches
+    if (historicalMatches && historicalMatches.length > 0) {
+      try {
+        console.log('[FaceStorage] Stringifying historicalMatches...');
+        const matchesString = JSON.stringify(historicalMatches);
+        faceDataItem.historicalMatches = matchesString; 
+        console.log(`🤝✅ [FaceStorage] OK: Stringified historicalMatches. Length: ${matchesString.length}.`);
+        faceDataItem.historicalMatchCount = historicalMatches.length; // Keep plain number count
+      } catch (e) {
+         console.error(`❌💥 [FaceStorage] FAILED to stringify historicalMatches:`, e);
+         faceDataItem.historicalMatchesError = e.message;
+      }
+    }
+        
+    // --- End preparing the cleaned item --- 
+
+    // DEBUG: Log the final item structure JUST BEFORE sending
+    console.log(`📄 [FaceStorage] FINAL ITEM TO SAVE (verify structure):`, JSON.stringify(faceDataItem, null, 2));
+
+    // Store face data in DynamoDB using DocumentClient
+    const { docClient } = await getAWSClients(); // Get the docClient
+    try {
+      console.log('🚀 [FaceStorage] Sending PutCommand to DynamoDB with docClient...');
+      const command = new DocPutCommand({
+        TableName: "shmong-face-data",
+        Item: faceDataItem // Use the clean JS object 
+      });
+      
+      await docClient.send(command); 
+      console.log(`✅ [FaceStorage] PutCommand successful!`);
+      
+      // Update Users table redundantly (keep this attempt)
+      try {
+        await updateUserWithFaceData(userId, {
+          faceId,
+          imageUrl,
+          videoUrl: videoData?.videoUrl,
+          locationData: locationData, // Pass original JS object
+          deviceData: finalDeviceDataForBlob // Pass prepared JS object
+        });
+        console.log(`✅ [FaceStorage] Face data also updated in Users table`);
+      } catch (userUpdateError) {
+        console.error(`⚠️ [FaceStorage] Error updating Users table (non-critical):`, userUpdateError);
+      }
+      
+      // Return success ONLY if the main PutCommand succeeded
+      return {
+        success: true,
+        imageUrl,
+        faceId
+      };
+    } catch (dbError) {
+      console.error(`❌💥 [FaceStorage] FAILED DynamoDB PutCommand with docClient:`, dbError);
+      console.error(`   Failed item data:`, JSON.stringify(faceDataItem, null, 2));
+      // CRITICAL: Return failure if the main save fails
+      return { success: false, error: `Database Save Error: ${dbError.message}` }; 
+    }
   } catch (error) {
-    console.error('[FaceStorage] Error storing face ID:', error);
+    console.error('[FaceStorage] Outer error in storeFaceId:', error);
     return { success: false, error: error.message || 'Error storing face ID' };
   }
 };
+
+/**
+ * Update user record with face data (redundancy)
+ */
+async function updateUserWithFaceData(userId, faceDataPayload) { // Renamed arg
+  const { docClient } = await getAWSClients(); // Use docClient
+
+  try {
+    // Check if user exists first using docClient
+    const getCommand = new GetCommand({
+      TableName: "users",
+      Key: { id: userId } // Assuming 'id' is the key for users table
+    });
+
+    const userData = await docClient.send(getCommand); 
+
+    if (!userData.Item) {
+      console.log(`⚠️ [FaceStorage] User ${userId} not found in Users table for redundant update.`);
+      return false; // User doesn't exist, can't update
+    }
+
+    // User exists, prepare the face data entry
+    const faces = userData.Item.faces || [];
+
+    // Create the new entry for the 'faces' list
+    const newFaceEntry = {
+      faceId: faceDataPayload.faceId,
+      createdAt: new Date().toISOString(),
+      imageUrl: faceDataPayload.imageUrl,
+      videoUrl: faceDataPayload.videoUrl,
+      // Store the full objects, DocumentClient handles marshalling correctly here
+      locationData: faceDataPayload.locationData, 
+      deviceData: faceDataPayload.deviceData 
+    };
+
+    // Prepend the new face data to keep the latest at the start (optional)
+    faces.unshift(newFaceEntry); 
+    
+    // Keep only the latest N face records if desired (e.g., latest 5)
+    const MAX_RECORDS = 5; 
+    if (faces.length > MAX_RECORDS) {
+       faces.length = MAX_RECORDS; 
+    }
+
+    // Update the user record using docClient UpdateCommand
+    const updateCommand = new UpdateCommand({
+      TableName: "users",
+      Key: { id: userId },
+      UpdateExpression: "set faces = :faces, updatedAt = :updatedAt",
+      ExpressionAttributeValues: {
+        ":faces": faces, // Pass the array directly
+        ":updatedAt": new Date().toISOString()
+      },
+       ReturnValues: "UPDATED_NEW" // Optional: get updated attributes back
+    });
+
+    await docClient.send(updateCommand); 
+    return true;
+  } catch (error) {
+    // Log specific errors for update failure
+    if (error.name === 'ResourceNotFoundException') {
+         console.error(`❌ [FaceStorage] Users table not found during update attempt.`);
+    } else if (error.name === 'ValidationException') {
+         console.error(`❌ [FaceStorage] Validation error updating Users table:`, error.message);
+    } else {
+        console.error(`❌ [FaceStorage] Generic error updating user with face data:`, error);
+    }
+    throw error; // Re-throw error to be caught by the caller if needed
+  }
+}
 
 /**
  * Retrieve a face ID for a user from database or localStorage backup

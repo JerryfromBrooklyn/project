@@ -58,26 +58,25 @@ export const Dashboard = () => {
       console.log('[Dashboard] Fetching face data from DynamoDB...');
       const data = await getFaceDataForUser(user.id);
       
-      if (data) {
+      if (data && data.faceId) { // Check if data exists AND has a faceId
         console.log('🟢 [Dashboard] getFaceDataForUser returned data, setting state...');
         console.log('[Dashboard] Face data found:', data);
-        setFaceRegistered(true);
+        setFaceRegistered(true); // Set registered to true if data and faceId exist
         
-        if (data.faceId) {
-          console.log('[Dashboard] Found face ID:', data.faceId);
-          setFaceId(data.faceId);
-        } else {
-          console.warn('[Dashboard] No face ID found in data');
-          setFaceId(null);
-        }
-        
+        // Set Face ID
+        console.log('[Dashboard] Found face ID:', data.faceId);
+        setFaceId(data.faceId);
+
+        // Set Face Attributes if they exist
         if (data.faceAttributes) {
           console.log('[Dashboard] Found face attributes:', data.faceAttributes);
           setFaceAttributes(data.faceAttributes);
         } else {
           console.warn('[Dashboard] No face attributes found in data');
+          setFaceAttributes(null);
         }
         
+        // Set Image URL
         if (data.imageUrl) {
           console.log('[Dashboard] Found image URL:', data.imageUrl);
           setFaceImageUrl(data.imageUrl);
@@ -87,19 +86,47 @@ export const Dashboard = () => {
           setFaceImageUrl(imageUrl);
         } else {
           console.warn('[Dashboard] No image URL found in data');
+          setFaceImageUrl(null); // Explicitly set to null if not found
         }
         
-        if (data.historicalMatches && data.historicalMatches.length > 0) {
-          console.log('[Dashboard] Found historical matches:', data.historicalMatches.length);
-          setHistoricalMatches(data.historicalMatches);
+        // Set Historical Matches (parse if needed)
+        if (data.historicalMatches) {
+            if (typeof data.historicalMatches === 'string') {
+                try {
+                    const parsedMatches = JSON.parse(data.historicalMatches);
+                    console.log(`[Dashboard] Found ${parsedMatches.length} historical matches (parsed from string).`);
+                    setHistoricalMatches(parsedMatches);
+                    // Use historicalMatchCount if available, otherwise use parsed length
+                    setMatchedCount(data.historicalMatchCount !== undefined ? data.historicalMatchCount : parsedMatches.length);
+                } catch (e) {
+                    console.error('[Dashboard] Error parsing historicalMatches JSON:', e);
+                    setHistoricalMatches([]);
+                    setMatchedCount(0);
+                }
+            } else if (Array.isArray(data.historicalMatches)) {
+                 console.log(`[Dashboard] Found ${data.historicalMatches.length} historical matches (already array).`);
+                 setHistoricalMatches(data.historicalMatches);
+                 // Use historicalMatchCount if available, otherwise use array length
+                 setMatchedCount(data.historicalMatchCount !== undefined ? data.historicalMatchCount : data.historicalMatches.length);
+            } else {
+                 console.warn('[Dashboard] Historical matches found but is not a string or array:', data.historicalMatches);
+                 setHistoricalMatches([]);
+                 setMatchedCount(0);
+            }
+        } else {
+            console.log('[Dashboard] No historical matches found in data.');
+            setHistoricalMatches([]);
+            // Use historicalMatchCount if available (might be 0), otherwise set to 0
+            setMatchedCount(data.historicalMatchCount || 0);
         }
-      } else {
-        console.log('[Dashboard] No face data found for user');
+      } else { // This covers cases where data is null or data exists but has no faceId
+        console.log('[Dashboard] No valid face registration data found for user.');
         setFaceRegistered(false);
         setFaceImageUrl(null);
         setFaceAttributes(null);
         setFaceId(null);
         setHistoricalMatches([]);
+        setMatchedCount(0); // Ensure matched count is 0 if not registered
       }
     } catch (err) {
       console.error('[Dashboard] Error fetching face data:', err);
@@ -109,6 +136,7 @@ export const Dashboard = () => {
       setFaceAttributes(null);
       setFaceId(null);
       setHistoricalMatches([]);
+      setMatchedCount(0);
     } finally {
       setIsLoadingFaceData(false);
     }
