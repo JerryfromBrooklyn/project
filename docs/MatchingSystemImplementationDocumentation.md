@@ -20,15 +20,15 @@ The Shmong face matching system is an AWS-based facial recognition platform. Use
 
 ### 1.2 Key Technical Components
 
-*   **AWS Rekognition:** Powers face detection, storage, and matching
-*   **AWS DynamoDB:** Stores user data, photo metadata, face matching relationships, and photo visibility status
-*   **AWS S3:** Stores uploaded photos
-*   **AWS Lambda:** Processes background tasks for matching and indexing
-*   **React Frontend:** Provides user interface (Dashboard, MyPhotos, PhotoManager, PhotoGrid, TrashBin, etc.)
-*   **TailwindCSS:** Provides consistent, responsive styling
-*   **Framer Motion:** Powers smooth animations and transitions
-*   **React Dropzone:** Enables drag-and-drop file uploads
-*   **Lucide Icons:** Provides consistent iconography throughout the app
+*   **AWS Rekognition:** Powers face detection, storage, and matching. Settings updated to request up to 40 labels, 80% confidence, and detailed color analysis (overall, foreground, background). Includes skin tone estimation based on dominant colors.
+*   **AWS DynamoDB:** Stores user data, photo metadata (including event details in both flat and nested formats for compatibility), face matching relationships, and photo visibility status.
+*   **AWS S3:** Stores uploaded photos.
+*   **AWS Lambda:** Processes background tasks for matching and indexing.
+*   **React Frontend:** Provides user interface (Dashboard, MyPhotos, PhotoManager, PhotoGrid, TrashBin, etc.). Enhanced logging with '✏️' prefix for database write operations.
+*   **TailwindCSS:** Provides consistent, responsive styling.
+*   **Framer Motion:** Powers smooth animations and transitions.
+*   **React Dropzone:** Enables drag-and-drop file uploads.
+*   **Lucide Icons:** Provides consistent iconography throughout the app.
 
 ## 2. How the Face Matching & Visibility System Works
 
@@ -121,13 +121,26 @@ The system uses a user-specific visibility map stored in DynamoDB to control wha
 {
   "id": "photo-123",
   "user_id": "user-who-uploaded-it",
-  "upload_date": "2023-09-15T14:30:00Z",
-  "url": "https://s3.bucket.com/photos/photo-123.jpg",
+  "eventName": "Concert Name", // Flat property
+  "venueName": "Venue Name", // Flat property
+  "promoterName": "Promoter Name", // Flat property
+  "date": "2025-05-03", // Flat property
+  "event_details": { // Nested structure
+    "name": "Concert Name",
+    "date": "2025-05-03",
+    "promoter": "Promoter Name",
+    "type": "event"
+  },
+  "venue": { // Nested structure
+    "id": null,
+    "name": "Venue Name"
+  },
   "faces": [
     { "id": "face-456", "faceId": "AWS-face-id-1", "boundingBox": {...} },
     { "id": "face-789", "faceId": "AWS-face-id-2", "boundingBox": {...} }
   ],
   "matched_users": ["user-1", "user-2"],
+  "skinTones": "[{\\"hexCode\\":\\"#cd853f\\",\\"confidence\\":95.5}]", // Example skin tone
   "user_visibility": {
     "user-1": "VISIBLE",  // This user sees the photo normally
     "user-2": "TRASH",    // This user has moved it to trash
@@ -135,6 +148,8 @@ The system uses a user-specific visibility map stored in DynamoDB to control wha
   }
 }
 ```
+
+This design allows each user to have a personalized view of the photo collection without affecting other users. Event details are stored redundantly in both flat and nested formats to ensure compatibility with different parts of the codebase during data retrieval and display.
 
 #### Visibility Control Flow:
 
@@ -323,60 +338,40 @@ The PhotoGrid component (`PhotoGrid.js`) provides a visually appealing and inter
 
 ### 5.3 Full-Screen Image Viewer
 
-The image viewer in `PhotoUploader.tsx` provides a rich viewing experience:
+The image viewer logic is primarily handled within `SimplePhotoInfoModal.jsx`, providing a rich viewing experience:
 
-- **Top Control Bar**: Contains buttons for download, info, trash, and close
-- **Image Display**: Shows the full image with support for zooming and rotation
-- **Bottom Info Bar**: Displays file information and additional controls
-- **Mobile Optimization**: Touch-friendly controls and responsive layout
-- **Native Integration**: Uses Web Share API when available for sharing
+- **Top Control Bar**: Contains buttons for download, info, trash, and close (context-dependent).
+- **Image Display**: Shows the full image with support for zooming and rotation.
+- **Bottom Info Bar/Toolbar**: Displays file information and action controls (Details/Image toggle, Share, Download, Close).
+- **Event Information Section**: Clearly displays event name, venue, promoter, and date, sourcing data from both flat and nested properties.
+- **Image Analysis Section**: Shows detailed Rekognition analysis including up to 40 labels, dominant colors (overall, foreground, background), and image quality metrics.
+- **Face Analysis Section**: Displays attributes for each detected face, including estimated age range, gender, expression, and estimated skin tone color swatch.
+- **Mobile Optimization**: Touch-friendly controls and responsive layout, including a 2x2 button grid for actions on smaller screens.
+- **Native Integration**: Uses Web Share API when available for sharing.
 
 ```jsx
-// Image Viewer Modal in PhotoUploader.tsx
-<motion.div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col touch-none">
-  {/* Top Controls */}
-  <div className="absolute top-0 left-0 right-0 z-10 p-4 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent">
-    <h2 className="text-lg font-medium text-white truncate max-w-[200px] sm:max-w-sm">
-      {viewerImage.file.name}
-    </h2>
-    <div className="flex items-center space-x-2">
-      {/* Download, Info, Trash, Close buttons */}
-    </div>
-  </div>
-  
-  {/* Image Container with touch support */}
-  <div className="flex-1 flex items-center justify-center overflow-hidden touch-pan-y">
-    <div 
-      style={{
-        transform: `scale(${zoomLevel}) rotate(${rotation}deg)`,
-        transition: 'transform 0.3s ease'
-      }}
-    >
-      <img
-        src={viewerImage.previewUrl || viewerImage.s3Url}
-        alt={viewerImage.file.name}
-        className="max-h-[85vh] max-w-[95vw] sm:max-w-[90vw] object-contain"
-        draggable={false}
-      />
-    </div>
-  </div>
-  
-  {/* Bottom Controls */}
-  <div className="absolute bottom-0 left-0 right-0 z-10 p-4 bg-gradient-to-t from-black/70 to-transparent">
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      {/* File info */}
-      <div className="text-white text-sm">
-        {(viewerImage.file.size / 1024 / 1024).toFixed(2)} MB • 
-        {viewerImage.file.type.split('/')[1].toUpperCase()}
-      </div>
-      
-      {/* Control buttons */}
-      <div className="flex flex-wrap gap-2 justify-center sm:justify-end">
-        {/* Zoom, Rotate, Fullscreen, Share buttons */}
+// SimplePhotoInfoModal.jsx (Illustrative Structure)
+<div className="fixed inset-0 ...">
+  <div className="bg-gray-100 ...">
+    {/* Image or Details Section based on showDetails state */}
+    
+    {/* Bottom Buttons Toolbar */}
+    <div className="p-3 ...">
+      {/* Buttons arranged in 2x2 grid on mobile, row on larger screens */}
+      <div className="grid grid-cols-2 sm:flex ...">
+         <button onClick={toggleDetailsView}>{showDetails ? 'Image' : 'Details'}</button>
+         <button onClick={handleShare} disabled={!navigator.share}>Share</button>
+         <button onClick={handleDownload} disabled={downloading}>Download</button>
+         <button onClick={onClose}>Close</button>
       </div>
     </div>
+
+    {/* Absolute Close Button */}
+    <button onClick={onClose} className="absolute top-2 right-2 ...">
+       <X size={18} />
+    </button>
   </div>
-</motion.div>
+</div>
 ```
 
 ### 5.4 PhotoUploader Component
@@ -617,22 +612,24 @@ const handleShare = () => {
 
 The image viewer has been enhanced with:
 
-1. **Interactive Controls**: Zoom, rotate, fullscreen toggle
-2. **Mobile Optimization**: Touch-friendly design and controls
-3. **Top/Bottom Control Bars**: Accessible actions with gradient backgrounds
-4. **Improved Image Sizing**: Better fit for different screen sizes
-5. **Download Integration**: Better handling of file downloads
-6. **Native Sharing**: Integration with the Web Share API
+1.  **Interactive Controls**: Zoom, rotate, fullscreen toggle (context-dependent)
+2.  **Mobile Optimization**: Touch-friendly design and controls, responsive button layout (2x2 grid on mobile).
+3.  **Top/Bottom Control Bars**: Accessible actions with gradient backgrounds.
+4.  **Improved Image Sizing**: Better fit for different screen sizes.
+5.  **Download Integration**: Better handling of file downloads.
+6.  **Native Sharing**: Integration with the Web Share API.
+7.  **HIG Alignment**: Refined styling (backgrounds, padding, buttons) for closer adherence to Apple's Human Interface Guidelines.
+8.  **Details Toggle**: Ability to switch between image-only view and a detailed view with metadata and analysis.
 
 ### 7.2 Mobile User Experience
 
 Mobile optimizations include:
 
-1. **Responsive Layouts**: Adaptive grids and flexbox layouts
-2. **Touch Event Handling**: Support for gestures like pinch-to-zoom
-3. **Device-Specific Features**: Integration with native capabilities
-4. **Performance Enhancements**: Optimized rendering and loading
-5. **Simplified Controls**: Context-appropriate UI for smaller screens
+1.  **Responsive Layouts**: Adaptive grids and flexbox layouts.
+2.  **Touch Event Handling**: Support for gestures like pinch-to-zoom.
+3.  **Device-Specific Features**: Integration with native capabilities like the Web Share API.
+4.  **Performance Enhancements**: Optimized rendering and loading.
+5.  **Simplified Controls**: Context-appropriate UI for smaller screens, like the 2x2 button grid in the photo modal.
 
 ### 7.3 UI Consistency and Animation
 
@@ -646,14 +643,15 @@ UI improvements include:
 
 ## 8. Next Steps & Future Enhancements
 
-1. **Implement Asynchronous Historical Matching:** Create and deploy the background Lambda (`shmong-historical-matcher`) to improve registration performance.
-2. **Enhanced Notifications:** Add notifications for completed background tasks.
-3. **Additional Image Viewer Features:** Add basic editing capabilities (crop, filter, adjust).
-4. **Advanced Search & Filter:** Implement more powerful search capabilities.
-5. **Performance Optimization:** Further improve loading times and responsiveness.
-6. **Accessibility Improvements:** Enhance keyboard navigation and screen reader support.
-7. **Advanced Trash Management:** Add auto-restoration and custom retention periods.
-8. **Expanded Sharing Options:** More flexible sharing capabilities with permissions.
+1.  **Implement Asynchronous Historical Matching:** Create and deploy the background Lambda (`shmong-historical-matcher`) to improve registration performance.
+2.  **Reinstate Events Tab:** Fix the underlying issues and re-enable the Events tab functionality.
+3.  **Enhanced Notifications:** Add notifications for completed background tasks.
+4.  **Additional Image Viewer Features:** Add basic editing capabilities (crop, filter, adjust).
+5.  **Advanced Search & Filter:** Implement more powerful search capabilities.
+6.  **Performance Optimization:** Further improve loading times and responsiveness.
+7.  **Accessibility Improvements:** Enhance keyboard navigation and screen reader support.
+8.  **Advanced Trash Management:** Add auto-restoration and custom retention periods.
+9.  **Expanded Sharing Options:** More flexible sharing capabilities with permissions.
 
 ## 9. Conclusion
 

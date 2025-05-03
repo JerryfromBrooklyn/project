@@ -30,9 +30,9 @@ src/
 ├── services/             # Business Logic Services
 │   ├── FaceIndexingService.js  # AWS Rekognition integration for face indexing
 │   ├── faceMatchingService.js  # Core face matching logic
-│   ├── awsPhotoService.js      # Photo fetching, upload, processing, and trash management
+│   ├── awsPhotoService.js      # Photo upload, metadata processing (incl. event data), Rekognition analysis, DB saving
 │   ├── userVisibilityService.js# Handles photo visibility status (VISIBLE, TRASH, HIDDEN)
-│   ├── FaceStorageService.js   # Face data storage and retrieval
+│   ├── FaceStorageService.js   # Face data storage and retrieval, image analysis functions
 │   └── PhotoService.js         # Client-side photo operations (download, etc.)
 ├── types.ts              # TypeScript type definitions
 ├── config.js             # Application configuration
@@ -43,12 +43,13 @@ src/
 
 ## Key Component: Dashboard
 
-The **Dashboard component (`src/components/Dashboard.jsx`)** is the central UI component of the application. It provides tab-based navigation to different sections:
+The **Dashboard component (`src/pages/Dashboard.tsx`)** is the central UI component of the application. It provides tab-based navigation to different sections:
 
 1. **Home**: User information and face registration
-2. **Matches**: Photos where the user has been recognized
+2. **Photos**: Photos where the user has been recognized (Previously 'Matches')
 3. **Upload**: Interface for uploading and managing photos
 4. **Trash**: View and manage trash photos
+5. **Events**: *Temporarily unavailable* - This tab is currently hidden or displays a placeholder while functionality is being improved.
 
 ## Dependency Relationships
 
@@ -93,14 +94,17 @@ PhotoGrid.js (Reusable Grid Component)
 ├── Service Dependencies:
 │   └── PhotoService.js           # For photo downloads (if not handled by parent)
 ├── Component Dependencies:
-│   └── SimplePhotoInfoModal.jsx  # For displaying photo details
+│   └── SimplePhotoInfoModal.jsx  # Modal for displaying photo details (incl. Event Info, Analysis, Faces)
 ├── Utility Dependencies:
 │   └── cn.js                     # For conditional class names
 
 PhotoUploader.tsx (Photo Upload + Image Viewer)
 ├── Service Dependencies:
-│   ├── awsPhotoService.js        # For uploading photos and trash function
+│   ├── awsPhotoService.js        # For uploading photos (incl. formatted event metadata) and trash function
 │   └── AuthContext.jsx           # For user info (optional, may be passed as props)
+├── Component Dependencies:
+│   └── SimplePhotoInfoModal.jsx  # Image viewer/details modal used here and in PhotoGrid
+│
 ├── Library Dependencies:
 │   ├── react-dropzone            # For drag-and-drop file uploads
 │   ├── framer-motion             # For animations
@@ -113,13 +117,13 @@ PhotoUploader.tsx (Photo Upload + Image Viewer)
 awsPhotoService.js
 ├── Depends on:
 │   ├── lib/awsClient.js          # For AWS SDK configuration
-│   ├── FaceStorageService.js     # For getting user face data
+│   ├── FaceStorageService.js     # For getting user face data & image analysis
 │   └── userVisibilityService.js  # For filtering based on visibility
 │
 └── Used by:
     ├── MyPhotos.jsx
     ├── PhotoManager.js
-    ├── PhotoUploader.tsx
+    ├── PhotoUploader.tsx         # Sends formatted metadata including event details
     └── TrashBin.jsx
 
 userVisibilityService.js
@@ -146,22 +150,24 @@ FaceIndexingService.js
 FaceStorageService.js
 ├── Depends on:
 │   └── lib/awsClient.js          # For AWS SDK or Storage API
+│   └── (Contains image analysis logic - analyzeImageWithDetectLabels, determineSkinTone)
 │
 └── Used by:
     ├── FaceIndexingService.js
     ├── Dashboard.jsx
     ├── awsPhotoService.js
-    └── faceMatchingService.js
+    ├── faceMatchingService.js
+    └── SimplePhotoInfoModal.jsx  # For fetching complete photo data including analysis
 ```
 
 ## Application Flow
 
 1. The application initializes through `main.jsx`
 2. The App component (`App.jsx`) sets up routing and context providers (`AuthContext`)
-3. For authenticated users, the **Dashboard component** (`src/components/Dashboard.jsx`) is loaded
-4. The Dashboard displays tabs: Home, Matches, Upload, Trash
+3. For authenticated users, the **Dashboard component** (`src/pages/Dashboard.tsx`) is loaded
+4. The Dashboard displays tabs: Home, Photos (Matches), Upload, Trash. The Events tab is temporarily hidden/disabled.
 5. The Home tab shows user info and face registration status/actions
-6. The Matches tab renders the `<MyPhotos />` component, which fetches and displays matched photos using `awsPhotoService`
+6. The Photos tab renders the `<MyPhotos />` component, which fetches and displays matched photos using `awsPhotoService`
 7. The Upload tab renders the `<PhotoManager />` component with the `<PhotoUploader />` component
 8. The Trash tab renders the `<TrashBin />` component, showing trashed items with options to toggle between uploads and matches
 
@@ -180,17 +186,15 @@ FaceStorageService.js
 ### Image Viewing Flow
 
 1. User clicks on a thumbnail in `PhotoGrid.js` or `PhotoUploader.tsx`
-2. Full-screen image viewer opens with controls:
-   - Top bar: Download, Info, Trash, Close buttons
-   - Bottom bar: File info, zoom controls, rotation, fullscreen toggle
+2. `SimplePhotoInfoModal.jsx` opens, showing the image initially.
 3. User can:
-   - Zoom in/out
-   - Rotate the image
-   - Toggle fullscreen mode
-   - Download or share the image
-   - Move the image to trash
-   - View image information
-4. User clicks close to return to the previous screen
+   - Toggle to the 'Details' view to see metadata, analysis, etc.
+   - Toggle back to the 'Image' view.
+   - Use the **Share** button (triggers native Web Share API).
+   - Use the **Download** button.
+   - Use the **Close** button.
+4. On mobile, the action buttons (Details/Image, Share, Download, Close) are arranged in a responsive 2x2 grid. On larger screens, they appear in a horizontal row.
+5. User clicks close ('X' icon or Close button) to return to the previous screen.
 
 ### Trash Management Flow
 
