@@ -1,8 +1,18 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, Loader, Check, X, RefreshCw } from 'lucide-react';
+import { AlertCircle, Loader, Check, Eye, EyeOff, RefreshCw, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import Footer from '../components/Footer';
+
+// Apple HIG compliant styles (using Tailwind utility classes)
+const labelStyle = "block text-sm font-medium text-gray-700 mb-1";
+const inputStyle = "appearance-none block w-full px-3 py-2.5 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"; // Adjusted padding/rounding
+const selectStyle = "appearance-none block w-full pl-3 pr-10 py-2.5 text-base border border-gray-300 bg-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"; // Adjusted padding/rounding/text size
+const buttonPrimaryStyle = "w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"; // Adjusted padding/font weight
+const buttonSecondaryStyle = "flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium"; // Added font-medium
+const checkboxContainerStyle = "flex items-start relative"; // Added relative for potential pseudo-elements if needed
+const checkboxInputStyle = "appearance-none h-5 w-5 border-2 border-gray-300 rounded-sm bg-white checked:bg-blue-600 checked:border-blue-600 focus:outline-none focus:ring-offset-0 focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50 shrink-0 mt-0.5 cursor-pointer"; // Added explicit border and background to ensure visibility, adjusted size
+const checkboxCheckmarkStyle = "absolute top-1 left-0.5 h-5 w-5 text-white pointer-events-none"; // For potential custom checkmark
+const checkboxLabelStyle = "ml-3 text-sm text-gray-700 cursor-pointer"; // Adjusted margin
 
 const Signup = () => {
   const [email, setEmail] = useState('');
@@ -34,113 +44,83 @@ const Signup = () => {
 
     // Check for agreement to terms and policies
     if (!agreedToTerms) {
-      setError('You must agree to the Terms of Service and Privacy Policy');
+      setError('Please agree to the Terms of Service and Privacy Policy.');
       setLoading(false);
       return;
     }
 
     if (!agreedToBiometrics) {
-      setError('You must agree to the Biometrics Policy');
+      setError('Please agree to the Biometrics Policy.');
       setLoading(false);
       return;
     }
     
     // Check if passwords match
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError('Passwords do not match.');
       setLoading(false);
       return;
     }
 
-    // Password validation with detailed logging
+    // Password validation
     console.log('[SIGNUP] Validating password...');
-    
-    if (password.length < 8) {
-      console.log('[SIGNUP] ❌ Password validation failed: too short');
-      setError('Password must be at least 8 characters long');
-      setLoading(false);
-      return;
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+=\-\\[\]{};':"\\|,.<>\/?]).{8,}$/;
+    if (!passwordRegex.test(password)) {
+       console.log('[SIGNUP] ❌ Password validation failed.');
+       setError('Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.');
+       setLoading(false);
+       return;
     }
-
-    // Check for uppercase, lowercase, numbers, and special characters
-    const hasUppercase = /[A-Z]/.test(password);
-    const hasLowercase = /[a-z]/.test(password);
-    const hasNumbers = /[0-9]/.test(password);
-    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
-
-    console.log('[SIGNUP] Password validation details:', {
-      length: password.length,
-      hasUppercase,
-      hasLowercase,
-      hasNumbers,
-      hasSpecialChar
-    });
-
-    if (!(hasUppercase && hasLowercase && hasNumbers && hasSpecialChar)) {
-      console.log('[SIGNUP] ❌ Password validation failed: missing required character types');
-      setError('Password must contain uppercase letters, lowercase letters, numbers, and special characters');
-      setLoading(false);
-      return;
-    }
-
     console.log('[SIGNUP] ✅ Password validation passed');
 
     try {
-      console.log('[SIGNUP] Validated input, calling signUp with email:', email);
+      console.log('[SIGNUP] Validated input, calling signUp...');
       
-      // Fix the way we're sending attributes to signUp - pass them as separate parameters instead of an object
-      const result = await signUp(
-        email, 
-        password, 
-        fullName,
-        userRole,
-        {
-          agreedToTerms: agreedToTerms,
-          agreedToBiometrics: agreedToBiometrics
-        }
-      );
+      // Attributes for Cognito
+      const attributes = {
+        name: fullName,
+        'custom:role': userRole, 
+        'custom:agreed_to_terms': agreedToTerms.toString(),
+        'custom:agreed_to_biometrics': agreedToBiometrics.toString() 
+      };
+
+      const result = await signUp(email, password, attributes);
       
       console.log('[SIGNUP] Sign-up result:', JSON.stringify({
         success: !result.error,
-        hasData: !!result.data,
+        userId: result.data?.user?.userId, // Changed from 'id' based on potential Cognito structure
+        userConfirmed: result.data?.userConfirmed,
         error: result.error ? result.error.message : null
       }, null, 2));
       
       if (result.error) {
         console.error('[SIGNUP] ❌ Signup returned error:', result.error);
-        throw result.error;
+        throw result.error; // Re-throw to be caught below
       }
       
-      if (!result.data) {
-        console.error('[SIGNUP] ❌ No user data returned from signup');
-        throw new Error('Registration failed. No user data received.');
+      // Check if user needs confirmation
+      if (!result.data?.userConfirmed) {
+         console.log('[SIGNUP] ✅ Signup successful, user needs confirmation.');
+         // Navigate to verification page, passing email as state
+         navigate('/verify-email', { state: { email: email } });
+      } else {
+         console.log('[SIGNUP] ✅ Signup successful and confirmed!');
+         // AuthContext should handle redirect for confirmed users
       }
-
-      console.log('[SIGNUP] ✅ Signup successful!', result.data);
-      // No need for redirection here - it's handled in AuthContext
       
     } catch (err) {
-      console.error('[SIGNUP] ❌ Signup error:', err);
-      
-      // Enhanced error logging
-      console.error('[SIGNUP] Error type:', err?.constructor?.name);
-      console.error('[SIGNUP] Error stack:', err?.stack);
-      
-      // Handle specific AWS Cognito error messages
-      let errorMessage = 'Failed to sign up. Please try again.';
-      
-      if (err.name === 'UsernameExistsException' || 
-          (err.message && err.message.includes('already exists'))) {
+      console.error('[SIGNUP] ❌ Signup error caught:', err);
+      let errorMessage = 'Failed to sign up. Please check your details and try again.';
+      if (err.name === 'UsernameExistsException' || (err.message && err.message.toLowerCase().includes('already exists'))) {
         errorMessage = 'An account with this email already exists.';
-      } else if (err.name === 'InvalidPasswordException' || 
-                (err.message && err.message.includes('password'))) {
-        errorMessage = err.message || 'Password does not meet requirements.';
+      } else if (err.name === 'InvalidPasswordException') {
+        errorMessage = 'Password does not meet the requirements.';
       } else if (err.name === 'TooManyRequestsException') {
-        errorMessage = 'Too many requests. Please try again later.';
+        errorMessage = 'Too many signup attempts. Please try again later.';
       } else if (err.message) {
-        errorMessage = err.message;
+         // Try to use the error message directly if it's informative
+         errorMessage = err.message;
       }
-      
       console.log('[SIGNUP] Setting error message:', errorMessage);
       setError(errorMessage);
     } finally {
@@ -148,70 +128,74 @@ const Signup = () => {
     }
   };
   
-  const handleBackClick = () => {
-    navigate('/');
-  };
-  
   const generatePassword = () => {
     const length = 16;
     const lowercase = "abcdefghijklmnopqrstuvwxyz";
     const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const numbers = "0123456789";
-    const specialChars = "!@#$%^&*()_+";
-    const charset = lowercase + uppercase + numbers + specialChars;
+    const specialChars = "!@#$%^&*()_+"; // Reduced set for easier typing if needed
+    const allChars = lowercase + uppercase + numbers + specialChars;
     
-    let newPassword = "";
+    let generatedPassword = "";
     
-    // Ensure at least one of each required character type
-    newPassword += lowercase.charAt(Math.floor(Math.random() * lowercase.length));
-    newPassword += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
-    newPassword += numbers.charAt(Math.floor(Math.random() * numbers.length));
-    newPassword += specialChars.charAt(Math.floor(Math.random() * specialChars.length));
+    // Ensure required characters
+    generatedPassword += lowercase[Math.floor(Math.random() * lowercase.length)];
+    generatedPassword += uppercase[Math.floor(Math.random() * uppercase.length)];
+    generatedPassword += numbers[Math.floor(Math.random() * numbers.length)];
+    generatedPassword += specialChars[Math.floor(Math.random() * specialChars.length)];
     
-    // Fill the rest randomly
-    for (let i = newPassword.length; i < length; i++) {
-      newPassword += charset.charAt(Math.floor(Math.random() * charset.length));
+    // Fill remaining length
+    for (let i = generatedPassword.length; i < length; i++) {
+      generatedPassword += allChars[Math.floor(Math.random() * allChars.length)];
     }
     
-    // Shuffle the password
-    newPassword = newPassword.split('').sort(() => Math.random() - 0.5).join('');
+    // Shuffle to avoid predictable pattern
+    generatedPassword = generatedPassword.split('').sort(() => 0.5 - Math.random()).join('');
     
-    setPassword(newPassword);
-    setConfirmPassword(newPassword);
-    setShowPassword(true);
+    setPassword(generatedPassword);
+    setConfirmPassword(generatedPassword);
+    setShowPassword(true); // Show generated password
     setShowConfirmPassword(true);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header with back button */}
-      <header className="py-4 px-6 flex items-center border-b border-gray-200">
-        <button 
-          onClick={handleBackClick}
-          className="p-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
-          aria-label="Go back"
+    // Use light gray background consistent with HIG
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 pt-6 pb-6"> 
+      
+      {/* Centered Card Layout - Mimicking iOS modal/sheet presentation */}
+      <div className="w-full max-w-md bg-white rounded-xl shadow-lg space-y-6 relative"> 
+        
+        {/* Back to Home Link - Positioned top-left */}
+        <Link 
+           to="/" 
+           className="absolute top-4 left-4 p-2 rounded-full text-gray-500 hover:bg-gray-100 transition-colors"
+           aria-label="Back to Home"
         >
-          <X className="h-5 w-5" />
-        </button>
-        <h1 className="text-xl font-semibold text-center flex-1 mr-8">Create Account</h1>
-      </header>
+            <ArrowLeft className="h-5 w-5" />
+        </Link>
 
-      <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 overflow-auto">
-        <div className="max-w-md w-full space-y-8">
+        {/* Inner Padding */}
+        <div className="p-6 md:p-8">
+
+          {/* Title */}
+          <h1 className="text-2xl font-bold text-center text-gray-900 mb-6">Create Account</h1>
+
+          {/* Error Message Area */}
           {error && (
-            <div className="bg-red-50 p-4 rounded-xl shadow-sm mb-4">
-              <div className="flex items-start">
-                <AlertCircle className="h-5 w-5 text-red-500 mr-2 flex-shrink-0" />
-                <p className="text-sm text-red-700">{error}</p>
+            <div className="bg-red-50 border border-red-200 p-3 rounded-md"> 
+              <div className="flex items-center"> 
+                <AlertCircle className="h-5 w-5 text-red-600 mr-2 flex-shrink-0" />
+                <p className="text-sm text-red-800">{error}</p>
               </div>
             </div>
           )}
-          
-          <form className="mt-8 space-y-6" onSubmit={handleSignup}>
+            
+          <form className="space-y-5" onSubmit={handleSignup}> 
+            {/* Grouped Form Fields */}
             <div className="space-y-4">
               <div>
-                <label htmlFor="full-name" className="block text-sm font-medium text-gray-700 mb-1">
-                  Full name
+                <label htmlFor="full-name" className={labelStyle}>
+                  Full Name
                 </label>
                 <input
                   id="full-name"
@@ -219,23 +203,23 @@ const Signup = () => {
                   type="text"
                   autoComplete="name"
                   required
-                  className="appearance-none block w-full px-3 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  placeholder="Your full name"
+                  className={inputStyle}
+                  placeholder="First and Last Name"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                 />
               </div>
-              
+                
               <div>
-                <label htmlFor="user-role" className="block text-sm font-medium text-gray-700 mb-1">
-                  I am a...
+                <label htmlFor="user-role" className={labelStyle}>
+                  Account Type
                 </label>
                 <select
                   id="user-role"
                   name="user-role"
                   value={userRole}
                   onChange={(e) => setUserRole(e.target.value)}
-                  className="appearance-none block w-full px-3 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className={selectStyle}
                   required
                 >
                   <option value="attendee">Attendee</option>
@@ -244,10 +228,10 @@ const Signup = () => {
                   <option value="venue">Venue</option>
                 </select>
               </div>
-              
+                
               <div>
-                <label htmlFor="email-address" className="block text-sm font-medium text-gray-700 mb-1">
-                  Email address
+                <label htmlFor="email-address" className={labelStyle}>
+                  Email Address
                 </label>
                 <input
                   id="email-address"
@@ -255,15 +239,16 @@ const Signup = () => {
                   type="email"
                   autoComplete="email"
                   required
-                  className="appearance-none block w-full px-3 py-3 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className={inputStyle}
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
-              
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                
+              {/* Password Section with Generator */}
+              <div className="space-y-2">
+                <label htmlFor="password" className={labelStyle}>
                   Password
                 </label>
                 <div className="relative">
@@ -273,36 +258,39 @@ const Signup = () => {
                     type={showPassword ? "text" : "password"}
                     autoComplete="new-password"
                     required
-                    className="appearance-none block w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="••••••••"
+                    className={`${inputStyle} pr-10`} // Add padding for icon
+                    placeholder="Create a password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     minLength={8}
+                    aria-describedby="password-description"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
                   >
-                    {showPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                    )}
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  Must be at least 8 characters with uppercase, lowercase, number, and special character.
+                <p id="password-description" className="text-xs text-gray-500">
+                  8+ characters, uppercase, lowercase, number, special char.
                 </p>
+                
+                {/* Generate Password Button */}
+                <button
+                    type="button"
+                    onClick={generatePassword}
+                    className={buttonSecondaryStyle}
+                >
+                    <RefreshCw className="h-4 w-4 mr-1.5" />
+                    Generate Secure Password
+                </button>
               </div>
-              
+                
               <div>
-                <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="confirm-password" className={labelStyle}>
                   Confirm Password
                 </label>
                 <div className="relative">
@@ -312,130 +300,97 @@ const Signup = () => {
                     type={showConfirmPassword ? "text" : "password"}
                     autoComplete="new-password"
                     required
-                    className="appearance-none block w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="••••••••"
+                    className={`${inputStyle} pr-10`}
+                    placeholder="Re-enter password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     minLength={8}
                   />
-                  <button
+                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                    aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}
                   >
-                    {showConfirmPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                    )}
+                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
-              </div>
-              
-              <div>
-                <button
-                  type="button"
-                  onClick={generatePassword}
-                  className="flex items-center text-sm text-blue-600 hover:text-blue-800"
-                >
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  Generate a secure password
-                </button>
+                {password !== confirmPassword && confirmPassword && (
+                   <p className="mt-1 text-xs text-red-600">Passwords do not match.</p>
+                )}
               </div>
             </div>
 
-            {/* Legal agreement checkboxes */}
-            <div className="space-y-4 pt-4">
-              <h2 className="text-sm font-medium text-gray-700">Legal Agreements</h2>
-              
-              <div className="flex items-start">
-                <div className="flex-shrink-0 mt-0.5">
-                  <div className="relative">
-                    <input
-                      id="terms-consent"
-                      name="terms-consent"
-                      type="checkbox"
-                      checked={agreedToTerms}
-                      onChange={(e) => setAgreedToTerms(e.target.checked)}
-                      className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-2 border-gray-300 rounded appearance-none cursor-pointer checked:bg-blue-600 checked:border-blue-600"
-                    />
-                    {agreedToTerms && (
-                      <Check className="absolute inset-0 h-5 w-5 text-white pointer-events-none" />
-                    )}
-                  </div>
-                </div>
-                <div className="ml-3 text-sm">
-                  <label htmlFor="terms-consent" className="font-medium text-gray-700 cursor-pointer">
-                    I agree to the{' '}
-                    <Link to="/terms-of-service-and-privacy-policy" target="_blank" className="text-blue-600 hover:text-blue-500">
-                      Terms of Service and Privacy Policy
-                    </Link>
-                  </label>
-                </div>
+            {/* Legal Agreement Checkboxes - Updated Styles */}
+            <div className="space-y-4 pt-2"> 
+              <div className={checkboxContainerStyle}>
+                <input
+                  id="terms-consent"
+                  name="terms-consent"
+                  type="checkbox"
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  className={checkboxInputStyle}
+                  required
+                />
+                {/* Optional: Add custom checkmark SVG here if needed, controlled by agreedToTerms state */}
+                {/* {agreedToTerms && <Check className={checkboxCheckmarkStyle} strokeWidth={3}/>} */}
+                <label htmlFor="terms-consent" className={checkboxLabelStyle}>
+                  I agree to the{' '}
+                  <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline">
+                    Terms & Privacy Policy
+                  </a>
+                </label>
               </div>
 
-              <div className="flex items-start">
-                <div className="flex-shrink-0 mt-0.5">
-                  <div className="relative">
-                    <input
-                      id="biometrics-consent"
-                      name="biometrics-consent"
-                      type="checkbox"
-                      checked={agreedToBiometrics}
-                      onChange={(e) => setAgreedToBiometrics(e.target.checked)}
-                      className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-2 border-gray-300 rounded appearance-none cursor-pointer checked:bg-blue-600 checked:border-blue-600"
-                    />
-                    {agreedToBiometrics && (
-                      <Check className="absolute inset-0 h-5 w-5 text-white pointer-events-none" />
-                    )}
-                  </div>
-                </div>
-                <div className="ml-3 text-sm">
-                  <label htmlFor="biometrics-consent" className="font-medium text-gray-700 cursor-pointer">
-                    I agree to the{' '}
-                    <Link to="/biometrics-policy" target="_blank" className="text-blue-600 hover:text-blue-500">
-                      Biometrics Policy
-                    </Link>
-                  </label>
-                </div>
+              <div className={checkboxContainerStyle}>
+                 <input
+                  id="biometrics-consent"
+                  name="biometrics-consent"
+                  type="checkbox"
+                  checked={agreedToBiometrics}
+                  onChange={(e) => setAgreedToBiometrics(e.target.checked)}
+                  className={checkboxInputStyle}
+                  required
+                />
+                {/* {agreedToBiometrics && <Check className={checkboxCheckmarkStyle} strokeWidth={3}/>} */}
+                <label htmlFor="biometrics-consent" className={checkboxLabelStyle}>
+                  I agree to the{' '}
+                  <a href="/biometrics.html" target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline">
+                    Biometrics Policy
+                  </a>
+                </label>
               </div>
             </div>
 
+            {/* Submit Button */}
             <div>
               <button
                 type="submit"
-                disabled={loading || !agreedToTerms || !agreedToBiometrics || password !== confirmPassword}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                // Disable button if loading, terms not agreed, or passwords don't match
+                disabled={loading || !agreedToTerms || !agreedToBiometrics || !password || password !== confirmPassword} 
+                className={buttonPrimaryStyle}
               >
                 {loading ? (
-                  <Loader className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" />
+                  <Loader className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" /> // Slightly larger loader
                 ) : null}
-                Create account
+                Create Account
               </button>
             </div>
-            
+              
+            {/* Link to Login */}
             <div className="text-center text-sm">
               <span className="text-gray-600">Already have an account?</span>{' '}
               <Link
                 to="/login"
-                className="font-medium text-blue-600 hover:text-blue-500"
+                className="font-medium text-blue-600 hover:underline"
               >
-                Log in
+                Log In
               </Link>
             </div>
           </form>
-        </div>
-      </div>
-
-      {/* Add Footer at bottom */}
-      <div className="mt-auto">
-        <Footer />
-      </div>
+        </div> { /* End Inner Padding */}
+      </div> { /* End Card */}
     </div>
   );
 };

@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service & Privacy Policy | SHMONG</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      color: #1d1d1f; /* Apple's primary text color */
+      background-color: #f5f5f7; /* Apple's light gray background */
+      line-height: 1.5; /* Improved readability */
+    }
+    h1, h2, h3 {
+      color: #1d1d1f;
+      font-weight: 600; /* Semi-bold headings typical in HIG */
+    }
+    h1 {
+      font-size: 1.75rem; /* ~28px */
+      letter-spacing: -0.022em;
+      margin-bottom: 0.75rem;
+    }
+    h2 {
+      font-size: 1.25rem; /* ~20px */
+      letter-spacing: -0.018em;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #d2d2d7; /* Apple's separator color */
+    }
+    h3 {
+      font-size: 1.0rem; /* ~16px */
+      letter-spacing: -0.014em;
+      font-weight: 600;
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    p, li {
+      font-size: 0.9375rem; /* ~15px */
+      color: #333336; /* Slightly lighter text for body */
+      line-height: 1.6; /* Generous line height */
+      margin-bottom: 1rem;
+    }
+    ul, ol {
+      margin-bottom: 1rem;
+      padding-left: 1.5rem; /* Standard list indent */
+    }
+    ul { list-style-type: disc; }
+    ol { list-style-type: decimal; }
+    li { margin-bottom: 0.5rem; }
+    a {
+      color: #007aff; /* Apple's standard blue link color */
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    strong, b {
+      font-weight: 600; /* Semi-bold */
+      color: #1d1d1f;
+    }
+    blockquote {
+      border-left: 3px solid #007aff; /* Blue accent for quote */
+      padding-left: 1rem;
+      margin: 1.5rem 0;
+      color: #6e6e73; /* Apple's secondary text color */
+      font-style: italic;
+      background-color: rgba(0, 122, 255, 0.05); /* Subtle background tint */
+      padding: 1rem;
+      border-radius: 6px;
+    }
+    code {
+      font-family: 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background-color: #e8e8ed; /* Light gray background for code */
+      padding: 0.1em 0.4em;
+      border-radius: 4px;
+      font-size: 0.875em;
+      color: #1d1d1f;
+    }
+    hr {
+      border: 0;
+      height: 1px;
+      background-color: #d2d2d7; /* Separator color */
+      margin: 2rem 0;
+    }
+    /* Header styling */
+    header {
+      background-color: rgba(249, 249, 250, 0.8); /* Apple's translucent header */
+      backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 0.5px solid rgba(0, 0, 0, 0.3); /* Subtle border */
+    }
+    .header-content { /* Max width and centering */
+       max-width: 980px; /* Common Apple content width */
+    }
+    .back-link {
+      color: #007aff;
+      font-size: 0.9375rem; /* 15px */
+    }
+    .back-link svg { margin-right: 4px; }
+    .service-name {
+        color: #6e6e73; /* Secondary text color */
+        font-size: 0.9375rem; /* 15px */
+    }
+
+    /* Main content container */
+    main {
+      max-width: 980px; /* Consistent content width */
+    }
+    .content-card {
+      background-color: #ffffff; /* White card background */
+      border-radius: 12px; /* Apple's typical card radius */
+      border: 0.5px solid rgba(0, 0, 0, 0.15); /* Subtle border */
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04); /* Subtle shadow */
+      overflow: hidden;
+    }
+    .content-header {
+      padding: 1.5rem 2rem; /* Generous padding */
+      border-bottom: 0.5px solid #d2d2d7;
+    }
+    .content-body {
+      padding: 1.5rem 2rem;
+      max-width: 692px; /* Apple's reading width ~65ch */
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .content-footer {
+      padding: 1rem 2rem;
+      background-color: #f5f5f7; /* Footer background */
+      border-top: 0.5px solid #d2d2d7;
+    }
+    .footer-text {
+      color: #6e6e73;
+      font-size: 0.75rem; /* 12px */
+    }
+    .footer-links a {
+      color: #515154; /* Darker gray for footer links */
+      font-size: 0.8125rem; /* 13px */
+    }
+    .footer-links a:hover {
+      color: #007aff;
+    }
+    
+    /* Responsiveness */
+    @media (max-width: 768px) {
+        h1 { font-size: 1.5rem; } /* 24px */
+        h2 { font-size: 1.125rem; } /* 18px */
+        h3 { font-size: 1rem; } /* 16px */
+        p, li { font-size: 0.9375rem; } /* 15px */
+        .content-header, .content-body, .content-footer { padding: 1rem 1.5rem; }
+    }
+     @media (max-width: 480px) {
+        h1 { font-size: 1.375rem; } /* 22px */
+        h2 { font-size: 1.0625rem; } /* 17px */
+        p, li { font-size: 1rem; } /* 16px - Increase for readability on small screens */
+        .content-header, .content-body, .content-footer { padding: 1rem; }
+        .footer-links { flex-direction: column; align-items: center; gap: 0.5rem; }
+        .footer-text { text-align: center; margin-bottom: 0.5rem;}
+     }
+  </style>
+</head>
+<body class="min-h-screen">
+  <header class="sticky top-0 z-10">
+    <div class="header-content mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
+      <a href="/" class="back-link flex items-center font-medium transition">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back to Home
+      </a>
+      <div class="service-name">SHMONG</div>
+    </div>
+  </header>
+
+  <main class="mx-auto px-4 sm:px-6 py-10">
+    <div class="content-card">
+      <div class="content-header">
+        <h1>Terms of Service & Privacy Policy</h1>
+        <p class="text-gray-500 text-sm mt-1">Last updated: April 25, 2025</p>
+      </div>
+      
+      <div class="content-body">
+        <!-- TERMS OF SERVICE CONTENT START -->
+        <h2>SUMMARY</h2>
+        <p>This Terms of Service governs your use of SHMONG services. It explains your rights and responsibilities, payment terms, arbitration procedures, and other legal matters. By using our services, you agree to these terms. These Terms include important provisions like arbitration requirements, limitations of liability, and your responsibilities when uploading content containing biometric data of other individuals.</p>
+        
+        <h2>1. ELIGIBILITY AND ACCOUNT CREATION</h2>
+        <p>1.1. <strong>Age Restriction.</strong> You must be at least 18 years old to create an account and use our Services.</p>
+        <p>1.2. <strong>Account Creation.</strong> To access certain features, you may need an account. You agree to provide accurate, current, and complete information during registration and keep it updated.</p>
+        <p>1.3. <strong>Electronic Communications Consent.</strong> By creating an account, you consent to receive electronic communications from us. These may include service notifications, security notices, and legal updates. You may opt out of marketing emails but not service-critical communications.</p>
+        <p>1.4. <strong>SMS and Mobile Communications.</strong> If you provide a mobile number, you consent to receive SMS/mobile messages. Standard rates may apply. Reply "STOP" to opt out.</p>
+        
+        <h2>2. USER CONTENT AND RESPONSIBILITY</h2>
+        <p>2.1. <strong>Responsibility for Content and Consent.</strong> You are solely responsible for all Content you upload and for obtaining all necessary permissions, including:</p>
+        <ul>
+           <li>Explicit, informed, written consent from all individuals whose biometric identifiers appear in your Content</li>
+           <li>Consent from parents/guardians for any minors depicted</li>
+           <li>Permissions for any property, trademarks, or copyrighted material shown</li>
+        </ul>
+        <p>2.2. <strong>Primary Accountability.</strong> As the uploader, you accept primary and sole legal responsibility for obtaining proper biometric consent from individuals in your Content. You agree to defend and indemnify SHMONG against claims arising from your failure to obtain proper consent.</p>
+        <p>2.3. <strong>Consent Record Requirements.</strong> As an uploader, you agree to:</p>
+        <ul>
+           <li>Maintain verifiable written consent records for all individuals in your Content</li>
+           <li>Preserve these records for at least five (5) years from upload</li>
+           <li>Provide records to SHMONG within seven (7) business days upon request</li>
+           <li>Update consents if new data uses arise not covered initially</li>
+        </ul>
+        <p>2.4. <strong>Copyright Ownership.</strong> You warrant that you own the copyright to the Content you upload or have obtained express permission from the owner.</p>
+        
+        <h2>3. LICENSE GRANT AND DATA USAGE</h2>
+        <p>3.1. <strong>License to Use Content.</strong> By providing Content, you grant SHMONG a non-exclusive, worldwide, royalty-free, sublicensable license to use, reproduce, modify, adapt, publish, translate, distribute, and display such Content solely in connection with providing, maintaining, securing, and improving the Services.</p>
+        <p>3.2. <strong>Anonymized and Aggregated Data.</strong> You agree SHMONG may create and use aggregated and anonymized datasets derived from Content and usage data for any purpose, including research, analytics, or commercial use, provided it complies with applicable laws.</p>
+        <p>3.3. <strong>Commercial Data Usage.</strong> By accepting this Agreement, you expressly authorize SHMONG to commercially use your biometric data as detailed in Section 1.3 of the Biometrics Policy (Section 3 of this document). This includes using anonymized biometric data for commercial purposes across all jurisdictions, and other commercial uses as permitted by the laws in your state of residence. Please refer to the Biometrics Policy for complete details on how we collect, use, store, protect, and share biometric data.</p>
+        
+        <h2>4. SUBSCRIPTION AND PAYMENT TERMS</h2>
+        <p>4.1. <strong>Subscription Services.</strong> Some features may require a paid subscription. By subscribing, you agree to pay all associated fees.</p>
+        <p>4.2. <strong>Billing and Payment.</strong> For paid subscriptions:</p>
+        <ul>
+           <li>You agree to provide accurate billing information</li>
+           <li>Subscription fees will be billed in advance on either a monthly or annual basis</li>
+           <li>All payments are non-refundable except as expressly stated or required by law</li>
+           <li>We reserve the right to change prices with notice, effective at your next billing cycle</li>
+        </ul>
+        <p>4.3. <strong>Free Trials.</strong> We may offer free trials. Unless you cancel before the trial ends, you authorize us to charge your payment method. No notice will be sent that your free trial has ended.</p>
+        <p>4.4. <strong>Subscription Renewal and Cancellation.</strong> Your subscription will automatically renew unless you cancel before the renewal date.</p>
+        
+        <h2>5. USER CONDUCT AND RESTRICTIONS</h2>
+        <p>5.1. <strong>Compliance with Laws.</strong> Use the Services in compliance with all applicable laws and regulations.</p>
+        <p>5.2. <strong>Prohibited Content.</strong> Do not upload, share, or create Content that:</p>
+        <ul>
+           <li>Violates third-party rights</li>
+           <li>Contains biometric data without proper consent</li>
+           <li>Depicts minors without parental consent</li>
+           <li>Is defamatory, obscene, pornographic, offensive, or threatening</li>
+           <li>Promotes illegal activities</li>
+           <li>Contains malware or harmful code</li>
+        </ul>
+        <p>5.3. <strong>Username and Content Policies.</strong> When creating usernames, profiles, or sharing content:</p>
+        <ul>
+           <li>Usernames must not impersonate others or infringe on trademarks</li>
+           <li>Usernames and profile content must not contain offensive, obscene, or hateful language</li>
+           <li>Display names and profile images must comply with our Content guidelines</li>
+           <li>You may not use misleading or deceptive identifiers</li>
+           <li>SHMONG reserves the right to remove or reclaim usernames, particularly those related to brands or notable individuals</li>
+           <li>Profile information must be accurate and not misleading</li>
+           <li>SHMONG may reject, reclaim, or remove any username for any reason, including trademark claims</li>
+           <li>Dormant accounts with desirable usernames may be reclaimed after 12 months of inactivity</li>
+        </ul>
+        
+        <h2>6. ARBITRATION AND DISPUTE RESOLUTION</h2>
+        <p>6.1. <strong>Binding Arbitration.</strong> Any dispute arising from these Terms shall be resolved exclusively through binding arbitration, except that either party may seek equitable relief in any court of competent jurisdiction.</p>
+        <blockquote><strong>In Plain Language:</strong> If we have a disagreement about these Terms, we'll resolve it through arbitration (a private dispute resolution process) instead of going to court. The only exception is if either of us needs immediate court help to stop ongoing harm.</blockquote>
+        <p>6.2. <strong>Arbitration Process.</strong> Arbitration shall be conducted in Delaware, pursuant to the rules of the American Arbitration Association (AAA) or JAMS. The arbitration award will be final and binding.</p>
+        <p>6.3. <strong>Opt-Out Option.</strong> You have the right to opt out of arbitration by notifying SHMONG in writing at Legal@shmong.com, or sending written notice to our Delaware address within 60 days of accepting these Terms. If you opt-out, all disputes will be resolved in accordance with the laws of Delaware and subject to the appropriate courts, rather than through arbitration. The written notice must clearly state your intent to opt out of arbitration.</p>
+        <blockquote><strong>In Plain Language:</strong> You can choose not to participate in arbitration if you tell us in writing within 60 days of agreeing to these terms. If you opt out, any disputes would go through regular courts instead.</blockquote>
+        <p>6.4. <strong>Class Action Waiver.</strong> You agree that disputes will be resolved on an individual basis only, not as part of a class action. You waive any right to participate in class actions.</p>
+        <blockquote><strong>In Plain Language:</strong> By using our service, you agree to handle any disputes with us one-on-one, not as part of a group lawsuit.</blockquote>
+        
+        <h2>7. CHOICE OF LAW AND VENUE</h2>
+        <p>7.1. <strong>Choice of Law.</strong> These Terms shall be governed by Delaware law, without regard to conflicts of law principles.</p>
+        <p>7.2. <strong>Venue.</strong> Disputes not subject to arbitration shall be resolved exclusively in Delaware courts. You agree to submit to the personal jurisdiction of such courts.</p>
+        
+        <h2>8. INDEMNIFICATION</h2>
+        <p>8.1. <strong>User Indemnification.</strong> You agree to defend, indemnify, and hold harmless SHMONG from any claims, liabilities, damages, losses, costs, or fees arising from your violation of these Terms, your Content (including lack of consent), or violation of third-party rights.</p>
+        
+        <h2>9. LIMITATION OF LIABILITY</h2>
+        <p>9.1. <strong>"AS IS" Basis.</strong> THE SERVICES ARE PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT WARRANTIES OF ANY KIND.</p>
+        <p>9.2. <strong>Limitation of Liability.</strong> TO THE FULLEST EXTENT PERMITTED BY LAW, SHMONG SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING FROM YOUR USE OF THE SERVICES.</p>
+        <p>9.3. <strong>Cap on Liability.</strong> SHMONG's total liability for all claims arising under these Terms shall be limited to the amount you paid to SHMONG in the last 12 months prior to the claim. This limitation applies regardless of the basis of any liability claim and regardless of the form of action.</p>
+        <blockquote><strong>In Plain Language:</strong> If something goes wrong, we'll only be responsible for refunding what you've paid us in the past year. This limit applies no matter what type of legal claim might be involved.</blockquote>
+        
+        <h2>10. MODIFICATION OF TERMS</h2>
+        <p>10.1. <strong>Changes to Terms.</strong> SHMONG reserves the right to modify these Terms of Service at any time. For material changes to these Terms:</p>
+        <ul>
+           <li>We will provide at least 30 days' notice before the changes take effect</li>
+           <li>Notice will be provided through email (for registered users) and prominent notice on our website</li>
+           <li>We will highlight significant changes and provide a summary of modifications</li>
+           <li>For non-material changes, updates may take effect immediately upon posting</li>
+        </ul>
+        <p>10.2. <strong>Acceptance of Modified Terms.</strong> After the notice period, your continued use of the Services constitutes acceptance of the modified Terms. If you do not agree to the updated terms, you must stop using the Services and terminate your account.</p>
+        <p>10.3. <strong>Prior Versions.</strong> We will maintain an archive of previous versions of these Terms for your reference.</p>
+        
+        <h2>11. GENERAL PROVISIONS</h2>
+        <p>11.1. <strong>Severability.</strong> If a provision is unenforceable, it will be limited or eliminated minimally; the rest remains in effect.</p>
+        <p>11.2. <strong>Assignment.</strong> You cannot assign Terms without SHMONG's consent; SHMONG may assign freely.</p>
+        <p>11.3. <strong>Entire Agreement.</strong> These Terms constitute the entire agreement, superseding prior agreements.</p>
+        <p>11.4. <strong>No Third Party Beneficiaries.</strong> These Terms are not intended to confer rights to any third parties.</p>
+        <p>11.5. <strong>Force Majeure.</strong> Neither party is liable for delays due to causes beyond reasonable control.</p>
+        <p>11.6. <strong>Contact.</strong> Questions about Terms: <a href="mailto:Legal@shmong.com">Legal@shmong.com</a></p>
+        
+        <h2>12. COPYRIGHT AND INTELLECTUAL PROPERTY</h2>
+        <p>12.1. <strong>DMCA Policy.</strong> SHMONG respects intellectual property rights and expects users to do the same. We will respond to notices of alleged copyright infringement that comply with applicable law.</p>
+        <p>12.2. <strong>Reporting Copyright Infringement.</strong> If you believe your copyrighted work has been used in a way that constitutes copyright infringement, please submit a notification containing:</p>
+        <ul>
+           <li>Physical or electronic signature of the copyright owner or authorized agent</li>
+           <li>Identification of the copyrighted work claimed to be infringed</li>
+           <li>Identification of the material that is claimed to be infringing</li>
+           <li>Your contact information (address, telephone number, email)</li>
+           <li>Statement that you have a good faith belief that use of the material is not authorized</li>
+           <li>Statement that the information is accurate and, under penalty of perjury, you are authorized to act on behalf of the copyright owner</li>
+        </ul>
+        <p>12.3. <strong>DMCA Agent.</strong> Submit copyright infringement notifications to:</p>
+        <ul>
+           <li>DMCA Agent, SHMONG</li>
+           <li><a href="mailto:Legal@shmong.com">Legal@shmong.com</a></li>
+           <li>[Physical Address]</li>
+        </ul>
+        <p>12.4. <strong>Counter Notification.</strong> If you believe your content was removed due to a mistake or misidentification, you may submit a counter-notification containing:</p>
+        <ul>
+           <li>Your physical or electronic signature</li>
+           <li>Identification of the material removed and its former location</li>
+           <li>Statement under penalty of perjury that you have a good faith belief the material was removed as a result of mistake or misidentification</li>
+           <li>Your consent to the jurisdiction of the federal court in Delaware</li>
+           <li>Your contact information</li>
+        </ul>
+        <p>12.5. <strong>Repeat Infringer Policy.</strong> SHMONG maintains a policy of terminating accounts of repeat infringers in appropriate circumstances. We reserve the right to terminate accounts that receive multiple copyright infringement notices.</p>
+        
+        <h2>13. EXPORT CONTROL COMPLIANCE</h2>
+        <p>13.1. <strong>Export Restrictions.</strong> The Services, including any biometric technologies and software, may be subject to U.S. export laws, including the Export Administration Regulations and sanctions programs administered by the Office of Foreign Assets Control.</p>
+        <p>13.2. <strong>User Compliance Obligations.</strong> You agree not to:</p>
+        <ul>
+           <li>Export or re-export our Services to any prohibited country, entity, or person</li>
+           <li>Access or use the Services in any U.S. embargoed countries (currently Cuba, Iran, North Korea, Syria, and the Crimea, Donetsk, and Luhansk regions)</li>
+           <li>Use the Services for activities prohibited by export laws, including nuclear, chemical, or biological weapons development</li>
+           <li>Transfer, export, or re-export the Services without required governmental authorizations</li>
+        </ul>
+        <blockquote><strong>In Plain Language:</strong> You cannot use our service in countries under U.S. embargo (like Cuba or North Korea) or share it with people on U.S. government restricted lists. You also can't use our technology for weapons development or other prohibited activities.</blockquote>
+        <p>13.3. <strong>Representation.</strong> By using the Services, you represent and warrant that you are not located in a country subject to U.S. embargo or designated as a "terrorist supporting" country, and you are not listed on any U.S. government list of prohibited or restricted parties.</p>
+        <p>13.4. <strong>Compliance with Laws.</strong> You are responsible for complying with all domestic and international export laws and regulations that apply to your use of the Services.</p>
+        
+        <h2>DEFINITIONS</h2>
+        <ul>
+            <li><strong>"Content"</strong>: Any images, videos, text, audio, or other materials uploaded, shared, or created using our Services.</li>
+            <li><strong>"User"</strong>: Any individual who accesses or uses our Services, whether registered or unregistered.</li>
+            <li><strong>"Consent"</strong>: Informed, written consent obtained through these Terms or the Biometric Data Consent Agreement.</li>
+            <li><strong>"Services"</strong>: Our website, mobile application, and related services, including face matching system.</li>
+            <li><strong>"Arbitration"</strong>: A process for resolving disputes outside of court where a neutral third party makes a binding decision.</li>
+            <li><strong>"Force Majeure"</strong>: Unforeseeable circumstances that prevent the fulfillment of a contract, such as natural disasters or war.</li>
+        </ul>
+
+        <!-- Renumbered section -->
+        <h2>14. ACCOUNT TERMINATION</h2> 
+        <p>14.1. <strong>Account Termination by User.</strong> You may terminate your account at any time by:</p>
+        <ul>
+           <li>Selecting "Delete Account" in account settings</li>
+           <li>Sending a deletion request to <a href="mailto:Legal@shmong.com">Legal@shmong.com</a></li>
+           <li>Upon confirmation, your account will be deactivated immediately and scheduled for permanent deletion within 30 days</li>
+           <li>Content you've publicly shared may remain visible unless specifically deleted prior to account termination</li>
+        </ul>
+        <p>14.2. <strong>Account Termination by SHMONG.</strong> SHMONG may suspend or terminate your account:</p>
+        <ul>
+           <li>For violations of these Terms</li>
+           <li>For extended periods of inactivity (12+ months)</li>
+           <li>If required by law or court order</li>
+           <li>If we suspect fraudulent activity or misrepresentation</li>
+           <li>If you fail to pay fees after reasonable attempts to collect</li>
+           <li>For any other reason at our discretion with reasonable notice</li>
+        </ul>
+        <p>14.3. <strong>Effect of Termination.</strong> Upon termination:</p>
+        <ul>
+           <li>Your access to the Services will cease immediately</li>
+           <li>You will lose access to any content stored within your account</li>
+           <li>Subscription charges will cease at the end of the billing period</li>
+           <li>Your biometric data will be deleted according to our Biometrics Policy</li>
+           <li>You remain liable for any outstanding obligations incurred before termination</li>
+           <li>Provisions of these Terms that by their nature should survive will remain in effect</li>
+        </ul>
+        <hr>
+        <!-- PRIVACY POLICY CONTENT START -->
+        <h2>SECTION 2: PRIVACY POLICY</h2>
+
+        <h2>SUMMARY</h2>
+        <p>This Privacy Policy explains what information we collect, how we use it, and your rights regarding your data. We collect personal information, usage data, and in some cases biometric data. We implement security measures to protect your information and provide you with control over your data through various rights and options. Special provisions apply for residents of certain states and countries.</p>
+        
+        <h2>1. INFORMATION WE COLLECT</h2>
+        <p>1.1. <strong>Personal Information.</strong> We collect information you provide when you:</p>
+        <ul>
+           <li>Create an account (name, email, phone number)</li>
+           <li>Use our services</li>
+           <li>Contact customer support</li>
+           <li>Participate in surveys or promotions</li>
+        </ul>
+        <p>1.2. <strong>Automatically Collected Information.</strong> We automatically collect:</p>
+        <ul>
+           <li>Device information (IP address, browser type, operating system)</li>
+           <li>Usage information (pages visited, features used, time spent)</li>
+           <li>Location information (approximate location based on IP address)</li>
+        </ul>
+        <p>1.3. <strong>Biometric Data.</strong> If you use our face matching features, we may collect biometric data as described in the Biometrics Policy.</p>
+        
+        <h2>2. HOW WE USE YOUR INFORMATION</h2>
+        <p>2.1. <strong>Provide and Improve Services.</strong> We use your information to:</p>
+        <ul>
+           <li>Deliver the services you request</li>
+           <li>Personalize your experience</li>
+           <li>Develop new features and improvements</li>
+           <li>Analyze usage patterns and trends</li>
+        </ul>
+        <p>2.2. <strong>Communications.</strong> We may use your information to:</p>
+        <ul>
+           <li>Send service announcements and updates</li>
+           <li>Respond to your inquiries</li>
+           <li>Provide customer support</li>
+           <li>Send marketing communications (with consent)</li>
+        </ul>
+        <p>2.3. <strong>Security and Fraud Prevention.</strong> We use information to:</p>
+        <ul>
+           <li>Protect the security of our services</li>
+           <li>Prevent fraudulent activity</li>
+           <li>Enforce our Terms of Service</li>
+        </ul>
+        
+        <h2>3. DATA SHARING AND DISCLOSURE</h2>
+        <p>3.1. <strong>No Sale of Personal Information.</strong> We do not sell, lease, trade, or otherwise profit from your personal information.</p>
+        <p>3.2. <strong>Limited Disclosure.</strong> We may share information with:</p>
+        <ul>
+           <li>Service providers helping us deliver our services</li>
+           <li>Legal authorities when required by law or legal process</li>
+           <li>In connection with a merger, acquisition, or sale of assets</li>
+        </ul>
+        <p>3.3. <strong>Third-Party Service Providers.</strong> We work with the following third parties who may receive or process your data:</p>
+        <ul>
+           <li>Stripe: For payment processing and subscription management</li>
+           <li>Amazon Web Services: For cloud storage and computing infrastructure</li>
+           <li>Google: For analytics, authentication, and cloud services</li>
+           <li>Dropbox: For file storage and synchronization</li>
+           <li>Mixpanel: For user behavior analytics and engagement tracking</li>
+        </ul>
+        <p>These third parties access and process your information only to perform specific tasks on our behalf and are obligated not to disclose or use your information for any other purpose. Each is bound by data processing agreements that require appropriate security and confidentiality measures.</p>
+        <p>3.4. <strong>Third-Party Services.</strong> Our services may integrate with third-party services. Information shared with these services is governed by their respective privacy policies.</p>
+        
+        <h2>4. DATA RETENTION AND DELETION</h2>
+        <p>4.1. <strong>Retention Period.</strong> We retain your personal information for as long as necessary to provide our services and fulfill the purposes described in this policy.</p>
+        <p>4.2. <strong>Data Deletion.</strong> You may request deletion of your personal information. We will delete your information within 45 days of a verified request, unless retention is required by law.</p>
+        
+        <h2>5. USER DATA RIGHTS</h2>
+        <p>5.1. <strong>Access.</strong> You have the right to access your personal data and information about its processing.</p>
+        <p>5.2. <strong>Correction.</strong> You can request correction of inaccurate personal information.</p>
+        <p>5.3. <strong>Deletion.</strong> You can request deletion of your personal information.</p>
+        <p>5.4. <strong>Portability.</strong> You may request a copy of your data in a structured, machine-readable format.</p>
+        <p>5.5. <strong>Withdraw Consent.</strong> You may withdraw consent for personal data processing at any time.</p>
+        <p>5.6. <strong>Exercise Rights.</strong> Contact <a href="mailto:Legal@shmong.com">Legal@shmong.com</a> to exercise these rights. We will respond within the timeframe required by applicable law.</p>
+        
+        <h2>6. COOKIES AND TRACKING TECHNOLOGIES</h2>
+        <p>6.1. <strong>Cookies.</strong> We use cookies and similar technologies to enhance your experience, gather information about users, and manage our services. These include:</p>
+        <ul>
+           <li><strong>Essential Cookies</strong>: Required for the service to function (cannot be disabled)</li>
+           <li><strong>Functional Cookies</strong>: Enhance functionality and personalization</li>
+           <li><strong>Analytics Cookies</strong>: Help us understand how users interact with our service</li>
+           <li><strong>Advertising Cookies</strong>: Used to deliver relevant ads and track campaign effectiveness</li>
+        </ul>
+        <p>6.2. <strong>Managing Cookies.</strong> You can manage cookie preferences through:</p>
+        <ul>
+           <li>Our cookie banner and preference center</li>
+           <li>Your browser settings</li>
+           <li>Opting out of specific third-party cookies via their opt-out mechanisms</li>
+        </ul>
+        <p>6.3. <strong>Do Not Track.</strong> We respond to Do Not Track signals by disabling all non-essential tracking when detected.</p>
+        <p>6.4. <strong>Similar Technologies.</strong> In addition to cookies, we also use:</p>
+        <ul>
+           <li>Web beacons</li>
+           <li>Pixel tags</li>
+           <li>Local storage</li>
+           <li>Device fingerprinting</li>
+           <li>Mobile analytics software</li>
+        </ul>
+        
+        <h2>7. INTERNATIONAL USERS</h2>
+        <p>7.1. <strong>Data Transfers.</strong> Your information may be transferred to and processed in countries other than your country of residence.</p>
+        <p>7.2. <strong>Legal Basis for Processing.</strong> For users in the European Economic Area, United Kingdom, or similar jurisdictions, we process your data based on:</p>
+        <ul>
+           <li>Your consent</li>
+           <li>Performance of a contract</li>
+           <li>Legitimate interests</li>
+           <li>Compliance with legal obligations</li>
+        </ul>
+        <p>7.3. <strong>Region-Specific Rights.</strong> Users in certain regions have additional rights as detailed in the Biometrics Policy.</p>
+        
+        <h2>8. CALIFORNIA PRIVACY RIGHTS</h2>
+        <p>8.1. <strong>California Consumer Privacy Act (CCPA/CPRA) Rights.</strong> California residents have the following rights:</p>
+        <ul>
+           <li>Right to know what personal information is collected, used, shared, or sold</li>
+           <li>Right to delete personal information collected from you</li>
+           <li>Right to opt-out of the sale of your personal information</li>
+           <li>Right to correct inaccurate personal information</li>
+           <li>Right to limit use and disclosure of sensitive personal information</li>
+           <li>Right to non-discrimination for exercising your rights</li>
+        </ul>
+        <p>8.2. <strong>California "Shine the Light" Law.</strong> California residents may request information regarding disclosure of personal information to third parties for direct marketing purposes.</p>
+        <p>8.3. <strong>Exercise Your California Rights.</strong> Submit requests by:</p>
+        <ul>
+           <li>Visiting our privacy portal at privacy.shmong.com</li>
+           <li>Emailing <a href="mailto:Legal@shmong.com">Legal@shmong.com</a></li>
+           <li>Calling 1-800-XXX-XXXX</li>
+        </ul>
+        <p>8.4. <strong>Authorized Agents.</strong> You may designate an authorized agent to make requests on your behalf.</p>
+        <p>8.5. <strong>Verification Process.</strong> We will verify your identity before fulfilling requests, which may require additional information.</p>
+        <p>8.6. <strong>Response Timeline.</strong> We will respond to verifiable requests within 45 days, with possible 45-day extension if reasonably necessary.</p>
+        
+        <h2>9. CHILDREN'S PRIVACY</h2>
+        <p>9.1. <strong>Age Restrictions.</strong> Our services are not directed to individuals under 18. We do not knowingly collect personal information from children.</p>
+        <p>9.2. <strong>Parental Rights.</strong> Parents or guardians may contact us to review, modify, or delete their child's information if we have inadvertently collected it.</p>
+        
+        <h2>10. DETAILED GDPR COMPLIANCE</h2>
+        <p>10.1. <strong>Legal Basis for Processing.</strong> For EEA, UK, and Swiss residents, we process personal data on these legal bases:</p>
+        <ul>
+           <li>Consent (Article 6(1)(a) GDPR): When you explicitly agree to processing</li>
+           <li>Contractual Necessity (Article 6(1)(b) GDPR): To perform our contract with you</li>
+           <li>Legal Obligation (Article 6(1)(c) GDPR): To comply with legal requirements</li>
+           <li>Legitimate Interests (Article 6(1)(f) GDPR): When we have legitimate business interests</li>
+        </ul>
+        <p>10.2. <strong>GDPR Data Subject Rights.</strong> You have the following rights:</p>
+        <ul>
+           <li>Access (Article 15): Obtain confirmation and access to your personal data</li>
+           <li>Rectification (Article 16): Correct inaccurate personal data</li>
+           <li>Erasure (Article 17): Request deletion of personal data</li>
+           <li>Restriction (Article 18): Limit how we use your data while a request is processed</li>
+           <li>Portability (Article 20): Receive your data in a structured, machine-readable format</li>
+           <li>Objection (Article 21): Object to processing based on legitimate interests</li>
+           <li>Automated Decision-Making (Article 22): Not be subject to automated decision-making with legal effects</li>
+        </ul>
+        <p>10.3. <strong>Data Transfers.</strong> For transfers outside the EEA, UK, or Switzerland:</p>
+        <ul>
+           <li>We use European Commission approved Standard Contractual Clauses</li>
+           <li>We implement supplementary measures as recommended by the EDPB</li>
+           <li>We conduct transfer impact assessments for high-risk transfers</li>
+        </ul>
+        <p>10.4. <strong>Data Protection Officer.</strong> You may contact our Data Protection Officer at <a href="mailto:dpo@shmong.com">dpo@shmong.com</a>.</p>
+        <p>10.5. <strong>Supervisory Authority.</strong> You have the right to lodge a complaint with your local supervisory authority.</p>
+        
+        <h2>11. DATA SECURITY</h2>
+        <p>11.1. <strong>Security Measures.</strong> We implement technical, administrative, and physical safeguards to protect your information.</p>
+        <p>11.2. <strong>Data Breach Notification.</strong> In the event of a data breach, we will notify affected users as required by applicable law.</p>
+        
+        <h2>12. LAW ENFORCEMENT DATA REQUESTS</h2>
+        <p>12.1. <strong>Government Requests.</strong> SHMONG may disclose personal information, including biometric data, in response to:</p>
+        <ul>
+           <li>Valid subpoenas, court orders, warrants, or similar legal processes</li>
+           <li>National security letters, requests from government agencies, or as otherwise required by law</li>
+           <li>Requests to protect the safety of any person, to address fraud or illegal activity, or to protect SHMONG's rights or property</li>
+        </ul>
+        <p>12.2. <strong>Request Evaluation Process.</strong> We carefully review all legal requests to ensure they satisfy applicable legal requirements and our policies. We may:</p>
+        <ul>
+           <li>Request clarification or additional information</li>
+           <li>Narrow overly broad requests</li>
+           <li>Object to requests we determine are improper</li>
+           <li>Notify users of requests when not prohibited by law or court order</li>
+        </ul>
+        <p>12.3. <strong>User Notification.</strong> Unless prohibited by law or court order (e.g., sealed court orders, confidentiality obligations):</p>
+        <ul>
+           <li>We will attempt to notify users of legal demands for their data</li>
+           <li>We will provide users with copies of the legal request when possible</li>
+           <li>We may delay notification where immediate notification could risk harm, safety, or fraud</li>
+        </ul>
+        <p>12.4. <strong>Transparency Reporting.</strong> SHMONG publishes periodic transparency reports summarizing:</p>
+        <ul>
+           <li>Number and types of government requests received</li>
+           <li>Our response rates</li>
+           <li>Number of accounts affected</li>
+           <li>Jurisdictional breakdown of requests</li>
+        </ul>
+        <p>12.5. <strong>International Requests.</strong> For requests from non-U.S. government agencies, we require:</p>
+        <ul>
+           <li>Due process under applicable laws</li>
+           <li>Mutual Legal Assistance Treaties or similar international agreements</li>
+           <li>Compliance with U.S. law and our policies</li>
+        </ul>
+        
+        <h2>DEFINITIONS</h2>
+        <ul>
+            <li><strong>"Personal Information"</strong>: Information that identifies or can be used to identify an individual.</li>
+            <li><strong>"Biometric Data"</strong>: Information based on biological characteristics, such as facial geometry, that can be used to identify an individual.</li>
+            <li><strong>"Data Controller"</strong>: The entity that determines the purposes and means of processing personal data.</li>
+            <li><strong>"Data Processor"</strong>: The entity that processes personal data on behalf of the data controller.</li>
+            <li><strong>"IP Address"</strong>: A unique string of numbers assigned to each device connected to a computer network.</li>
+            <li><strong>"Cookies"</strong>: Small text files stored on your device that help websites remember your preferences and track usage.</li>
+        </ul>
+        <!-- TERMS/PRIVACY CONTENT END -->
+      </div>
+      
+      <div class="content-footer">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-2">
+          <p class="footer-text">
+            © 2025 SHMONG. All rights reserved.
+          </p>
+          <div class="footer-links flex gap-4">
+            <a href="/terms.html" class="hover:text-blue-600">Terms & Privacy</a>
+            <a href="/biometrics.html" class="hover:text-blue-600">Biometrics Policy</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html> 

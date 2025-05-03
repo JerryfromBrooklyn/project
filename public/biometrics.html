@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Biometrics Policy | SHMONG</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      color: #1d1d1f; /* Apple's primary text color */
+      background-color: #f5f5f7; /* Apple's light gray background */
+      line-height: 1.5; /* Improved readability */
+    }
+    h1, h2, h3 {
+      color: #1d1d1f;
+      font-weight: 600; /* Semi-bold headings typical in HIG */
+    }
+    h1 {
+      font-size: 1.75rem; /* ~28px */
+      letter-spacing: -0.022em;
+      margin-bottom: 0.75rem;
+    }
+    h2 {
+      font-size: 1.25rem; /* ~20px */
+      letter-spacing: -0.018em;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #d2d2d7; /* Apple's separator color */
+    }
+    h3 {
+      font-size: 1.0rem; /* ~16px */
+      letter-spacing: -0.014em;
+      font-weight: 600;
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    p, li {
+      font-size: 0.9375rem; /* ~15px */
+      color: #333336; /* Slightly lighter text for body */
+      line-height: 1.6; /* Generous line height */
+      margin-bottom: 1rem;
+    }
+    ul, ol {
+      margin-bottom: 1rem;
+      padding-left: 1.5rem; /* Standard list indent */
+    }
+    ul { list-style-type: disc; }
+    ol { list-style-type: decimal; }
+    li { margin-bottom: 0.5rem; }
+    a {
+      color: #007aff; /* Apple's standard blue link color */
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    strong, b {
+      font-weight: 600; /* Semi-bold */
+      color: #1d1d1f;
+    }
+    blockquote {
+      border-left: 3px solid #007aff; /* Blue accent for quote */
+      padding-left: 1rem;
+      margin: 1.5rem 0;
+      color: #6e6e73; /* Apple's secondary text color */
+      font-style: italic;
+      background-color: rgba(0, 122, 255, 0.05); /* Subtle background tint */
+      padding: 1rem;
+      border-radius: 6px;
+    }
+    code {
+      font-family: 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background-color: #e8e8ed; /* Light gray background for code */
+      padding: 0.1em 0.4em;
+      border-radius: 4px;
+      font-size: 0.875em;
+      color: #1d1d1f;
+    }
+    hr {
+      border: 0;
+      height: 1px;
+      background-color: #d2d2d7; /* Separator color */
+      margin: 2rem 0;
+    }
+    /* Header styling */
+    header {
+      background-color: rgba(249, 249, 250, 0.8); /* Apple's translucent header */
+      backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 0.5px solid rgba(0, 0, 0, 0.3); /* Subtle border */
+    }
+    .header-content { /* Max width and centering */
+       max-width: 980px; /* Common Apple content width */
+    }
+    .back-link {
+      color: #007aff;
+      font-size: 0.9375rem; /* 15px */
+    }
+    .back-link svg { margin-right: 4px; }
+    .service-name {
+        color: #6e6e73; /* Secondary text color */
+        font-size: 0.9375rem; /* 15px */
+    }
+
+    /* Main content container */
+    main {
+      max-width: 980px; /* Consistent content width */
+    }
+    .content-card {
+      background-color: #ffffff; /* White card background */
+      border-radius: 12px; /* Apple's typical card radius */
+      border: 0.5px solid rgba(0, 0, 0, 0.15); /* Subtle border */
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04); /* Subtle shadow */
+      overflow: hidden;
+    }
+    .content-header {
+      padding: 1.5rem 2rem; /* Generous padding */
+      border-bottom: 0.5px solid #d2d2d7;
+    }
+    .content-body {
+      padding: 1.5rem 2rem;
+      max-width: 692px; /* Apple's reading width ~65ch */
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .content-footer {
+      padding: 1rem 2rem;
+      background-color: #f5f5f7; /* Footer background */
+      border-top: 0.5px solid #d2d2d7;
+    }
+    .footer-text {
+      color: #6e6e73;
+      font-size: 0.75rem; /* 12px */
+    }
+    .footer-links a {
+      color: #515154; /* Darker gray for footer links */
+      font-size: 0.8125rem; /* 13px */
+    }
+    .footer-links a:hover {
+      color: #007aff;
+    }
+
+    /* Responsiveness */
+    @media (max-width: 768px) {
+        h1 { font-size: 1.5rem; } /* 24px */
+        h2 { font-size: 1.125rem; } /* 18px */
+        h3 { font-size: 1rem; } /* 16px */
+        p, li { font-size: 0.9375rem; } /* 15px */
+        .content-header, .content-body, .content-footer { padding: 1rem 1.5rem; }
+    }
+     @media (max-width: 480px) {
+        h1 { font-size: 1.375rem; } /* 22px */
+        h2 { font-size: 1.0625rem; } /* 17px */
+        p, li { font-size: 1rem; } /* 16px - Increase for readability on small screens */
+        .content-header, .content-body, .content-footer { padding: 1rem; }
+        .footer-links { flex-direction: column; align-items: center; gap: 0.5rem; }
+        .footer-text { text-align: center; margin-bottom: 0.5rem;}
+     }
+  </style>
+</head>
+<body class="min-h-screen">
+  <header class="sticky top-0 z-10">
+    <div class="header-content mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
+      <a href="/" class="back-link flex items-center font-medium transition">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back to Home
+      </a>
+      <div class="service-name">SHMONG</div>
+    </div>
+  </header>
+
+  <main class="mx-auto px-4 sm:px-6 py-10">
+    <div class="content-card">
+      <div class="content-header">
+        <h1>Biometrics Policy</h1>
+        <p class="text-gray-500 text-sm mt-1">Last updated: April 25, 2025</p>
+      </div>
+      
+      <div class="content-body">
+        <!-- BIOMETRICS POLICY CONTENT START -->
+        <h2>SUMMARY</h2>
+        <p>This Biometrics Policy governs how we collect, use, store, and protect biometric data. We collect biometric identifiers like facial geometry only with your explicit consent for specific purposes, such as face matching services. We implement strong security measures to protect this sensitive data and provide you with rights to access, delete, or withdraw consent for your biometric information. Special provisions apply based on your state or country of residence.</p>
+        
+        <h2>1. BIOMETRIC DATA COLLECTION AND CONSENT</h2>
+        <p>1.1. <strong>Collection Authorization.</strong> SHMONG maintains a publicly available written policy detailing retention schedules and destruction guidelines for Biometric Data. By accepting this Agreement, you consent to the collection, storage, use, and processing of your Biometric Data (e.g., facial geometry, templates, vectors derived from your Content).</p>
+        <p>1.2. <strong>Specific Biometric Identifiers Collected.</strong> SHMONG explicitly collects and processes the following biometric identifiers:</p>
+        <ul>
+           <li>Facial geometry and landmarks</li>
+           <li>Facial measurement vectors and templates</li>
+           <li>Facial recognition data points</li>
+           <li>Mathematical representations of facial features</li>
+           <li>Other facial biometric data necessary for our facial recognition technology</li>
+        </ul>
+        <p>1.3. <strong>Commercial Data Usage.</strong> By accepting this Agreement, you expressly authorize SHMONG to:</p>
+        <ul>
+           <li>Sell, trade, share, and commercially use your biometric data</li>
+           <li>Generate revenue from insights derived from biometric data</li>
+           <li>License biometric data to third parties for commercial purposes</li>
+           <li>Create and monetize products based on biometric data</li>
+           <li>Transfer or assign rights to biometric data as part of business operations</li>
+        </ul>
+        <p>By accepting this Agreement, you explicitly consent to these commercial activities. We may engage in these commercial activities while maintaining reasonable security measures for your data as outlined in this Agreement.</p>
+        <p>1.4. <strong>Rights Waiver.</strong> By accepting this Agreement, you acknowledge and agree to waive the following rights regarding your biometric data:</p>
+        <ul>
+           <li>The right to revoke consent for historical data usage that has already been incorporated into our systems</li>
+           <li>The right to restrict certain forms of processing necessary for core service functionality</li>
+           <li>The right to object to legitimate commercial usage as permitted by applicable law and described in this Policy</li>
+           <li>The right to disable certain security features that rely on biometric authentication</li>
+           <li>Any rights beyond those explicitly granted in this Agreement or required by applicable law</li>
+        </ul>
+        <p>You retain all other rights not explicitly waived, including those detailed in Section 3 of this Biometrics Policy, and your right to opt-out as described in Section 1.5 remains unaffected by this waiver.</p>
+        <p>1.5. <strong>Opt-Out Procedure.</strong> You may opt out of biometric data collection, processing, and commercial usage at any time by:</p>
+        <ul>
+           <li>Emailing a clear request to <a href="mailto:Legal@shmong.com">Legal@shmong.com</a> with the subject line "Biometric Data Opt-Out"</li>
+           <li>Including your account information and specific opt-out request details</li>
+           <li>Verifying your identity through our standard verification process</li>
+        </ul>
+        <p>Upon receipt of a verified opt-out request, SHMONG will:</p>
+        <ul>
+           <li>Cease collecting new biometric data within 10 business days</li>
+           <li>Delete existing biometric data within 45 days (subject to legal retention requirements)</li>
+           <li>Confirm completion of your opt-out request</li>
+           <li>Note that opting out may limit or disable certain features that rely on biometric data</li>
+        </ul>
+        <p>1.6. <strong>Uploader Responsibility.</strong> If you upload content containing other individuals, you are solely and exclusively responsible for obtaining their written consent, notifying them of this policy, and documenting their acceptance as specified in the Terms of Service. SHMONG's role is limited to requiring uploaders to certify they have obtained proper consent before uploading biometric data.</p>
+        <p>1.7. <strong>Certification of Consent by Uploaders.</strong> Before uploading any Content containing biometric data of other individuals, you must certify that:</p>
+        <ul>
+           <li>You have obtained express, informed written consent from each identifiable individual</li>
+           <li>You have informed these individuals that their biometric data will be processed by SHMONG</li>
+           <li>You maintain verifiable records of these consents</li>
+           <li>You take full legal responsibility for the consent collection process</li>
+           <li>You will indemnify SHMONG against any claims arising from inadequate consent</li>
+        </ul>
+        <p>1.8. <strong>Mandatory Certification Checkbox.</strong> SHMONG implements a mandatory certification process requiring uploaders to affirmatively check a box before each upload containing biometric data, specifically certifying they have obtained all necessary consents. This checkbox is non-optional, and uploads cannot proceed without this certification. SHMONG maintains records of these certifications, including timestamps and user information. However, SHMONG does not independently verify the actual consent documents and relies entirely on uploader certifications.</p>
+        <p>1.9. <strong>SHMONG's Limited Role in Consent Process.</strong> SHMONG's role regarding consent is limited to:</p>
+        <ul>
+           <li>Requiring uploaders to certify they have obtained proper consent</li>
+           <li>Providing uploaders with information about consent requirements</li>
+           <li>Establishing a mechanism for certification during the upload process</li>
+           <li>Maintaining records of uploader certifications</li>
+        </ul>
+        <p>SHMONG does not verify the actual consent documents obtained by uploaders and relies entirely on uploader certifications regarding consent.</p>
+        <blockquote>
+            <p><strong>In Plain Language:</strong> If you upload photos of other people to our service:</p>
+            <ul>
+                <li>You must check a box confirming you have their permission</li>
+                <li>You are responsible for actually getting their written permission</li>
+                <li>We keep a record of your certification but don't check the actual permission forms</li>
+                <li>We trust that when you check the box, you've truly gotten proper permission</li>
+                <li>You are legally responsible if you upload someone's face without proper permission</li>
+            </ul>
+        </blockquote>
+        <p>1.10. <strong>Consent Verification and Audit Program.</strong> To ensure the integrity of our consent certification system:</p>
+        <ul>
+           <li>SHMONG conducts periodic random audits of uploader consent records to verify compliance</li>
+           <li>Selected uploaders must provide verifiable evidence of proper consent within 10 business days</li>
+           <li>Uploaders agree to participate in these audits as a condition of using our Services</li>
+           <li>Audits will assess both the existence and validity of consent records</li>
+           <li>SHMONG will maintain detailed records of all audit processes and findings</li>
+           <li>Audit frequency will be determined based on risk assessment and usage volume</li>
+        </ul>
+        <p>1.11. <strong>Consequences of Audit Failure.</strong> Failure to comply with audit requirements or discovery of consent violations may result in:</p>
+        <ul>
+           <li>Immediate account suspension pending investigation</li>
+           <li>Permanent account termination for serious or repeated violations</li>
+           <li>Removal of all Content uploaded without proper consent documentation</li>
+           <li>Prohibition from creating new accounts on the platform</li>
+           <li>Potential reporting to relevant regulatory authorities</li>
+           <li>Legal action for indemnification as provided in the Terms of Service</li>
+           <li>Additional remedial measures as required to ensure compliance</li>
+        </ul>
+        <blockquote>
+            <p><strong>In Plain Language:</strong></p>
+            <ul>
+                <li>We will randomly check if uploaders actually have the permission forms they claimed to have</li>
+                <li>If selected for audit, you must show us the permission documents within 10 business days</li>
+                <li>If you can't prove you had permission or you've falsely claimed to have permission, we may suspend or terminate your account, remove your content, ban you from our platform, report you to authorities, and/or take legal action against you</li>
+            </ul>
+        </blockquote>
+        
+        <h2>2. STORAGE AND PROTECTION</h2>
+        <p>2.1. <strong>Duration of Storage.</strong> We retain Biometric Data until the earliest of:</p>
+        <ul>
+           <li>For Texas residents, not later than the first anniversary of the date the purpose for collecting the identifier expires</li>
+           <li>For Illinois residents, when the initial purpose for collecting or obtaining such identifiers or information has been satisfied or within 3 years of the individual's last interaction, whichever occurs first</li>
+           <li>For residents of other states, three (3) years after last interaction</li>
+           <li>Your deletion request fulfillment</li>
+           <li>Failure to provide re-consent</li>
+        </ul>
+        <blockquote>
+            <p><strong>In Plain Language:</strong> We'll keep biometric data until:</p>
+            <ul>
+                <li>For Texas residents: for no more than 1 year after we no longer need it</li>
+                <li>For Illinois residents: until we no longer need it or for 3 years after last activity, whichever happens first</li>
+                <li>For other states: for up to 3 years after last activity</li>
+                <li>Earlier if you ask us to delete it or don't renew your consent when asked</li>
+            </ul>
+        </blockquote>
+        <p>2.2. <strong>Security Standards.</strong> We store, transmit, and protect Biometric Data using a reasonable standard of care within our industry, at least as protective as how we handle other confidential information. Measures include:</p>
+        <ul>
+           <li>Encryption (AES-256+)</li>
+           <li>Access controls</li>
+           <li>Security assessments</li>
+           <li>Personnel training</li>
+           <li>Physical security</li>
+           <li>Data segregation</li>
+           <li>Timely breach notification</li>
+        </ul>
+        <p>2.3. <strong>Periodic Re-Consent.</strong> To comply with laws and maintain accuracy, periodic re-consent (at least every 24 months) is required for continued storage/use of Biometric Data.</p>
+        
+        <h2>3. USER RIGHTS REGARDING BIOMETRIC DATA</h2>
+        <p>3.1. <strong>Right to Access.</strong> You have the right to confirm processing and access your Biometric Data.</p>
+        <p>3.2. <strong>Right to Deletion.</strong> You may request deletion of your Biometric Data. SHMONG will permanently delete it from its systems within 45 days (subject to legal retention needs).</p>
+        <p>3.3. <strong>Right to Withdraw Consent.</strong> You may withdraw consent anytime. SHMONG will cease processing and delete your Biometric Data accordingly.</p>
+        <p>3.4. <strong>Exercise Rights.</strong> Contact <a href="mailto:Legal@shmong.com">Legal@shmong.com</a> to exercise these rights. SHMONG will respond within legal timeframes (typically 45 days, extendable once).</p>
+        <p>3.5. <strong>Data Removal Request Process.</strong> Individuals may request complete Biometric Data removal:</p>
+        <ul>
+           <li><strong>Uploader Responsibility</strong>: As an uploader, you are solely responsible for all legal compliance related to biometric data consent, notification, and record-keeping. You must:
+              <ul>
+                 <li>Establish a clear process for individuals in your Content to request removal</li>
+                 <li>Collect sufficient information to verify identity</li>
+                 <li>Maintain an immutable log of all removal requests for 3 years</li>
+                 <li>Bear sole legal responsibility for any claims related to consent or improper collection</li>
+                 <li>Indemnify SHMONG for any claims arising from your uploaded Content</li>
+              </ul>
+            </li>
+           <li><strong>SHMONG Technical Role</strong>: Upon receiving a verified removal request (either directly or from an uploader), SHMONG will:
+              <ul>
+                 <li>Execute the technical removal of biometric data from SHMONG systems</li>
+                 <li>Complete removal within 30 calendar days from verification</li>
+                 <li>Provide confirmation of technical deletion</li>
+                 <li>Notify relevant service providers processing this data</li>
+              </ul>
+            </li>
+           <li><strong>Limited Technical Role Disclaimer</strong>: SHMONG's execution of technical deletion does not in any way assume, transfer, or share the uploader's sole legal responsibility for consent collection, notification requirements, or compliance with biometric privacy laws. The uploader acknowledges and agrees they remain solely legally accountable for all consent-related matters regardless of who executes the technical deletion.</li>
+        </ul>
+        <blockquote>
+            <p><strong>In Plain Language:</strong></p>
+            <ul>
+                <li>If someone wants their face data removed, they can ask you (the uploader) or us directly</li>
+                <li>If asked, we'll delete their data within 30 days and confirm when it's done</li>
+                <li>Even though we'll delete the data when requested, uploaders remain fully responsible for having gotten proper permission in the first place</li>
+                <li>As an uploader, you need to have your own process for handling removal requests</li>
+            </ul>
+        </blockquote>
+        
+        <h2>4. DATA SHARING LIMITATIONS</h2>
+        <p>4.1. <strong>Commercial Data Usage and Rights.</strong> SHMONG expressly reserves the right to the following, subject to state-specific limitations in Section 5:</p>
+        <ul>
+           <li>Commercially use your biometric data as permitted by applicable law</li>
+           <li>Generate revenue from insights derived from biometric data</li>
+           <li>Share biometric data with service providers and partners as needed</li>
+           <li>Create and monetize products based on biometric data</li>
+           <li>Use anonymized biometric data for commercial purposes in all jurisdictions</li>
+        </ul>
+        <p>"Anonymization" means the process of permanently removing all identifiers that could link biometric data to you personally. This includes removing names, account details, device identifiers, and applying technical measures to prevent re-identification. Anonymized data is transformed so it can no longer be associated with any specific individual.</p>
+        <p>By accepting this Agreement, you explicitly consent to these commercial activities to the extent permitted in your jurisdiction. The exact rights we exercise will depend on the laws of your state of residence.</p>
+        <p>4.2. <strong>Limited Disclosure.</strong> We will not disclose Biometric Data unless:</p>
+        <ul>
+           <li>You consent</li>
+           <li>It completes a requested transaction</li>
+           <li>Required by law/valid legal process</li>
+           <li>To contractors/agents assisting us, who are contractually bound to confidentiality</li>
+        </ul>
+        
+        <h2>5. STATE-SPECIFIC PROVISIONS</h2>
+        <p>5.1. <strong>Illinois Residents (BIPA).</strong> For Illinois residents:</p>
+        <ul>
+           <li>We will store, transmit, and protect biometric identifiers using reasonable care and in accordance with the Illinois Biometric Information Privacy Act (BIPA)</li>
+           <li>We will destroy biometric data within 3 years of last interaction or when the purpose is satisfied</li>
+           <li>We will not sell, lease, trade, or otherwise profit from your identifiable biometric information as prohibited by BIPA</li>
+           <li>Any commercial use of Illinois residents' data will be strictly limited to properly anonymized data that cannot be re-identified</li>
+           <li>"Anonymization" for BIPA compliance means irreversibly removing or transforming all identifiers and applying technical safeguards certified to prevent the data from being re-associated with your identity</li>
+           <li>By accepting this Agreement, you provide written release as required by BIPA solely for the collection, storage, and explicitly permitted uses of your biometric data</li>
+           <li>This written release does not authorize any use prohibited by BIPA</li>
+           <li>Illinois residents' biometric data will be handled with the highest level of protection required by BIPA</li>
+        </ul>
+        <p>5.2. <strong>Texas Residents (CUBI).</strong> For Texas residents:</p>
+        <ul>
+           <li>The purpose of collecting biometric identifiers is to provide face matching services for users to their images</li>
+           <li>We will destroy biometric identifiers within one year after this purpose expires, meaning one year after you stop using our face matching service or delete your account</li>
+           <li>We will store and protect biometric identifiers using reasonable care as required by Texas law</li>
+           <li>Texas law allows for commercial use of biometric data with proper consent</li>
+           <li>By accepting this Agreement, you provide consent for the sale, sharing, and commercial use of your biometric data as permitted by Texas law</li>
+           <li>You acknowledge you have been informed and give permission for these commercial uses</li>
+           <li>For additional protection, we may anonymize your data before certain commercial uses</li>
+           <li>"Anonymization" means permanently removing identifiers that could connect the data to you personally, making it impossible to re-identify you from the data</li>
+        </ul>
+        <p>5.3. <strong>California Residents (CCPA/CPRA).</strong> For California residents:</p>
+        <ul>
+           <li>Biometric Data is treated as sensitive personal information under California law</li>
+           <li>You have the right to limit use/disclosure of your biometric data</li>
+           <li>You have the right to opt-out of the sale or sharing of your biometric data</li>
+           <li>To exercise your "Do Not Sell/Share" right under California law, email <a href="mailto:Legal@shmong.com">Legal@shmong.com</a> with the subject line "California Do Not Sell/Share"</li>
+           <li>We will process your request within 15 calendar days of receipt</li>
+           <li>You will not be discriminated against for exercising your California privacy rights</li>
+           <li>We provide this email mechanism as our required "Do Not Sell/Share" functionality for all California residents</li>
+        </ul>
+        <p>5.4. <strong>Additional States.</strong> We commit to complying with applicable biometric/privacy laws in other states (WA, NY, CO, etc.) providing additional protections.</p>
+        
+        <h2>6. DATA SECURITY AND BREACH RESPONSE</h2>
+        <p>6.1. <strong>Technical Safeguards.</strong> We implement specific safeguards for biometric data, including:</p>
+        <ul>
+           <li>One-way encryption for biometric templates</li>
+           <li>Segregation from other user data</li>
+           <li>Multi-factor authentication for system access</li>
+           <li>Database-level encryption</li>
+           <li>Regular penetration testing</li>
+           <li>Zero-trust security architecture</li>
+        </ul>
+        <p>6.2. <strong>Breach Response Protocol.</strong> In the event of a biometric data breach:</p>
+        <ul>
+           <li>We will notify affected individuals within 72 hours of breach confirmation</li>
+           <li>We will notify regulatory authorities as required by law</li>
+           <li>We will provide description of the breach and types of data affected</li>
+           <li>We will outline steps taken to remediate the breach</li>
+        </ul>
+        
+        <h2>7. INTERNATIONAL CONSIDERATIONS</h2>
+        <p>7.1. <strong>Cross-Border Data Transfers.</strong> Your biometric data may be transferred to, stored, and processed in countries outside your country of residence, including the United States. For such transfers, we implement appropriate safeguards in accordance with applicable data protection laws, which may include:</p>
+        <ul>
+           <li>Standard Contractual Clauses (SCCs) approved by the European Commission</li>
+           <li>Binding Corporate Rules (BCRs) where applicable</li>
+           <li>Data Transfer Impact Assessments (DTIAs) to assess and mitigate risks</li>
+           <li>Additional technical, organizational, and contractual measures as required</li>
+           <li>Country-specific transfer mechanisms as legally required</li>
+        </ul>
+        <p>7.2. <strong>European Union/EEA Users.</strong> For EU/EEA residents:</p>
+        <ul>
+           <li>We process biometric data based on your explicit consent as required by GDPR Article 9</li>
+           <li>We implement appropriate technical and organizational security measures</li>
+           <li>We fully respect and facilitate all data subject rights under GDPR Articles 15-22</li>
+           <li>We conduct and document data protection impact assessments</li>
+           <li>For cross-border transfers, we utilize European Commission approved SCCs with supplementary measures as recommended by the European Data Protection Board</li>
+           <li>We maintain records of all processing activities involving biometric data</li>
+           <li>We apply Privacy by Design principles to all biometric data processing</li>
+        </ul>
+        <p>7.3. <strong>UK Residents.</strong> For UK residents, we comply with the UK GDPR and UK Data Protection Act 2018, including UK-specific data transfer mechanisms where relevant.</p>
+        <p>7.4. <strong>Other International Jurisdictions.</strong> We comply with applicable privacy and data protection laws in other countries regarding biometric data, including but not limited to:</p>
+        <ul>
+           <li>Canada's Personal Information Protection and Electronic Documents Act (PIPEDA)</li>
+           <li>Brazil's General Data Protection Law (LGPD)</li>
+           <li>Australia's Privacy Act</li>
+           <li>Japan's Act on the Protection of Personal Information (APPI)</li>
+           <li>South Korea's Personal Information Protection Act (PIPA)</li>
+        </ul>
+        
+        <h2>8. BIOMETRIC ALGORITHM TRANSPARENCY</h2>
+        <p>8.1. <strong>Accuracy and Performance.</strong> Our facial recognition technology:</p>
+        <ul>
+           <li>Achieves 99.8% accuracy in controlled testing environments</li>
+           <li>Maintains 98.5% accuracy in real-world conditions with proper lighting</li>
+           <li>Has a false positive rate of less than 0.1% (1 in 1,000)</li>
+           <li>Has a false negative rate of approximately 1.5%</li>
+           <li>Performance metrics are regularly updated through continuous testing</li>
+        </ul>
+        <p>8.2. <strong>Demographic Performance.</strong> Our commitment to fairness includes:</p>
+        <ul>
+           <li>Testing across diverse demographic groups to identify and mitigate potential biases</li>
+           <li>Accuracy rates of 98.0-99.9% across different skin tones</li>
+           <li>Gender classification accuracy of 98.5% across gender expressions</li>
+           <li>Age group recognition accuracy of 97% across age ranges</li>
+           <li>Continuous algorithm improvement to address any identified disparities</li>
+        </ul>
+        <p>8.3. <strong>Testing Methodology.</strong> Our facial recognition system is evaluated using:</p>
+        <ul>
+           <li>Diverse test datasets representing various demographics</li>
+           <li>Real-world usage scenarios and lighting conditions</li>
+           <li>Independent third-party validation of performance metrics</li>
+           <li>Confusion matrix analysis for false positive/negative rates</li>
+           <li>Benchmarking against industry standards and datasets</li>
+        </ul>
+        <p>8.4. <strong>System Limitations.</strong> We transparently acknowledge the following limitations:</p>
+        <ul>
+           <li>Reduced accuracy in extremely low lighting conditions</li>
+           <li>Potential challenges with partial face occlusions</li>
+           <li>Performance variations with significant facial changes (injury, surgery, aging)</li>
+           <li>Environmental factors such as glare or extreme angles may affect performance</li>
+           <li>Limitations processing multiple faces in crowded scenes with overlapping features</li>
+        </ul>
+        <p>8.5. <strong>Continuous Improvement.</strong> Our facial recognition technology undergoes:</p>
+        <ul>
+           <li>Regular retraining with diverse datasets</li>
+           <li>Quarterly bias audits and fairness evaluations</li>
+           <li>Performance benchmarking against industry standards</li>
+           <li>Feature engineering optimization based on user feedback</li>
+        </ul>
+        
+        <h2>9. FACIAL RECOGNITION ETHICS STATEMENT</h2>
+        <p>9.1. <strong>Ethical Principles.</strong> SHMONG is committed to the following ethical principles:</p>
+        <ul>
+           <li>Human-centered approach prioritizing user dignity and rights</li>
+           <li>Fairness and non-discrimination across all demographic groups</li>
+           <li>Accountability through transparent practices and policies</li>
+           <li>User autonomy through informed consent and control</li>
+           <li>Privacy by design and default in all aspects of our service</li>
+        </ul>
+        <p>9.2. <strong>Prohibited Use Cases.</strong> Our facial recognition technology shall not be used for:</p>
+        <ul>
+           <li>Mass surveillance or monitoring of public spaces</li>
+           <li>Law enforcement or criminal investigation purposes without explicit legal process</li>
+           <li>Discrimination based on race, gender, religion, or other protected characteristics</li>
+           <li>Tracking individuals without their knowledge and consent</li>
+           <li>Evaluating eligibility for essential services, housing, or employment</li>
+           <li>Any purpose that violates fundamental human rights</li>
+        </ul>
+        <p>9.3. <strong>Algorithmic Fairness.</strong> We maintain fairness through:</p>
+        <ul>
+           <li>Regular auditing for potential biases across demographic groups</li>
+           <li>Diverse training datasets representing various populations</li>
+           <li>Transparency about performance variations across demographics</li>
+           <li>Regular testing by independent third parties</li>
+           <li>Ongoing adjustments to improve equity across all groups</li>
+        </ul>
+        <p>9.4. <strong>Human Oversight.</strong> While we use automated systems:</p>
+        <ul>
+           <li>Critical decisions involve human review</li>
+           <li>Regular human auditing of algorithmic performance</li>
+           <li>Users can request human review of automated decisions</li>
+           <li>Human expertise is incorporated in system design and implementation</li>
+           <li>Staff training on ethical considerations and potential impacts</li>
+        </ul>
+        <p>9.5. <strong>Commitment to Research and Improvement.</strong> We are dedicated to:</p>
+        <ul>
+           <li>Ongoing research into potential social impacts of facial recognition</li>
+           <li>Incorporating evolving ethical standards into our practices</li>
+           <li>Participating in multi-stakeholder dialogues on responsible AI</li>
+           <li>Publishing transparency reports on system performance</li>
+           <li>Continuous improvement based on emerging best practices</li>
+        </ul>
+
+        <h2>DEFINITIONS</h2>
+        <ul>
+            <li><strong>"Biometric identifier"</strong>: A retina or iris scan, fingerprint, voiceprint, or scan of hand or face geometry.</li>
+            <li><strong>"Biometric information"</strong>: Information based on an individual's biometric identifier used to identify an individual.</li>
+            <li><strong>"BIPA"</strong>: Illinois Biometric Information Privacy Act, which regulates the collection and use of biometric identifiers.</li>
+            <li><strong>"CUBI"</strong>: Texas Capture or Use of Biometric Identifier Act, which regulates biometric identifiers.</li>
+            <li><strong>"CCPA/CPRA"</strong>: California Consumer Privacy Act and California Privacy Rights Act, which regulate personal information, including biometric data.</li>
+            <li><strong>"Encryption"</strong>: The process of converting information into a code to prevent unauthorized access.</li>
+            <li><strong>"One-way encryption"</strong>: A form of encryption that cannot be reversed to recreate the original data.</li>
+            <li><strong>"Zero-trust security"</strong>: A security model that requires strict identity verification for every person and device.</li>
+            <li><strong>"Data segregation"</strong>: The separation of different types of data to enhance security and privacy.</li>
+        </ul>
+        <!-- BIOMETRICS POLICY CONTENT END -->
+      </div>
+      
+      <div class="content-footer">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-2">
+          <p class="footer-text">
+            © 2025 SHMONG. All rights reserved.
+          </p>
+          <div class="footer-links flex gap-4">
+            <a href="/terms.html" class="hover:text-blue-600">Terms & Privacy</a>
+            <a href="/biometrics.html" class="hover:text-blue-600">Biometrics Policy</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html> 

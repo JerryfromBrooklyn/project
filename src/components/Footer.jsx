@@ -11,18 +11,18 @@ const Footer = () => {
           </div>
           
           <div className="flex space-x-6">
-            <Link 
-              to="/terms-of-service-and-privacy-policy" 
+            <a 
+              href="/terms.html"
               className="text-sm text-gray-400 hover:text-white transition"
             >
               Terms & Privacy Policy
-            </Link>
-            <Link 
-              to="/biometrics-policy" 
+            </a>
+            <a 
+              href="/biometrics.html"
               className="text-sm text-gray-400 hover:text-white transition"
             >
               Biometrics Policy
-            </Link>
+            </a>
           </div>
         </div>
       </div>

@@ -163,13 +163,11 @@ export function AuthProvider({ children }) {
         navigate('/login', { state: { message: 'Social logins are not available in the current environment.' } });
     };
     
-    const signUp = async (email, password, fullName, userRole, agreements = {}) => {
+    const signUp = async (email, password, userAttributes = {}) => {
         try {
             console.log('[AUTH_CONTEXT] 🚀 Starting AWS signup process...');
             console.log('[AUTH_CONTEXT] Email:', email);
-            console.log('[AUTH_CONTEXT] Full Name:', fullName);
-            console.log('[AUTH_CONTEXT] User Type:', userRole);
-            console.log('[AUTH_CONTEXT] Agreement details:', agreements);
+            console.log('[AUTH_CONTEXT] User Attributes:', userAttributes);
             console.log('[AUTH_CONTEXT] AWS Connectivity Status:', navigator.onLine ? 'Online' : 'Offline');
             // Log basic browser network status before attempting signup
             console.log('[AUTH_CONTEXT] Browser network status:', {
@@ -177,14 +175,6 @@ export function AuthProvider({ children }) {
                 userAgent: navigator.userAgent,
                 url: window.location.href
             });
-            
-            // Format attributes for AWS Cognito
-            const userAttributes = {
-                full_name: fullName,
-                role: userRole,
-                custom_agreed_to_terms: agreements.agreedToTerms ? 'true' : 'false',
-                custom_agreed_to_biometrics: agreements.agreedToBiometrics ? 'true' : 'false'
-            };
             
             const { data, error } = await awsAuth.signUp(email, password, userAttributes);
             // Handle signup errors
@@ -215,8 +205,8 @@ export function AuthProvider({ children }) {
                 userData: data?.user ? {
                     id: data.user.id,
                     email: data.user.email,
-                    fullName: data.user.full_name,
-                    role: data.user.role,
+                    fullName: data.user.name,
+                    role: data.user.custom_role,
                 } : null,
                 userConfirmed: data?.userConfirmed,
             }, null, 2));
