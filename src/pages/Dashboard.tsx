@@ -752,7 +752,7 @@ export const Dashboard = () => {
                   <h3 className="text-xs font-semibold text-[#636366] mb-1">Privacy Information</h3>
                   <div className="flex items-start text-xs text-[#636366]">
                     <AlertCircle className="w-3 h-3 mr-1.5 text-[#8E8E93] flex-shrink-0 mt-0.5" />
-                    <p>Your face data is encrypted and stored securely. We never share your biometric data.</p>
+                    <p>Your face data is secured with bank and military-grade encryption</p>
                   </div>
                 </div>
               </motion.div>
