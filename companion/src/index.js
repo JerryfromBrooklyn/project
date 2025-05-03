@@ -15,9 +15,20 @@ const app = express();
 // Cookie parser
 app.use(cookieParser(process.env.COMPANION_SECRET));
 
-// Middleware to get token from cookies
+// Middleware to handle Dropbox token
 app.use((req, res, next) => {
-  req.dropboxToken = req.cookies['uppy-dropbox-token'];
+  // Get token from cookie
+  const token = req.cookies['uppy-dropbox-token'];
+  
+  if (req.path === '/dropbox/list/') {
+    if (!token) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    // Add token to request headers
+    req.headers['Authorization'] = `Bearer ${token}`;
+  }
+  
   next();
 });
 

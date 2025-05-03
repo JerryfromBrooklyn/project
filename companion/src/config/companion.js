@@ -69,22 +69,18 @@ const companionConfig = {
           // Get token from cookies
           const token = req.cookies['uppy-dropbox-token'];
           
-          // Verify token with Dropbox API
-          const verifyResponse = await fetch('https://api.dropboxapi.com/2/auth/token/validate', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-
-          if (!verifyResponse.ok) {
-            // Token is invalid or expired
-            return res.status(401).json({ error: 'Token invalid or expired' });
+          if (!token) {
+            return res.status(401).json({ error: 'Not authenticated' });
           }
 
-          // Token is valid, proceed
+          // Add token to request headers
           req.headers['Authorization'] = `Bearer ${token}`;
+          
+          // Forward the request with the token
+          next();
+        },
+        after: async (req, res, next) => {
+          // Handle any post-processing if needed
           next();
         }
       }
