@@ -1379,11 +1379,12 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
 
         {/* Bottom Buttons Toolbar */}
         <div className="p-3 border-t border-gray-300/70 dark:border-gray-700/70 bg-gray-100/90 dark:bg-gray-800/90 backdrop-blur-sm flex-shrink-0">
-          <div className="flex flex-col sm:flex-row sm:justify-end gap-2.5">
+          {/* Use grid-cols-2 for mobile, sm:flex for larger screens */}
+          <div className="grid grid-cols-2 sm:flex sm:flex-row sm:justify-end gap-2.5"> 
             {/* Details/Image Toggle Button */}
             <button
               onClick={toggleDetailsView}
-              className="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md transition-colors
+              className="sm:w-auto px-4 py-2 text-sm font-medium rounded-md transition-colors
                          bg-gray-200/80 dark:bg-gray-700/80 text-gray-800 dark:text-gray-100
                          hover:bg-gray-300/80 dark:hover:bg-gray-600/80
                          flex items-center justify-center"
@@ -1404,7 +1405,7 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
             {/* Share Button */}
             <button
               onClick={handleShare}
-              className="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md transition-colors
+              className="sm:w-auto px-4 py-2 text-sm font-medium rounded-md transition-colors
                          bg-gray-200/80 dark:bg-gray-700/80 text-gray-800 dark:text-gray-100
                          hover:bg-gray-300/80 dark:hover:bg-gray-600/80
                          disabled:opacity-50 flex items-center justify-center"
@@ -1419,7 +1420,7 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
             <button
               onClick={handleDownload}
               disabled={downloading || !safePhoto.url}
-              className="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md transition-colors
+              className="sm:w-auto px-4 py-2 text-sm font-medium rounded-md transition-colors
                          bg-gray-200/80 dark:bg-gray-700/80 text-gray-800 dark:text-gray-100
                          hover:bg-gray-300/80 dark:hover:bg-gray-600/80
                          disabled:opacity-50 flex items-center justify-center"
@@ -1435,7 +1436,7 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
             {/* Close Button (Primary Action) */}
             <button
               onClick={onClose}
-              className="w-full sm:w-auto px-4 py-2 text-sm font-semibold rounded-md transition-colors
+              className="sm:w-auto px-4 py-2 text-sm font-semibold rounded-md transition-colors
                          bg-blue-500 text-white
                          hover:bg-blue-600 active:bg-blue-700
                          flex items-center justify-center"
