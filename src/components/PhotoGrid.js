@@ -1,61 +1,36 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Share2, Trash2, Users, AlertCircle, Info } from 'lucide-react';
-import { PhotoService } from '../services/PhotoService';
+import { Users, AlertCircle } from 'lucide-react';
 import SimplePhotoInfoModal from './SimplePhotoInfoModal.jsx';
 import { cn } from '../utils/cn';
 
-export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash }) => {
+export const PhotoGrid = ({ photos, onDelete, onShare, onTrash }) => {
     const [selectedPhoto, setSelectedPhoto] = useState(null);
-    const [loading, setLoading] = useState({});
-    const [sharing, setSharing] = useState({});
+    const [isMobile, setIsMobile] = useState(false);
 
-    const handleDownload = async (photo) => {
-        if (onDownload) {
-            try {
-                setLoading({ ...loading, [photo.id]: true });
-                await onDownload(photo.id);
-            }
-            catch (error) {
-                console.error('Error downloading photo:', error);
-            }
-            finally {
-                setLoading({ ...loading, [photo.id]: false });
-            }
-            return;
-        }
-        try {
-            setLoading({ ...loading, [photo.id]: true });
-            const url = await PhotoService.downloadPhoto(photo.id);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `photo-${photo.id}.jpg`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-        }
-        catch (error) {
-            console.error('Error downloading photo:', error);
-        }
-        finally {
-            setLoading({ ...loading, [photo.id]: false });
-        }
+    // Detect if user is on mobile device
+    useEffect(() => {
+        const checkMobile = () => {
+            setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768);
+        };
+        
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
+
+    // Function to open the photo modal
+    const handlePhotoClick = (photo) => {
+        console.log("PhotoGrid: Opening photo modal for:", photo.id);
+        setSelectedPhoto(photo);
     };
 
-    const handleShare = async (photo, e) => {
-        e.stopPropagation();
-        if (!onShare) return;
-        
-        try {
-            setSharing({ ...sharing, [photo.id]: true });
-            await onShare(photo.id);
-        } catch (error) {
-            console.error('Error sharing photo:', error);
-        } finally {
-            setSharing({ ...sharing, [photo.id]: false });
-        }
+    // Function to handle modal close
+    const handleCloseModal = () => {
+        console.log("PhotoGrid: Closing photo modal");
+        setSelectedPhoto(null);
     };
 
     if (photos.length === 0) {
@@ -77,19 +52,55 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash }) =>
                 return _jsxs(motion.div, { 
                     key: photo.id,
                     ...motionProps,
+                    onClick: () => {
+                        console.log("PhotoGrid: Parent div clicked for photo:", photo.id);
+                        handlePhotoClick(photo);
+                    },
+                    style: { cursor: 'pointer', position: 'relative', zIndex: 1 },
+                    role: "button",
+                    tabIndex: 0,
+                    "aria-label": `View photo ${photo.title || photo.id}`,
                     children: [
                         _jsx("div", { 
-                            className: "aspect-square rounded-apple-xl overflow-hidden shadow-md", 
-                            onClick: () => setSelectedPhoto(photo),
-                            style: { cursor: 'pointer' },
+                            className: cn(
+                                "aspect-square rounded-apple-xl overflow-hidden shadow-md",
+                                "active:opacity-90 active:scale-95 transition-all duration-150", // iOS-style tap feedback
+                                isMobile ? "touch-manipulation" : "" // Optimization for touch devices
+                            ),
+                            onClick: (e) => {
+                                // Ensure the click event is handled and not just propagated
+                                e.stopPropagation(); 
+                                console.log("PhotoGrid: Image container clicked for photo:", photo.id);
+                                handlePhotoClick(photo);
+                            },
+                            onTouchStart: (e) => {
+                                // Adds active state for touch devices (iOS style)
+                                e.currentTarget.classList.add("scale-[0.98]", "opacity-80");
+                            },
+                            onTouchEnd: (e) => {
+                                // Removes active state
+                                e.currentTarget.classList.remove("scale-[0.98]", "opacity-80");
+                            },
+                            onTouchCancel: (e) => {
+                                // Removes active state if touch is canceled
+                                e.currentTarget.classList.remove("scale-[0.98]", "opacity-80");
+                            },
+                            role: "button",
+                            tabIndex: 0,
+                            "aria-label": `View photo ${photo.title || photo.id}`,
+                            style: { cursor: 'pointer', position: 'relative', zIndex: 2 }, 
                             children: _jsx("img", { 
                                 src: photo.url, 
                                 alt: photo.title || `Photo ${photo.id}`, 
-                                className: "w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
+                                className: "w-full h-full object-cover transition-transform duration-300 group-hover:scale-105",
+                                draggable: false, // Prevent drag on mobile
+                                loading: "lazy",
+                                style: { pointerEvents: 'none' } // Ensure clicks go to parent div
                             })
                         }),
                         photo.faces && (_jsxs("div", { 
                             className: cn("absolute top-2 right-2 px-2 py-1 rounded-full text-sm flex items-center gap-1", "bg-indigo-500/85 text-white backdrop-blur-sm shadow-md"), 
+                            style: { zIndex: 3 },
                             children: [
                                 _jsx(Users, { className: "w-4 h-4 text-indigo-100" }), 
                                 photo.matched_users?.length > 0 
@@ -98,68 +109,24 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash }) =>
                             ]
                         })),
                         _jsx("div", { 
-                            className: "absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent rounded-apple-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300", 
-                            children: _jsxs("div", { 
-                                className: "absolute bottom-3 left-3 right-3 flex justify-between items-center", 
-                                children: [
-                                    _jsxs("div", { 
-                                        className: "flex space-x-1.5 md:space-x-2", 
-                                        children: [
-                                            _jsx("button", { 
-                                                onClick: (e) => { e.stopPropagation(); handleDownload(photo); }, 
-                                                className: "p-2 md:p-2.5 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition-colors duration-300 shadow-lg", 
-                                                disabled: loading[photo.id],
-                                                "aria-label": "Download photo", 
-                                                title: "Download",
-                                                children: _jsx(Download, { className: "w-3.5 h-3.5 md:w-4 md:h-4" })
-                                            }), 
-                                            onShare && (_jsx("button", { 
-                                                onClick: (e) => handleShare(photo, e), 
-                                                className: "p-2 md:p-2.5 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors duration-300 shadow-lg", 
-                                                disabled: sharing[photo.id],
-                                                "aria-label": "Share photo", 
-                                                title: "Share",
-                                                children: _jsx(Share2, { className: "w-3.5 h-3.5 md:w-4 md:h-4" })
-                                            }))
-                                        ]
-                                    }), 
-                                    _jsxs("div", { 
-                                        className: "flex space-x-1.5 md:space-x-2", 
-                                        children: [
-                                            _jsx("button", { 
-                                                onClick: (e) => { e.stopPropagation(); setSelectedPhoto(photo); }, 
-                                                className: "p-2 md:p-2.5 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-colors duration-300 shadow-lg", 
-                                                "aria-label": "View photo details", 
-                                                title: "Info",
-                                                children: _jsx(Info, { className: "w-3.5 h-3.5 md:w-4 md:h-4" })
-                                            }), 
-                                            onTrash && (
-                                                _jsx("button", { 
-                                                    onClick: (e) => onTrash(photo.id, e),
-                                                    className: "p-2 md:p-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg", 
-                                                    "aria-label": "Move photo to trash", 
-                                                    title: "Move to Trash",
-                                                    children: _jsx(Trash2, { className: "w-3.5 h-3.5 md:w-4 md:h-4" })
-                                                })
-                                            ),
-                                            !onTrash && onDelete && (
-                                                 _jsx("button", { 
-                                                     onClick: (e) => {e.stopPropagation(); onDelete(photo.id);}, 
-                                                     className: "p-2 md:p-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors duration-300 shadow-lg", 
-                                                     "aria-label": "Delete photo", 
-                                                     title: "Delete",
-                                                     children: _jsx(Trash2, { className: "w-3.5 h-3.5 md:w-4 md:h-4" })
-                                                 })
-                                            )
-                                        ]
-                                    })
-                                ]
-                            })
+                            className: cn(
+                                "absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-transparent rounded-apple-xl",
+                                "opacity-0 group-hover:opacity-100 group-active:opacity-100", // Show on hover and active (touch)
+                                "transition-opacity duration-200"
+                            ),
+                            style: { zIndex: 1, pointerEvents: 'none' } // Ensure overlay doesn't interfere with clicks
                         })
                     ]
                 });
             })
         }),
-        _jsx(AnimatePresence, { children: selectedPhoto && (_jsx(SimplePhotoInfoModal, { photo: selectedPhoto, onClose: () => setSelectedPhoto(null) })) })
+        _jsx(AnimatePresence, { 
+            children: selectedPhoto && (
+                _jsx(SimplePhotoInfoModal, { 
+                    photo: selectedPhoto, 
+                    onClose: handleCloseModal
+                })
+            ) 
+        })
     ] }));
 };

@@ -221,8 +221,8 @@ export const awsPhotoService = {
                 if (indexFacesResponse && indexFacesResponse.FaceRecords && indexFacesResponse.FaceRecords.length > 0) {
                     console.log(`   ✅ Successfully indexed ${indexFacesResponse.FaceRecords.length} face(s)`);
                     allDetectedFaces = indexFacesResponse.FaceRecords.map(record => ({ 
-                       faceId: record.Face.FaceId,
-                       boundingBox: record.Face.BoundingBox,
+                            faceId: record.Face.FaceId,
+                            boundingBox: record.Face.BoundingBox,
                        confidence: record.Face.Confidence,
                        attributes: record.FaceDetail 
                     }));
@@ -267,30 +267,30 @@ export const awsPhotoService = {
                         
                         if (!matchedFaceId || !matchedExternalId || similarity === undefined) {
                             console.log(`         SKIP: Invalid match data.`);
-                            continue;
-                        }
-                        
+                                        continue;
+                                    }
+
                         // We only want matches with user_ prefix
                         if (!matchedExternalId.startsWith('user_')) {
                             console.log(`         SKIP: External ID (${matchedExternalId}) is not a user registration face.`);
-                            continue;
-                        }
-
+                                            continue;
+                                        }
+                                        
                         // Extract the user ID from the External ID
                         const potentialUserId = matchedExternalId.substring(5);
                         console.log(`         User Face Detected. Extracted User ID: ${potentialUserId}`);
                         
                         // Add user to list if not already added
                         if (!uniqueMatchedUserIds.has(potentialUserId)) {
-                            photoMetadata.matched_users.push({
+                                            photoMetadata.matched_users.push({
                                 userId: potentialUserId,
                                 faceId: matchedFaceId, // The user's registered face ID that matched
                                 similarity: similarity,
-                                matchedAt: new Date().toISOString()
-                            });
+                                                matchedAt: new Date().toISOString()
+                                            });
                             uniqueMatchedUserIds.add(potentialUserId); // Add to set to prevent duplicates
                             console.log(`         ✏️ DATABASE WRITE: Match added for user ${potentialUserId} (Similarity: ${similarity.toFixed(2)}%).`);
-                        } else {
+                                        } else {
                             console.log(`         SKIP: User ${potentialUserId} already added to matched list (duplicate).`);
                         }
                     }
@@ -442,7 +442,7 @@ export const awsPhotoService = {
                         if (quality.brightness !== undefined || quality.sharpness !== undefined || quality.contrast !== undefined) {
                           photoMetadata.imageQuality = JSON.stringify(quality);
                           console.log(`   ✏️ DATABASE WRITE: Image quality metrics stored: Brightness=${quality.brightness?.toFixed(2)}, Sharpness=${quality.sharpness?.toFixed(2)}, Contrast=${quality.contrast?.toFixed(2)}`);
-                        } else {
+                                        } else {
                           console.log(`   Image quality metrics not available.`);
                         }
                     } else {
@@ -682,7 +682,7 @@ export const awsPhotoService = {
                         return true;
                     }
                 }
-                
+
                 return false;
             });
             
@@ -1243,17 +1243,17 @@ export const awsPhotoService = {
                 } while (typeof items.LastEvaluatedKey !== 'undefined');
                 
                 console.log(`[PhotoService] Found ${scanResults.length} photos uploaded by user ${userId}.`);
-                
-                // Apply visibility filter
+            
+            // Apply visibility filter
                 const visibleUploadedPhotos = await filterPhotosByVisibility(userId, scanResults, 'VISIBLE');
-                
-                // Sort by creation date (newest first)
-                const sortedVisiblePhotos = visibleUploadedPhotos.sort((a, b) => {
-                    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-                });
-                
-                console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} visible uploaded photos for user ${userId}.`);
-                return sortedVisiblePhotos;
+            
+            // Sort by creation date (newest first)
+            const sortedVisiblePhotos = visibleUploadedPhotos.sort((a, b) => {
+                return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+            });
+            
+            console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} visible uploaded photos for user ${userId}.`);
+            return sortedVisiblePhotos;
             } catch (error) {
                 console.error('[PhotoService] Error fetching uploaded photos:', error);
                 return [];
