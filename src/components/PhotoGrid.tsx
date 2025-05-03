@@ -238,7 +238,7 @@ export const PhotoGrid: React.FC<PhotoGridProps> = ({
               {/* Photo thumbnail */}
               <div className="aspect-square bg-gray-100">
                 <img
-                  src={photo.url || ''}
+                  src={photo.url || photo.thumbnail_url || photo.public_url || ''}
                   alt={photo.title || 'Photo'}
                   className="w-full h-full object-cover"
                   loading="lazy"

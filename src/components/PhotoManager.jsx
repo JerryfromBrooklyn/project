@@ -6,233 +6,247 @@ import { awsPhotoService } from '../services/awsPhotoService';
 import { movePhotosToTrash } from '../services/userVisibilityService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, Info, Trash2, Share, Download } from 'lucide-react';
+import { PhotoInfoModal } from './PhotoInfoModal';
+import FaceStorageService from '../services/FaceStorageService';
 
 export const PhotoManager = ({ mode = 'all', nativeShare = false }) => {
   const { user } = useAuth();
   const [photos, setPhotos] = useState([]);
+  const [photosWithAnalysis, setPhotosWithAnalysis] = useState({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selectedPhotos, setSelectedPhotos] = useState([]);
+  const [counts, setCounts] = useState({ uploaded: 0, matched: 0 });
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Define fetch function with proper method based on mode
-  const fetchPhotos = useCallback(async () => {
-    if (!user?.id) {
-      console.warn("[PhotoManager] No user ID, skipping fetch");
-      setLoading(false);
-      setPhotos([]);
-      return;
+  // Load photos based on mode
+  const fetchPhotos = useCallback(async (forceRefresh = false) => {
+    if (!user) return;
+    
+    if (forceRefresh) {
+      console.log(`[PhotoManager ${mode}] Force refresh requested`);
     }
-
+    
+    console.log(`[PhotoManager ${mode}] Fetching photos for mode: ${mode}`);
     setLoading(true);
-    setError(null);
-
+    
     try {
-      console.log(`[PhotoManager] Fetching photos for mode: ${mode}, user: ${user.id}`);
-      
       let fetchedPhotos = [];
       
-      // Important: Use the correct method based on mode
-      if (mode === 'matches') {
-        // Only use fetchPhotos for actual face matches - this now uses the 99% threshold
-        fetchedPhotos = await awsPhotoService.fetchPhotos(user.id);
-        console.log(`[PhotoManager] Fetched ${fetchedPhotos.length} matched photos with strict 99% threshold`);
-      } else if (mode === 'upload') {
-        // Use fetchUploadedPhotosOnly for uploads
-        fetchedPhotos = await awsPhotoService.fetchUploadedPhotosOnly(user.id);
-        console.log(`[PhotoManager] Fetched ${fetchedPhotos.length} uploaded photos`);
-      } else {
-        // Use getVisiblePhotos for 'all' mode or any other mode
-        fetchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, mode);
-        console.log(`[PhotoManager] Fetched ${fetchedPhotos.length} photos for mode: ${mode}`);
+      if (mode === 'upload') {
+        console.log(`📥 [PhotoManager ${mode}] Fetching UPLOADED photos...`);
+        fetchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'uploaded');
+      } else if (mode === 'matched') {
+        console.log(`📥 [PhotoManager ${mode}] Fetching MATCHED photos...`);
+        fetchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'matched');
+      } else if (mode === 'all') {
+        console.log(`📥 [PhotoManager ${mode}] Fetching ALL photos...`);
+        const uploadedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'uploaded');
+        const matchedPhotos = await awsPhotoService.getVisiblePhotos(user.id, 'matched');
+        fetchedPhotos = [...uploadedPhotos, ...matchedPhotos];
       }
       
-      // Sort by creation date (newest first)
-      const sortedPhotos = fetchedPhotos.sort((a, b) => 
-        new Date(b.created_at || 0) - new Date(a.created_at || 0)
-      );
+      console.log(`[PhotoManager ${mode}] Successfully fetched ${fetchedPhotos.length} photos for current view.`);
+      setPhotos(fetchedPhotos);
       
-      setPhotos(sortedPhotos);
-    } catch (err) {
-      console.error(`[PhotoManager] Error fetching photos for mode ${mode}:`, err);
-      setError(err.message || 'Error fetching photos');
-      setPhotos([]);
+      // Fetch photo counts for tabs
+      console.log(`[PhotoManager ${mode}] Fetching counts...`);
+      const uploadedCount = await awsPhotoService.getVisiblePhotos(user.id, 'uploaded').then(p => p.length);
+      const matchedCount = await awsPhotoService.getVisiblePhotos(user.id, 'matched').then(p => p.length);
+      setCounts({ uploaded: uploadedCount, matched: matchedCount });
+      console.log(`[PhotoManager ${mode}] Counts updated: Uploaded=${uploadedCount}, Matched=${matchedCount}`);
+      
+      // Batch fetch analysis data for all loaded photos
+      if (fetchedPhotos.length > 0) {
+        console.log(`🔍 [PhotoManager ${mode}] Prefetching complete analysis data for ${fetchedPhotos.length} photos...`);
+        try {
+          const photoIds = fetchedPhotos.map(photo => photo.id);
+          const analysisData = await FaceStorageService.getPhotosWithAnalysisBatch(photoIds);
+          
+          // Log some analysis stats
+          const photoIdsWithAnalysis = Object.keys(analysisData);
+          console.log(`🔍 [PhotoManager ${mode}] Successfully fetched analysis data for ${photoIdsWithAnalysis.length}/${photoIds.length} photos`);
+          
+          if (photoIdsWithAnalysis.length > 0) {
+            // Count photos with actual content analysis
+            const withLabels = photoIdsWithAnalysis.filter(id => analysisData[id].imageLabels || (analysisData[id].faces && analysisData[id].faces.some(face => face.imageLabels))).length;
+            const withColors = photoIdsWithAnalysis.filter(id => analysisData[id].dominantColors || (analysisData[id].faces && analysisData[id].faces.some(face => face.dominantColors))).length;
+            
+            console.log(`🔍 [PhotoManager ${mode}] Analysis stats: ${withLabels} photos with labels, ${withColors} with color data`);
+          }
+          
+          setPhotosWithAnalysis(analysisData);
+        } catch (error) {
+          console.error(`❌ [PhotoManager ${mode}] Error prefetching analysis data:`, error);
+        }
+      }
+      
+    } catch (error) {
+      console.error(`[PhotoManager ${mode}] Error fetching photos:`, error);
     } finally {
       setLoading(false);
     }
-  }, [user?.id, mode]);
+  }, [user, mode]);
 
-  // Fetch photos when component mounts or mode/user changes
+  // Load photos on mount and when user/mode changes
   useEffect(() => {
-    fetchPhotos();
-  }, [fetchPhotos]);
+    if (user) {
+      fetchPhotos();
+    }
+  }, [user, mode, fetchPhotos, refreshTrigger]);
 
-  const handlePhotoSelect = (photoId) => {
-    setSelectedPhotos(prev => 
-      prev.includes(photoId) 
-        ? prev.filter(id => id !== photoId)
-        : [...prev, photoId]
-    );
-  };
-
-  const handleRefresh = () => {
-    fetchPhotos();
-  };
-
-  const handleTrashPhotos = async () => {
-    if (!selectedPhotos.length) return;
+  // Handle photo actions
+  const handlePhotoAction = async ({ type, photo }) => {
+    if (!photo) return;
     
-    try {
-      const result = await movePhotosToTrash(user.id, selectedPhotos);
-      if (result.success) {
-        setPhotos(prev => prev.filter(photo => !selectedPhotos.includes(photo.id)));
-        setSelectedPhotos([]);
-      } else {
-        setError(`Failed to move photos to trash: ${result.error}`);
-      }
-    } catch (err) {
-      console.error('Error moving photos to trash:', err);
-      setError('Failed to move photos to trash');
+    switch (type) {
+      case 'view':
+        console.log(`[PhotoManager] Viewing photo: ${photo.id}`);
+        
+        // Try to get enhanced photo data if available
+        if (photosWithAnalysis[photo.id]) {
+          console.log(`[PhotoManager] Using enhanced photo data for ${photo.id}`);
+          setSelectedPhoto(photosWithAnalysis[photo.id]);
+        } else {
+          // Fallback to regular photo data
+          setSelectedPhoto(photo);
+          
+          // Try to fetch complete data in background
+          console.log(`[PhotoManager] Fetching complete data for ${photo.id} in background`);
+          try {
+            const completeData = await FaceStorageService.getCompletePhotoData(photo.id);
+            if (completeData) {
+              console.log(`[PhotoManager] Updated with complete data for ${photo.id}`);
+              setSelectedPhoto(completeData);
+              
+              // Also update the cache
+              setPhotosWithAnalysis(prev => ({
+                ...prev,
+                [photo.id]: completeData
+              }));
+            }
+          } catch (error) {
+            console.error(`[PhotoManager] Error fetching complete photo data:`, error);
+          }
+        }
+        break;
+        
+      case 'download':
+        console.log(`[PhotoManager] Downloading photo: ${photo.id}`);
+        // Create a download link
+        const link = document.createElement('a');
+        link.href = photo.url || photo.imageUrl;
+        link.download = photo.title || `photo-${photo.id}.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        break;
+        
+      case 'trash':
+        console.log(`[PhotoManager] Moving photo to trash: ${photo.id}`);
+        try {
+          await movePhotosToTrash(user.id, [photo.id]);
+          // Refresh the photos list
+          fetchPhotos(true);
+        } catch (error) {
+          console.error(`[PhotoManager] Error moving photo to trash:`, error);
+        }
+        break;
+        
+      case 'share':
+        if (nativeShare && navigator.share) {
+          try {
+            await navigator.share({
+              title: photo.title || 'Shared Photo',
+              text: 'Check out this photo!',
+              url: photo.url
+            });
+          } catch (error) {
+            console.error(`[PhotoManager] Error sharing photo:`, error);
+          }
+        } else {
+          // Copy link to clipboard
+          navigator.clipboard.writeText(photo.url).then(() => {
+            alert('Photo link copied to clipboard!');
+          });
+        }
+        break;
+        
+      default:
+        console.log(`[PhotoManager] Unknown photo action: ${type}`);
     }
   };
 
-  const handlePhotoAction = async (action) => {
-    if (action.type === 'trash') {
-      try {
-        const result = await movePhotosToTrash(user.id, [action.photo.id]);
-        if (result.success) {
-          setPhotos(prev => prev.filter(photo => photo.id !== action.photo.id));
-        } else {
-          setError('Failed to move photo to trash');
-        }
-      } catch (err) {
-        console.error('Error trashing photo:', err);
-        setError('Failed to move photo to trash');
-      }
-    } else if (action.type === 'share' && nativeShare) {
-      try {
-        if (navigator.share) {
-          await navigator.share({
-            title: 'Share Photo',
-            text: 'Check out this photo!',
-            url: action.photo.url || action.photo.public_url || window.location.href
-          });
-        } else {
-          console.log('Web Share API not supported');
-        }
-      } catch (err) {
-        console.error('Error sharing:', err);
-      }
+  // Handle photo upload completion
+  const handleUploadComplete = (forceRefresh = true) => {
+    console.log(`[PhotoManager] Photo upload complete${forceRefresh ? ' (force refresh requested)' : ''}`);
+    if (forceRefresh) {
+      fetchPhotos(true);
     }
+  };
+
+  // Close the photo modal
+  const handleClosePhotoModal = () => {
+    setSelectedPhoto(null);
+  };
+
+  // Manual refresh handler
+  const handleManualRefresh = () => {
+    setRefreshTrigger(prev => prev + 1);
   };
 
   return (
-    <div className="photo-manager">
+    <div className="space-y-6">
       {mode === 'upload' && (
-        <div className="mb-8">
-          <SimplePhotoUploader onUploadComplete={fetchPhotos} />
-        </div>
-      )}
-      
-      {/* Controls and Selection */}
-      {photos.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleRefresh}
-              className="inline-flex items-center px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
-              disabled={loading}
-            >
-              <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-              {loading ? 'Loading...' : 'Refresh'}
-            </button>
-            
-            {selectedPhotos.length > 0 && (
-              <button
-                onClick={handleTrashPhotos}
-                className="inline-flex items-center px-3 py-1.5 text-sm bg-red-50 text-red-600 rounded-md hover:bg-red-100 transition-colors"
-              >
-                <Trash2 className="w-4 h-4 mr-1.5" />
-                Move to Trash ({selectedPhotos.length})
-              </button>
-            )}
-          </div>
-          
-          <div className="text-sm text-gray-500">
-            {photos.length} photo{photos.length !== 1 ? 's' : ''}
-          </div>
-        </div>
-      )}
-      
-      {/* Loading state */}
-      {loading && (
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="w-12 h-12 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin mb-4"></div>
-          <p className="text-gray-500">Loading photos...</p>
-        </div>
-      )}
-      
-      {/* Error state */}
-      {error && !loading && (
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="bg-red-50 text-red-700 p-4 rounded-lg mb-6"
-        >
-          <p>{error}</p>
-          <button 
-            onClick={() => setError(null)}
-            className="text-sm underline mt-2"
-          >
-            Dismiss
-          </button>
-        </motion.div>
-      )}
-      
-      {/* Empty state */}
-      {!loading && !error && photos.length === 0 && (
-        <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
-          <div className="w-16 h-16 mx-auto bg-gray-200 rounded-full flex items-center justify-center text-gray-400 mb-4">
-            {mode === 'matches' ? (
-              <Info className="w-8 h-8" />
-            ) : (
-              <Info className="w-8 h-8" />
-            )}
-          </div>
-          <h3 className="text-xl font-medium text-gray-900 mb-2">No photos found</h3>
-          <p className="text-gray-500 max-w-md mx-auto">
-            {mode === 'matches' 
-              ? "We haven't found any photos with you yet. Your face must match with high confidence (99%) to appear here."
-              : mode === 'upload'
-                ? "You haven't uploaded any photos yet. Use the uploader above to add photos."
-                : "No photos available. Try uploading some photos first."}
-          </p>
-        </div>
-      )}
-      
-      {/* Photo grid */}
-      {!loading && !error && photos.length > 0 && (
-        <PhotoGrid
-          photos={photos}
-          selectable={true}
-          selectedPhotos={selectedPhotos}
-          onSelectPhoto={handlePhotoSelect}
-          onPhotoAction={handlePhotoAction}
-          actionButtons={[
-            nativeShare && { 
-              icon: Share, 
-              label: 'Share', 
-              action: 'share',
-              className: 'text-blue-600' 
-            },
-            { 
-              icon: Trash2, 
-              label: 'Move to Trash', 
-              action: 'trash',
-              className: 'text-red-600'
-            }
-          ].filter(Boolean)}
+        <SimplePhotoUploader 
+          user={user}
+          onUploadComplete={handleUploadComplete}
         />
       )}
+      
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+          {mode === 'upload' ? 'Your Uploads' : 
+           mode === 'matched' ? 'Photos You Appear In' : 
+           'All Photos'}
+        </h2>
+        
+        <button
+          onClick={handleManualRefresh}
+          className="flex items-center text-sm text-gray-600 hover:text-indigo-600 transition-colors"
+        >
+          <RefreshCw className="w-4 h-4 mr-1" />
+          Refresh
+        </button>
+      </div>
+      
+      <PhotoGrid
+        photos={photos}
+        loading={loading}
+        onPhotoAction={handlePhotoAction}
+        columns={{
+          default: 2,
+          sm: 3,
+          md: 4,
+          lg: 5
+        }}
+      />
+      
+      <AnimatePresence>
+        {selectedPhoto && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          >
+            <PhotoInfoModal 
+              photo={selectedPhoto} 
+              onClose={handleClosePhotoModal}
+              onShare={nativeShare ? () => handlePhotoAction({ type: 'share', photo: selectedPhoto }) : null}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

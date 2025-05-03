@@ -11,6 +11,7 @@ import TabNavigation from '../components/TabNavigation';
 import { permanentlyHidePhotos, restorePhotosFromTrash } from '../services/userVisibilityService';
 import TabBarSpacer from "../components/layout/TabBarSpacer";
 import TrashBin from '../components/TrashBin';
+import { EventsGrid } from '../components/EventsGrid';
 
 interface FaceAttributes {
   age: { low: number; high: number };
@@ -616,7 +617,7 @@ export const Dashboard = () => {
               </h2>
             </div>
             <p className="text-sm text-apple-gray-600 mb-6">
-              View photos organized by the events they were uploaded to.
+              The Events feature is temporarily unavailable while we make improvements.
             </p>
             <div className="text-center p-8 bg-apple-gray-50 rounded-lg border border-apple-gray-100">
               <Calendar className="w-10 h-10 mx-auto text-apple-gray-400 mb-3" />

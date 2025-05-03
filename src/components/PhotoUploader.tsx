@@ -261,46 +261,50 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         };
 
         // Prepare photo metadata
-        const partialMetadata: Partial<PhotoMetadata> = {
-          id: upload.id, // Use upload item ID temporarily?
-          // url: upload.s3Url, // This might not be available yet
-          fileSize: upload.file.size,
-          fileType: upload.file.type,
-          title: upload.file.name,
-          description: '',
-          date_taken: new Date(metadata.date).toISOString(),
-          location: metadata.location ? {
-            lat: metadata.location.lat,
-            lng: metadata.location.lng,
-            name: metadata.location.name,
-          } : undefined,
+        console.log('📋 Preparing metadata for upload, form data:', metadata);
+        
+        const uploadMetadata = {
+          // Use metadata from the form state, not file.meta which might be empty
+          eventName: metadata.eventName,
+          venueName: metadata.venueName,
+          promoterName: metadata.promoterName,
+          date: metadata.date,
+          
+          // Nested structure for compatibility
           event_details: { 
             name: metadata.eventName, 
             date: metadata.date, 
             promoter: metadata.promoterName,
-            type: null // Ensure type is included (even if null)
+            type: null
           },
           venue: { 
-            id: null, // Ensure id is included (even if null)
+            id: null,
             name: metadata.venueName 
           },
-          externalAlbumLink: metadata.externalAlbumLink || undefined,
-          tags: [],
-          user_id: user?.id, // Add the current user's ID
-          uploaded_by: user?.id, // Add the current user's ID
-          uploadedBy: user?.id, // Add the current user's ID for consistency
+          location: metadata.location,
+          
+          // User info
+          user_id: user?.id || '',
+          uploadedBy: user?.id || '',
+          uploaded_by: user?.id || '',
+          
+          // External album link
+          externalAlbumLink: metadata.externalAlbumLink || ''
         };
+        
+        console.log('📋 Prepared metadata for AWS service:', uploadMetadata);
 
         // Upload photo using AWS S3 service
         const result = await awsPhotoService.uploadPhoto(
           upload.file,
           eventId ? eventId : undefined, // Fix potential object conversion issue
           upload.folderPath,
-          partialMetadata,
+          uploadMetadata,
           handleProgress
         );
 
         if (result.success) {
+          console.log('📋 Received result from AWS service:', result);
           // Ensure the structure fully matches PhotoMetadata & UploadItem
           const updatedDetails: Partial<PhotoMetadata> = {
             ...result.photoMetadata, // Start with the data from the service
@@ -696,6 +700,96 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
     }
   };
 
+  const uppyConfig = {
+    // Rest of Uppy config...
+    aws: {
+      getUploadParameters: async (file) => {
+        console.log('📤 [Uppy] Getting upload parameters for file:', file.name);
+        console.log('   File meta from Uppy:', file.meta); // Debug log
+        console.log('   Current form metadata state:', metadata); // Add this to see the actual form data
+        
+        try {
+          const fileData = new File([file.data], file.name, { type: file.type });
+          
+          // IMPORTANT: First set metadata on file.meta so it is available to other plugins
+          // This ensures any other plugins that look at file.meta will see the data
+          file.meta = {
+            ...file.meta,
+            eventName: metadata.eventName,
+            venueName: metadata.venueName,
+            promoterName: metadata.promoterName,
+            date: metadata.date,
+            event_details: { 
+              name: metadata.eventName, 
+              date: metadata.date, 
+              promoter: metadata.promoterName,
+              type: null
+            },
+            venue: { 
+              id: null,
+              name: metadata.venueName 
+            },
+            location: metadata.location,
+            externalAlbumLink: metadata.externalAlbumLink || ''
+          };
+          
+          // Now also pass the same data directly to AWS photo service
+          const uploadMetadata = {
+            // Use metadata from the form state, not file.meta which might be empty
+            eventName: metadata.eventName,
+            venueName: metadata.venueName,
+            promoterName: metadata.promoterName,
+            date: metadata.date,
+            
+            // Nested structure for compatibility
+            event_details: { 
+              name: metadata.eventName, 
+              date: metadata.date, 
+              promoter: metadata.promoterName,
+              type: null
+            },
+            venue: { 
+              id: null,
+              name: metadata.venueName 
+            },
+            location: metadata.location,
+            
+            // User info
+            user_id: user?.id || '',
+            uploadedBy: user?.id || '',
+            uploaded_by: user?.id || '',
+            
+            // External album link
+            externalAlbumLink: metadata.externalAlbumLink || ''
+          };
+          
+          console.log('📤 [Uppy] Using direct form metadata for upload:', uploadMetadata);
+
+          const result = await awsPhotoService.uploadPhoto(
+            fileData,
+            eventId ? eventId : undefined,
+            file.meta?.folderPath,
+            uploadMetadata
+          );
+          
+          // Implement the required Companion API response format
+          return {
+            method: 'POST',
+            url: result.photoMetadata.url,
+            fields: {
+              success: result.success,
+              photoId: result.photoId
+            },
+            headers: {}
+          };
+        } catch (error) {
+          console.error('Error in getUploadParameters:', error);
+          throw error;
+        }
+      }
+    }
+  };
+
   return (
     <div className="w-full">
       {/* Storage Usage */}
@@ -768,11 +862,14 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                     type="text"
                     value={metadata.eventName || ""}
                     onChange={(e) => setMetadata({...metadata, eventName: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-3 rounded-xl border ${metadata.eventName?.trim() ? 'border-green-300 focus:ring-green-500' : 'border-gray-300 focus:ring-blue-500'} focus:border-transparent`}
                     placeholder="Enter event name"
                     title="Event name"
                     aria-label="Event name"
                   />
+                  {!metadata.eventName?.trim() && 
+                    <p className="text-xs text-red-500 mt-1">Event name is required</p>
+                  }
                 </div>
                 
                 <div>
@@ -783,11 +880,14 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                     type="text"
                     value={metadata.venueName || ""}
                     onChange={(e) => setMetadata({...metadata, venueName: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-3 rounded-xl border ${metadata.venueName?.trim() ? 'border-green-300 focus:ring-green-500' : 'border-gray-300 focus:ring-blue-500'} focus:border-transparent`}
                     placeholder="Enter venue name"
                     title="Venue name"
                     aria-label="Venue name"
                   />
+                  {!metadata.venueName?.trim() && 
+                    <p className="text-xs text-red-500 mt-1">Venue name is required</p>
+                  }
                 </div>
                 
                 <div>
@@ -798,11 +898,14 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                     type="text"
                     value={metadata.promoterName || ""}
                     onChange={(e) => setMetadata({...metadata, promoterName: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-3 rounded-xl border ${metadata.promoterName?.trim() ? 'border-green-300 focus:ring-green-500' : 'border-gray-300 focus:ring-blue-500'} focus:border-transparent`}
                     placeholder="Enter promoter name"
                     title="Promoter name"
                     aria-label="Promoter name"
                   />
+                  {!metadata.promoterName?.trim() && 
+                    <p className="text-xs text-red-500 mt-1">Promoter name is required</p>
+                  }
                 </div>
                 
                 <div>
