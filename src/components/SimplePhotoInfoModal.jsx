@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, User, Calendar, MapPin, Building, Tag, Download, Image, FileType,
          Smile, Eye, Glasses, Sliders, Ruler, Laugh, AlertCircle, Clock, Globe, Link,
-         FileImage, ZoomIn, Palette, Database, LayoutGrid, Info } from 'lucide-react';
+         FileImage, ZoomIn, Palette, Database, LayoutGrid, Info, Share2 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import FaceStorageService from '../services/FaceStorageService';
 import { useAuth } from '../context/AuthContext';
@@ -860,7 +860,7 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
               Detailed Labels {labels.length > 40 && `(showing all ${Math.min(labels.length, 40)} of ${labels.length})`}
             </h4>
             
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 max-h-60 overflow-y-auto">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
               <table className="w-full text-xs">
                 <thead className="text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-gray-50 dark:bg-gray-800">
                   <tr>
@@ -1157,18 +1157,45 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
     setShowDetails(!showDetails);
   };
 
+  // Handle native share action
+  const handleShare = async () => {
+    if (!navigator.share) {
+      console.warn('Web Share API not supported in this browser.');
+      alert('Sharing is not supported on this browser.');
+      return;
+    }
+    
+    const shareData = {
+      title: safePhoto.title || 'Check out this photo!',
+      text: `Photo: ${safePhoto.title}`,
+      url: safePhoto.url || window.location.href, // Fallback to current page URL
+    };
+    
+    try {
+      await navigator.share(shareData);
+      console.log('Photo shared successfully!');
+    } catch (error) {
+      if (error.name !== 'AbortError') { // Don't log error if user cancels
+        console.error('Error sharing photo:', error);
+        alert(`Error sharing: ${error.message}`);
+      } else {
+        console.log('Share action cancelled by user.');
+      }
+    }
+  };
+
   return (
     <div
-      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-hidden"
+      className="fixed inset-0 bg-black/60 dark:bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-hidden"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl animate-fadeIn flex flex-col"
+        className="bg-gray-100 dark:bg-gray-800 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-xl flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Image Section - Only visible in image mode */}
+        {/* Image Section */}
         {!showDetails && (
-          <div className="w-full bg-black flex items-center justify-center relative h-[80vh]">
+          <div className="w-full bg-black flex items-center justify-center relative flex-grow min-h-0">
             <img
               src={encodeURI(safePhoto.url || '')}
               alt={safePhoto.title}
@@ -1187,50 +1214,50 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
           </div>
         )}
 
-        {/* Details Section - Only visible in details mode */}
+        {/* Details Section */}
         {showDetails && (
-          <div className="w-full flex flex-col overflow-hidden h-[80vh]">
-            <div className="relative h-12 flex items-center justify-center bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Photo Details</h2>
+          <div className="w-full flex flex-col overflow-hidden flex-grow min-h-0">
+            {/* Details Header */}
+            <div className="relative h-11 flex items-center justify-center border-b border-gray-300/70 dark:border-gray-700/70 flex-shrink-0 bg-gray-100/80 dark:bg-gray-800/80 backdrop-blur-sm">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white">Photo Details</h2>
             </div>
 
-            <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-800">
-              <section className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm">
-                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
-                  <Image size={16} className="mr-2 text-blue-500" />
-                  Basic Information
+            {/* Scrollable Details Content */}
+            <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-gray-100 dark:bg-gray-800">
+              {/* Basic Info Section */}
+              <section className="bg-white dark:bg-gray-900/50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3 ml-1">
+                  Information
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {[
-                    { label: 'Title', value: safePhoto.title, icon: <Image size={16} className="text-gray-500" /> },
-                    { label: 'Date', value: formatDate(safePhoto.date_taken || safePhoto.created_at), icon: <Calendar size={16} className="text-gray-500" /> },
-                    { label: 'File Size', value: formatFileSize(safePhoto.file_size), icon: <FileType size={16} className="text-gray-500" /> },
-                    { label: 'File Type', value: safePhoto.file_type, icon: <FileType size={16} className="text-gray-500" /> },
-                    { label: 'Uploaded', value: formatDate(safePhoto.created_at), icon: <Clock size={16} className="text-gray-500" /> },
-                    { 
-                      label: 'Uploaded by', 
-                      value: getUploaderName(), 
-                      icon: <User size={16} className="text-gray-500" /> 
+                    { label: 'Title', value: safePhoto.title, icon: <Image size={16} className="text-gray-500 dark:text-gray-400" /> },
+                    { label: 'Date', value: formatDate(safePhoto.date_taken || safePhoto.created_at), icon: <Calendar size={16} className="text-gray-500 dark:text-gray-400" /> },
+                    { label: 'File Size', value: formatFileSize(safePhoto.file_size), icon: <FileType size={16} className="text-gray-500 dark:text-gray-400" /> },
+                    { label: 'File Type', value: safePhoto.file_type, icon: <FileType size={16} className="text-gray-500 dark:text-gray-400" /> },
+                    { label: 'Uploaded', value: formatDate(safePhoto.created_at), icon: <Clock size={16} className="text-gray-500 dark:text-gray-400" /> },
+                    {
+                      label: 'Uploaded by',
+                      value: getUploaderName(),
+                      icon: <User size={16} className="text-gray-500 dark:text-gray-400" />
                     }
                   ].map((item, index) => (
-                    <div key={index} className="flex items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <div className="mr-3 text-gray-500">{item.icon}</div>
+                    <div key={index} className="flex items-center p-2.5 bg-gray-100/50 dark:bg-gray-800/50 rounded-md">
+                      <div className="mr-2 text-gray-500 dark:text-gray-400">{item.icon}</div>
                       <div>
                         <p className="text-xs text-gray-500 dark:text-gray-400">{item.label}</p>
-                        <p className="font-medium text-sm text-gray-900 dark:text-white">{item.value || 'Not available'}</p>
+                        <p className="font-medium text-sm text-gray-900 dark:text-gray-100">{item.value || 'Not available'}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               </section>
 
-              {/* Event Information Section */}
-              <section className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm mb-5">
-                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
-                  <Calendar size={16} className="mr-2 text-blue-500" />
+              {/* Event Info Section */}
+              <section className="bg-white dark:bg-gray-900/50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3 ml-1">
                   Event Information
                 </h3>
-                
                 <div className="space-y-3 divide-y divide-gray-100 dark:divide-gray-800">
                   {/* Display information about the event */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
@@ -1238,25 +1265,25 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
                       { 
                         label: 'Event Name', 
                         value: safePhoto.eventName || safePhoto.event_details?.name || 'Not specified', 
-                        icon: <Calendar size={16} className="text-gray-500" />,
+                        icon: <Calendar size={16} className="text-gray-500 dark:text-gray-400" />,
                         highlight: !!safePhoto.eventName || !!safePhoto.event_details?.name
                       },
                       { 
                         label: 'Venue', 
                         value: safePhoto.venueName || safePhoto.venue?.name || 'Not specified', 
-                        icon: <MapPin size={16} className="text-gray-500" />,
+                        icon: <MapPin size={16} className="text-gray-500 dark:text-gray-400" />,
                         highlight: !!safePhoto.venueName || !!safePhoto.venue?.name
                       },
                       { 
                         label: 'Promoter', 
                         value: safePhoto.promoterName || safePhoto.event_details?.promoter || 'Not specified', 
-                        icon: <User size={16} className="text-gray-500" />,
+                        icon: <User size={16} className="text-gray-500 dark:text-gray-400" />,
                         highlight: !!safePhoto.promoterName || !!safePhoto.event_details?.promoter
                       },
                       { 
                         label: 'Date', 
                         value: formatDate(safePhoto.date || safePhoto.event_details?.date || safePhoto.created_at), 
-                        icon: <Calendar size={16} className="text-gray-500" />,
+                        icon: <Calendar size={16} className="text-gray-500 dark:text-gray-400" />,
                         highlight: true
                       },
                     ].map((item, i) => (
@@ -1281,7 +1308,7 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
                   {(safePhoto.externalAlbumLink || safePhoto.albumLink) && (
                     <div className="pt-3">
                       <div className="flex items-center mb-1">
-                        <Link size={16} className="text-gray-500 mr-1" />
+                        <Link size={16} className="text-gray-500 dark:text-gray-400 mr-1" />
                         <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
                           External Album
                         </span>
@@ -1299,40 +1326,41 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
                 </div>
               </section>
 
-              {/* Image Analysis Section */}
+              {/* Analysis Section */}
               {renderImageAnalysis()}
 
+              {/* Location Section */}
               {hasLocationData() && (
-                <section className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm">
-                  <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
-                    <Globe size={16} className="mr-2 text-blue-500" />
+                <section className="bg-white dark:bg-gray-900/50 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3 ml-1">
                     Location
                   </h3>
                   <div className="space-y-2">
                     <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center">
-                      <Building size={18} className="text-gray-500 mr-3" />
+                      <Building size={18} className="text-gray-500 dark:text-gray-400 mr-3" />
                       <div>
                         <p className="text-xs text-gray-500 dark:text-gray-400">Place Name</p>
-                        <p className="font-medium text-sm text-gray-900 dark:text-white">{getLocationName()}</p>
+                        <p className="font-medium text-sm text-gray-900 dark:text-gray-100">{getLocationName()}</p>
                       </div>
                     </div>
                     <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center">
-                      <MapPin size={18} className="text-gray-500 mr-3" />
+                      <MapPin size={18} className="text-gray-500 dark:text-gray-400 mr-3" />
                       <div>
                         <p className="text-xs text-gray-500 dark:text-gray-400">Address</p>
-                        <p className="font-medium text-sm text-gray-900 dark:text-white">{getLocationAddress()}</p>
+                        <p className="font-medium text-sm text-gray-900 dark:text-gray-100">{getLocationAddress()}</p>
                       </div>
                     </div>
                   </div>
                 </section>
               )}
 
+              {/* Faces Section */}
               {renderFaceAttributes()}
 
+              {/* Tags Section */}
               {safePhoto.tags && safePhoto.tags.length > 0 && (
-                <section className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm">
-                  <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
-                    <Tag size={16} className="mr-2 text-blue-500" />
+                <section className="bg-white dark:bg-gray-900/50 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3 ml-1">
                     Tags
                   </h3>
                   <div className="flex flex-wrap gap-2">
@@ -1350,49 +1378,80 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
         )}
 
         {/* Bottom Buttons Toolbar */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex-shrink-0">
-          <div className="flex justify-end gap-3">
+        <div className="p-3 border-t border-gray-300/70 dark:border-gray-700/70 bg-gray-100/90 dark:bg-gray-800/90 backdrop-blur-sm flex-shrink-0">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2.5">
+            {/* Details/Image Toggle Button */}
             <button
               onClick={toggleDetailsView}
-              className="ios-button-secondary flex items-center"
+              className="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md transition-colors
+                         bg-gray-200/80 dark:bg-gray-700/80 text-gray-800 dark:text-gray-100
+                         hover:bg-gray-300/80 dark:hover:bg-gray-600/80
+                         flex items-center justify-center"
             >
               {showDetails ? (
                 <>
-                  <Image className="w-5 h-5 mr-2" />
+                  <Image className="w-4 h-4 mr-1.5" />
                   Image
                 </>
               ) : (
                 <>
-                  <Info className="w-5 h-5 mr-2" />
+                  <Info className="w-4 h-4 mr-1.5" />
                   Details
                 </>
               )}
             </button>
+
+            {/* Share Button */}
+            <button
+              onClick={handleShare}
+              className="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md transition-colors
+                         bg-gray-200/80 dark:bg-gray-700/80 text-gray-800 dark:text-gray-100
+                         hover:bg-gray-300/80 dark:hover:bg-gray-600/80
+                         disabled:opacity-50 flex items-center justify-center"
+              disabled={!navigator.share}
+              title={!navigator.share ? "Sharing not supported on this browser" : "Share this photo"}
+            >
+              <Share2 className="w-4 h-4 mr-1.5" />
+              Share
+            </button>
+
+            {/* Download Button */}
             <button
               onClick={handleDownload}
               disabled={downloading || !safePhoto.url}
-              className="ios-button-secondary flex items-center disabled:opacity-50"
+              className="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-md transition-colors
+                         bg-gray-200/80 dark:bg-gray-700/80 text-gray-800 dark:text-gray-100
+                         hover:bg-gray-300/80 dark:hover:bg-gray-600/80
+                         disabled:opacity-50 flex items-center justify-center"
             >
               {downloading ? (
                 <div className="w-5 h-5 mr-2 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
               ) : (
-                <Download className="w-5 h-5 mr-2" />
+                <Download className="w-4 h-4 mr-1.5" />
               )}
               Download
             </button>
-            <button onClick={onClose} className="ios-button-primary">
+
+            {/* Close Button (Primary Action) */}
+            <button
+              onClick={onClose}
+              className="w-full sm:w-auto px-4 py-2 text-sm font-semibold rounded-md transition-colors
+                         bg-blue-500 text-white
+                         hover:bg-blue-600 active:bg-blue-700
+                         flex items-center justify-center"
+            >
               Close
             </button>
           </div>
         </div>
 
-        {/* Close Button - Always visible in the top right */}
+        {/* Absolute Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 p-2 rounded-full bg-gray-800/50 hover:bg-gray-800/70 transition-colors z-10"
+          className="absolute top-2 right-2 p-1.5 rounded-full bg-gray-500/40 hover:bg-gray-500/60 text-white/80 hover:text-white transition-colors z-10"
           aria-label="Close modal"
         >
-          <X size={20} className="text-white" />
+          <X size={18} />
         </button>
       </div>
     </div>
