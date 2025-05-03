@@ -156,12 +156,12 @@ function UploadPage() {
 
 ### PhotoGrid.jsx
 
-The PhotoGrid component displays a responsive grid of photos with various interactions.
+The PhotoGrid component displays a responsive grid of photos with direct thumbnail interaction.
 
 **Key functions:**
-- `handlePhotoClick`: Opens photo in viewer
-- `handlePhotoAction`: Handles photo-specific actions
-- `renderGridItem`: Renders individual grid items
+- `handlePhotoClick`: Opens photo in viewer when thumbnails are clicked
+- `checkMobile`: Detects mobile devices for optimized interactions
+- `renderThumbnail`: Renders individual thumbnails with proper event handlers
 
 **Usage example:**
 ```jsx
@@ -174,22 +174,51 @@ function GalleryPage({ photos }) {
       photos={photos}
       columns={4}
       onPhotoClick={handlePhotoClick}
-      onPhotoAction={handlePhotoAction}
     />
   );
 }
 ```
 
-### ImageViewer.jsx
+**Key implementation details:**
+```jsx
+// PhotoGrid.jsx - Touch-optimized thumbnail implementation
+<motion.div 
+  key={photo.id}
+  className="relative group rounded-apple-xl overflow-hidden"
+  onClick={() => handlePhotoClick(photo)}
+  whileHover={{ scale: 1.02 }}
+  whileTap={{ scale: 0.98 }}
+  transition={{ duration: 0.2 }}
+>
+  {/* Multiple click handlers for reliable operation */}
+  <div 
+    className="aspect-square w-full" 
+    onClick={(e) => {
+      e.stopPropagation();
+      handlePhotoClick(photo);
+    }}
+  >
+    <img 
+      src={photo.url} 
+      alt={photo.title || 'Photo'} 
+      style={{ pointerEvents: 'none' }} // Ensures clicks go to parent div
+      className="w-full h-full object-cover"
+    />
+  </div>
+</motion.div>
+```
 
-The enhanced image viewer logic is primarily handled within `SimplePhotoInfoModal.jsx`.
+### SimplePhotoInfoModal.jsx
+
+The enhanced image viewer modal presents photos and metadata with a focus on usability.
 
 **Key functions:**
-- `toggleDetailsView`: Switches between image and details mode (if implemented)
+- `toggleDetailsView`: Switches between image and details mode
 - `handleZoom`, `handleRotate`: Image manipulation controls
 - `handleDownload`: Downloads the current image
 - `handleShare`: Shares the current image using Web Share API
-- `handleTrash`: Moves the photo to the trash
+- `confirmDelete`: Opens the delete confirmation dialog
+- `handleDelete`: Moves the photo to trash after confirmation
 
 **Usage example:**
 ```jsx
@@ -202,21 +231,101 @@ function PhotoCard({ photo }) {
   return (
     <>
       <img 
-        src={photo.url} // Assuming photo has a url
-        alt={photo.title || 'Photo'} // Use title or default alt text
+        src={photo.url}
+        alt={photo.title || 'Photo'}
         onClick={() => setIsModalOpen(true)}
       />
       
       {isModalOpen && (
         <SimplePhotoInfoModal
           photo={photo} 
-          isOpen={isModalOpen} // Pass isOpen state
           onClose={() => setIsModalOpen(false)} 
         />
       )}
     </>
   );
 }
+```
+
+**Key implementation details:**
+```jsx
+// SimplePhotoInfoModal.jsx - Bottom toolbar with iOS HIG-compliant button arrangement
+<div className="p-3 border-t border-gray-300/70 dark:border-gray-700/70 bg-gray-100/90 dark:bg-gray-800/90 backdrop-blur-sm">
+  {/* Responsive layout - 2x2 grid on mobile, horizontal on larger screens */}
+  <div className="grid grid-cols-2 sm:flex sm:flex-row sm:justify-end gap-2.5">
+    {/* Toggle between details and image view */}
+    <button onClick={toggleDetailsView} className="px-4 py-2 bg-gray-200/80 dark:bg-gray-700/80 rounded-lg">
+      {showDetails ? 'Image' : 'Details'}
+    </button>
+    
+    {/* Share button (uses Web Share API when available) */}
+    <button onClick={handleShare} className="px-4 py-2 bg-gray-200/80 dark:bg-gray-700/80 rounded-lg">
+      <Share2 className="w-4 h-4 mr-1.5 inline" />
+      Share
+    </button>
+    
+    {/* Download button */}
+    <button onClick={handleDownload} className="px-4 py-2 bg-gray-200/80 dark:bg-gray-700/80 rounded-lg">
+      <Download className="w-4 h-4 mr-1.5 inline" />
+      Download
+    </button>
+    
+    {/* Delete button - Uses iOS red color, positioned next to Close */}
+    <button 
+      onClick={confirmDelete} 
+      className="px-4 py-2 bg-[#FF3B30] text-white rounded-lg"
+    >
+      <Trash2 className="w-4 h-4 mr-1.5 inline" />
+      Delete
+    </button>
+    
+    {/* Close button - Primary action */}
+    <button 
+      onClick={onClose} 
+      className="px-4 py-2 bg-blue-500 text-white rounded-lg"
+    >
+      Close
+    </button>
+  </div>
+</div>
+
+{/* iOS-style Delete confirmation sheet */}
+{showDeleteConfirmation && (
+  <motion.div 
+    className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+  >
+    <motion.div 
+      className="w-full max-w-sm bg-white dark:bg-[#1C1C1E] rounded-xl overflow-hidden m-4"
+      initial={{ y: 50, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 50, opacity: 0 }}
+    >
+      <div className="px-4 py-4 text-center border-b border-gray-200 dark:border-gray-800">
+        <h3 className="text-base font-semibold">Delete Photo</h3>
+        <p className="mt-1 text-sm text-gray-500">
+          Are you sure you want to move this photo to trash?
+        </p>
+      </div>
+      <div className="divide-y divide-gray-200 dark:divide-gray-800">
+        <button
+          className="w-full py-3.5 px-4 text-[#FF3B30] font-medium text-sm"
+          onClick={handleDelete}
+        >
+          Delete Photo
+        </button>
+        <button
+          className="w-full py-3.5 px-4 text-[#007AFF] font-medium text-sm"
+          onClick={() => setShowDeleteConfirmation(false)}
+        >
+          Cancel
+        </button>
+      </div>
+    </motion.div>
+  </motion.div>
+)}
 ```
 
 ## UI/UX Implementation Guidelines
@@ -378,6 +487,87 @@ function PhotoActions({ photo }) {
 }
 ```
 
+### iOS-style Confirmation Sheets
+
+For iOS-like confirmation dialogs, especially for destructive actions, use this pattern:
+
+```jsx
+// iOS-style confirmation sheet
+function IOSConfirmationSheet({ isOpen, onClose, onConfirm, title, message, confirmText, confirmColor = '#FF3B30' }) {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div 
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div 
+            className="w-full max-w-sm bg-white dark:bg-[#1C1C1E] rounded-xl overflow-hidden m-4"
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 50, opacity: 0 }}
+            transition={{ type: "spring", damping: 25 }}
+          >
+            <div className="px-4 py-4 text-center border-b border-gray-200 dark:border-gray-800">
+              <h3 className="text-base font-semibold">{title}</h3>
+              <p className="mt-1 text-sm text-gray-500">{message}</p>
+            </div>
+            <div className="divide-y divide-gray-200 dark:divide-gray-800">
+              <button
+                className="w-full py-3.5 px-4 font-medium text-sm"
+                style={{ color: confirmColor }}
+                onClick={onConfirm}
+              >
+                {confirmText}
+              </button>
+              <button
+                className="w-full py-3.5 px-4 text-[#007AFF] font-medium text-sm"
+                onClick={onClose}
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// Usage
+function DeletePhotoButton({ photo }) {
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  
+  const handleDelete = async () => {
+    await movePhotoToTrash(photo.id);
+    setShowConfirmation(false);
+  };
+  
+  return (
+    <>
+      <button 
+        onClick={() => setShowConfirmation(true)}
+        className="bg-[#FF3B30] text-white px-4 py-2 rounded-lg"
+      >
+        <Trash2 className="w-4 h-4 mr-1.5 inline" />
+        Delete
+      </button>
+      
+      <IOSConfirmationSheet
+        isOpen={showConfirmation}
+        onClose={() => setShowConfirmation(false)}
+        onConfirm={handleDelete}
+        title="Delete Photo"
+        message="Are you sure you want to move this photo to trash?"
+        confirmText="Delete Photo"
+      />
+    </>
+  );
+}
+```
+
 ### Form Controls
 
 All form controls should:
@@ -499,16 +689,63 @@ The application uses Framer Motion for animations with consistent patterns:
 
 ### Touch Optimization
 
-- Minimum touch target size: 44px × 44px
-- Adequate spacing between touch targets
-- Support for touch gestures (swipe, pinch, etc.)
-- Avoid hover-only interactions
-- **Responsive Controls**: Action buttons in modals (like the photo viewer) should adapt their layout (e.g., 2x2 grid) for easier tapping on smaller screens.
+- **Minimum touch target size: 44px × 44px** - Ensure all interactive elements are at least this size on mobile
+- **Adequate spacing between touch targets** - Provide at least 8px spacing between touchable elements
+- **Robust click handling** for thumbnails and buttons:
+  - Use multiple click handlers to prevent dead zones
+  - Apply `pointer-events: none` to nested elements like images to ensure parent click handlers fire
+  - Use `stopPropagation()` to prevent event bubbling issues
+  - Set explicit `z-index` values to ensure proper layering of interactive elements
+- **Visual feedback on touch** - Provide immediate visual feedback for touch interactions
+- **Avoid hover-only interactions** - Never rely solely on hover effects for critical functionality
+- **Device detection** - Implement runtime detection of mobile devices to adapt interaction patterns:
+
+```jsx
+// Mobile device detection example
+useEffect(() => {
+  const checkMobile = () => {
+    const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isSmallScreen = window.innerWidth < 768;
+    setIsMobile(isMobileDevice || isSmallScreen);
+  };
+  
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+  return () => window.removeEventListener('resize', checkMobile);
+}, []);
+```
+
+- **Responsive Controls**: Action buttons in modals (like the photo viewer) should adapt their layout for easier tapping on smaller screens:
+  - Use a grid layout (2×2 or 3×2) on mobile screens
+  - Switch to a horizontal row on larger screens
+  - Position destructive actions (like Delete) next to primary actions (like Close) following iOS HIG
+
+### iOS-specific UI Guidelines
+
+When implementing iOS-style interfaces:
+
+- **Colors**: Use Apple's standard interface colors
+  - Blue (#007AFF) for primary actions
+  - Red (#FF3B30) for destructive actions
+  - Gray (#8E8E93) for secondary/neutral actions
+- **Button Styles**:
+  - Use rounded buttons with consistent padding (px-4 py-2)
+  - Maintain minimum 44×44px touch targets
+  - Group related actions together (especially Destructive + Close buttons)
+- **Confirmation Sheets**:
+  - Use slide-up sheet animations for confirmation dialogs
+  - Position Cancel button at the bottom
+  - Use standard red color for destructive actions
+  - Add subtle backdrop blur effects
+- **Safe Areas**:
+  - Respect iOS safe areas, especially on notched devices
+  - Add bottom padding to avoid conflicts with home indicator
 
 ```jsx
 // Touch-friendly button
-<button className="p-3 min-w-[44px] min-h-[44px]">
-  <Icon />
+<button className="p-3 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg">
+  <Icon className="w-5 h-5" />
+  <span className="ml-2">Label</span>
 </button>
 ```
 
@@ -522,28 +759,51 @@ function ImageViewer({ image }) {
   const [{ zoom, position }, setTransform] = useState({ zoom: 1, position: [0, 0] });
   
   const bind = useGesture({
-    onDrag: ({ movement: [mx, my] }) => {
+    onDrag: ({ movement: [mx, my], first, last }) => {
+      // Add clear visual feedback during drag
+      if (first) {
+        document.body.classList.add('dragging');
+      }
+      
       setTransform(state => ({
         ...state,
         position: [mx, my]
       }));
+      
+      if (last) {
+        document.body.classList.remove('dragging');
+      }
     },
-    onPinch: ({ offset: [d] }) => {
+    onPinch: ({ offset: [d], first, last }) => {
+      // Prevent pinch-to-zoom conflict with browser gestures
+      if (first) {
+        document.body.style.overflow = 'hidden';
+        document.body.style.touchAction = 'none';
+      }
+      
       setTransform(state => ({
         ...state,
-        zoom: d
+        zoom: Math.max(0.5, Math.min(4, d))
       }));
+      
+      if (last) {
+        document.body.style.overflow = '';
+        document.body.style.touchAction = '';
+      }
     }
   });
   
   return (
-    <div className="touch-none" {...bind()}>
+    <div className="touch-none h-full w-full" {...bind()}>
       <img 
         src={image.url} 
         alt={image.alt}
         style={{
-          transform: `scale(${zoom}) translate(${position[0]}px, ${position[1]}px)`
+          transform: `scale(${zoom}) translate(${position[0]}px, ${position[1]}px)`,
+          touchAction: 'none', // Prevent browser handling of gestures
+          WebkitUserSelect: 'none', // Prevent selection issues on iOS
         }}
+        className="w-full h-full object-contain pointer-events-none" // Ensure parent gets gesture events
       />
     </div>
   );
@@ -861,6 +1121,47 @@ function PhotoCard({ photo, isLoading }) {
     </div>
   );
 }
+```
+
+### Touch Interaction Issues
+
+If thumbnails or buttons aren't responding properly to touch/click events:
+
+1. **Identify the Problem**
+   - Use browser DevTools to inspect event handling
+   - Check for overlapping elements with higher z-index
+   - Verify pointer-events settings on nested elements
+   - Test on real mobile devices, not just simulators
+
+2. **Common Solutions**
+   - Add multiple click handlers at different levels
+   - Ensure sufficient padding for touch targets (min 44×44px)
+   - Set `pointer-events: none` on images inside click targets
+   - Use `stopPropagation()` to prevent event bubbling issues
+   - Add explicit `z-index` values to ensure proper layering
+   - Test with actual touch events, not just mouse clicks
+
+```jsx
+// Example of robust touch handling for a thumbnail
+<div 
+  className="relative aspect-square" 
+  onClick={handleClick} // Primary handler
+>
+  <div 
+    className="absolute inset-0" 
+    onClick={(e) => { // Backup handler
+      e.stopPropagation();
+      handleClick();
+    }}
+  >
+    <img 
+      src={imageUrl} 
+      alt={alt} 
+      className="w-full h-full object-cover"
+      style={{ pointerEvents: 'none' }} // Ensures parent gets the click
+    />
+  </div>
+</div>
 ```
 
 ## Conclusion

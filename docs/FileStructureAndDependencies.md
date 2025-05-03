@@ -186,15 +186,19 @@ FaceStorageService.js
 ### Image Viewing Flow
 
 1. User clicks on a thumbnail in `PhotoGrid.js` or `PhotoUploader.tsx`
+   - Thumbnails are now highly optimized for touch interactions on mobile devices
+   - Multiple click/touch handlers ensure reliable opening of the modal on all devices
 2. `SimplePhotoInfoModal.jsx` opens, showing the image initially.
 3. User can:
    - Toggle to the 'Details' view to see metadata, analysis, etc.
    - Toggle back to the 'Image' view.
    - Use the **Share** button (triggers native Web Share API).
    - Use the **Download** button.
+   - Use the **Delete** button (positioned next to the Close button) to move photo to trash.
    - Use the **Close** button.
-4. On mobile, the action buttons (Details/Image, Share, Download, Close) are arranged in a responsive 2x2 grid. On larger screens, they appear in a horizontal row.
+4. On mobile, the action buttons (Details/Image, Share, Download, Delete, Close) are arranged in a responsive grid. On larger screens, they appear in a horizontal row with the Delete button positioned directly next to the Close button for intuitive grouping of high-impact actions.
 5. User clicks close ('X' icon or Close button) to return to the previous screen.
+6. When users click "Delete", an iOS-style confirmation modal appears asking for confirmation before trashing the photo.
 
 ### Trash Management Flow
 
@@ -251,24 +255,52 @@ const Dashboard = () => {
 // PhotoGrid.js - Key functionality
 const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash }) => {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [isMobile, setIsMobile] = useState(false);
   
-  // Photo card rendering with hover effects
+  // Detect mobile devices for optimized interactions
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  // Handler for opening the photo modal
+  const handlePhotoClick = (photo) => {
+    console.log("Opening photo modal for:", photo.id);
+    setSelectedPhoto(photo);
+  };
+  
+  // Photo card rendering with improved touch handling
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {photos.map((photo) => (
-          <motion.div key={photo.id} /* animation props */>
-            {/* Photo card with hover effects and action buttons */}
-            <div className="aspect-square rounded-apple-xl overflow-hidden">
-              <img src={photo.url} alt={photo.title} />
+          <motion.div 
+            key={photo.id} 
+            /* animation props */
+            onClick={() => handlePhotoClick(photo)}
+          >
+            {/* Photo card with proper touch feedback and handling */}
+            <div 
+              className="aspect-square rounded-apple-xl overflow-hidden" 
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePhotoClick(photo);
+              }}
+            >
+              <img 
+                src={photo.url} 
+                alt={photo.title} 
+                style={{ pointerEvents: 'none' }} // Ensure clicks go to parent div
+              />
             </div>
             
-            {/* Hover overlay with action buttons */}
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100">
-              <div className="flex justify-between items-center">
-                {/* Download, Share buttons */}
-                {/* Info, Trash buttons */}
-              </div>
+            {/* Simplified hover overlay with no buttons */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/20 to-transparent opacity-0 group-hover:opacity-100 group-active:opacity-100">
             </div>
           </motion.div>
         ))}
@@ -288,57 +320,112 @@ const PhotoGrid = ({ photos, onDelete, onShare, onDownload, onTrash }) => {
 };
 ```
 
-### PhotoUploader
+### SimplePhotoInfoModal
 
-```tsx
-// PhotoUploader.tsx - Key functionality
-const PhotoUploader = ({ onUploadComplete, onError }) => {
-  const [uploads, setUploads] = useState<UploadItem[]>([]);
-  const [viewerImage, setViewerImage] = useState<UploadItem | null>(null);
-  
-  // Dropzone setup
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop: async (acceptedFiles) => {
-      // Process dropped files
-      // Generate previews
-      // Show metadata form
-    },
-    // Configuration options
-  });
-  
+The image viewer modal has undergone significant improvements to enhance user experience:
+
+```jsx
+// SimplePhotoInfoModal.jsx - Key functionality
+const SimplePhotoInfoModal = ({ photo, onClose }) => {
+  const [showDetails, setShowDetails] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+
+  // Toggle between image and details view
+  const toggleDetailsView = () => {
+    setShowDetails(!showDetails);
+  };
+
+  // Open delete confirmation dialog
+  const confirmDelete = () => {
+    setShowDeleteConfirmation(true);
+  };
+
+  // Handle delete action
+  const handleDelete = async () => {
+    // Implementation of trash functionality
+    // ...
+    setShowDeleteConfirmation(false);
+    onClose();
+  };
+
   return (
-    <div>
-      {/* Dropzone */}
-      <div {...getRootProps()} className="border-dashed border-2 p-10 text-center">
-        <input {...getInputProps()} />
-        <p>Drag and drop photos, or click to select</p>
-      </div>
-      
-      {/* Upload list/grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {uploads.map((upload) => (
-          <div key={upload.id} className="relative">
-            {/* Thumbnail that opens viewer when clicked */}
-            <div onClick={() => setViewerImage(upload)}>
-              <img src={upload.previewUrl} alt={upload.file.name} />
-            </div>
-            
-            {/* Progress indicator, status, etc. */}
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50">
+      <div className="bg-gray-100 dark:bg-gray-800 rounded-xl max-w-4xl max-h-[90vh]">
+        {/* Close button only in top-right corner */}
+        <div className="absolute top-3 right-3 z-20">
+          <button
+            onClick={onClose}
+            className="p-3 rounded-full bg-[#8E8E93]/90 min-w-[44px] min-h-[44px]"
+            aria-label="Close modal"
+          >
+            <X size={20} strokeWidth={2.5} />
+          </button>
+        </div>
+
+        {/* Image or Details Section */}
+        {!showDetails ? (
+          <div className="bg-black flex items-center justify-center">
+            <img src={photo.url} alt={photo.title} />
           </div>
-        ))}
-      </div>
-      
-      {/* Image viewer modal */}
-      <AnimatePresence>
-        {viewerImage && (
-          <motion.div className="fixed inset-0 z-50 bg-black/90">
-            {/* Image viewer with controls */}
-            {/* Top bar with actions */}
-            {/* Image with zoom/rotate */}
-            {/* Bottom bar with info */}
+        ) : (
+          <div className="overflow-y-auto p-4 space-y-4">
+            {/* Details content sections */}
+          </div>
+        )}
+
+        {/* Bottom Buttons Toolbar with Delete next to Close */}
+        <div className="p-3 border-t bg-gray-100/90 dark:bg-gray-800/90">
+          <div className="grid grid-cols-2 sm:flex sm:flex-row sm:justify-end gap-2.5">
+            <button onClick={toggleDetailsView}>
+              {showDetails ? 'Image' : 'Details'}
+            </button>
+            <button onClick={handleShare}>Share</button>
+            <button onClick={handleDownload}>Download</button>
+            {/* Delete button positioned next to Close button */}
+            <button 
+              onClick={confirmDelete}
+              className="bg-[#FF3B30] text-white"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              Delete
+            </button>
+            <button 
+              onClick={onClose}
+              className="bg-blue-500 text-white"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+
+        {/* iOS-style Delete Confirmation Modal */}
+        {showDeleteConfirmation && (
+          <motion.div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50">
+            <motion.div className="w-full max-w-sm bg-white dark:bg-[#1C1C1E] rounded-xl">
+              <div className="px-4 py-4 text-center border-b">
+                <h3 className="text-base font-semibold">Delete Photo</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Are you sure you want to move this photo to trash?
+                </p>
+              </div>
+              <div className="divide-y">
+                <button
+                  className="w-full py-3.5 px-4 text-[#FF3B30] font-medium text-sm"
+                  onClick={handleDelete}
+                >
+                  Delete Photo
+                </button>
+                <button
+                  className="w-full py-3.5 px-4 text-[#007AFF] font-medium text-sm"
+                  onClick={() => setShowDeleteConfirmation(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </div>
     </div>
   );
 };
@@ -429,13 +516,19 @@ Failing to implement pagination will result in incomplete data retrieval, as Dyn
 
 2. **Incorrect File Extensions**: Ensure JSX files have `.jsx` or `.tsx` extensions, not `.js`.
 
-3. **Visibility Filtering Order**: Apply visibility filtering (`filterPhotosByVisibility`) AFTER retrieving all photos, not before.
+3. **Thumbnail Click Issues**: When implementing clickable thumbnails, ensure proper event handling with:
+   - Multiple click handlers (parent div and image container)
+   - Proper `z-index` and `pointer-events` settings to prevent dead zones
+   - Explicit stop propagation to prevent double-firing
+   - Touch-specific event handlers for mobile devices
 
-4. **Missing Error Handling**: Add proper error handling, especially for asynchronous operations.
+4. **Modal Button Placement**: When designing modals, follow HIG standards for destructive actions:
+   - Group related actions together (e.g., Delete next to Close)
+   - Use appropriate colors for destructive actions (red for delete)
+   - Provide confirmation dialogs for destructive actions
+   - Ensure touch targets are at least 44x44px on mobile
 
-5. **Inefficient Matching**: The current implementation scans the entire photos table. Consider using GSIs (Global Secondary Indexes) for more efficient querying.
-
-6. **Data Structure Inconsistencies**: Some photo objects have different property names for the same data (`user_id` vs `userId`, etc.). Normalize these or handle all variations.
+5. **Visibility Filtering Order**: Apply visibility filtering (`filterPhotosByVisibility`) AFTER retrieving all photos, not before.
 
 ### Recent Fixes
 

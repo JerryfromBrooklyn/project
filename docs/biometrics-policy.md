@@ -208,8 +208,6 @@ This Biometrics Policy governs how we collect, use, store, and protect biometric
 ## 6. DATA SECURITY AND BREACH RESPONSE
 
 6.1. **Technical Safeguards.** We implement specific safeguards for biometric data, including:
-   - One-way encryption for biometric templates
-   - Segregation from other user data
    - Multi-factor authentication for system access
    - Database-level encryption
    - Regular penetration testing

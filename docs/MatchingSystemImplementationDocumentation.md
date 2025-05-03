@@ -296,14 +296,16 @@ The Dashboard is implemented in `Dashboard.jsx` and serves as the central naviga
 The PhotoGrid component (`PhotoGrid.js`) provides a visually appealing and interactive way to display photos:
 
 - **Responsive Grid Layout**: Adapts to different screen sizes
-- **Hover Actions**: Reveals action buttons on hover
-- **Quick Actions**: Download, share, view info, and trash options
+- **Direct Photo Interaction**: Clicking/tapping anywhere on the thumbnail opens the photo detail modal
+- **Optimized Touch Handling**: Multiple click/touch handlers ensure reliable opening on all devices
 - **Animation Effects**: Smooth transitions when photos are added or removed
 - **Empty State Handling**: Displays appropriate messages when no photos are available
 - **Match Count Badges**: Shows the number of matched faces in each photo
+- **Mobile Detection**: Automatically adapts the interaction model based on device detection
+- **Device-Specific Optimizations**: Different behavior patterns for touch vs mouse interactions
 
 ```jsx
-// PhotoGrid.js key structure
+// PhotoGrid.js key structure - Touch-optimized version
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
   {photos.map(photo => (
     <motion.div 
@@ -313,10 +315,21 @@ The PhotoGrid component (`PhotoGrid.js`) provides a visually appealing and inter
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
       className="relative group"
+      onClick={() => handlePhotoClick(photo)}
     >
-      {/* Photo thumbnail - clickable */}
-      <div className="aspect-square" onClick={() => handlePhotoClick(photo)}>
-        <img src={photo.url} alt={photo.title} />
+      {/* Photo thumbnail - entire card is clickable */}
+      <div 
+        className="aspect-square rounded-apple-xl overflow-hidden" 
+        onClick={(e) => {
+          e.stopPropagation();
+          handlePhotoClick(photo);
+        }}
+      >
+        <img 
+          src={photo.url} 
+          alt={photo.title || 'Photo'} 
+          style={{ pointerEvents: 'none' }} // Ensures clicks go to parent div
+        />
       </div>
       
       {/* Face/match count badge */}
@@ -325,11 +338,8 @@ The PhotoGrid component (`PhotoGrid.js`) provides a visually appealing and inter
         {photo.matched_users?.length || photo.faces?.length} 
       </div>
       
-      {/* Hover overlay with action buttons */}
-      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100">
-        <div className="flex justify-between">
-          {/* Download, Share, Info, Trash buttons */}
-        </div>
+      {/* Simplified hover effect with no buttons */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/20 to-transparent opacity-0 group-hover:opacity-100 group-active:opacity-100 pointer-events-none">
       </div>
     </motion.div>
   ))}
@@ -340,35 +350,61 @@ The PhotoGrid component (`PhotoGrid.js`) provides a visually appealing and inter
 
 The image viewer logic is primarily handled within `SimplePhotoInfoModal.jsx`, providing a rich viewing experience:
 
-- **Top Control Bar**: Contains buttons for download, info, trash, and close (context-dependent).
+- **Top Control Bar**: Contains only the close button ('X' icon) for clear navigation.
 - **Image Display**: Shows the full image with support for zooming and rotation.
-- **Bottom Info Bar/Toolbar**: Displays file information and action controls (Details/Image toggle, Share, Download, Close).
+- **Bottom Info Bar/Toolbar**: Contains all action buttons in a logical order:
+  - Toggle (Details/Image) - For switching between views
+  - Share - Uses Web Share API when available
+  - Download - For saving the current image
+  - Delete - Now positioned next to Close for intuitive grouping (iOS HIG standard)
+  - Close - Primary action to exit modal
+- **Delete Confirmation**: iOS-style sheet appears when Delete is pressed, asking for confirmation.
 - **Event Information Section**: Clearly displays event name, venue, promoter, and date, sourcing data from both flat and nested properties.
 - **Image Analysis Section**: Shows detailed Rekognition analysis including up to 40 labels, dominant colors (overall, foreground, background), and image quality metrics.
 - **Face Analysis Section**: Displays attributes for each detected face, including estimated age range, gender, expression, and estimated skin tone color swatch.
-- **Mobile Optimization**: Touch-friendly controls and responsive layout, including a 2x2 button grid for actions on smaller screens.
+- **Mobile Optimization**: Touch-friendly controls with a responsive layout:
+  - Grid layout for buttons on smaller screens (2×2 or 3×2 depending on screen size)
+  - Horizontal row on larger screens with Delete button next to Close button
+  - All touch targets are at least 44×44px for iOS HIG compliance
 - **Native Integration**: Uses Web Share API when available for sharing.
 
-```jsx
-// SimplePhotoInfoModal.jsx (Illustrative Structure)
-<div className="fixed inset-0 ...">
-  <div className="bg-gray-100 ...">
-    {/* Image or Details Section based on showDetails state */}
-    
-    {/* Bottom Buttons Toolbar */}
-    <div className="p-3 ...">
-      {/* Buttons arranged in 2x2 grid on mobile, row on larger screens */}
-      <div className="grid grid-cols-2 sm:flex ...">
-         <button onClick={toggleDetailsView}>{showDetails ? 'Image' : 'Details'}</button>
-         <button onClick={handleShare} disabled={!navigator.share}>Share</button>
-         <button onClick={handleDownload} disabled={downloading}>Download</button>
-         <button onClick={onClose}>Close</button>
-      </div>
-    </div>
+The Delete button follows Apple HIG guidelines for destructive actions:
+- Positioned next to the primary action (Close)
+- Uses the standard Apple SF red color (#FF3B30)
+- Shows a confirmation dialog before taking action
+- Has a distinctive icon (trash) for immediate visual recognition
 
-    {/* Absolute Close Button */}
-    <button onClick={onClose} className="absolute top-2 right-2 ...">
-       <X size={18} />
+```jsx
+// SimplePhotoInfoModal.jsx (Bottom Toolbar Structure)
+<div className="p-3 border-t border-gray-300/70 dark:border-gray-700/70 bg-gray-100/90 dark:bg-gray-800/90 backdrop-blur-sm flex-shrink-0">
+  {/* Use grid-cols-2 for mobile, sm:flex for larger screens */}
+  <div className="grid grid-cols-2 sm:flex sm:flex-row sm:justify-end gap-2.5"> 
+    {/* Details/Image Toggle Button */}
+    <button onClick={toggleDetailsView}>
+      {showDetails ? 'Image' : 'Details'}
+    </button>
+    
+    {/* Share Button */}
+    <button onClick={handleShare}>Share</button>
+    
+    {/* Download Button */}
+    <button onClick={handleDownload}>Download</button>
+    
+    {/* Delete Button - Next to Close button */}
+    <button 
+      onClick={confirmDelete}
+      className="bg-[#FF3B30] text-white"
+    >
+      <Trash2 className="w-4 h-4 mr-1.5" />
+      Delete
+    </button>
+    
+    {/* Close Button */}
+    <button 
+      onClick={onClose}
+      className="bg-blue-500 text-white"
+    >
+      Close
     </button>
   </div>
 </div>
@@ -470,18 +506,28 @@ const TrashBin = () => {
 The application is fully responsive and optimized for mobile devices:
 
 - **Responsive Layouts**: Adapts to different screen sizes
-- **Touch-Friendly Controls**: Larger tap targets for mobile
+- **Touch-Friendly Controls**: Larger tap targets (minimum 44x44px) for mobile
+- **Optimized Click Handling**: Multiple event handlers ensure reliable touch interaction
 - **Swipe Support**: Natural gesture support for image navigation
 - **Native Integration**: Uses Web Share API for native sharing on mobile
 - **Simplified Controls**: Contextual controls based on device capabilities
 - **Performance Optimization**: Lazy loading and efficient rendering for mobile
+- **Device Detection**: Runtime detection of mobile devices to adapt interaction patterns
 
 Mobile optimizations include:
 
 1. **Simplified Grids**: Changes column count based on screen size
-2. **Touch Controls**: Supports pinch-to-zoom and swipe gestures
-3. **Adaptive Layouts**: Stacks controls vertically on smaller screens
+2. **Touch Controls**: 
+   - Optimized click/touch event handling to prevent "dead zones"
+   - Direct thumbnail clicking without requiring hover/interaction with overlay buttons
+   - Supports pinch-to-zoom and swipe gestures
+3. **Adaptive Layouts**: Responsive grid layouts for buttons on smaller screens
 4. **Native Interactions**: Uses device capabilities when available
+5. **Improved Button Placement**: 
+   - Delete button positioned next to Close button following iOS HIG standards
+   - Confirmation dialogs for destructive actions
+   - Red accent color (#FF3B30) for Delete buttons matching iOS standards
+6. **iOS-style Confirmation Sheets**: Bottom sheet confirmation dialogs for critical actions
 
 ## 6. Technical Implementation Details
 
