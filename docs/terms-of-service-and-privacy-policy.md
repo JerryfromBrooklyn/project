@@ -1,0 +1,433 @@
+# SHMONG TERMS OF SERVICE & PRIVACY POLICY
+
+*Last Updated: April 25, 2025*
+*Effective Date: April 25, 2025*
+
+---
+
+# SECTION 1: TERMS OF SERVICE
+
+## SUMMARY
+This Terms of Service governs your use of SHMONG services. It explains your rights and responsibilities, payment terms, arbitration procedures, and other legal matters. By using our services, you agree to these terms. These Terms include important provisions like arbitration requirements, limitations of liability, and your responsibilities when uploading content containing biometric data of other individuals.
+
+## 1. ELIGIBILITY AND ACCOUNT CREATION
+
+1.1. **Age Restriction.** You must be at least 18 years old to create an account and use our Services.
+
+1.2. **Account Creation.** To access certain features, you may need an account. You agree to provide accurate, current, and complete information during registration and keep it updated.
+
+1.3. **Electronic Communications Consent.** By creating an account, you consent to receive electronic communications from us. These may include service notifications, security notices, and legal updates. You may opt out of marketing emails but not service-critical communications.
+
+1.4. **SMS and Mobile Communications.** If you provide a mobile number, you consent to receive SMS/mobile messages. Standard rates may apply. Reply "STOP" to opt out.
+
+## 2. USER CONTENT AND RESPONSIBILITY
+
+2.1. **Responsibility for Content and Consent.** You are solely responsible for all Content you upload and for obtaining all necessary permissions, including:
+   - Explicit, informed, written consent from all individuals whose biometric identifiers appear in your Content
+   - Consent from parents/guardians for any minors depicted
+   - Permissions for any property, trademarks, or copyrighted material shown
+
+2.2. **Primary Accountability.** As the uploader, you accept primary and sole legal responsibility for obtaining proper biometric consent from individuals in your Content. You agree to defend and indemnify SHMONG against claims arising from your failure to obtain proper consent.
+
+2.3. **Consent Record Requirements.** As an uploader, you agree to:
+   - Maintain verifiable written consent records for all individuals in your Content
+   - Preserve these records for at least five (5) years from upload
+   - Provide records to SHMONG within seven (7) business days upon request
+   - Update consents if new data uses arise not covered initially
+
+2.4. **Copyright Ownership.** You warrant that you own the copyright to the Content you upload or have obtained express permission from the owner.
+
+## 3. LICENSE GRANT AND DATA USAGE
+
+3.1. **License to Use Content.** By providing Content, you grant SHMONG a non-exclusive, worldwide, royalty-free, sublicensable license to use, reproduce, modify, adapt, publish, translate, distribute, and display such Content solely in connection with providing, maintaining, securing, and improving the Services.
+
+3.2. **Anonymized and Aggregated Data.** You agree SHMONG may create and use aggregated and anonymized datasets derived from Content and usage data for any purpose, including research, analytics, or commercial use, provided it complies with applicable laws.
+
+3.3. **Commercial Data Usage.** By accepting this Agreement, you expressly authorize SHMONG to commercially use your biometric data as detailed in Section 1.3 of the Biometrics Policy (Section 3 of this document). This includes using anonymized biometric data for commercial purposes across all jurisdictions, and other commercial uses as permitted by the laws in your state of residence. Please refer to the Biometrics Policy for complete details on how we collect, use, store, protect, and share biometric data.
+
+## 4. SUBSCRIPTION AND PAYMENT TERMS
+
+4.1. **Subscription Services.** Some features may require a paid subscription. By subscribing, you agree to pay all associated fees.
+
+4.2. **Billing and Payment.** For paid subscriptions:
+   - You agree to provide accurate billing information
+   - Subscription fees will be billed in advance on either a monthly or annual basis
+   - All payments are non-refundable except as expressly stated or required by law
+   - We reserve the right to change prices with notice, effective at your next billing cycle
+
+4.3. **Free Trials.** We may offer free trials. Unless you cancel before the trial ends, you authorize us to charge your payment method. No notice will be sent that your free trial has ended.
+
+4.4. **Subscription Renewal and Cancellation.** Your subscription will automatically renew unless you cancel before the renewal date.
+
+## 5. USER CONDUCT AND RESTRICTIONS
+
+5.1. **Compliance with Laws.** Use the Services in compliance with all applicable laws and regulations.
+
+5.2. **Prohibited Content.** Do not upload, share, or create Content that:
+   - Violates third-party rights
+   - Contains biometric data without proper consent
+   - Depicts minors without parental consent
+   - Is defamatory, obscene, pornographic, offensive, or threatening
+   - Promotes illegal activities
+   - Contains malware or harmful code
+
+5.3. **Username and Content Policies.** When creating usernames, profiles, or sharing content:
+   - Usernames must not impersonate others or infringe on trademarks
+   - Usernames and profile content must not contain offensive, obscene, or hateful language
+   - Display names and profile images must comply with our Content guidelines
+   - You may not use misleading or deceptive identifiers
+   - SHMONG reserves the right to remove or reclaim usernames, particularly those related to brands or notable individuals
+   - Profile information must be accurate and not misleading
+   - SHMONG may reject, reclaim, or remove any username for any reason, including trademark claims
+   - Dormant accounts with desirable usernames may be reclaimed after 12 months of inactivity
+
+## 6. ARBITRATION AND DISPUTE RESOLUTION
+
+6.1. **Binding Arbitration.** Any dispute arising from these Terms shall be resolved exclusively through binding arbitration, except that either party may seek equitable relief in any court of competent jurisdiction.
+
+> **In Plain Language:** If we have a disagreement about these Terms, we'll resolve it through arbitration (a private dispute resolution process) instead of going to court. The only exception is if either of us needs immediate court help to stop ongoing harm.
+
+6.2. **Arbitration Process.** Arbitration shall be conducted in Delaware, pursuant to the rules of the American Arbitration Association (AAA) or JAMS. The arbitration award will be final and binding.
+
+6.3. **Opt-Out Option.** You have the right to opt out of arbitration by notifying SHMONG in writing at Legal@shmong.com, or sending written notice to our Delaware address within 60 days of accepting these Terms. If you opt-out, all disputes will be resolved in accordance with the laws of Delaware and subject to the appropriate courts, rather than through arbitration. The written notice must clearly state your intent to opt-out of arbitration.
+
+> **In Plain Language:** You can choose not to participate in arbitration if you tell us in writing within 60 days of agreeing to these terms. If you opt out, any disputes would go through regular courts instead.
+
+6.4. **Class Action Waiver.** You agree that disputes will be resolved on an individual basis only, not as part of a class action. You waive any right to participate in class actions.
+
+> **In Plain Language:** By using our service, you agree to handle any disputes with us one-on-one, not as part of a group lawsuit.
+
+## 7. CHOICE OF LAW AND VENUE
+
+7.1. **Choice of Law.** These Terms shall be governed by Delaware law, without regard to conflicts of law principles.
+
+7.2. **Venue.** Disputes not subject to arbitration shall be resolved exclusively in Delaware courts. You agree to submit to the personal jurisdiction of such courts.
+
+## 8. INDEMNIFICATION
+
+8.1. **User Indemnification.** You agree to defend, indemnify, and hold harmless SHMONG from any claims, liabilities, damages, losses, costs, or fees arising from your violation of these Terms, your Content (including lack of consent), or violation of third-party rights.
+
+## 9. LIMITATION OF LIABILITY
+
+9.1. **"AS IS" Basis.** THE SERVICES ARE PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT WARRANTIES OF ANY KIND.
+
+9.2. **Limitation of Liability.** TO THE FULLEST EXTENT PERMITTED BY LAW, SHMONG SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING FROM YOUR USE OF THE SERVICES.
+
+9.3. **Cap on Liability.** SHMONG's total liability for all claims arising under these Terms shall be limited to the amount you paid to SHMONG in the last 12 months prior to the claim. This limitation applies regardless of the basis of any liability claim and regardless of the form of action.
+
+> **In Plain Language:** If something goes wrong, we'll only be responsible for refunding what you've paid us in the past year. This limit applies no matter what type of legal claim might be involved.
+
+## 10. MODIFICATION OF TERMS
+
+10.1. **Changes to Terms.** SHMONG reserves the right to modify these Terms of Service at any time. For material changes to these Terms:
+   - We will provide at least 30 days' notice before the changes take effect
+   - Notice will be provided through email (for registered users) and prominent notice on our website
+   - We will highlight significant changes and provide a summary of modifications
+   - For non-material changes, updates may take effect immediately upon posting
+
+10.2. **Acceptance of Modified Terms.** After the notice period, your continued use of the Services constitutes acceptance of the modified Terms. If you do not agree to the updated terms, you must stop using the Services and terminate your account.
+
+10.3. **Prior Versions.** We will maintain an archive of previous versions of these Terms for your reference.
+
+## 11. GENERAL PROVISIONS
+
+11.1. **Severability.** If a provision is unenforceable, it will be limited or eliminated minimally; the rest remains in effect.
+
+11.2. **Assignment.** You cannot assign Terms without SHMONG's consent; SHMONG may assign freely.
+
+11.3. **Entire Agreement.** These Terms constitute the entire agreement, superseding prior agreements.
+
+11.4. **No Third Party Beneficiaries.** These Terms are not intended to confer rights to any third parties.
+
+11.5. **Force Majeure.** Neither party is liable for delays due to causes beyond reasonable control.
+
+11.6. **Contact.** Questions about Terms: Legal@shmong.com
+
+## 12. COPYRIGHT AND INTELLECTUAL PROPERTY
+
+12.1. **DMCA Policy.** SHMONG respects intellectual property rights and expects users to do the same. We will respond to notices of alleged copyright infringement that comply with applicable law.
+
+12.2. **Reporting Copyright Infringement.** If you believe your copyrighted work has been used in a way that constitutes copyright infringement, please submit a notification containing:
+   - Physical or electronic signature of the copyright owner or authorized agent
+   - Identification of the copyrighted work claimed to be infringed
+   - Identification of the material that is claimed to be infringing
+   - Your contact information (address, telephone number, email)
+   - Statement that you have a good faith belief that use of the material is not authorized
+   - Statement that the information is accurate and, under penalty of perjury, you are authorized to act on behalf of the copyright owner
+
+12.3. **DMCA Agent.** Submit copyright infringement notifications to:
+   - DMCA Agent, SHMONG
+   - Legal@shmong.com
+   - [Physical Address]
+
+12.4. **Counter Notification.** If you believe your content was removed due to a mistake or misidentification, you may submit a counter-notification containing:
+   - Your physical or electronic signature
+   - Identification of the material removed and its former location
+   - Statement under penalty of perjury that you have a good faith belief the material was removed as a result of mistake or misidentification
+   - Your consent to the jurisdiction of the federal court in Delaware
+   - Your contact information
+
+12.5. **Repeat Infringer Policy.** SHMONG maintains a policy of terminating accounts of repeat infringers in appropriate circumstances. We reserve the right to terminate accounts that receive multiple copyright infringement notices.
+
+## 13. EXPORT CONTROL COMPLIANCE
+
+13.1. **Export Restrictions.** The Services, including any biometric technologies and software, may be subject to U.S. export laws, including the Export Administration Regulations and sanctions programs administered by the Office of Foreign Assets Control.
+
+13.2. **User Compliance Obligations.** You agree not to:
+   - Export or re-export our Services to any prohibited country, entity, or person
+   - Access or use the Services in any U.S. embargoed countries (currently Cuba, Iran, North Korea, Syria, and the Crimea, Donetsk, and Luhansk regions)
+   - Use the Services for activities prohibited by export laws, including nuclear, chemical, or biological weapons development
+   - Transfer, export, or re-export the Services without required governmental authorizations
+
+> **In Plain Language:** You cannot use our service in countries under U.S. embargo (like Cuba or North Korea) or share it with people on U.S. government restricted lists. You also can't use our technology for weapons development or other prohibited activities.
+
+13.3. **Representation.** By using the Services, you represent and warrant that you are not located in a country subject to U.S. embargo or designated as a "terrorist supporting" country, and you are not listed on any U.S. government list of prohibited or restricted parties.
+
+13.4. **Compliance with Laws.** You are responsible for complying with all domestic and international export laws and regulations that apply to your use of the Services.
+
+## DEFINITIONS
+
+- **"Content"**: Any images, videos, text, audio, or other materials uploaded, shared, or created using our Services.
+- **"User"**: Any individual who accesses or uses our Services, whether registered or unregistered.
+- **"Consent"**: Informed, written consent obtained through these Terms or the Biometric Data Consent Agreement.
+- **"Services"**: Our website, mobile application, and related services, including face matching system.
+- **"Arbitration"**: A process for resolving disputes outside of court where a neutral third party makes a binding decision.
+- **"Force Majeure"**: Unforeseeable circumstances that prevent the fulfillment of a contract, such as natural disasters or war.
+
+## 6. ACCOUNT TERMINATION
+
+6.1. **Account Termination by User.** You may terminate your account at any time by:
+   - Selecting "Delete Account" in account settings
+   - Sending a deletion request to Legal@shmong.com
+   - Upon confirmation, your account will be deactivated immediately and scheduled for permanent deletion within 30 days
+   - Content you've publicly shared may remain visible unless specifically deleted prior to account termination
+
+6.2. **Account Termination by SHMONG.** SHMONG may suspend or terminate your account:
+   - For violations of these Terms
+   - For extended periods of inactivity (12+ months)
+   - If required by law or court order
+   - If we suspect fraudulent activity or misrepresentation
+   - If you fail to pay fees after reasonable attempts to collect
+   - For any other reason at our discretion with reasonable notice
+
+6.3. **Effect of Termination.** Upon termination:
+   - Your access to the Services will cease immediately
+   - You will lose access to any content stored within your account
+   - Subscription charges will cease at the end of the billing period
+   - Your biometric data will be deleted according to our Biometrics Policy
+   - You remain liable for any outstanding obligations incurred before termination
+   - Provisions of these Terms that by their nature should survive will remain in effect
+
+---
+
+# SECTION 2: PRIVACY POLICY
+
+## SUMMARY
+This Privacy Policy explains what information we collect, how we use it, and your rights regarding your data. We collect personal information, usage data, and in some cases biometric data. We implement security measures to protect your information and provide you with control over your data through various rights and options. Special provisions apply for residents of certain states and countries.
+
+## 1. INFORMATION WE COLLECT
+
+1.1. **Personal Information.** We collect information you provide when you:
+   - Create an account (name, email, phone number)
+   - Use our services
+   - Contact customer support
+   - Participate in surveys or promotions
+
+1.2. **Automatically Collected Information.** We automatically collect:
+   - Device information (IP address, browser type, operating system)
+   - Usage information (pages visited, features used, time spent)
+   - Location information (approximate location based on IP address)
+
+1.3. **Biometric Data.** If you use our face matching features, we may collect biometric data as described in the Biometrics Policy.
+
+## 2. HOW WE USE YOUR INFORMATION
+
+2.1. **Provide and Improve Services.** We use your information to:
+   - Deliver the services you request
+   - Personalize your experience
+   - Develop new features and improvements
+   - Analyze usage patterns and trends
+
+2.2. **Communications.** We may use your information to:
+   - Send service announcements and updates
+   - Respond to your inquiries
+   - Provide customer support
+   - Send marketing communications (with consent)
+
+2.3. **Security and Fraud Prevention.** We use information to:
+   - Protect the security of our services
+   - Prevent fraudulent activity
+   - Enforce our Terms of Service
+
+## 3. DATA SHARING AND DISCLOSURE
+
+3.1. **No Sale of Personal Information.** We do not sell, lease, trade, or otherwise profit from your personal information.
+
+3.2. **Limited Disclosure.** We may share information with:
+   - Service providers helping us deliver our services
+   - Legal authorities when required by law or legal process
+   - In connection with a merger, acquisition, or sale of assets
+
+3.3. **Third-Party Service Providers.** We work with the following third parties who may receive or process your data:
+   - Stripe: For payment processing and subscription management
+   - Amazon Web Services: For cloud storage and computing infrastructure
+   - Google: For analytics, authentication, and cloud services
+   - Dropbox: For file storage and synchronization
+   - Mixpanel: For user behavior analytics and engagement tracking
+
+   These third parties access and process your information only to perform specific tasks on our behalf and are obligated not to disclose or use your information for any other purpose. Each is bound by data processing agreements that require appropriate security and confidentiality measures.
+
+3.4. **Third-Party Services.** Our services may integrate with third-party services. Information shared with these services is governed by their respective privacy policies.
+
+## 4. DATA RETENTION AND DELETION
+
+4.1. **Retention Period.** We retain your personal information for as long as necessary to provide our services and fulfill the purposes described in this policy.
+
+4.2. **Data Deletion.** You may request deletion of your personal information. We will delete your information within 45 days of a verified request, unless retention is required by law.
+
+## 5. USER DATA RIGHTS
+
+5.1. **Access.** You have the right to access your personal data and information about its processing.
+
+5.2. **Correction.** You can request correction of inaccurate personal information.
+
+5.3. **Deletion.** You can request deletion of your personal information.
+
+5.4. **Portability.** You may request a copy of your data in a structured, machine-readable format.
+
+5.5. **Withdraw Consent.** You may withdraw consent for personal data processing at any time.
+
+5.6. **Exercise Rights.** Contact Legal@shmong.com to exercise these rights. We will respond within the timeframe required by applicable law.
+
+## 6. COOKIES AND TRACKING TECHNOLOGIES
+
+6.1. **Cookies.** We use cookies and similar technologies to enhance your experience, gather information about users, and manage our services. These include:
+   - **Essential Cookies**: Required for the service to function (cannot be disabled)
+   - **Functional Cookies**: Enhance functionality and personalization
+   - **Analytics Cookies**: Help us understand how users interact with our service
+   - **Advertising Cookies**: Used to deliver relevant ads and track campaign effectiveness
+
+6.2. **Managing Cookies.** You can manage cookie preferences through:
+   - Our cookie banner and preference center
+   - Your browser settings
+   - Opting out of specific third-party cookies via their opt-out mechanisms
+
+6.3. **Do Not Track.** We respond to Do Not Track signals by disabling all non-essential tracking when detected.
+
+6.4. **Similar Technologies.** In addition to cookies, we also use:
+   - Web beacons
+   - Pixel tags
+   - Local storage
+   - Device fingerprinting
+   - Mobile analytics software
+
+## 7. INTERNATIONAL USERS
+
+7.1. **Data Transfers.** Your information may be transferred to and processed in countries other than your country of residence.
+
+7.2. **Legal Basis for Processing.** For users in the European Economic Area, United Kingdom, or similar jurisdictions, we process your data based on:
+   - Your consent
+   - Performance of a contract
+   - Legitimate interests
+   - Compliance with legal obligations
+
+7.3. **Region-Specific Rights.** Users in certain regions have additional rights as detailed in the Biometrics Policy.
+
+## 8. CALIFORNIA PRIVACY RIGHTS
+
+8.1. **California Consumer Privacy Act (CCPA/CPRA) Rights.** California residents have the following rights:
+   - Right to know what personal information is collected, used, shared, or sold
+   - Right to delete personal information collected from you
+   - Right to opt-out of the sale of your personal information
+   - Right to correct inaccurate personal information
+   - Right to limit use and disclosure of sensitive personal information
+   - Right to non-discrimination for exercising your rights
+
+8.2. **California "Shine the Light" Law.** California residents may request information regarding disclosure of personal information to third parties for direct marketing purposes.
+
+8.3. **Exercise Your California Rights.** Submit requests by:
+   - Visiting our privacy portal at privacy.shmong.com
+   - Emailing Legal@shmong.com
+   - Calling 1-800-XXX-XXXX
+
+8.4. **Authorized Agents.** You may designate an authorized agent to make requests on your behalf.
+
+8.5. **Verification Process.** We will verify your identity before fulfilling requests, which may require additional information.
+
+8.6. **Response Timeline.** We will respond to verifiable requests within 45 days, with possible 45-day extension if reasonably necessary.
+
+## 9. CHILDREN'S PRIVACY
+
+9.1. **Age Restrictions.** Our services are not directed to individuals under 18. We do not knowingly collect personal information from children.
+
+9.2. **Parental Rights.** Parents or guardians may contact us to review, modify, or delete their child's information if we have inadvertently collected it.
+
+## 10. DETAILED GDPR COMPLIANCE
+
+10.1. **Legal Basis for Processing.** For EEA, UK, and Swiss residents, we process personal data on these legal bases:
+   - Consent (Article 6(1)(a) GDPR): When you explicitly agree to processing
+   - Contractual Necessity (Article 6(1)(b) GDPR): To perform our contract with you
+   - Legal Obligation (Article 6(1)(c) GDPR): To comply with legal requirements
+   - Legitimate Interests (Article 6(1)(f) GDPR): When we have legitimate business interests
+
+10.2. **GDPR Data Subject Rights.** You have the following rights:
+   - Access (Article 15): Obtain confirmation and access to your personal data
+   - Rectification (Article 16): Correct inaccurate personal data
+   - Erasure (Article 17): Request deletion of personal data
+   - Restriction (Article 18): Limit how we use your data while a request is processed
+   - Portability (Article 20): Receive your data in a structured, machine-readable format
+   - Objection (Article 21): Object to processing based on legitimate interests
+   - Automated Decision-Making (Article 22): Not be subject to automated decision-making with legal effects
+
+10.3. **Data Transfers.** For transfers outside the EEA, UK, or Switzerland:
+   - We use European Commission approved Standard Contractual Clauses
+   - We implement supplementary measures as recommended by the EDPB
+   - We conduct transfer impact assessments for high-risk transfers
+
+10.4. **Data Protection Officer.** You may contact our Data Protection Officer at dpo@shmong.com.
+
+10.5. **Supervisory Authority.** You have the right to lodge a complaint with your local supervisory authority.
+
+## 11. DATA SECURITY
+
+11.1. **Security Measures.** We implement technical, administrative, and physical safeguards to protect your information.
+
+11.2. **Data Breach Notification.** In the event of a data breach, we will notify affected users as required by applicable law.
+
+## 12. LAW ENFORCEMENT DATA REQUESTS
+
+12.1. **Government Requests.** SHMONG may disclose personal information, including biometric data, in response to:
+   - Valid subpoenas, court orders, warrants, or similar legal processes
+   - National security letters, requests from government agencies, or as otherwise required by law
+   - Requests to protect the safety of any person, to address fraud or illegal activity, or to protect SHMONG's rights or property
+
+12.2. **Request Evaluation Process.** We carefully review all legal requests to ensure they satisfy applicable legal requirements and our policies. We may:
+   - Request clarification or additional information
+   - Narrow overly broad requests
+   - Object to requests we determine are improper
+   - Notify users of requests when not prohibited by law or court order
+
+12.3. **User Notification.** Unless prohibited by law or court order (e.g., sealed court orders, confidentiality obligations):
+   - We will attempt to notify users of legal demands for their data
+   - We will provide users with copies of the legal request when possible
+   - We may delay notification where immediate notification could risk harm, safety, or fraud
+
+12.4. **Transparency Reporting.** SHMONG publishes periodic transparency reports summarizing:
+   - Number and types of government requests received
+   - Our response rates
+   - Number of accounts affected
+   - Jurisdictional breakdown of requests
+
+12.5. **International Requests.** For requests from non-U.S. government agencies, we require:
+   - Due process under applicable laws
+   - Mutual Legal Assistance Treaties or similar international agreements
+   - Compliance with U.S. law and our policies
+
+## DEFINITIONS
+
+- **"Personal Information"**: Information that identifies or can be used to identify an individual.
+- **"Biometric Data"**: Information based on biological characteristics, such as facial geometry, that can be used to identify an individual.
+- **"Data Controller"**: The entity that determines the purposes and means of processing personal data.
+- **"Data Processor"**: The entity that processes personal data on behalf of the data controller.
+- **"IP Address"**: A unique string of numbers assigned to each device connected to a computer network.
+- **"Cookies"**: Small text files stored on your device that help websites remember your preferences and track usage. 

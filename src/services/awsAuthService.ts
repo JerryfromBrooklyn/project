@@ -25,22 +25,22 @@ export const BYPASS_EMAIL_VERIFICATION = true;
 export interface User {
   id: string;
   email: string;
-  // Add other potential fields based on Cognito attributes or your DB record
-  // Example based on AuthUser in types.ts
+  // Add properties that were causing linter errors
+  full_name?: string; 
+  role?: string;
+  created_at?: string;
+  updated_at?: string;
+  // User metadata
   user_metadata?: { 
     name?: string; 
     full_name?: string; 
     avatar_url?: string; 
-    role?: string; // Keep role here or inside metadata?
+    role?: string;
   };
-  app_metadata?: { // Example from Supabase type
+  app_metadata?: {
       provider?: string;
       providers?: string[];
   };
-  role?: string; // Keep top-level role? Decide on structure
-  created_at?: string;
-  updated_at?: string;
-  // Add any other fields returned by getCurrentUser or needed by the app
 }
 
 // Auth state
@@ -210,12 +210,24 @@ export const signUp = async (email: string, password: string, userData: Record<s
       console.log('[AUTH] Adding full_name attribute:', userData.full_name);
       userAttributes.push({ Name: 'name', Value: userData.full_name });
     }
+    
     // Only add custom:role if userData.role is a non-empty string
     if (typeof userData.role === 'string' && userData.role.trim() !== '') {
       console.log('[AUTH] Adding role attribute:', userData.role);
       userAttributes.push({ Name: 'custom:role', Value: userData.role });
     } else {
       console.log('[AUTH] Skipping role attribute (value invalid or empty):', userData.role);
+    }
+    
+    // Add legal agreement consent attributes
+    if (userData['custom:agreed_to_terms']) {
+      console.log('[AUTH] Adding terms agreement:', userData['custom:agreed_to_terms']);
+      userAttributes.push({ Name: 'custom:agreed_to_terms', Value: userData['custom:agreed_to_terms'] });
+    }
+    
+    if (userData['custom:agreed_to_biometrics']) {
+      console.log('[AUTH] Adding biometrics agreement:', userData['custom:agreed_to_biometrics']);
+      userAttributes.push({ Name: 'custom:agreed_to_biometrics', Value: userData['custom:agreed_to_biometrics'] });
     }
     
     // Create the signup command

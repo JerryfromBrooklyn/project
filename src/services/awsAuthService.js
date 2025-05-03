@@ -156,6 +156,23 @@ export const signUp = async (email, password, userData = {}) => {
             console.log('[AUTH] Adding role attribute:', userData.role);
             userAttributes.push({ Name: 'custom:role', Value: userData.role });
         }
+        
+        // Add custom agreement attributes
+        if (userData.custom_agreed_to_terms !== undefined) {
+            console.log('[AUTH] Adding terms agreement attribute:', userData.custom_agreed_to_terms);
+            userAttributes.push({ 
+                Name: 'custom:agreed_to_terms', 
+                Value: userData.custom_agreed_to_terms 
+            });
+        }
+        
+        if (userData.custom_agreed_to_biometrics !== undefined) {
+            console.log('[AUTH] Adding biometrics agreement attribute:', userData.custom_agreed_to_biometrics);
+            userAttributes.push({ 
+                Name: 'custom:agreed_to_biometrics', 
+                Value: userData.custom_agreed_to_biometrics 
+            });
+        }
         // Create the signup command
         const command = new SignUpCommand({
             ClientId: COGNITO_CLIENT_ID,

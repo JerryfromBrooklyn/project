@@ -5,6 +5,7 @@ import { AuthForms } from '../components/AuthForms';
 import { useAuth } from '../context/AuthContext';
 import { Camera, Search, Shield, Clock, Users, Image, Sparkles, ChevronRight, ExternalLink, Check, X, Zap, Lock, Timer, User, CheckCircle, Star } from 'lucide-react';
 import { cn } from '../utils/cn';
+import Footer from '../components/Footer';
 
 interface NavItem {
   label: string;
@@ -420,13 +421,18 @@ export const LandingPage: React.FC = () => {
             </nav>
 
             <div className="flex items-center space-x-2">
-              <button
-                onClick={(e) => handleLoginSignupClick(e, 'signin')}
-                // Green button as requested, HIG compliant style otherwise
+              <Link
+                to="/login"
                 className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors"
               >
-                Log In / Sign Up
-              </button>
+                Log In
+              </Link>
+              <Link
+                to="/signup"
+                className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors"
+              >
+                Sign Up
+              </Link>
             </div>
           </div>
         </div>
@@ -449,13 +455,12 @@ export const LandingPage: React.FC = () => {
                 Never miss a moment again. SHMONG's AI technology finds all photos of you at events and gatherings - no searching required.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start mb-8"> {/* Adjusted Gap */}
-                <button
-                  onClick={handleDashboardClick}
-                  // Standard HIG Blue Primary Button
-                  className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors"
+                <Link
+                  to="/signup"
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors text-center"
                 >
                   Find My Photos
-                </button>
+                </Link>
                 <button
                   onClick={() => handleNavClick('#how-it-works')}
                   // Standard HIG Secondary Button
@@ -625,13 +630,12 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div className="text-center mt-12 md:mt-16"> {/* Adjusted Margin */}
-            <button
-              onClick={handleDashboardClick}
-              // Standard HIG Blue Primary Button
-              className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors"
+            <Link
+              to="/signup"
+              className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-5 rounded-lg text-base transition-colors inline-block"
             >
               Get Started
-            </button>
+            </Link>
           </div>
         </div>
       </section>
@@ -649,76 +653,19 @@ export const LandingPage: React.FC = () => {
               Join thousands of others who are already using SHMONG to discover their event photos effortlessly.
             </p>
             <div className="flex justify-center">
-              <button
-                onClick={handleDashboardClick}
-                // Standard HIG Blue Primary Button, slightly larger for CTA
-                className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg text-lg transition-colors"
+              <Link
+                to="/signup"
+                className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg text-lg transition-colors inline-block"
               >
                 Get Started Now
-              </button>
+              </Link>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* Footer - Adjusted padding and text styles */}
-      <footer className="bg-apple-gray-900 text-apple-gray-400 py-12 md:py-16"> {/* Standardized Padding */}
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div>
-              <img src="https://www.shmong.tv/wp-content/uploads/2023/05/logo-white.png" alt="SHMONG" className="h-7 mb-4" /> {/* Adjusted Logo */}
-              <p className="text-sm">Making event photography accessible and enjoyable for everyone.</p> {/* Adjusted Text */}
-            </div>
-            <div>
-              <h3 className="text-base font-semibold text-white mb-3">Product</h3> {/* Adjusted Heading */}
-              <ul className="space-y-1.5"> {/* Adjusted Spacing */}
-                <li><Link to="#features" className="text-sm hover:text-white transition-colors">Features</Link></li> {/* Adjusted Links */}
-                <li><Link to="#how-it-works" className="text-sm hover:text-white transition-colors">How It Works</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="text-base font-semibold text-white mb-3">Company</h3> {/* Adjusted Heading */}
-              <ul className="space-y-1.5"> {/* Adjusted Spacing */}
-                <li><Link to="#about" className="text-sm hover:text-white transition-colors">About Us</Link></li> {/* Adjusted Links */}
-                <li><Link to="#contact" className="text-sm hover:text-white transition-colors">Contact</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="text-base font-semibold text-white mb-3">Legal</h3> {/* Adjusted Heading */}
-              <ul className="space-y-1.5"> {/* Adjusted Spacing */}
-                <li><Link to="/privacy" className="text-sm hover:text-white transition-colors">Privacy Policy</Link></li> {/* Adjusted Links */}
-                <li><Link to="/terms" className="text-sm hover:text-white transition-colors">Terms of Service</Link></li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-apple-gray-700 mt-8 md:mt-12 pt-8"> {/* Adjusted Margin */}
-            <div className="flex flex-col sm:flex-row justify-between items-center">
-              <p className="text-xs"> {/* Adjusted Text */}
-                © {new Date().getFullYear()} SHMONG. All rights reserved.
-              </p>
-              <div className="flex space-x-5 mt-4 sm:mt-0"> {/* Adjusted Spacing */}
-                {socialLinks.map((link) => (
-                  <a
-                    key={link.name}
-                    href={link.href}
-                    className="hover:text-white transition-colors"
-                  >
-                    <span className="sr-only">{link.name}</span>
-                    <svg
-                      className="h-5 w-5" // Adjusted Icon Size
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path d={link.icon} />
-                    </svg>
-                  </a>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </footer>
+      {/* Add Footer component */}
+      <Footer />
 
       {/* Auth Modal - Adjusted styling */}
       <AnimatePresence>

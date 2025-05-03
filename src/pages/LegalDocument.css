@@ -1,0 +1,147 @@
+/* Apple-inspired Legal Document Styling */
+
+.apple-legal-document {
+  /* Apple's font stacks with system font preference */
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 
+    Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  color: #1d1d1f;
+}
+
+/* Improve typography and readability */
+.apple-legal-document .legal-content {
+  font-size: 15px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  color: #333336;
+}
+
+/* Style headings with Apple-like typography */
+.apple-legal-document h1 {
+  letter-spacing: -0.022em;
+  font-weight: 700;
+}
+
+.apple-legal-document h2 {
+  letter-spacing: -0.018em;
+  font-weight: 600;
+}
+
+.apple-legal-document h3 {
+  letter-spacing: -0.014em;
+  font-weight: 600;
+}
+
+/* Enhance blockquotes to match Apple's style guides */
+.apple-legal-document blockquote {
+  font-size: 0.95em;
+  color: #494949;
+  line-height: 1.6;
+  border-radius: 6px;
+}
+
+/* Style links with Apple's blue */
+.apple-legal-document a {
+  color: #0066cc;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.apple-legal-document a:hover {
+  color: #0071e3;
+  text-decoration: underline;
+}
+
+/* Better list styling */
+.apple-legal-document ul, 
+.apple-legal-document ol {
+  padding-left: 1.5em;
+  margin-bottom: 1.5em;
+}
+
+.apple-legal-document li {
+  margin-bottom: 0.5em;
+  position: relative;
+}
+
+/* Add subtle animations for page transitions */
+.apple-legal-document .legal-content {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Enhanced styling for sections */
+.apple-legal-document .legal-content > h2 {
+  margin-top: 3em;
+  padding-bottom: 0.5em;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+/* Enhance definition terms and descriptions */
+.apple-legal-document dt {
+  font-weight: 600;
+  margin-top: 1em;
+  color: #1d1d1f;
+}
+
+.apple-legal-document dd {
+  margin-left: 1em;
+  margin-bottom: 1em;
+}
+
+/* Specific styles for legal sections */
+.apple-legal-document h2 + p {
+  color: #494949;
+  font-size: 0.95em;
+}
+
+/* Make scrolling smooth */
+.apple-legal-document {
+  scroll-behavior: smooth;
+}
+
+/* Style code elements */
+.apple-legal-document code {
+  font-family: 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+/* Print styles for better document printing */
+@media print {
+  .apple-legal-document {
+    font-size: 12pt;
+    line-height: 1.5;
+    color: black;
+  }
+  
+  .apple-legal-document a {
+    color: black;
+    text-decoration: underline;
+  }
+  
+  .apple-legal-document header,
+  .apple-legal-document footer {
+    display: none;
+  }
+}
+
+/* Responsive font size adjustments */
+@media (max-width: 640px) {
+  .apple-legal-document .legal-content {
+    font-size: 14px;
+  }
+  
+  .apple-legal-document h1 {
+    font-size: 1.8rem;
+  }
+  
+  .apple-legal-document h2 {
+    font-size: 1.4rem;
+  }
+} 
