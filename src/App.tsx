@@ -1,20 +1,22 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './auth/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { LandingPage } from './pages/LandingPage';
+import BiometricsPolicy from './pages/BiometricsPolicy';
+import TermsAndPrivacy from './pages/TermsAndPrivacy';
 
 // Lazy load components to improve initial load time
 const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Signup = lazy(() => import('./pages/Signup'));
-const Login = lazy(() => import('./pages/Login'));
+const Signup = lazy(() => import('./pages/Signup.jsx'));
+const Login = lazy(() => import('./pages/Login.jsx'));
 const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
 
 interface ProtectedRouteProps {
-  children: JSX.Element;
+  children: ReactNode;
 }
 
 interface PublicRouteProps {
-  children: JSX.Element;
+  children: ReactNode;
 }
 
 // Protected route component
@@ -33,7 +35,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     return <Navigate to="/" replace />;
   }
 
-  return children;
+  return <>{children}</>;
 };
 
 // Public route component that redirects to dashboard if user is logged in
@@ -52,7 +54,7 @@ const PublicRoute = ({ children }: PublicRouteProps) => {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return children;
+  return <>{children}</>;
 };
 
 // Create a function to check if we're in testing mode 
@@ -76,98 +78,113 @@ function App() {
 
   return (
     <Router>
-      <AuthProvider>
-        {/* Mock mode banner with retry option */}
-        {isMockMode && (
-          <div className="bg-yellow-500 text-white text-center py-2 px-4 shadow-md">
-            ⚠️ Running in Local Storage Mode - AWS connectivity issue detected. Data stored locally only.
-            <button 
-              onClick={handleRetryAwsConnection}
-              className="ml-4 px-2 py-1 bg-white text-yellow-700 rounded text-sm hover:bg-yellow-100"
-            >
-              Retry AWS Connection
-            </button>
-          </div>
-        )}
-        {isInTestMode && !isMockMode && (
-          <div className="bg-purple-500 text-white text-center py-2 px-4 shadow-md">
-            🧪 Running in Testing Mode - Authentication is bypassed
-          </div>
-        )}
-        <Routes>
-          <Route 
-            path="/" 
-            element={
-              <PublicRoute>
-                <LandingPage />
-              </PublicRoute>
-            } 
-          />
-          <Route 
-            path="/signup" 
-            element={
-              <PublicRoute>
-                <Suspense fallback={<div className="min-h-screen flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
-                </div>}>
-                  <Signup />
-                </Suspense>
-              </PublicRoute>
-            } 
-          />
-          <Route 
-            path="/login" 
-            element={
-              <PublicRoute>
-                <Suspense fallback={<div className="min-h-screen flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
-                </div>}>
-                  <Login />
-                </Suspense>
-              </PublicRoute>
-            } 
-          />
-          <Route 
-            path="/verify-email" 
-            element={
-              <PublicRoute>
-                <Suspense fallback={<div className="min-h-screen flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
-                </div>}>
-                  <VerifyEmail />
-                </Suspense>
-              </PublicRoute>
-            } 
-          />
-          <Route 
-            path="/dashboard" 
-            element={
-              isInTestMode ? (
-                // In testing mode, allow access to dashboard without authentication
-                <Suspense fallback={
-                  <div className="min-h-screen flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
-                  </div>
-                }>
-                  <Dashboard />
-                </Suspense>
-              ) : (
-                // Normal protected route
-                <ProtectedRoute>
-                  <Suspense fallback={
-                    <div className="min-h-screen flex items-center justify-center">
+      <Routes>
+        {/* Legal document routes - completely outside of AuthProvider */}
+        <Route 
+          path="/terms-of-service-and-privacy-policy" 
+          element={<TermsAndPrivacy />} 
+        />
+        <Route 
+          path="/biometrics-policy" 
+          element={<BiometricsPolicy />} 
+        />
+        
+        {/* All other routes inside AuthProvider */}
+        <Route path="*" element={
+          <AuthProvider>
+            {/* Mock mode banner with retry option */}
+            {isMockMode && (
+              <div className="bg-yellow-500 text-white text-center py-2 px-4 shadow-md">
+                ⚠️ Running in Local Storage Mode - AWS connectivity issue detected. Data stored locally only.
+                <button 
+                  onClick={handleRetryAwsConnection}
+                  className="ml-4 px-2 py-1 bg-white text-yellow-700 rounded text-sm hover:bg-yellow-100"
+                >
+                  Retry AWS Connection
+                </button>
+              </div>
+            )}
+            {isInTestMode && !isMockMode && (
+              <div className="bg-purple-500 text-white text-center py-2 px-4 shadow-md">
+                🧪 Running in Testing Mode - Authentication is bypassed
+              </div>
+            )}
+            <Routes>
+              <Route 
+                path="/" 
+                element={
+                  <PublicRoute>
+                    <LandingPage />
+                  </PublicRoute>
+                } 
+              />
+              <Route 
+                path="/signup" 
+                element={
+                  <PublicRoute>
+                    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">
                       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
-                    </div>
-                  }>
-                    <Dashboard />
-                  </Suspense>
-                </ProtectedRoute>
-              )
-            } 
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
+                    </div>}>
+                      <Signup />
+                    </Suspense>
+                  </PublicRoute>
+                } 
+              />
+              <Route 
+                path="/login" 
+                element={
+                  <PublicRoute>
+                    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
+                    </div>}>
+                      <Login />
+                    </Suspense>
+                  </PublicRoute>
+                } 
+              />
+              <Route 
+                path="/verify-email" 
+                element={
+                  <PublicRoute>
+                    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
+                    </div>}>
+                      <VerifyEmail />
+                    </Suspense>
+                  </PublicRoute>
+                } 
+              />
+              <Route 
+                path="/dashboard" 
+                element={
+                  isInTestMode ? (
+                    // In testing mode, allow access to dashboard without authentication
+                    <Suspense fallback={
+                      <div className="min-h-screen flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
+                      </div>
+                    }>
+                      <Dashboard />
+                    </Suspense>
+                  ) : (
+                    // Normal protected route
+                    <ProtectedRoute>
+                      <Suspense fallback={
+                        <div className="min-h-screen flex items-center justify-center">
+                          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
+                        </div>
+                      }>
+                        <Dashboard />
+                      </Suspense>
+                    </ProtectedRoute>
+                  )
+                } 
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </AuthProvider>
+        } />
+      </Routes>
     </Router>
   );
 }

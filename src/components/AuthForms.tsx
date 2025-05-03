@@ -3,7 +3,27 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../utils/cn';
 import { Eye, EyeOff, User, Mail, Lock, X, CheckCircle, AlertCircle, UserCog, RefreshCw } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import './CheckboxStyles.css';
+
+// Add these styles directly in the component to ensure they're applied
+const checkboxStyle: React.CSSProperties = {
+  width: '20px',
+  height: '20px',
+  border: '2px solid #d1d5db',
+  borderRadius: '4px',
+  backgroundColor: 'white',
+  cursor: 'pointer',
+  position: 'relative',
+  outline: 'none',
+  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+};
+
+const checkedStyle: React.CSSProperties = {
+  ...checkboxStyle,
+  backgroundColor: '#3b82f6',
+  borderColor: '#3b82f6'
+};
 
 interface AuthFormsProps {
   defaultView?: 'signin' | 'signup';
@@ -41,6 +61,8 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreedToBiometrics, setAgreedToBiometrics] = useState(false);
   const [touched, setTouched] = useState<TouchedFields>({
     fullName: false,
     email: false,
@@ -82,7 +104,14 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
         setError('Please enter your full name');
         return false;
       }
-      
+      if (!agreedToTerms) {
+        setError('You must agree to the Terms of Service and Privacy Policy.');
+        return false;
+      }
+      if (!agreedToBiometrics) {
+        setError('You must agree to the Biometrics Policy.');
+        return false;
+      }
       if (password !== confirmPassword) {
         setError('Passwords do not match');
         return false;
@@ -107,8 +136,15 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
         if (error) throw error;
       } else {
         console.log('Starting signup submission...');
-        const userData = { full_name: fullName, role: userType };
-        const { data, error: signUpError } = await signUp(email, password, userData);
+        const userAttributes = {
+          full_name: fullName,
+          role: userType,
+          'custom:agreed_to_terms': agreedToTerms.toString(),
+          'custom:agreed_to_biometrics': agreedToBiometrics.toString(),
+        };
+        
+        console.log('[AuthForms] Calling signUp with attributes:', userAttributes);
+        const { data, error: signUpError } = await signUp(email, password, userAttributes);
         
         if (signUpError) {
           console.error('Signup returned error:', signUpError);
@@ -395,6 +431,41 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
                       </div>
                     </div>
                   </div>
+
+                  {/* Legal Agreement Checkboxes */}
+                  <div className="mb-6 space-y-3">
+                    <div className="flex items-start">
+                      <input
+                        id="terms-consent"
+                        type="checkbox"
+                        checked={agreedToTerms}
+                        onChange={(e) => setAgreedToTerms(e.target.checked)}
+                        className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        required
+                      />
+                      <div className="ml-3 text-sm">
+                        <label htmlFor="terms-consent" className="font-medium text-gray-700 cursor-pointer">
+                          I agree to the <a href="/terms-of-service-and-privacy-policy" target="_blank" className="text-blue-600 hover:text-blue-800">Terms of Service and Privacy Policy</a>
+                        </label>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start">
+                      <input
+                        id="biometrics-consent"
+                        type="checkbox"
+                        checked={agreedToBiometrics}
+                        onChange={(e) => setAgreedToBiometrics(e.target.checked)}
+                        className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        required
+                      />
+                      <div className="ml-3 text-sm">
+                        <label htmlFor="biometrics-consent" className="font-medium text-gray-700 cursor-pointer">
+                          I agree to the <a href="/biometrics-policy" target="_blank" className="text-blue-600 hover:text-blue-800">Biometrics Policy</a>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
                 </>
               )}
 
@@ -519,12 +590,11 @@ export const AuthForms = ({ defaultView = 'signin', isModal = false, onClose }: 
               <div className="mb-6">
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || (view === 'signup' && (!agreedToTerms || !agreedToBiometrics))}
                   className={cn(
                     "w-full p-4 rounded-xl text-white font-medium relative overflow-hidden transition-all text-base shadow-md",
-                    loading
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-blue-500 hover:bg-blue-600"
+                    loading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-600",
+                    view === 'signup' && (!agreedToTerms || !agreedToBiometrics) && "opacity-50 cursor-not-allowed"
                   )}
                 >
                   {loading ? (

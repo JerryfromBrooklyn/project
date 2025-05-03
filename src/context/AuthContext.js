@@ -64,16 +64,32 @@ export function AuthProvider({ children }) {
                 
                 setLoading(false);
                 
-                if (currentUser) {
+                // Check if current path is a legal page
+                const currentPath = window.location.pathname;
+                const isLegalPage = 
+                    currentPath === '/terms-of-service-and-privacy-policy' || 
+                    currentPath === '/biometrics-policy';
+                
+                // Only redirect to dashboard if not on a legal page
+                if (currentUser && !isLegalPage) {
                     console.log('[AUTH_CONTEXT] User already logged in, redirecting to dashboard');
                     navigate('/dashboard');
+                } else if (isLegalPage) {
+                    console.log('[AUTH_CONTEXT] On legal page, not redirecting');
                 }
                 
                 // Set up listener for auth changes
                 const subscription = awsAuth.onAuthStateChange((currentUser) => {
                     console.log('[AUTH_CONTEXT] Auth state changed', { hasUser: !!currentUser });
                     updateUser(currentUser);
-                    if (currentUser) {
+                    
+                    // Also check for legal pages before redirecting here
+                    const currentPath = window.location.pathname;
+                    const isLegalPage = 
+                        currentPath === '/terms-of-service-and-privacy-policy' || 
+                        currentPath === '/biometrics-policy';
+                    
+                    if (currentUser && !isLegalPage) {
                         navigate('/dashboard');
                     }
                 });
@@ -93,10 +109,21 @@ export function AuthProvider({ children }) {
     // NEW Effect: Redirect to dashboard when user logs in
     useEffect(() => {
         console.log(`[AUTH_CONTEXT] Redirect Effect Triggered: loading=${loading}, user=${!!user}`);
-        // Only redirect if loading is finished AND we have a user object
-        if (!loading && user) {
+        
+        // Get current path to check if it's a legal document page
+        const currentPath = window.location.pathname;
+        const isLegalPage = 
+            currentPath === '/terms-of-service-and-privacy-policy' || 
+            currentPath === '/biometrics-policy';
+            
+        console.log(`[AUTH_CONTEXT] Current path: ${currentPath}, isLegalPage: ${isLegalPage}`);
+            
+        // Only redirect if loading is finished AND we have a user object AND not on a legal page
+        if (!loading && user && !isLegalPage) {
             console.log('[AUTH_CONTEXT] User detected after load, redirecting to /dashboard');
             navigate('/dashboard', { replace: true });
+        } else if (isLegalPage) {
+            console.log('[AUTH_CONTEXT] On legal page, not redirecting');
         }
     }, [user, loading, navigate]);
 
@@ -136,12 +163,11 @@ export function AuthProvider({ children }) {
         navigate('/login', { state: { message: 'Social logins are not available in the current environment.' } });
     };
     
-    const signUp = async (email, password, fullName, userType) => {
+    const signUp = async (email, password, userAttributes = {}) => {
         try {
             console.log('[AUTH_CONTEXT] 🚀 Starting AWS signup process...');
             console.log('[AUTH_CONTEXT] Email:', email);
-            console.log('[AUTH_CONTEXT] Full Name:', fullName);
-            console.log('[AUTH_CONTEXT] User Type:', userType);
+            console.log('[AUTH_CONTEXT] User Attributes:', userAttributes);
             console.log('[AUTH_CONTEXT] AWS Connectivity Status:', navigator.onLine ? 'Online' : 'Offline');
             // Log basic browser network status before attempting signup
             console.log('[AUTH_CONTEXT] Browser network status:', {
@@ -149,10 +175,8 @@ export function AuthProvider({ children }) {
                 userAgent: navigator.userAgent,
                 url: window.location.href
             });
-            const { data, error } = await awsAuth.signUp(email, password, {
-                full_name: fullName,
-                role: userType
-            });
+            
+            const { data, error } = await awsAuth.signUp(email, password, userAttributes);
             // Handle signup errors
             if (error) {
                 console.error('[AUTH_CONTEXT] ❌ AWS signup failed:', error);
@@ -181,8 +205,8 @@ export function AuthProvider({ children }) {
                 userData: data?.user ? {
                     id: data.user.id,
                     email: data.user.email,
-                    fullName: data.user.full_name,
-                    role: data.user.role,
+                    fullName: data.user.name,
+                    role: data.user.custom_role,
                 } : null,
                 userConfirmed: data?.userConfirmed,
             }, null, 2));

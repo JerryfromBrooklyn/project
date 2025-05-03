@@ -33,13 +33,6 @@ const TabNavigation = ({ activeTab, onTabChange }) => {
       color: 'green'
     },
     {
-      id: 'events',
-      label: 'Events',
-      icon: Calendar,
-      tooltip: 'Browse photos by event',
-      color: 'indigo'
-    },
-    {
       id: 'trash',
       label: 'Trash',
       icon: Trash2,

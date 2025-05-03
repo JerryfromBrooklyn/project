@@ -182,35 +182,36 @@ function GalleryPage({ photos }) {
 
 ### ImageViewer.jsx
 
-The enhanced image viewer provides a full-featured viewing experience.
+The enhanced image viewer logic is primarily handled within `SimplePhotoInfoModal.jsx`.
 
 **Key functions:**
-- `handleZoom`: Controls image zoom
-- `handleRotate`: Rotates the image
+- `toggleDetailsView`: Switches between image and details mode (if implemented)
+- `handleZoom`, `handleRotate`: Image manipulation controls
 - `handleDownload`: Downloads the current image
-- `handleShare`: Shares the current image
+- `handleShare`: Shares the current image using Web Share API
+- `handleTrash`: Moves the photo to the trash
 
 **Usage example:**
 ```jsx
-// In a component
-import ImageViewer from '../components/ui/ImageViewer';
+// In a component like PhotoGrid or PhotoUploader
+import SimplePhotoInfoModal from '../components/SimplePhotoInfoModal';
 
-function PhotoDetail({ photo }) {
-  const [isViewerOpen, setIsViewerOpen] = useState(false);
+function PhotoCard({ photo }) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
   
   return (
     <>
       <img 
-        src={photo.thumbnailUrl} 
-        alt={photo.name}
-        onClick={() => setIsViewerOpen(true)}
+        src={photo.url} // Assuming photo has a url
+        alt={photo.title || 'Photo'} // Use title or default alt text
+        onClick={() => setIsModalOpen(true)}
       />
       
-      {isViewerOpen && (
-        <ImageViewer
-          image={photo}
-          onClose={() => setIsViewerOpen(false)}
-          onAction={handleViewerAction}
+      {isModalOpen && (
+        <SimplePhotoInfoModal
+          photo={photo} 
+          isOpen={isModalOpen} // Pass isOpen state
+          onClose={() => setIsModalOpen(false)} 
         />
       )}
     </>
@@ -380,33 +381,34 @@ function PhotoActions({ photo }) {
 ### Form Controls
 
 All form controls should:
-- Have associated labels
-- Provide validation feedback
-- Have proper disabled/loading states
-- Use consistent styling
+- Have associated labels using `htmlFor` pointing to the input `id`.
+- Provide validation feedback (e.g., highlighting required fields or showing error messages).
+- Have proper disabled/loading states visually indicated.
+- Use consistent styling, including focus states (`focus:ring-primary-500`).
 
 ```jsx
-// Form control example
+// Form control example with validation highlight
 <div className="space-y-4">
   <div>
     <label 
-      htmlFor="email" 
-      className="block text-sm font-medium text-gray-700"
+      htmlFor="eventName" 
+      className="block text-sm font-medium text-gray-700 mb-1"
     >
-      Email
+      Event Name*
     </label>
     <input
-      id="email"
-      type="email"
-      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-      value={email}
-      onChange={(e) => setEmail(e.target.value)}
-      aria-invalid={errors.email ? "true" : "false"}
-      aria-describedby={errors.email ? "email-error" : undefined}
+      id="eventName"
+      type="text"
+      className={`w-full px-4 py-3 rounded-xl border ${metadata.eventName?.trim() ? 'border-green-300 focus:ring-green-500' : 'border-gray-300 focus:ring-blue-500'} focus:border-transparent`}
+      value={metadata.eventName || ""}
+      onChange={(e) => setMetadata({...metadata, eventName: e.target.value})}
+      aria-required="true"
+      aria-invalid={!metadata.eventName?.trim()}
+      aria-describedby={!metadata.eventName?.trim() ? "event-name-error" : undefined}
     />
-    {errors.email && (
-      <p id="email-error" className="mt-2 text-sm text-red-600">
-        {errors.email}
+    {!metadata.eventName?.trim() && (
+      <p id="event-name-error" className="mt-1 text-xs text-red-500">
+        Event name is required
       </p>
     )}
   </div>
@@ -501,6 +503,7 @@ The application uses Framer Motion for animations with consistent patterns:
 - Adequate spacing between touch targets
 - Support for touch gestures (swipe, pinch, etc.)
 - Avoid hover-only interactions
+- **Responsive Controls**: Action buttons in modals (like the photo viewer) should adapt their layout (e.g., 2x2 grid) for easier tapping on smaller screens.
 
 ```jsx
 // Touch-friendly button
@@ -886,21 +889,26 @@ Follow these rules when you write code:
   - Footer with links and additional information
 
 ### Recent Updates (April 2025)
-- **HIG Alignment**: Applied extensive refinements based on Apple's Human Interface Guidelines.
-  - **Layout/Spacing**: Standardized section padding (e.g., `py-16 md:py-20`), horizontal padding (`px-6 lg:px-8`), and grid gaps.
-  - **Typography**: Adjusted heading sizes (`text-3xl md:text-5xl` for H1, etc.) and body text sizes (`text-lg`, `text-base`) for better hierarchy.
-  - **Color/Buttons**: Standardized button styling using Tailwind classes. Default primary buttons are now HIG-standard blue (`bg-blue-500`). The header "Log In / Sign Up" button was specifically made green (`bg-green-500`) for distinction.
-  - **Cards/Sections**: Simplified styling with consistent rounding (`rounded-xl`), borders, and subtle shadows.
-  - **Animations**: Refined animations in the iPhone mockup:
-    - *Register Face*: Replaced camera icon with pulsing blue scan rings.
-    - *Processing*: Implemented a more dynamic green loading spinner and removed potentially problematic background gradients to ensure a consistent dark background.
-    - *Photos Found*: Added gradient background to the checkmark and applied a vibrant green-to-blue gradient to the "Photos Found!" text.
-- **File Structure**: Removed `LandingPage.js` due to build issues; `LandingPage.tsx` is the active source file.
+- **HIG Alignment**: Applied extensive refinements based on Apple's Human Interface Guidelines to multiple components, including `LandingPage.tsx` and `SimplePhotoInfoModal.jsx`.
+  - **Layout/Spacing**: Standardized section padding, horizontal padding, and grid gaps.
+  - **Typography**: Adjusted heading and body text sizes for better hierarchy.
+  - **Color/Buttons**: Standardized button styling using Tailwind classes. Default primary buttons use HIG-standard blue (`bg-blue-500`). Modal buttons updated for responsiveness (2x2 grid on mobile).
+  - **Cards/Sections**: Simplified styling with consistent rounding, borders, and subtle shadows. Modal sections use slightly inset backgrounds (`bg-white dark:bg-gray-900/50`).
+  - **Animations**: Refined animations in the iPhone mockup on the landing page.
+- **File Structure**: Removed `LandingPage.js`; `LandingPage.tsx` is the active source file.
+- **Image Viewer/Modal**: Enhanced `SimplePhotoInfoModal.jsx`:
+    - Added a "Share" button using the Web Share API.
+    - Implemented a toggle between Image-only and Details view.
+    - Refined layout and styling for better HIG compliance and responsiveness.
+    - Removed nested scrollbar in the detailed labels list.
+- **Events Tab**: Temporarily deprecated/hidden the Events tab due to ongoing development.
 
 ### Dashboard (src/pages/Dashboard.tsx)
 - **Purpose**: Displays user's photos and provides navigation options
 - **Key Components**:
-  - Photo grid display
-  - Navigation tabs (photos, trash)
-  - Photo upload functionality
-  - User profile display
+  - Navigation Tabs (Home, Photos, Upload, Trash)
+  - PhotoGrid for displaying photos
+  - FaceRegistration (on Home tab)
+  - PhotoUploader (on Upload tab)
+  - TrashBin (on Trash tab)
+- **Data Handling**: Fetches user data, photo counts, and manages active tab state.

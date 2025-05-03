@@ -1,7 +1,6 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, User, AlertCircle, Calendar, Tag, Download, Share2, Building, UserCog, Image, Clock, Sparkles, Eye, Ruler, Smile, Sliders, Glasses, Laugh, Bean as Beard, FileType, HardDrive, Globe, Upload, Users, MapPin, Link } from 'lucide-react';
+import { X, User, AlertCircle, Calendar, Tag, Download, Share2, Building, UserCog, Image, Clock, Sparkles, Eye, Ruler, Smile, Sliders, Glasses, Laugh, Bean as Beard, FileType, HardDrive, Globe, Upload, Users, MapPin, Link, Camera, ColorSwatch, ZoomIn, FileImage, LayoutGrid, Binary, Database } from 'lucide-react';
 import { PhotoService } from '../services/PhotoService';
 import { cn } from '../utils/cn';
 import { GoogleMaps } from './GoogleMaps';
@@ -10,82 +9,10 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
     const [loading, setLoading] = React.useState(false);
     const [imageLoaded, setImageLoaded] = React.useState(false);
     const [imageSize, setImageSize] = React.useState({ width: 0, height: 0 });
-    const [enhancedPhoto, setEnhancedPhoto] = useState(() => {
-        // Initialize with safe defaults for all fields
-        return {
-            ...photo,
-            faces: photo.faces || [],
-            matched_users: photo.matched_users || [],
-            location: photo.location || { lat: null, lng: null, name: null },
-            venue: photo.venue || { id: null, name: null },
-            event_details: photo.event_details || { date: null, name: null, type: null, promoter: null },
-            tags: photo.tags || []
-        };
-    });
     
-    // Check localStorage for cached face data when the photo is loaded
-    useEffect(() => {
-        const checkForCachedData = async () => {
-            // Only look for cached data if no faces are present
-            if (!photo.faces || !Array.isArray(photo.faces) || photo.faces.length === 0) {
-                try {
-                    // Get current user ID from Supabase
-                    const { data: userData } = await PhotoService.getCurrentUser();
-                    if (userData && userData.id) {
-                        // Look for cached data for this photo
-                        const cachedData = PhotoService.getFromLocalStorage(userData.id, photo.id);
-                        
-                        if (cachedData && cachedData.faces && cachedData.faces.length > 0) {
-                            console.log("[PhotoInfoModal] Found cached face data:", cachedData.faces);
-                            
-                            // Merge the cached data with the current photo
-                            setEnhancedPhoto({
-                                ...photo,
-                                faces: cachedData.faces,
-                                face_ids: cachedData.face_ids || [],
-                                matched_users: cachedData.matched_users || []
-                            });
-                            return;
-                        }
-                    }
-                } catch (error) {
-                    console.error("[PhotoInfoModal] Error retrieving cached data:", error);
-                }
-            }
-        };
-        
-        checkForCachedData();
-    }, [photo.id]);
+    // Add simple debug log of incoming photo data
+    console.log("[PhotoInfoModal] Received photo data:", photo?.id);
     
-    // Add extensive logging of incoming photo data
-    console.log("[PhotoInfoModal] Full photo data:", JSON.stringify(enhancedPhoto, null, 2));
-    console.log("[PhotoInfoModal] Has faces:", Boolean(enhancedPhoto.faces?.length), "Length:", enhancedPhoto.faces?.length);
-    console.log("[PhotoInfoModal] Has matched_users:", Boolean(enhancedPhoto.matched_users?.length), "Length:", enhancedPhoto.matched_users?.length);
-    console.log("[PhotoInfoModal] Has location:", Boolean(enhancedPhoto.location?.lat && enhancedPhoto.location?.lng));
-    console.log("[PhotoInfoModal] Has event_details:", Boolean(enhancedPhoto.event_details));
-    
-    // Check externalAlbumLink specifically
-    console.log("[PhotoInfoModal] DEBUG: externalAlbumLink value:", enhancedPhoto.externalAlbumLink);
-    console.log("[PhotoInfoModal] DEBUG: All keys in enhancedPhoto:", Object.keys(enhancedPhoto));
-    console.log("[PhotoInfoModal] DEBUG: safeGet result:", safeGet(enhancedPhoto, 'externalAlbumLink', null));
-    
-    // Check for potential issues with data structure
-    if (enhancedPhoto.faces) {
-        console.log("[PhotoInfoModal] First face structure:", JSON.stringify(enhancedPhoto.faces[0], null, 2));
-        if (enhancedPhoto.faces[0] && !enhancedPhoto.faces[0].attributes) {
-            console.error("[PhotoInfoModal] ERROR: Face object exists but has no attributes property");
-            console.log("[PhotoInfoModal] Available face properties:", Object.keys(enhancedPhoto.faces[0]));
-        }
-    }
-    
-    if (enhancedPhoto.matched_users) {
-        console.log("[PhotoInfoModal] First matched user:", JSON.stringify(enhancedPhoto.matched_users[0], null, 2));
-    }
-    
-    if (enhancedPhoto.location) {
-        console.log("[PhotoInfoModal] Location data:", JSON.stringify(enhancedPhoto.location, null, 2));
-    }
-
     const handleImageLoad = (e) => {
         const img = e.target;
         setImageSize({
@@ -98,10 +25,10 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
     const handleDownload = async () => {
         try {
             setLoading(true);
-            const url = await PhotoService.downloadPhoto(enhancedPhoto.id);
+            const url = await PhotoService.downloadPhoto(photo.id);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `photo-${enhancedPhoto.id}.jpg`;
+            link.download = `photo-${photo.id}.jpg`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -130,29 +57,175 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
         }
     };
 
+    // Render image analysis data directly from the provided data
+    const renderImageAnalysis = () => {
+        // Image analysis data can be at the top level or in faces[0] if it's face-specific
+        const imageLabels = photo.imageLabels || (photo.faces?.[0]?.imageLabels) || [];
+        const imageProperties = photo.imageProperties || (photo.faces?.[0]?.imageProperties) || null;
+        const topLabels = photo.topLabels || (photo.faces?.[0]?.topLabels) || [];
+        const dominantColors = photo.dominantColors || (photo.faces?.[0]?.dominantColors) || [];
+        const imageQuality = photo.imageQuality || (photo.faces?.[0]?.imageQuality) || null;
+        
+        // If no image analysis data is available, return null
+        if (!imageLabels.length && !imageProperties && !topLabels.length && !dominantColors.length && !imageQuality) {
+            return null;
+        }
+        
+        return (
+            <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Image Analysis</h4>
+                
+                {/* Display top labels if available */}
+                {topLabels.length > 0 && (
+                    <div className="mb-4">
+                        <h5 className="text-xs font-semibold text-gray-600 mb-2">Content Labels</h5>
+                        <div className="flex flex-wrap gap-2">
+                            {topLabels.map((label, index) => (
+                                <span 
+                                    key={index} 
+                                    className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
+                                >
+                                    <Tag className="w-3 h-3 mr-1" />
+                                    {label}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                
+                {/* Display dominant colors if available */}
+                {dominantColors.length > 0 && (
+                    <div className="mb-4">
+                        <h5 className="text-xs font-semibold text-gray-600 mb-2">Dominant Colors</h5>
+                        <div className="flex flex-wrap gap-2">
+                            {dominantColors.slice(0, 5).map((color, index) => (
+                                <div 
+                                    key={index} 
+                                    className="flex items-center bg-white rounded-lg p-2 shadow-sm"
+                                >
+                                    <div 
+                                        className="w-6 h-6 rounded-full mr-2" 
+                                        style={{ backgroundColor: color }}
+                                    ></div>
+                                    <span className="text-xs font-mono">{color}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                
+                {/* Display image quality if available */}
+                {imageQuality && (
+                    <div className="mb-4 grid grid-cols-3 gap-2">
+                        <div className="flex flex-col p-3 bg-gray-50 rounded-lg">
+                            <div className="flex items-center mb-1">
+                                <ZoomIn className="w-4 h-4 text-gray-500 mr-1" />
+                                <span className="text-xs font-medium text-gray-600">Sharpness</span>
+                            </div>
+                            <div className="mt-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div 
+                                    className="h-full bg-blue-500 rounded-full" 
+                                    style={{ width: `${(imageQuality.sharpness || 0) * 100}%` }}
+                                ></div>
+                            </div>
+                            <span className="text-xs text-right mt-1">
+                                {Math.round((imageQuality.sharpness || 0) * 100)}%
+                            </span>
+                        </div>
+                        
+                        <div className="flex flex-col p-3 bg-gray-50 rounded-lg">
+                            <div className="flex items-center mb-1">
+                                <Image className="w-4 h-4 text-gray-500 mr-1" />
+                                <span className="text-xs font-medium text-gray-600">Brightness</span>
+                            </div>
+                            <div className="mt-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div 
+                                    className="h-full bg-yellow-500 rounded-full" 
+                                    style={{ width: `${(imageQuality.brightness || 0) * 100}%` }}
+                                ></div>
+                            </div>
+                            <span className="text-xs text-right mt-1">
+                                {Math.round((imageQuality.brightness || 0) * 100)}%
+                            </span>
+                        </div>
+                        
+                        <div className="flex flex-col p-3 bg-gray-50 rounded-lg">
+                            <div className="flex items-center mb-1">
+                                <Sliders className="w-4 h-4 text-gray-500 mr-1" />
+                                <span className="text-xs font-medium text-gray-600">Contrast</span>
+                            </div>
+                            <div className="mt-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div 
+                                    className="h-full bg-purple-500 rounded-full" 
+                                    style={{ width: `${(imageQuality.contrast || 0) * 100}%` }}
+                                ></div>
+                            </div>
+                            <span className="text-xs text-right mt-1">
+                                {Math.round((imageQuality.contrast || 0) * 100)}%
+                            </span>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Display detailed labels if available */}
+                {imageLabels.length > 0 && (
+                    <div className="mb-4">
+                        <h5 className="text-xs font-semibold text-gray-600 mb-2 flex items-center">
+                            <FileImage className="w-4 h-4 mr-1" />
+                            Detailed Labels {imageLabels.length > 10 && `(showing top 10 of ${imageLabels.length})`}
+                        </h5>
+                        <div className="bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto">
+                            <table className="w-full text-xs">
+                                <thead className="text-gray-500 border-b">
+                                    <tr>
+                                        <th className="text-left py-1 font-medium">Label</th>
+                                        <th className="text-right py-1 font-medium">Confidence</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {imageLabels.slice(0, 10).map((label, index) => (
+                                        <tr key={index} className="border-b border-gray-100">
+                                            <td className="py-1.5">{label.Name}</td>
+                                            <td className="text-right py-1.5">{label.Confidence?.toFixed(1)}%</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Data source info */}
+                <div className="text-xs text-gray-400 italic text-center">
+                    Analysis powered by AWS Rekognition
+                </div>
+            </div>
+        );
+    };
+
     const renderEventDetails = () => {
         const details = [
             {
-                icon: _jsx(Calendar, { className: "w-4 h-4" }),
+                icon: <Calendar className="w-4 h-4" />,
                 label: "Event Date",
-                value: safeGet(enhancedPhoto, 'event_details.date', null) || 
-                      safeGet(enhancedPhoto, 'date_taken', null) || 
-                      safeGet(enhancedPhoto, 'created_at', 'Unknown Date')
+                value: safeGet(photo, 'event_details.date', null) || 
+                      safeGet(photo, 'date_taken', null) || 
+                      safeGet(photo, 'created_at', 'Unknown Date')
             },
             {
-                icon: _jsx(Sparkles, { className: "w-4 h-4" }),
+                icon: <Sparkles className="w-4 h-4" />,
                 label: "Event Name",
-                value: safeGet(enhancedPhoto, 'event_details.name', 'Untitled Event')
+                value: safeGet(photo, 'event_details.name', 'Untitled Event')
             },
             {
-                icon: _jsx(Building, { className: "w-4 h-4" }),
+                icon: <Building className="w-4 h-4" />,
                 label: "Venue",
-                value: safeGet(enhancedPhoto, 'venue.name', 'Unknown Venue')
+                value: safeGet(photo, 'venue.name', 'Unknown Venue')
             },
             {
-                icon: _jsx(UserCog, { className: "w-4 h-4" }),
+                icon: <UserCog className="w-4 h-4" />,
                 label: "Promoter",
-                value: safeGet(enhancedPhoto, 'event_details.promoter', 'Unknown')
+                value: safeGet(photo, 'event_details.promoter', 'Unknown')
             }
         ];
         
@@ -167,17 +240,32 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
         
         if (validDetails.length === 0) return null;
         
-        return (_jsxs("div", { className: "mb-6", children: [_jsx("h4", { className: "text-sm font-medium text-gray-700 mb-2", children: "Event Information" }), _jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-2", children: validDetails.map((detail, index) => {
-            const valueDisplay = typeof detail.value === 'string' && detail.value.toLowerCase().includes('unknown')
-                ? _jsx("span", { className: "text-gray-400 italic", children: detail.value })
-                : detail.value;
-                
-            return (_jsxs("div", { className: "flex items-center p-2 bg-gray-50 rounded-xl", children: [_jsx("div", { className: "mr-2 text-gray-500", children: detail.icon }), _jsxs("div", { children: [_jsx("div", { className: "text-sm font-medium text-gray-900", children: detail.label }), _jsx("div", { className: "text-xs text-gray-500", children: valueDisplay })] })] }, index));
-        }) })] }));
+        return (
+            <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Event Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {validDetails.map((detail, index) => {
+                        const valueDisplay = typeof detail.value === 'string' && detail.value.toLowerCase().includes('unknown')
+                            ? <span className="text-gray-400 italic">{detail.value}</span>
+                            : detail.value;
+                            
+                        return (
+                            <div className="flex items-center p-2 bg-gray-50 rounded-xl" key={index}>
+                                <div className="mr-2 text-gray-500">{detail.icon}</div>
+                                <div>
+                                    <div className="text-sm font-medium text-gray-900">{detail.label}</div>
+                                    <div className="text-xs text-gray-500">{valueDisplay}</div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
     };
 
     const renderAlbumLink = () => {
-        if (!safeGet(enhancedPhoto, 'externalAlbumLink', null)) {
+        if (!safeGet(photo, 'externalAlbumLink', null)) {
             return null;
         }
 
@@ -188,15 +276,15 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
                     <div className="flex items-center">
                         <Link className="w-5 h-5 text-blue-600 mr-3" />
                         <a 
-                            href={enhancedPhoto.externalAlbumLink} 
+                            href={photo.externalAlbumLink} 
                             target="_blank" 
                             rel="noopener noreferrer"
                             className="text-blue-600 font-medium hover:underline flex-1 truncate"
                         >
-                            {enhancedPhoto.externalAlbumLink}
+                            {photo.externalAlbumLink}
                         </a>
                         <button 
-                            onClick={() => window.open(enhancedPhoto.externalAlbumLink, '_blank')}
+                            onClick={() => window.open(photo.externalAlbumLink, '_blank')}
                             className="ml-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
                         >
                             Visit
@@ -213,59 +301,57 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
     const renderPhotoDetails = () => {
         const details = [
             {
-                icon: _jsx(Calendar, { className: "w-4 h-4" }),
+                icon: <Calendar className="w-4 h-4" />,
                 label: "Date Taken",
-                value: safeGet(enhancedPhoto, 'date_taken', null) || 
-                      safeGet(enhancedPhoto, 'created_at', new Date().toLocaleDateString())
+                value: safeGet(photo, 'date_taken', null) || 
+                      safeGet(photo, 'created_at', new Date().toLocaleDateString())
             },
             {
-                icon: _jsx(FileType, { className: "w-4 h-4" }),
+                icon: <FileType className="w-4 h-4" />,
                 label: "File Type",
-                value: safeGet(enhancedPhoto, 'file_type', null) || 
-                      safeGet(enhancedPhoto, 'fileType', 'Unknown')
+                value: safeGet(photo, 'file_type', null) || 
+                      safeGet(photo, 'fileType', 'Unknown')
             },
             {
-                icon: _jsx(HardDrive, { className: "w-4 h-4" }),
+                icon: <HardDrive className="w-4 h-4" />,
                 label: "File Size",
-                value: `${((safeGet(enhancedPhoto, 'file_size', 0) || 
-                           safeGet(enhancedPhoto, 'fileSize', 0) || 
-                           safeGet(enhancedPhoto, 'size', 0)) / 1024 / 1024).toFixed(2)} MB`
+                value: `${((safeGet(photo, 'file_size', 0) || 
+                           safeGet(photo, 'fileSize', 0) || 
+                           safeGet(photo, 'size', 0)) / 1024 / 1024).toFixed(2)} MB`
             },
             {
-                icon: _jsx(Clock, { className: "w-4 h-4" }),
+                icon: <Clock className="w-4 h-4" />,
                 label: "Uploaded",
-                value: new Date(safeGet(enhancedPhoto, 'created_at', new Date())).toLocaleString()
+                value: new Date(safeGet(photo, 'created_at', new Date())).toLocaleString()
             },
             {
-                icon: _jsx(Image, { className: "w-4 h-4" }),
+                icon: <Image className="w-4 h-4" />,
                 label: "Dimensions",
                 value: imageSize.width > 0 ? `${imageSize.width} × ${imageSize.height}` : 'Unknown'
             },
             {
-                icon: _jsx(Upload, { className: "w-4 h-4" }),
+                icon: <Upload className="w-4 h-4" />,
                 label: "Uploaded By",
-                value: safeGet(enhancedPhoto, 'uploaded_by', null) || 
-                      safeGet(enhancedPhoto, 'uploadedBy', 'Unknown')
+                value: safeGet(photo, 'uploaded_by', null) || 
+                      safeGet(photo, 'uploadedBy', 'Unknown')
             }
         ];
         
-        if (safeGet(enhancedPhoto, 'location.name', null)) {
+        if (safeGet(photo, 'location.name', null)) {
             details.push({
-                icon: _jsx(Globe, { className: "w-4 h-4" }),
+                icon: <Globe className="w-4 h-4" />,
                 label: "Location",
-                value: enhancedPhoto.location.name
+                value: photo.location.name
             });
         }
         
-        if (safeGet(enhancedPhoto, 'tags', []).length) {
+        if (safeGet(photo, 'tags', []).length) {
             details.push({
-                icon: _jsx(Tag, { className: "w-4 h-4" }),
+                icon: <Tag className="w-4 h-4" />,
                 label: "Tags",
-                value: Array.isArray(enhancedPhoto.tags) ? enhancedPhoto.tags.join(', ') : 'No tags'
+                value: Array.isArray(photo.tags) ? photo.tags.join(', ') : 'No tags'
             });
         }
-        
-        // Album link is now handled in its own dedicated section
         
         // Check if GoogleMaps component is available
         let GoogleMapsComponent = null;
@@ -276,120 +362,91 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
         }
         
         // Only show the map if we have valid coordinates
-        const showMap = safeGet(enhancedPhoto, 'location.lat', null) !== null && 
-                       safeGet(enhancedPhoto, 'location.lng', null) !== null &&
+        const showMap = safeGet(photo, 'location.lat', null) !== null && 
+                       safeGet(photo, 'location.lng', null) !== null &&
                        GoogleMapsComponent !== null;
         
-        return (_jsxs("div", { className: "mb-6", children: [
-            _jsx("h4", { className: "text-sm font-medium text-gray-700 mb-2", children: "Photo Information" }), 
-            _jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-2", children: details.map((detail, index) => {
-                const valueDisplay = typeof detail.value === 'string' && detail.value.toLowerCase().includes('unknown')
-                    ? _jsx("span", { className: "text-gray-400 italic", children: detail.value })
-                    : detail.value;
-                    
-                return (_jsxs("div", { className: "flex items-center p-2 bg-gray-50 rounded-xl", children: [
-                    _jsx("div", { className: "mr-2 text-gray-500", children: detail.icon }), 
-                    _jsxs("div", { children: [
-                        _jsx("div", { className: "text-sm font-medium text-gray-900", children: detail.label }), 
-                        _jsx("div", { className: "text-xs text-gray-500", children: valueDisplay })
-                    ] })
-                ] }, index));
-            }) }), 
-            (safeGet(enhancedPhoto, 'location.address', null) || safeGet(enhancedPhoto, 'location.name', null) || showMap) && (_jsxs("div", { className: "mt-4", children: [
-                _jsx("h4", { className: "text-sm font-medium text-gray-700 mb-2", children: "Location Details" }), 
-                  _jsxs("div", { className: "flex items-center p-3 bg-gray-50 rounded-xl mb-2", children: [
-                    _jsx("div", { className: "mr-2 text-gray-500", children: _jsx(Building, { className: "w-4 h-4" }) }),
-                    _jsxs("div", { children: [
-                      _jsx("div", { className: "text-sm font-medium text-gray-900", children: "Place Name" }),
-                      _jsx("div", { className: "text-xs text-gray-500", children: safeGet(enhancedPhoto, 'location.name', 'Unknown Location') })
-                    ] })
-                  ] }),
-                  _jsxs("div", { className: "flex items-center p-3 bg-gray-50 rounded-xl mb-2", children: [
-                    _jsx("div", { className: "mr-2 text-gray-500", children: _jsx(MapPin, { className: "w-4 h-4" }) }),
-                    _jsxs("div", { children: [
-                      _jsx("div", { className: "text-sm font-medium text-gray-900", children: "Address" }),
-                      _jsx("div", { className: "text-xs text-gray-500", children: safeGet(enhancedPhoto, 'location.address', 
-                        (safeGet(enhancedPhoto, 'location.lat', null) && safeGet(enhancedPhoto, 'location.lng', null)) 
-                          ? `${enhancedPhoto.location.lat.toFixed(6)}, ${enhancedPhoto.location.lng.toFixed(6)}`
-                          : 'No address available'
-                      ) })
-                    ] })
-                  ] }),
-                showMap && (
-                  _jsx("div", { className: "h-48 rounded-xl overflow-hidden", children: _jsx(GoogleMapsComponent, { 
-                      location: {
-                          lat: enhancedPhoto.location.lat,
-                          lng: enhancedPhoto.location.lng,
-                          name: enhancedPhoto.location.name || ''
-                      }, 
-                      onLocationChange: () => { }, 
-                      height: "100%", 
-                      className: "w-full" 
-                  }) })
-                )
-            ] }))
-        ] }));
+        return (
+            <div className="mb-6">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Photo Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {details.map((detail, index) => {
+                        const valueDisplay = typeof detail.value === 'string' && detail.value.toLowerCase().includes('unknown')
+                            ? <span className="text-gray-400 italic">{detail.value}</span>
+                            : detail.value;
+                            
+                        return (
+                            <div className="flex items-center p-2 bg-gray-50 rounded-xl" key={index}>
+                                <div className="mr-2 text-gray-500">{detail.icon}</div>
+                                <div>
+                                    <div className="text-sm font-medium text-gray-900">{detail.label}</div>
+                                    <div className="text-xs text-gray-500">{valueDisplay}</div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                
+                {renderImageAnalysis()}
+                
+                {(safeGet(photo, 'location.address', null) || safeGet(photo, 'location.name', null) || showMap) && (
+                    <div className="mt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Location Details</h4>
+                        <div className="flex items-center p-3 bg-gray-50 rounded-xl mb-2">
+                            <div className="mr-2 text-gray-500"><Building className="w-4 h-4" /></div>
+                            <div>
+                                <div className="text-sm font-medium text-gray-900">Place Name</div>
+                                <div className="text-xs text-gray-500">{safeGet(photo, 'location.name', 'Unknown Location')}</div>
+                            </div>
+                        </div>
+                        <div className="flex items-center p-3 bg-gray-50 rounded-xl mb-2">
+                            <div className="mr-2 text-gray-500"><MapPin className="w-4 h-4" /></div>
+                            <div>
+                                <div className="text-sm font-medium text-gray-900">Address</div>
+                                <div className="text-xs text-gray-500">{safeGet(photo, 'location.address', 
+                                    (safeGet(photo, 'location.lat', null) && safeGet(photo, 'location.lng', null)) 
+                                      ? `${photo.location.lat.toFixed(6)}, ${photo.location.lng.toFixed(6)}`
+                                      : 'No address available'
+                                )}</div>
+                            </div>
+                        </div>
+                        {showMap && (
+                          <div className="h-48 rounded-xl overflow-hidden">
+                              <GoogleMapsComponent 
+                                  location={{
+                                      lat: photo.location.lat,
+                                      lng: photo.location.lng,
+                                      name: photo.location.name || ''
+                                  }} 
+                                  onLocationChange={() => {}} 
+                                  height="100%" 
+                                  className="w-full" 
+                              />
+                          </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
     };
 
     const renderFaceAttributes = () => {
-        console.log("[renderFaceAttributes] Called with photo.faces:", JSON.stringify(enhancedPhoto.faces, null, 2));
-        
         // If no faces are detected, return null
-        if (!enhancedPhoto.faces || !Array.isArray(enhancedPhoto.faces) || enhancedPhoto.faces.length === 0) {
-            console.log("[renderFaceAttributes] No faces found");
+        if (!photo.faces || !Array.isArray(photo.faces) || photo.faces.length === 0) {
             return null;
         }
         
-        const face = enhancedPhoto.faces[0];
-        console.log("[renderFaceAttributes] Processing face:", JSON.stringify(face, null, 2));
+        const face = photo.faces[0];
         
-        // Check if face object has expected structure and attributes
+        // If the face object is undefined or null, return null
         if (!face) {
-            console.error("[renderFaceAttributes] ERROR: Face is undefined or null");
             return null;
         }
         
-        // If the attributes property doesn't exist or is empty, try to extract attributes from the face object directly
-        let attributes = face.attributes;
-        if (!attributes || Object.keys(attributes).length === 0) {
-            console.log("[renderFaceAttributes] No attributes property found or it's empty, trying to extract attributes from the face object directly");
-            
-            // Try to reconstruct attributes from direct properties if they exist
-            const possibleAttributes = ['age', 'gender', 'smile', 'emotions', 'eyeglasses', 'sunglasses', 'eyesOpen', 'mouthOpen',
-                                       'AgeRange', 'Gender', 'Smile', 'Emotions', 'Eyeglasses', 'Sunglasses', 'EyesOpen', 'MouthOpen'];
-            
-            const foundKeys = Object.keys(face).filter(key => possibleAttributes.includes(key));
-            console.log("[renderFaceAttributes] Found these attribute keys directly on face object:", foundKeys);
-            
-            if (foundKeys.length > 0) {
-                // Create an attributes object from the direct properties
-                attributes = {};
-                foundKeys.forEach(key => {
-                    attributes[key] = face[key];
-                });
-                console.log("[renderFaceAttributes] Reconstructed attributes:", attributes);
-            } else {
-                console.error("[renderFaceAttributes] ERROR: Could not find any attribute properties");
-                
-                // Provide a simpler face detected view since no attributes are available
-                return (
-                    <div className="mb-6 p-4 bg-blue-50 rounded-xl text-center">
-                        <Users className="w-8 h-8 text-blue-400 mx-auto mb-2" />
-                        <p className="text-blue-600 font-medium">
-                            Face Detected
-                        </p>
-                        <p className="text-blue-500 text-sm mt-1">
-                            Face analysis is available, but no detailed attributes were found.
-                        </p>
-                    </div>
-                );
-            }
-        }
+        // Look for attributes in the standard place
+        const attributes = face.attributes || {};
         
-        // Log the attributes we'll be using
-        console.log("[renderFaceAttributes] Using these attributes:", attributes);
-        
-        // Normalize attributes to handle both camelCase and PascalCase formats from AWS
+        // Normalize attributes
         const normalizedAttrs = {
             age: attributes.age || {
                 low: attributes.AgeRange?.Low || 0,
@@ -419,14 +476,11 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
                 value: attributes.MouthOpen?.Value || false,
                 confidence: attributes.MouthOpen?.Confidence || 0
             },
-            // Add quality metrics
             quality: attributes.quality || {
                 brightness: attributes.Quality?.Brightness || 0,
                 sharpness: attributes.Quality?.Sharpness || 0
             },
-            // Add pose information
             pose: attributes.pose || attributes.Pose || null,
-            // Add beard and mustache
             beard: attributes.beard || {
                 value: attributes.Beard?.Value || false,
                 confidence: attributes.Beard?.Confidence || 0
@@ -440,23 +494,16 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
         // Get primary emotion (highest confidence)
         let primaryEmotion = { type: "Neutral", confidence: 0 };
         if (attributes.emotions && Array.isArray(attributes.emotions) && attributes.emotions.length > 0) {
-            console.log("[renderFaceAttributes] Using camelCase emotions:", attributes.emotions);
             primaryEmotion = attributes.emotions.reduce((prev, curr) => 
                 (curr.confidence > prev.confidence) ? curr : prev, 
                 { type: "Neutral", confidence: 0 }
             );
         } else if (attributes.Emotions && Array.isArray(attributes.Emotions)) {
-            console.log("[renderFaceAttributes] Using PascalCase Emotions:", attributes.Emotions);
             primaryEmotion = attributes.Emotions.reduce((prev, curr) => 
                 (curr.Confidence > prev.confidence) ? {type: curr.Type, confidence: curr.Confidence} : prev, 
                 { type: "Neutral", confidence: 0 }
             );
-        } else {
-            console.warn("[renderFaceAttributes] WARNING: No emotions array found, using default neutral emotion");
         }
-        
-        console.log("[renderFaceAttributes] Normalized attributes:", normalizedAttrs);
-        console.log("[renderFaceAttributes] Primary emotion:", primaryEmotion);
         
         // Display these attributes in a nice UI
         const details = [
@@ -586,13 +633,10 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
     };
 
     const renderMatchedUsers = () => {
-        console.log("[renderMatchedUsers] Called with matched_users:", JSON.stringify(enhancedPhoto.matched_users, null, 2));
-        
         // Ensure matched_users is defined and is an array
-        if (!enhancedPhoto.matched_users || !Array.isArray(enhancedPhoto.matched_users) || enhancedPhoto.matched_users.length === 0) {
-            console.log("[renderMatchedUsers] No matched users found");
+        if (!photo.matched_users || !Array.isArray(photo.matched_users) || photo.matched_users.length === 0) {
             // Check if there are faces detected but no matches
-            const hasFaces = enhancedPhoto.faces && Array.isArray(enhancedPhoto.faces) && enhancedPhoto.faces.length > 0;
+            const hasFaces = photo.faces && Array.isArray(photo.faces) && photo.faces.length > 0;
             
             return (
                 <div className="mb-6 p-4 bg-blue-50 rounded-xl text-center">
@@ -600,7 +644,7 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
                         <>
                             <Users className="w-8 h-8 text-blue-400 mx-auto mb-2" />
                             <p className="text-blue-600 font-medium">
-                                {enhancedPhoto.faces.length} {enhancedPhoto.faces.length === 1 ? "Face" : "Faces"} Detected
+                                {photo.faces.length} {photo.faces.length === 1 ? "Face" : "Faces"} Detected
                             </p>
                             <p className="text-blue-500 text-sm mt-1">
                                 No matches found with registered users
@@ -619,12 +663,8 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
             );
         }
         
-        console.log("[renderMatchedUsers] Processing matched users:", enhancedPhoto.matched_users);
-        
         // Ensure each user has required properties, setting defaults if missing
-        const validMatchedUsers = enhancedPhoto.matched_users.map((user, index) => {
-            console.log(`[renderMatchedUsers] Processing user ${index}:`, JSON.stringify(user, null, 2));
-            
+        const validMatchedUsers = photo.matched_users.map((user, index) => {
             const normalizedUser = {
                 userId: user.userId || user.user_id || 'unknown',
                 fullName: user.fullName || user.full_name || user.name || user.display_name || user.email || 'Unknown User',
@@ -632,11 +672,8 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
                 confidence: user.confidence || 0
             };
             
-            console.log(`[renderMatchedUsers] Normalized user ${index}:`, JSON.stringify(normalizedUser, null, 2));
             return normalizedUser;
         });
-        
-        console.log("[renderMatchedUsers] Final validMatchedUsers:", validMatchedUsers);
         
         return (
             <div className="mb-6">
@@ -692,8 +729,8 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
                         <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
                             <div className="relative w-full h-full">
                                 <img
-                                    src={enhancedPhoto.url || enhancedPhoto.public_url}
-                                    alt={enhancedPhoto.title || 'Photo'}
+                                    src={photo.url || photo.public_url}
+                                    alt={photo.title || 'Photo'}
                                     className={cn(
                                         "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
                                         "max-w-[95%] max-h-[95%] w-auto h-auto object-contain",
@@ -725,13 +762,13 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
                             </div>
 
                             {/* Photo Info */}
-                            {(enhancedPhoto.title || enhancedPhoto.description) && (
+                            {(photo.title || photo.description) && (
                                 <div className="mb-6">
-                                    {enhancedPhoto.title && (
-                                        <h3 className="text-lg font-medium mb-1">{enhancedPhoto.title}</h3>
+                                    {photo.title && (
+                                        <h3 className="text-lg font-medium mb-1">{photo.title}</h3>
                                     )}
-                                    {enhancedPhoto.description && (
-                                        <p className="text-gray-600 text-sm">{enhancedPhoto.description}</p>
+                                    {photo.description && (
+                                        <p className="text-gray-600 text-sm">{photo.description}</p>
                                     )}
                                 </div>
                             )}
@@ -765,7 +802,7 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
                                 </button>
                                 {onShare && (
                                     <button 
-                                        onClick={() => onShare(enhancedPhoto.id)}
+                                        onClick={() => onShare(photo.id)}
                                         className="ios-button-primary flex items-center"
                                     >
                                         <Share2 className="w-5 h-5 mr-2" />
@@ -779,4 +816,4 @@ export const PhotoInfoModal = ({ photo, onClose, onShare }) => {
             </motion.div>
         </motion.div>
     );
-}; 
+};

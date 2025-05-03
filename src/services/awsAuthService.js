@@ -143,19 +143,25 @@ export const signUp = async (email, password, userData = {}) => {
             throw new Error('Cognito configuration is missing. Please check your environment variables.');
         }
         // Prepare user attributes for Cognito
-        console.log('[AUTH] Preparing user attributes');
-        const userAttributes = [
-            { Name: 'email', Value: email },
-        ];
-        // Add additional user data
-        if (userData.full_name) {
-            console.log('[AUTH] Adding full_name attribute:', userData.full_name);
-            userAttributes.push({ Name: 'name', Value: userData.full_name });
+        console.log('[AUTH] Preparing user attributes from provided userData object');
+        const userAttributes = [];
+
+        // Iterate over the userData object and format attributes correctly
+        for (const key in userData) {
+            if (Object.hasOwnProperty.call(userData, key) && userData[key] !== undefined && userData[key] !== null) {
+                // Ensure value is a string as required by Cognito
+                const valueString = userData[key].toString(); 
+                console.log(`[AUTH] Adding attribute: ${key} = ${valueString}`);
+                userAttributes.push({ Name: key, Value: valueString });
+            }
         }
-        if (userData.role) {
-            console.log('[AUTH] Adding role attribute:', userData.role);
-            userAttributes.push({ Name: 'custom:role', Value: userData.role });
+        
+        // Ensure email attribute is always included (Cognito often requires it in attributes too)
+        if (!userAttributes.some(attr => attr.Name === 'email')) {
+            console.log('[AUTH] Ensuring email attribute is present');
+            userAttributes.push({ Name: 'email', Value: email });
         }
+
         // Create the signup command
         const command = new SignUpCommand({
             ClientId: COGNITO_CLIENT_ID,
