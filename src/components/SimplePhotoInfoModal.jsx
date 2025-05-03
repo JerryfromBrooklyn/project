@@ -882,7 +882,7 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
             </div>
             
             <div className="text-xs text-gray-400 dark:text-gray-500 italic text-center mt-2">
-              Analysis powered by AWS Rekognition
+              Analysis powered by SHMONG AI
             </div>
           </div>
         )}
