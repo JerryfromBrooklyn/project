@@ -217,6 +217,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   const [previewImage, setPreviewImage] = useState(null);
   const [uppy, setUppy] = useState(null);
   const [dropboxConfigured, setDropboxConfigured] = useState(false);
+  const [dropboxAuthError, setDropboxAuthError] = useState(null);
   const [googleDriveConfigured, setGoogleDriveConfigured] = useState(false);
   
   // Get auth context
@@ -306,8 +307,86 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       })
       .use(DropboxPlugin, {
         companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+        companionAllowedHosts: [
+          'localhost:3020',
+          'localhost:5173',
+          '127.0.0.1:5173',
+          ...(process.env.REACT_APP_VALID_HOSTS?.split(',') || [])
+        ],
         companionHeaders: {
-          Authorization: `Bearer ${user?.accessToken || ''}`,
+          'x-uppy-auth-token': process.env.REACT_APP_COMPANION_SECRET
+        },
+        debug: true,
+        auth: {
+          path: '/dropbox/connect',
+          callback: '/dropbox/callback'
+        },
+        onError: (error) => {
+          console.error('Dropbox error:', error);
+          if (error.message?.includes('authentication') || error.message?.includes('Bad Request')) {
+            // Check if we have a valid session first
+            const dropboxPlugin = uppyInstance.getPlugin('Dropbox');
+            if (dropboxPlugin) {
+              // Try to get the current session
+              dropboxPlugin.getAuthToken().then(token => {
+                if (!token) {
+                  // If no token, trigger authentication
+                  dropboxPlugin.connect();
+                } else {
+                  // If we have a token but still getting errors, try to refresh the session
+                  dropboxPlugin.refreshToken();
+                }
+              }).catch(() => {
+                // If token check fails, trigger authentication
+                dropboxPlugin.connect();
+              });
+            }
+          }
+        },
+        onRequest: (req) => {
+          console.log('Dropbox request:', req);
+          // Add authentication check before making requests
+          const dropboxPlugin = uppyInstance.getPlugin('Dropbox');
+          if (dropboxPlugin) {
+            dropboxPlugin.getAuthToken().then(token => {
+              if (!token) {
+                // If no token, trigger authentication before proceeding
+                dropboxPlugin.connect();
+              }
+            });
+          }
+        },
+        onResponse: (res) => {
+          console.log('Dropbox response:', res);
+          if (res.status === 200) {
+            setDropboxConfigured(true);
+          } else if (res.status === 401 || res.status === 403) {
+            // Handle authentication errors
+            const dropboxPlugin = uppyInstance.getPlugin('Dropbox');
+            if (dropboxPlugin) {
+              dropboxPlugin.connect();
+            }
+          }
+        },
+        locale: {
+          strings: {
+            dropPasteFiles: 'Drop files here, %{browseFiles} or %{browseFolders}',
+            browse: 'browse',
+            browseFiles: 'browse files',
+            browseFolders: 'browse folders',
+            myDevice: 'My Device',
+            dropbox: 'Dropbox',
+            folder: 'Folder',
+            uploadComplete: 'Upload complete',
+            uploadFailed: 'Upload failed',
+            uploadPaused: 'Upload paused',
+            uploading: 'Uploading',
+            complete: 'Complete'
+          }
+        },
+        list: {
+          path: '/dropbox/list',
+          method: 'GET'
         }
       })
       .use(GoogleDrivePlugin, {
@@ -895,12 +974,34 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
               height="min(70vh, 600px)"
               showProgressDetails={true}
               proudlyDisplayPoweredByUppy={false}
-              note="Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file"
+              note="Supported formats: JPG, PNG, WebP, RAW • Max 100MB per file • Folder uploads supported"
               metaFields={[
                 { id: 'folderPath', name: 'Folder Path', placeholder: 'Optional folder path' }
               ]}
               className="uppy-Dashboard--adaptive"
               hideUploadButton={true}
+              showRemoveButtonAfterComplete={true}
+              showLinkToFileUploadResult={true}
+              doneButtonHandler={() => {
+                console.log('Upload complete');
+                setUploadComplete(true);
+              }}
+              locale={{
+                strings: {
+                  dropPasteFiles: 'Drop files here, %{browseFiles} or %{browseFolders}',
+                  browse: 'browse',
+                  browseFiles: 'browse files',
+                  browseFolders: 'browse folders',
+                  myDevice: 'My Device',
+                  dropbox: 'Dropbox',
+                  folder: 'Folder',
+                  uploadComplete: 'Upload complete',
+                  uploadFailed: 'Upload failed',
+                  uploadPaused: 'Upload paused',
+                  uploading: 'Uploading',
+                  complete: 'Complete'
+                }
+              }}
             />
           </div>
         )}
@@ -1135,40 +1236,40 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
             </div>
           </div>
         )}
-      </div>
 
-      {/* Photo details dialog */}
-      <Dialog
-        isOpen={!!selectedUpload && !!selectedUpload.photoDetails}
-        onClose={() => setSelectedUpload(null)}
-        title="Photo Details"
-        maxWidth="max-w-2xl"
-      >
-        {selectedUpload && selectedUpload.photoDetails && (
-          <>
-            <div className="aspect-video rounded-lg overflow-hidden mb-6">
-              <img
-                src={URL.createObjectURL(selectedUpload.file)}
-                alt={selectedUpload.file.name}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            {renderUploadDetails(selectedUpload)}
-          </>
+        {/* Photo details dialog */}
+        <Dialog
+          isOpen={!!selectedUpload && !!selectedUpload.photoDetails}
+          onClose={() => setSelectedUpload(null)}
+          title="Photo Details"
+          maxWidth="max-w-2xl"
+        >
+          {selectedUpload && selectedUpload.photoDetails && (
+            <>
+              <div className="aspect-video rounded-lg overflow-hidden mb-6">
+                <img
+                  src={URL.createObjectURL(selectedUpload.file)}
+                  alt={selectedUpload.file.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              {renderUploadDetails(selectedUpload)}
+            </>
+          )}
+        </Dialog>
+
+        {/* Image viewer */}
+        {previewImage && (
+          <ImageViewer
+            image={{ 
+              url: URL.createObjectURL(previewImage), 
+              name: previewImage.name 
+            }}
+            onClose={() => setPreviewImage(null)}
+            onAction={(action) => console.log('Image action:', action)}
+          />
         )}
-      </Dialog>
-
-      {/* Image viewer */}
-      {previewImage && (
-        <ImageViewer
-          image={{ 
-            url: URL.createObjectURL(previewImage), 
-            name: previewImage.name 
-          }}
-          onClose={() => setPreviewImage(null)}
-          onAction={(action) => console.log('Image action:', action)}
-        />
-      )}
+      </div>
     </div>
   );
 }; 

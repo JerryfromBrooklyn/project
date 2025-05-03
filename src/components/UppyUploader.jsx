@@ -3,6 +3,7 @@ import { useAuth } from '../auth';
 import Uppy from '@uppy/core';
 import { Dashboard, DashboardModal } from '@uppy/react';
 import AwsS3 from '@uppy/aws-s3';
+import Dropbox from '@uppy/dropbox';
 import StatusBar from '@uppy/status-bar';
 
 // Import Uppy styles
@@ -38,6 +39,20 @@ const UppyUploader = ({ onUploadComplete }) => {
             meta: {
                 userId: user?.id,
                 ...metadataFields
+            },
+            companion: {
+                token: document.cookie.split('; ').find(row => row.startsWith('uppy-dropbox-token='))?.split('=')[1],
+                headers: {
+                    'Authorization': `Bearer ${document.cookie.split('; ').find(row => row.startsWith('uppy-dropbox-token='))?.split('=')[1]}`
+                }
+            }
+        });
+
+        // Add Dropbox plugin
+        uppyInstance.use(Dropbox, {
+            companionUrl: process.env.REACT_APP_COMPANION_URL || '/companion',
+            companionHeaders: {
+                'x-uppy-auth-token': process.env.REACT_APP_COMPANION_SECRET
             }
         });
 
