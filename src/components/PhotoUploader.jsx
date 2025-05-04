@@ -251,14 +251,13 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         meta: {
           userId: user?.id || '',
           eventId: eventId || '',
-          // Add a timestamp to ensure each upload request is unique
           timestamp: Date.now()
         }
       })
       .use(AwsS3Multipart, {
         limit: 5,
         retryDelays: [0, 1000, 3000, 5000],
-        companionUrl: process.env.REACT_APP_COMPANION_URL || '',
+        companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
         },
@@ -267,7 +266,6 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           try {
             const fileData = new File([file.data], file.name, { type: file.type });
             
-            // Include metadata in the upload
             const uploadMetadata = {
               ...metadata,
               user_id: user?.id || '',
@@ -305,22 +303,25 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         }
       })
       .use(DropboxPlugin, {
-        companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+        companionUrl: 'http://localhost:3020',
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
-        }
+        },
+        companionAllowedHosts: ['localhost:3020']
       })
       .use(GoogleDrivePlugin, {
-        companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+        companionUrl: 'http://localhost:3020',
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
-        }
+        },
+        companionAllowedHosts: ['localhost:3020']
       })
       .use(UrlPlugin, {
-        companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+        companionUrl: 'http://localhost:3020',
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
-        }
+        },
+        companionAllowedHosts: ['localhost:3020']
       });
 
       // Add listeners using the refs
@@ -901,6 +902,105 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
               ]}
               className="uppy-Dashboard--adaptive"
               hideUploadButton={true}
+              showRemoveButtonAfterComplete={true}
+              showLinkToFileUploadResult={true}
+              showSelectedFiles={true}
+              doneButtonHandler={() => {
+                console.log('Upload complete');
+                if (onUploadComplete) {
+                  onUploadComplete();
+                }
+              }}
+              locale={{
+                strings: {
+                  dropPasteFiles: 'Drop files here, %{browse} or %{paste}',
+                  browse: 'browse',
+                  paste: 'paste from clipboard',
+                  uploadComplete: 'Upload complete',
+                  uploadFailed: 'Upload failed',
+                  dropPasteFolders: 'Drop files here, %{browseFolders} or %{paste}',
+                  browseFolders: 'browse folders',
+                  selectToUpload: 'Select files to upload',
+                  closeModal: 'Close Modal',
+                  upload: 'Upload',
+                  importFrom: 'Import files from %{name}',
+                  dashboardTitle: 'File Upload Dashboard',
+                  dashboardWindowTitle: 'File Upload Dashboard Window (Press escape to close)',
+                  copyLinkToClipboardSuccess: 'Link copied to clipboard.',
+                  copyLinkToClipboardFallback: 'Copy the URL below',
+                  copyLink: 'Copy link',
+                  fileSource: 'File source: %{name}',
+                  done: 'Done',
+                  localDisk: 'Local Disk',
+                  dropbox: 'Dropbox',
+                  googleDrive: 'Google Drive',
+                  url: 'URL',
+                  retry: 'Retry upload',
+                  retryUpload: 'Retry upload',
+                  cancel: 'Cancel',
+                  cancelUpload: 'Cancel upload',
+                  pause: 'Pause',
+                  pauseUpload: 'Pause uploads',
+                  resume: 'Resume',
+                  resumeUpload: 'Resume uploads',
+                  close: 'Close',
+                  uploadXFiles: {
+                    0: 'Upload %{smart_count} file',
+                    1: 'Upload %{smart_count} files',
+                    2: 'Upload %{smart_count} files'
+                  },
+                  uploadXNewFiles: {
+                    0: 'Upload +%{smart_count} file',
+                    1: 'Upload +%{smart_count} files',
+                    2: 'Upload +%{smart_count} files'
+                  },
+                  xFilesSelected: {
+                    0: '%{smart_count} file selected',
+                    1: '%{smart_count} files selected',
+                    2: '%{smart_count} files selected'
+                  },
+                  uploadingXFiles: {
+                    0: 'Uploading %{smart_count} file',
+                    1: 'Uploading %{smart_count} files',
+                    2: 'Uploading %{smart_count} files'
+                  },
+                  processingXFiles: {
+                    0: 'Processing %{smart_count} file',
+                    1: 'Processing %{smart_count} files',
+                    2: 'Processing %{smart_count} files'
+                  },
+                  poweredBy: 'Powered by %{uppy}',
+                  addMore: 'Add more',
+                  addMoreFiles: 'Add more files',
+                  addingMoreFiles: 'Adding more files',
+                  dropPaste: 'Drop files here, %{browse} or %{paste}',
+                  selectAllFilesFromFolderNamed: 'Select all files from folder %{name}',
+                  moveToTrash: 'Move to trash',
+                  confirmTrash: 'Are you sure you want to move these files to trash?',
+                  removeFile: 'Remove file',
+                  removeFiles: 'Remove files',
+                  cancelUploads: 'Cancel uploads',
+                  retryUploads: 'Retry uploads',
+                  pauseUploads: 'Pause uploads',
+                  resumeUploads: 'Resume uploads',
+                  uploadPaused: 'Upload paused',
+                  uploadPausedXFiles: {
+                    0: 'Upload paused for %{smart_count} file',
+                    1: 'Upload paused for %{smart_count} files',
+                    2: 'Upload paused for %{smart_count} files'
+                  },
+                  uploadFailedXFiles: {
+                    0: 'Upload failed for %{smart_count} file',
+                    1: 'Upload failed for %{smart_count} files',
+                    2: 'Upload failed for %{smart_count} files'
+                  },
+                  uploadCompleteXFiles: {
+                    0: 'Upload complete for %{smart_count} file',
+                    1: 'Upload complete for %{smart_count} files',
+                    2: 'Upload complete for %{smart_count} files'
+                  }
+                }
+              }}
             />
           </div>
         )}
