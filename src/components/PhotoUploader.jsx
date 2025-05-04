@@ -243,7 +243,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     try {
       const uppyInstance = new Uppy({
         id: 'photo-uploader',
-        autoProceed: false, // Disable auto upload
+        autoProceed: false,
         restrictions: {
           maxFileSize: 100 * 1024 * 1024, // 100MB
           allowedFileTypes: ['image/*', '.jpg', '.jpeg', '.png', '.webp', '.raw', '.cr2', '.nef', '.arw', '.rw2']
@@ -301,27 +301,50 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           autoCropArea: 1,
           responsive: true
         }
-      })
-      .use(DropboxPlugin, {
+      });
+
+      // Initialize Dropbox plugin with proper configuration
+      uppyInstance.use(DropboxPlugin, {
         companionUrl: import.meta.env.VITE_COMPANION_URL,
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
         },
-        companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL]
-      })
-      .use(GoogleDrivePlugin, {
+        companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL],
+        target: 'body',
+        locale: {
+          strings: {
+            // Add any custom strings here
+          }
+        },
+        // Add additional Dropbox configuration
+        oauth: {
+          transport: 'session',
+          domain: import.meta.env.VITE_COMPANION_URL
+        }
+      });
+
+      // Initialize Google Drive plugin
+      uppyInstance.use(GoogleDrivePlugin, {
         companionUrl: import.meta.env.VITE_COMPANION_URL,
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
         },
-        companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL]
-      })
-      .use(UrlPlugin, {
+        companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL],
+        target: 'body',
+        oauth: {
+          transport: 'session',
+          domain: import.meta.env.VITE_COMPANION_URL
+        }
+      });
+
+      // Initialize URL plugin
+      uppyInstance.use(UrlPlugin, {
         companionUrl: import.meta.env.VITE_COMPANION_URL,
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
         },
-        companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL]
+        companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL],
+        target: 'body'
       });
 
       // Add listeners using the refs
@@ -349,8 +372,6 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     return () => {
       console.log('🧹 [Uppy] Cleaning up Uppy instance');
       
-      // Only cleanup if we have an instance and we're truly unmounting
-      // (not just temporarily removing the component)
       if (uppyRef.current) {
         try {
           const instance = uppyRef.current;
@@ -372,22 +393,18 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
             onUploadComplete();
           }
           
-          // Rest of cleanup as before...
+          // Remove all event listeners
           instance.off('file-added', handlersRef.current.handleFileAdded);
           instance.off('file-removed', handlersRef.current.handleFileRemoved);
           instance.off('upload-progress', handlersRef.current.handleUploadProgress);
           instance.off('complete', handlersRef.current.handleBatchComplete);
           instance.off('error', handlersRef.current.handleUploadError);
           
-          // Safely close the instance
-          if (typeof instance.close === 'function') {
-            instance.close();
-          } else {
-            console.log('⚠️ [Uppy] Warning: instance.close is not a function');
-            if (typeof instance.destroy === 'function') {
-              instance.destroy();
-            }
-          }
+          // Reset the instance
+          instance.reset();
+          
+          // Destroy the instance
+          instance.destroy();
         } catch (cleanupError) {
           console.error('❌ [Uppy] Error during cleanup:', cleanupError);
         }

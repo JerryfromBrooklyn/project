@@ -27,8 +27,8 @@ console.log('\nOAuth Configuration:');
 console.log('----------------------------------------');
 console.log('COMPANION_GOOGLE_KEY:', process.env.COMPANION_GOOGLE_KEY ? '✅ Set' : '❌ Not Set');
 console.log('COMPANION_GOOGLE_SECRET:', process.env.COMPANION_GOOGLE_SECRET ? '✅ Set' : '❌ Not Set');
-console.log('VITE_DROPBOX_APP_KEY:', process.env.VITE_DROPBOX_APP_KEY || '❌ Not Set');
-console.log('VITE_DROPBOX_APP_SECRET:', process.env.VITE_DROPBOX_APP_SECRET ? '✅ Set' : '❌ Not Set');
+console.log('COMPANION_DROPBOX_KEY:', process.env.COMPANION_DROPBOX_KEY ? '✅ Set' : '❌ Not Set');
+console.log('COMPANION_DROPBOX_SECRET:', process.env.COMPANION_DROPBOX_SECRET ? '✅ Set' : '❌ Not Set');
 console.log('\nURL Configuration:');
 console.log('----------------------------------------');
 console.log('VITE_COMPANION_URL:', process.env.VITE_COMPANION_URL || '❌ Not Set');
@@ -40,8 +40,12 @@ const app = express();
 app.use(bodyParser.json());
 app.use(session({
   secret: process.env.COMPANION_SECRET || 'some-secret-key',
-  resave: true,
-  saveUninitialized: true
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.COMPANION_PROTOCOL === 'https',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
 }));
 
 // Companion configuration
@@ -52,8 +56,12 @@ const companionOptions = {
       secret: process.env.COMPANION_GOOGLE_SECRET
     },
     dropbox: {
-      key: process.env.VITE_DROPBOX_APP_KEY,
-      secret: process.env.VITE_DROPBOX_APP_SECRET
+      key: process.env.COMPANION_DROPBOX_KEY,
+      secret: process.env.COMPANION_DROPBOX_SECRET,
+      oauth: {
+        domain: process.env.VITE_COMPANION_URL || 'http://localhost:3020',
+        transport: 'session'
+      }
     }
   },
   server: {
@@ -71,7 +79,11 @@ const companionOptions = {
   chunkSize: 6 * 1024 * 1024, // 6MB chunks
   enableUrlEndpoint: true,
   enableGooglePickerEndpoint: true,
-  allowedHeaders: ['Authorization', 'Content-Type', 'Accept', 'X-Requested-With', 'uppy-auth-token']
+  allowedHeaders: ['Authorization', 'Content-Type', 'Accept', 'X-Requested-With', 'uppy-auth-token'],
+  encryption: {
+    key: process.env.COMPANION_ENCRYPTION_KEY || process.env.COMPANION_SECRET,
+    algorithm: 'aes-256-gcm'
+  }
 };
 
 // Debug companion options
