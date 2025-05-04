@@ -257,7 +257,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       .use(AwsS3Multipart, {
         limit: 5,
         retryDelays: [0, 1000, 3000, 5000],
-        companionUrl: process.env.REACT_APP_COMPANION_URL || 'http://localhost:3020',
+        companionUrl: import.meta.env.VITE_COMPANION_URL,
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
         },
@@ -303,25 +303,25 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         }
       })
       .use(DropboxPlugin, {
-        companionUrl: 'http://localhost:3020',
+        companionUrl: import.meta.env.VITE_COMPANION_URL,
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
         },
-        companionAllowedHosts: ['localhost:3020']
+        companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL]
       })
       .use(GoogleDrivePlugin, {
-        companionUrl: 'http://localhost:3020',
+        companionUrl: import.meta.env.VITE_COMPANION_URL,
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
         },
-        companionAllowedHosts: ['localhost:3020']
+        companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL]
       })
       .use(UrlPlugin, {
-        companionUrl: 'http://localhost:3020',
+        companionUrl: import.meta.env.VITE_COMPANION_URL,
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
         },
-        companionAllowedHosts: ['localhost:3020']
+        companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL]
       });
 
       // Add listeners using the refs
