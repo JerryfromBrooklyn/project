@@ -25,11 +25,11 @@ export const awsPhotoService = {
      * @returns {Promise<Object>} The uploaded photo data
      */
     uploadPhoto: async (file, eventId, folderPath, metadata = {}, progressCallback = (progress) => {}) => {
+        // Generate a unique ID for this upload operation for better log tracking
+        const uploadId = Math.random().toString(36).substring(2, 8);
+        console.log(`🚀 [Upload ${uploadId}] Starting upload for ${file.name}`);
+        
         try {
-            // Generate a unique ID for this upload operation for better log tracking
-            const uploadId = Math.random().toString(36).substring(2, 8);
-            console.log(`🚀 [Upload ${uploadId}] Starting upload for ${file.name}`);
-            
             // IMPROVED EVENT DATA DEBUGGING
             console.log(`📋 [Upload ${uploadId}] EVENT DATA RECEIVED:`, {
                 // Flat properties
@@ -520,10 +520,24 @@ export const awsPhotoService = {
             
             console.log(`   ✏️ Final metadata includes: ${Object.keys(photoMetadata).length} fields to be stored`);
             
+            // FIX: Convert the matched_users array to a string to avoid GSI type mismatch error
+            // This is a workaround for the MatchedUsersCreatedAtIndex GSI issue
+            if (photoMetadata.matched_users && Array.isArray(photoMetadata.matched_users)) {
+                console.log(`   ⚠️ Converting matched_users array to string to avoid GSI validation error`);
+                // Store the original array as matched_users_list for app processing
+                photoMetadata.matched_users_list = [...photoMetadata.matched_users];
+                // Convert to comma-separated string of user IDs for GSI compatibility
+                photoMetadata.matched_users = photoMetadata.matched_users
+                    .map(match => typeof match === 'object' ? match.userId : match)
+                    .filter(Boolean)
+                    .join(',');
+                console.log(`   ✏️ Converted matched_users to string format: "${photoMetadata.matched_users}"`);
+            }
+            
             // Manually marshal the data for the base client
             let marshalledItem;
             try {
-                console.log(`   Final matched_users before marshalling: ${photoMetadata.matched_users.length} entries`); 
+                console.log(`   Final matched_users before marshalling: ${typeof photoMetadata.matched_users === 'string' ? photoMetadata.matched_users : 'Array with ' + photoMetadata.matched_users.length + ' entries'}`); 
                 marshalledItem = marshall(photoMetadata, {
                     convertEmptyValues: true, // Convert empty strings/sets to NULL
                     removeUndefinedValues: true, // Remove keys with undefined values
@@ -564,11 +578,16 @@ export const awsPhotoService = {
             console.log(`   S3 URL: ${publicUrl}`);
             console.log(`   Detected Faces Indexed: ${photoMetadata.face_ids.length}`);
             // Add more detailed logging about matched users
-            if (photoMetadata.matched_users && photoMetadata.matched_users.length > 0) {
-                console.log(`   Matched Users (${photoMetadata.matched_users.length}):`);
-                photoMetadata.matched_users.forEach((match, idx) => {
-                    console.log(`     [${idx+1}] User: ${match.userId}, Similarity: ${match.similarity}%, FaceId: ${match.faceId}`);
-                });
+            if (photoMetadata.matched_users) {
+                const matchedUsers = photoMetadata.matched_users_list || [];
+                console.log(`   Matched Users (${matchedUsers.length}):`);
+                if (matchedUsers.length > 0) {
+                    matchedUsers.forEach((match, idx) => {
+                        console.log(`     [${idx+1}] User: ${match.userId}, Similarity: ${match.similarity}%, FaceId: ${match.faceId}`);
+                    });
+                } else {
+                    console.log(`   No face matches found during upload.`);
+                }
             } else {
                 console.log(`   No face matches found during upload.`);
             }
@@ -588,9 +607,14 @@ export const awsPhotoService = {
             };
         } catch (error) {
             console.error(`❌ [Upload ${uploadId}] Upload process failed:`, error);
+            // Add more specific error message including uploadId if marshalling failed
+            const errorMessage = error.message.includes('marshall') 
+              ? `Failed to prepare data for DynamoDB (Upload ID: ${uploadId}): ${error.message}`
+              : error.message;
+              
             return {
                 success: false,
-                error: error.message
+                error: errorMessage
             };
         }
     },
@@ -659,9 +683,9 @@ export const awsPhotoService = {
                     const photoId = typeof match === 'object' ? match.id : match;
                     if (photoId) historicalPhotoIds.add(photoId);
                 });
-                
+            
                 console.log(`[PhotoService] Searching for ${historicalPhotoIds.size} historical photo IDs in DynamoDB`);
-                
+
                 // Step 2: Now scan for both direct matches and historical matches
                 const scanParams = {
                     TableName: PHOTOS_TABLE
@@ -687,13 +711,46 @@ export const awsPhotoService = {
                         if (item.matched_users) {
                             let matchedUsers = item.matched_users;
                             
-                            // Parse matched_users if it's a string
+                            // Handle both string and array formats (after our fix)
                             if (typeof matchedUsers === 'string') {
-                                try { 
-                                    matchedUsers = JSON.parse(matchedUsers); 
-                                } catch(e) { 
-                                    console.log(`[PhotoService] Invalid JSON in matched_users for photo ${item.id}`);
-                                    return;
+                                // First check if it's a comma-separated list from our fix
+                                if (matchedUsers.includes(',')) {
+                                    // Convert comma-separated string back to array of user IDs
+                                    const userIds = matchedUsers.split(',');
+                                    if (userIds.includes(userId)) {
+                                        scanResults.push(item);
+                                        return;
+                                    }
+                                } else {
+                                    try { 
+                                        // Check if it's JSON format from older data
+                                        matchedUsers = JSON.parse(matchedUsers); 
+                                    } catch(e) { 
+                                        // If not JSON and not comma-separated, check if it's a single user ID
+                                        if (matchedUsers === userId) {
+                                            scanResults.push(item);
+                                            return;
+                                        }
+                                        console.log(`[PhotoService] Invalid JSON in matched_users for photo ${item.id}`);
+                                        return;
+                                    }
+                                }
+                            }
+                            
+                            // Check matched_users_list as well (from our fix)
+                            if (item.matched_users_list && Array.isArray(item.matched_users_list)) {
+                                for (const match of item.matched_users_list) {
+                                    // Check for matches in various formats
+                                    if (typeof match === 'string' && match === userId) {
+                                        scanResults.push(item);
+                                        return;
+                                    } else if (typeof match === 'object' && match !== null) {
+                                        const matchUserId = match.userId || match.user_id;
+                                        if (matchUserId === userId) {
+                                            scanResults.push(item);
+                                            return;
+                                        }
+                                    }
                                 }
                             }
                             
@@ -759,13 +816,46 @@ export const awsPhotoService = {
                         if (item.matched_users) {
                             let matchedUsers = item.matched_users;
                             
-                            // Parse matched_users if it's a string
+                            // Handle both string and array formats (after our fix)
                             if (typeof matchedUsers === 'string') {
-                                try { 
-                                    matchedUsers = JSON.parse(matchedUsers); 
-                                } catch(e) { 
-                                    console.log(`[PhotoService] Invalid JSON in matched_users for photo ${item.id}`);
-                                    return;
+                                // First check if it's a comma-separated list from our fix
+                                if (matchedUsers.includes(',')) {
+                                    // Convert comma-separated string back to array of user IDs
+                                    const userIds = matchedUsers.split(',');
+                                    if (userIds.includes(userId)) {
+                                        scanResults.push(item);
+                                        return;
+                                    }
+                                } else {
+                                    try { 
+                                        // Check if it's JSON format from older data
+                                        matchedUsers = JSON.parse(matchedUsers); 
+                                    } catch(e) { 
+                                        // If not JSON and not comma-separated, check if it's a single user ID
+                                        if (matchedUsers === userId) {
+                                            scanResults.push(item);
+                                            return;
+                                        }
+                                        console.log(`[PhotoService] Invalid JSON in matched_users for photo ${item.id}`);
+                                        return;
+                                    }
+                                }
+                            }
+                            
+                            // Check matched_users_list as well (from our fix)
+                            if (item.matched_users_list && Array.isArray(item.matched_users_list)) {
+                                for (const match of item.matched_users_list) {
+                                    // Check for matches in various formats
+                                    if (typeof match === 'string' && match === userId) {
+                                        scanResults.push(item);
+                                        return;
+                                    } else if (typeof match === 'object' && match !== null) {
+                                        const matchUserId = match.userId || match.user_id;
+                                        if (matchUserId === userId) {
+                                            scanResults.push(item);
+                                            return;
+                                        }
+                                    }
                                 }
                             }
                             
@@ -790,18 +880,18 @@ export const awsPhotoService = {
                     
                     scanParams.ExclusiveStartKey = items.LastEvaluatedKey;
                 } while (typeof items.LastEvaluatedKey !== 'undefined');
-                
+            
                 console.log(`[PhotoService] Scanned ${scannedCount} total photos.`);
                 console.log(`[PhotoService] Found ${scanResults.length} matched photos for user ${userId}.`);
-                
+            
                 // Apply visibility filter
                 const visibleMatchedPhotos = await filterPhotosByVisibility(userId, scanResults, 'VISIBLE');
-                
+            
                 // Sort by creation date (newest first)
-                const sortedVisiblePhotos = visibleMatchedPhotos.sort((a, b) => {
-                    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-                });
-                
+            const sortedVisiblePhotos = visibleMatchedPhotos.sort((a, b) => {
+                return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+            });
+            
                 // Store in cache with timestamp
                 awsPhotoService.matchedPhotosCache.set(cacheKey, {
                     items: sortedVisiblePhotos,
@@ -809,7 +899,7 @@ export const awsPhotoService = {
                 });
                 
                 console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} visible matched photos for user ${userId}.`);
-                return sortedVisiblePhotos;
+            return sortedVisiblePhotos;
             }
         } catch (error) {
             console.error(`[PhotoService] Error fetching matched photos: ${error}`);

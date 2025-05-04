@@ -157,9 +157,28 @@ export const PhotoGrid = memo(({ photos, onDelete, onShare, onTrash }) => {
                         style: { zIndex: 3 },
                         children: [
                             _jsx(Users, { className: "w-4 h-4 text-indigo-100" }),
-                            photo.matched_users?.length > 0 
-                                ? `${photo.matched_users.length} ${photo.matched_users.length === 1 ? "Match" : "Matches"}` 
-                                : `${photo.faces.length} ${photo.faces.length === 1 ? "Face" : "Faces"}`
+                            (() => {
+                                // Get matched users count correctly regardless of format
+                                let matchCount = 0;
+                                
+                                if (photo.matched_users_list && Array.isArray(photo.matched_users_list)) {
+                                    // Use the dedicated list field if available
+                                    matchCount = photo.matched_users_list.length;
+                                } else if (typeof photo.matched_users === 'string') {
+                                    // Handle comma-separated string format
+                                    matchCount = photo.matched_users ? photo.matched_users.split(',').filter(Boolean).length : 0;
+                                } else if (Array.isArray(photo.matched_users)) {
+                                    // Handle array format
+                                    matchCount = photo.matched_users.length;
+                                } else if (photo.faces && Array.isArray(photo.faces)) {
+                                    // Fallback to face count if no matches
+                                    matchCount = 0;
+                                }
+                                
+                                return matchCount > 0 
+                                    ? `${matchCount} ${matchCount === 1 ? "Match" : "Matches"}` 
+                                    : `${photo.faces.length} ${photo.faces.length === 1 ? "Face" : "Faces"}`;
+                            })()
                         ]
                     }),
                     _jsx("div", {
