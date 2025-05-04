@@ -1,6 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 // src/components/PhotoManager.tsx
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { PhotoUploader } from './PhotoUploader';
 import { PhotoGrid } from './PhotoGrid';
 import { useAuth } from '../context/AuthContext';
@@ -10,7 +10,7 @@ import { cn } from '../utils/cn';
 import { awsPhotoService } from '../services/awsPhotoService';
 import { movePhotosToTrash } from '../services/userVisibilityService';
 
-export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) => {
+export const PhotoManager = memo(({ eventId, mode = 'upload', nativeShare = false }) => {
     const [photos, setPhotos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -72,14 +72,16 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
         if (!user?.id) return;
         console.log(`🔄 [PhotoManager ${mode}] Effect triggered: mode or user changed.`);
         fetchPhotos();
-    }, [fetchPhotos]);
+    }, [fetchPhotos, user?.id]);
 
-    const handlePhotoDelete = async (photoId) => {
+    const handlePhotoDelete = useCallback(async (photoId) => {
+        if (!user?.id || !photoId) return;
+        
         try {
             // Use userVisibilityService to move the photo to trash instead of deleting it
             const result = await movePhotosToTrash(user.id, [photoId]);
             if (result.success) {
-                setPhotos(photos.filter(p => p.id !== photoId));
+                setPhotos(photos => photos.filter(p => p.id !== photoId));
             }
             else {
                 throw new Error('Failed to move photo to trash');
@@ -89,9 +91,9 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
             console.error('Error moving photo to trash:', err);
             setError('Failed to move photo to trash. Please try again.');
         }
-    };
+    }, [user?.id]);
 
-    const handleTrashSinglePhoto = async (photoId, e) => {
+    const handleTrashSinglePhoto = useCallback(async (photoId, e) => {
         if (e) e.stopPropagation();
         if (!user?.id || !photoId) return;
         
@@ -111,9 +113,9 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
             console.error(`[PhotoManager] Exception moving photo ${photoId} to trash:`, err);
             setError('Failed to move photo to trash. Please try again.');
         }
-    };
+    }, [user?.id]);
 
-    const handleShare = async (photoId, e) => {
+    const handleShare = useCallback(async (photoId, e) => {
         if (e) e.stopPropagation();
         if (!nativeShare) return; // Only try to share if nativeShare is true
     
@@ -141,9 +143,9 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
         } catch (err) {
             console.error('[PhotoManager] Error sharing photo:', err);
         }
-    };
+    }, [photos, nativeShare]);
 
-    const downloadPhoto = (photo) => {
+    const downloadPhoto = useCallback((photo) => {
         // Create a temporary anchor element for downloading
         const link = document.createElement('a');
         link.href = photo.url;
@@ -159,78 +161,135 @@ export const PhotoManager = ({ eventId, mode = 'upload', nativeShare = false }) 
             link.click();
             document.body.removeChild(link);
         }
-    };
+    }, []);
 
     // Pagination logic
-    const totalPages = Math.ceil(photos.length / photosPerPage);
+    const totalPages = useMemo(() => Math.ceil(photos.length / photosPerPage), [photos.length, photosPerPage]);
     
     const currentPhotos = useMemo(() => {
         const startIndex = (currentPage - 1) * photosPerPage;
         return photos.slice(startIndex, startIndex + photosPerPage);
     }, [photos, currentPage, photosPerPage]);
 
+    const goToNextPage = useCallback(() => {
+        setCurrentPage(prev => Math.min(prev + 1, totalPages));
+    }, [totalPages]);
+
+    const goToPrevPage = useCallback(() => {
+        setCurrentPage(prev => Math.max(prev - 1, 1));
+    }, []);
+
+    const goToPage = useCallback((pageNumber) => {
+        setCurrentPage(pageNumber);
+    }, []);
+
+    const renderPaginationButtons = useMemo(() => {
+        if (photos.length <= photosPerPage) return null;
+        
+        return (
+            _jsx("div", { className: "mt-8 flex justify-center", children: 
+                _jsxs("nav", { className: "flex items-center", children: [
+                    _jsx("button", { 
+                        onClick: goToPrevPage,
+                        disabled: currentPage === 1,
+                        className: "p-2 mr-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed",
+                        children: _jsx(ChevronLeft, { size: 18 })
+                    }),
+                    _jsx("div", { className: "flex space-x-1", children:
+                        [...Array(totalPages)].map((_, i) => (
+                            _jsx("button", {
+                                onClick: () => goToPage(i + 1),
+                                className: `px-3 py-1 rounded-md ${
+                                    currentPage === i + 1
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-100 hover:bg-gray-200'
+                                }`,
+                                children: i + 1
+                            }, i)
+                        ))
+                    }),
+                    _jsx("button", { 
+                        onClick: goToNextPage,
+                        disabled: currentPage === totalPages,
+                        className: "p-2 ml-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed",
+                        children: _jsx(ChevronRight, { size: 18 })
+                    })
+                ]})
+            })
+        );
+    }, [photos.length, photosPerPage, currentPage, totalPages, goToPrevPage, goToPage, goToNextPage]);
+
+    // IMPORTANT: Always define all useMemo hooks unconditionally, before any early returns
+    const headerContent = useMemo(() => (
+        _jsxs("div", { className: "photo-manager-header mb-4 p-4 bg-gray-50 rounded-lg border", children: [
+            _jsxs("h3", { className: "text-lg font-semibold mb-2", children: [mode === 'upload' ? "My Uploads" : "Matched Photos"]}),
+            _jsxs("div", { className: "flex items-center space-x-4 text-sm text-gray-600", children: [
+                mode === 'upload' && _jsxs("span", { className: "flex items-center", children: [
+                    _jsx(Upload, { size: 16, className:"mr-1"}), 
+                    `Uploaded: ${uploadedCount}`
+                ]}),
+                mode === 'matches' && _jsxs("span", { className: "flex items-center", children: [
+                    _jsx(ImageIcon, { size: 16, className:"mr-1"}), 
+                    `Matched: ${matchedCount}`
+                ]})
+            ]})
+        ]})
+    ), [mode, uploadedCount, matchedCount]);
+
+    // Create empty and non-empty variants but always call useMemo
+    const emptyPhotoGrid = useMemo(() => (
+        _jsx("div", { 
+            className: "text-center py-12 bg-apple-gray-50 rounded-apple-xl border-2 border-dashed border-apple-gray-200", 
+            children: _jsx("p", { 
+                className: "text-apple-gray-500", 
+                children: mode === 'upload' ? "No photos uploaded yet" : "No photos found with your face" 
+            }) 
+        })
+    ), [mode]);
+
+    const nonEmptyPhotoGrid = useMemo(() => (
+        _jsxs("div", { children: [
+            _jsx(PhotoGrid, { 
+                photos: currentPhotos, 
+                onDelete: mode === 'upload' ? handlePhotoDelete : undefined,
+                onTrash: handleTrashSinglePhoto,
+                onShare: handleShare,
+                columns: { default: 2, sm: 3, md: 4, lg: 4 }
+            }),
+            renderPaginationButtons
+        ]})
+    ), [
+        currentPhotos, 
+        mode, 
+        handlePhotoDelete, 
+        handleTrashSinglePhoto, 
+        handleShare, 
+        renderPaginationButtons
+    ]);
+
     if (loading) {
         return (_jsx("div", { className: "flex items-center justify-center h-64", children: _jsx(RefreshCw, { className: "w-8 h-8 text-apple-gray-400 animate-spin" }) }));
     }
-    return (_jsxs("div", { children: [error && (_jsxs("div", { className: "mb-6 p-4 bg-red-50 text-red-600 rounded-apple flex items-center", children: [_jsx(AlertTriangle, { className: "w-5 h-5 mr-2" }), error] })), mode === 'upload' && (_jsx(PhotoUploader, { eventId: eventId, onUploadComplete: handlePhotoUpload, onError: (error) => setError(error) })), _jsxs("div", { className: "photo-manager-header mb-4 p-4 bg-gray-50 rounded-lg border", children: [
-        _jsxs("h3", { className: "text-lg font-semibold mb-2", children: [mode === 'upload' ? "My Uploads" : "Matched Photos"]}),
-        _jsxs("div", { className: "flex items-center space-x-4 text-sm text-gray-600", children: [
-            mode === 'upload' && _jsxs("span", { className: "flex items-center", children: [
-                _jsx(Upload, { size: 16, className:"mr-1"}), 
-                `Uploaded: ${uploadedCount}`
-            ]}),
-            mode === 'matches' && _jsxs("span", { className: "flex items-center", children: [
-                _jsx(ImageIcon, { size: 16, className:"mr-1"}), 
-                `Matched: ${matchedCount}`
-            ]})
-        ]})
-    ]}), _jsx("hr", { className: "mb-6"}), _jsx(motion.div, { 
-        initial: { opacity: 0, y: 20 }, 
-        animate: { opacity: 1, y: 0 }, 
-        children: currentPhotos.length > 0 ? (
-            _jsxs("div", { children: [
-                _jsx(PhotoGrid, { 
-                    photos: currentPhotos, 
-                    onDelete: mode === 'upload' ? handlePhotoDelete : undefined,
-                    onTrash: handleTrashSinglePhoto,
-                    onShare: handleShare,
-                    columns: { default: 2, sm: 3, md: 4, lg: 4 }
-                }),
-                // Pagination controls (use photos.length for total count)
-                photos.length > photosPerPage && (
-                    _jsx("div", { className: "mt-8 flex justify-center", children: 
-                        _jsxs("nav", { className: "flex items-center", children: [
-                            _jsx("button", { 
-                                onClick: () => setCurrentPage(prev => Math.max(prev - 1, 1)),
-                                disabled: currentPage === 1,
-                                className: "p-2 mr-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed",
-                                children: _jsx(ChevronLeft, { size: 18 })
-                            }),
-                            _jsx("div", { className: "flex space-x-1", children:
-                                [...Array(totalPages)].map((_, i) => (
-                                    _jsx("button", {
-                                        onClick: () => setCurrentPage(i + 1),
-                                        className: `px-3 py-1 rounded-md ${
-                                            currentPage === i + 1
-                                                ? 'bg-blue-600 text-white'
-                                                : 'bg-gray-100 hover:bg-gray-200'
-                                        }`,
-                                        children: i + 1
-                                    }, i)
-                                ))
-                            }),
-                            _jsx("button", { 
-                                onClick: () => setCurrentPage(prev => Math.min(prev + 1, totalPages)),
-                                disabled: currentPage === totalPages,
-                                className: "p-2 ml-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed",
-                                children: _jsx(ChevronRight, { size: 18 })
-                            })
-                        ]})
-                    })
-                )
-            ]})
-        ) : (
-            _jsx("div", { className: "text-center py-12 bg-apple-gray-50 rounded-apple-xl border-2 border-dashed border-apple-gray-200", children: _jsx("p", { className: "text-apple-gray-500", children: mode === 'upload'
-                                ? "No photos uploaded yet"
-                                : "No photos found with your face" }) })) })] }));
-};
+
+    return (_jsxs("div", { children: [
+        error && (_jsxs("div", { 
+            className: "mb-6 p-4 bg-red-50 text-red-600 rounded-apple flex items-center", 
+            children: [_jsx(AlertTriangle, { className: "w-5 h-5 mr-2" }), error] 
+        })), 
+        mode === 'upload' && (_jsx(PhotoUploader, { 
+            eventId: eventId, 
+            onUploadComplete: handlePhotoUpload, 
+            onError: (error) => setError(error) 
+        })), 
+        headerContent,
+        _jsx("hr", { className: "mb-6"}), 
+        _jsx(motion.div, { 
+            initial: { opacity: 0, y: 20 }, 
+            animate: { opacity: 1, y: 0 }, 
+            children: currentPhotos.length > 0 ? nonEmptyPhotoGrid : emptyPhotoGrid
+        })
+    ] }));
+});
+
+// Add display name for better debugging
+PhotoManager.displayName = 'PhotoManager';

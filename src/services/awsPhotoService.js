@@ -635,34 +635,39 @@ export const awsPhotoService = {
             
             console.log(`[PhotoService] User ${userId} has registered face IDs: ['${faceData.faceId}']`);
             
-            // Use the GSI to find photos where this user is in matched_users
-            console.log(`[PhotoService] Querying matched_users index for ${userId}...`);
-            
-            let matchedPhotos = [];
-            try {
-                // First, try to use the GSI for efficient query
-                const queryParams = {
-                    TableName: PHOTOS_TABLE,
-                    IndexName: 'MatchedUsersIndex',
-                    KeyConditionExpression: 'userId = :userId',
-                    ExpressionAttributeValues: {
-                        ':userId': userId
+            // Step 1: Get historical matches from face data (if available)
+            let historicalMatches = [];
+            if (faceData && faceData.historicalMatches) {
+                let parsedHistoricalMatches = [];
+                
+                // Parse historicalMatches if it's a string
+                if (typeof faceData.historicalMatches === 'string') {
+                    try {
+                        parsedHistoricalMatches = JSON.parse(faceData.historicalMatches);
+                        console.log(`[PhotoService] Found ${parsedHistoricalMatches.length} historical matches in face data`);
+                    } catch(e) {
+                        console.error(`[PhotoService] Error parsing historical matches: ${e.message}`);
                     }
-                };
+                } else if (Array.isArray(faceData.historicalMatches)) {
+                    parsedHistoricalMatches = faceData.historicalMatches;
+                    console.log(`[PhotoService] Found ${parsedHistoricalMatches.length} historical matches in face data (array)`);
+                }
                 
-                console.log(`[PhotoService] Querying GSI with params: ${JSON.stringify(queryParams)}`);
-                const queryResponse = await docClient.send(new QueryCommand(queryParams));
-                matchedPhotos = queryResponse.Items || [];
-                console.log(`[PhotoService] GSI query found ${matchedPhotos.length} photos with user ${userId} in matched_users`);
-            } catch (gsiError) {
-                console.error(`[PhotoService] Error querying GSI, falling back to scan: ${gsiError.message}`);
+                // Create a set for faster lookups
+                const historicalPhotoIds = new Set();
+                parsedHistoricalMatches.forEach(match => {
+                    const photoId = typeof match === 'object' ? match.id : match;
+                    if (photoId) historicalPhotoIds.add(photoId);
+                });
                 
-                // Fallback to scan if GSI query fails
+                console.log(`[PhotoService] Searching for ${historicalPhotoIds.size} historical photo IDs in DynamoDB`);
+                
+                // Step 2: Now scan for both direct matches and historical matches
                 const scanParams = {
                     TableName: PHOTOS_TABLE
                 };
                 
-                // Scan all photos and filter client-side
+                // Scan photos and filter for matches
                 const scanResults = [];
                 let items;
                 let scannedCount = 0;
@@ -672,6 +677,13 @@ export const awsPhotoService = {
                     scannedCount += items.ScannedCount || 0;
                     
                     items.Items.forEach((item) => {
+                        // First check if this is a historical match
+                        if (historicalPhotoIds.has(item.id)) {
+                            scanResults.push(item);
+                            return;
+                        }
+                        
+                        // Also check for direct matches in matched_users array
                         if (item.matched_users) {
                             let matchedUsers = item.matched_users;
                             
@@ -702,11 +714,76 @@ export const awsPhotoService = {
                                 }
                             }
                         }
-                        
-                        // Check historical matches if there's face data available
-                        if (faceData && faceData.historicalMatches && Array.isArray(faceData.historicalMatches)) {
-                            if (faceData.historicalMatches.some(match => match.id === item.id)) {
-                                scanResults.push(item);
+                    });
+                    
+                    scanParams.ExclusiveStartKey = items.LastEvaluatedKey;
+                } while (typeof items.LastEvaluatedKey !== 'undefined');
+                
+                console.log(`[PhotoService] Scanned ${scannedCount} total photos.`);
+                console.log(`[PhotoService] Found ${scanResults.length} matched photos for user ${userId}.`);
+                
+                // Apply visibility filter
+                const visibleMatchedPhotos = await filterPhotosByVisibility(userId, scanResults, 'VISIBLE');
+                
+                // Sort by creation date (newest first)
+                const sortedVisiblePhotos = visibleMatchedPhotos.sort((a, b) => {
+                    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+                });
+                
+                // Store in cache with timestamp
+                awsPhotoService.matchedPhotosCache.set(cacheKey, {
+                    items: sortedVisiblePhotos,
+                    timestamp: now.getTime()
+                });
+                
+                console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} visible matched photos for user ${userId}.`);
+                return sortedVisiblePhotos;
+            } else {
+                console.log(`[PhotoService] No historical matches found in face data, scanning for direct matches only.`);
+                // Continue with just scan for direct matches in matched_users array
+                const scanParams = {
+                    TableName: PHOTOS_TABLE
+                };
+                
+                // Scan photos and filter for matches
+                const scanResults = [];
+                let items;
+                let scannedCount = 0;
+                
+                do {
+                    items = await docClient.send(new ScanCommand(scanParams));
+                    scannedCount += items.ScannedCount || 0;
+                    
+                    items.Items.forEach((item) => {
+                        // Only check for direct matches in matched_users array
+                        if (item.matched_users) {
+                            let matchedUsers = item.matched_users;
+                            
+                            // Parse matched_users if it's a string
+                            if (typeof matchedUsers === 'string') {
+                                try { 
+                                    matchedUsers = JSON.parse(matchedUsers); 
+                                } catch(e) { 
+                                    console.log(`[PhotoService] Invalid JSON in matched_users for photo ${item.id}`);
+                                    return;
+                                }
+                            }
+                            
+                            // Look for this user in the matched_users array
+                            if (Array.isArray(matchedUsers)) {
+                                for (const match of matchedUsers) {
+                                    // Check for matches in various formats
+                                    if (typeof match === 'string' && match === userId) {
+                                        scanResults.push(item);
+                                        return;
+                                    } else if (typeof match === 'object' && match !== null) {
+                                        const matchUserId = match.userId || match.user_id;
+                                        if (matchUserId === userId) {
+                                            scanResults.push(item);
+                                            return;
+                                        }
+                                    }
+                                }
                             }
                         }
                     });
@@ -717,25 +794,23 @@ export const awsPhotoService = {
                 console.log(`[PhotoService] Scanned ${scannedCount} total photos.`);
                 console.log(`[PhotoService] Found ${scanResults.length} matched photos for user ${userId}.`);
                 
-                matchedPhotos = scanResults;
+                // Apply visibility filter
+                const visibleMatchedPhotos = await filterPhotosByVisibility(userId, scanResults, 'VISIBLE');
+                
+                // Sort by creation date (newest first)
+                const sortedVisiblePhotos = visibleMatchedPhotos.sort((a, b) => {
+                    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+                });
+                
+                // Store in cache with timestamp
+                awsPhotoService.matchedPhotosCache.set(cacheKey, {
+                    items: sortedVisiblePhotos,
+                    timestamp: now.getTime()
+                });
+                
+                console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} visible matched photos for user ${userId}.`);
+                return sortedVisiblePhotos;
             }
-            
-            // Apply visibility filter
-            const visibleMatchedPhotos = await filterPhotosByVisibility(userId, matchedPhotos, 'VISIBLE');
-            
-            // Sort by creation date (newest first)
-            const sortedVisiblePhotos = visibleMatchedPhotos.sort((a, b) => {
-                return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-            });
-            
-            // Store in cache with timestamp
-            awsPhotoService.matchedPhotosCache.set(cacheKey, {
-                items: sortedVisiblePhotos,
-                timestamp: now.getTime()
-            });
-            
-            console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} visible matched photos for user ${userId}.`);
-            return sortedVisiblePhotos;
         } catch (error) {
             console.error(`[PhotoService] Error fetching matched photos: ${error}`);
             return [];
