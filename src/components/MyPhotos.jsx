@@ -69,9 +69,6 @@ const MyPhotos = () => {
   useEffect(() => {
     console.log('[MyPhotos.jsx] Mounted or User ID changed');
     fetchPhotos(); // Initial fetch
-
-    // Removed the setInterval polling logic
-
   }, [fetchPhotos]); // Depend on the memoized fetchPhotos function
 
   // Filter photos based on search term
@@ -239,8 +236,8 @@ const MyPhotos = () => {
           </div>
         )}
         
-        {/* Main Content Area */}
-        <div className="p-6">
+        {/* Main Content Area - No extra overflow container */}
+        <div className="photo-content-container">
           {/* Loading State */}
           {loading && (
             <div className="flex flex-col items-center justify-center py-12">
@@ -254,7 +251,7 @@ const MyPhotos = () => {
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 flex items-start"
+              className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 flex items-start mx-6 mt-6"
             >
               <div className="flex-1">
                 <p className="font-medium">{error}</p>
@@ -287,21 +284,23 @@ const MyPhotos = () => {
             </motion.div>
           )}
           
-          {/* Photo Grid */}
+          {/* Photo Grid - One single scrollable element */}
           {!loading && !error && filteredPhotos.length > 0 && (
-            <>
+            <div className="photo-grid-wrapper mx-6 my-6">
               <div className="text-sm text-gray-500 mb-4">
                 Showing {currentPhotos.length} of {filteredPhotos.length} photos
               </div>
               
-              <PhotoGrid
-                photos={currentPhotos}
-                selectable={true}
-                selectedPhotos={selectedPhotos}
-                onSelectPhoto={handleSelectPhoto}
-                onPhotoAction={handlePhotoAction}
-                columns={{ default: 2, sm: 3, md: 4, lg: 4 }}
-              />
+              <div className="photo-grid-container">
+                <PhotoGrid
+                  photos={currentPhotos}
+                  selectable={true}
+                  selectedPhotos={selectedPhotos}
+                  onSelectPhoto={handleSelectPhoto}
+                  onPhotoAction={handlePhotoAction}
+                  columns={{ default: 2, sm: 3, md: 4, lg: 4 }}
+                />
+              </div>
               
               {/* Pagination */}
               {totalPages > 1 && (
@@ -355,7 +354,7 @@ const MyPhotos = () => {
                   </nav>
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </div>

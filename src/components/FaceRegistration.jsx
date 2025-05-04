@@ -837,8 +837,14 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
     const processCapturedImage = async (imgSrc, capturedLocationInfo) => {
         try {
             setProcessing(true);
+            
+            // Image resizing to optimize performance
+            console.log('📸 Original image size:', Math.round(imgSrc.length * 0.75) / 1000, 'KB');
+            const resizedImage = await resizeImageForFaceRecognition(imgSrc);
+            console.log('📸 Resized image size:', Math.round(resizedImage.length * 0.75) / 1000, 'KB');
+            
             // Convert base64 to Uint8Array for AWS
-            const base64Data = imgSrc.split(',')[1];
+            const base64Data = resizedImage.split(',')[1];
             const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
             
             // Use AWS Rekognition to detect faces
@@ -885,7 +891,7 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
             // Proceed with face registration with the direct blob reference
             if (user && FACE_REGISTER_METHOD === 'direct') {
                 // Pass the capturedLocationInfo to registerFace
-                await registerFace(imgSrc, user.id, blobForUpload, capturedLocationInfo);
+                await registerFace(resizedImage, user.id, blobForUpload, capturedLocationInfo);
             }
             setProcessing(false);
         }
@@ -895,6 +901,57 @@ const FaceRegistration = ({ onSuccess, onClose }) => {
             setCaptured(false);
             setProcessing(false);
         }
+    };
+
+    // Image resizing utility function
+    const resizeImageForFaceRecognition = async (imgSrc) => {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                // Create canvas for resizing
+                const canvas = document.createElement('canvas');
+                
+                // Target size: 320x240 is sufficient for face recognition
+                // This reduces a ~2MB image to ~50KB (97% reduction)
+                const MAX_WIDTH = 320;
+                const MAX_HEIGHT = 240;
+                
+                // Calculate new dimensions while maintaining aspect ratio
+                let width = img.width;
+                let height = img.height;
+                
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height = Math.round(height * (MAX_WIDTH / width));
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width = Math.round(width * (MAX_HEIGHT / height));
+                        height = MAX_HEIGHT;
+                    }
+                }
+                
+                // Set canvas dimensions and draw resized image
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Convert to base64 with reduced quality (0.8)
+                const resizedImgData = canvas.toDataURL('image/jpeg', 0.8);
+                resolve(resizedImgData);
+            };
+            
+            // Handle loading errors
+            img.onerror = () => {
+                console.error('📸 Error loading image for resizing');
+                resolve(imgSrc); // Fall back to original image
+            };
+            
+            // Load the image
+            img.src = imgSrc;
+        });
     };
 
     const registerFace = async (imgSrc, userId, blobForUpload, locationInfoFromCapture) => {

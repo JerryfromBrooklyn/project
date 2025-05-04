@@ -1,11 +1,14 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, AlertCircle } from 'lucide-react';
 import SimplePhotoInfoModal from './SimplePhotoInfoModal.jsx';
 import { cn } from '../utils/cn';
+import { LazyLoadImage } from 'react-lazy-load-image-component';
+import 'react-lazy-load-image-component/src/effects/blur.css';
 
-export const PhotoGrid = ({ photos, onDelete, onShare, onTrash }) => {
+// Convert to memoized component using React.memo
+export const PhotoGrid = memo(({ photos, onDelete, onShare, onTrash }) => {
     const [selectedPhoto, setSelectedPhoto] = useState(null);
     const [isMobile, setIsMobile] = useState(false);
 
@@ -21,17 +24,17 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onTrash }) => {
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
-    // Function to open the photo modal
-    const handlePhotoClick = (photo) => {
+    // Function to open the photo modal - converted to useCallback
+    const handlePhotoClick = useCallback((photo) => {
         console.log("PhotoGrid: Opening photo modal for:", photo.id);
         setSelectedPhoto(photo);
-    };
+    }, []);
 
-    // Function to handle modal close
-    const handleCloseModal = () => {
+    // Function to handle modal close - converted to useCallback
+    const handleCloseModal = useCallback(() => {
         console.log("PhotoGrid: Closing photo modal");
         setSelectedPhoto(null);
-    };
+    }, []);
 
     if (photos.length === 0) {
         return (_jsxs("div", { className: "text-center py-12 bg-apple-gray-50 rounded-apple-xl border-2 border-dashed border-apple-gray-200", children: [_jsx(AlertCircle, { className: "w-12 h-12 text-apple-gray-400 mx-auto mb-4" }), _jsx("p", { className: "text-apple-gray-500 font-medium", children: "No photos found" }), _jsx("p", { className: "text-apple-gray-400 text-sm mt-1", children: photos.length === 0 ? "No photos have been uploaded yet" : "No matches found in any photos" })] }));
@@ -89,13 +92,17 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onTrash }) => {
                             tabIndex: 0,
                             "aria-label": `View photo ${photo.title || photo.id}`,
                             style: { cursor: 'pointer', position: 'relative', zIndex: 2 }, 
-                            children: _jsx("img", { 
+                            children: _jsx(LazyLoadImage, { 
                                 src: photo.url, 
                                 alt: photo.title || `Photo ${photo.id}`, 
                                 className: "w-full h-full object-cover transition-transform duration-300 group-hover:scale-105",
-                                draggable: false, // Prevent drag on mobile
-                                loading: "lazy",
-                                style: { pointerEvents: 'none' } // Ensure clicks go to parent div
+                                draggable: false, 
+                                effect: "blur", 
+                                threshold: 100, 
+                                placeholderSrc: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", 
+                                style: { pointerEvents: 'none' }, 
+                                visibleByDefault: false,
+                                wrapperClassName: "w-full h-full"
                             })
                         }),
                         photo.faces && (_jsxs("div", { 
@@ -129,4 +136,7 @@ export const PhotoGrid = ({ photos, onDelete, onShare, onTrash }) => {
             ) 
         })
     ] }));
-};
+});
+
+// Add display name for debugging
+PhotoGrid.displayName = 'PhotoGrid';

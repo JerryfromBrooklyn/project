@@ -14,6 +14,8 @@ import { API_URL } from '../config';
  * Service for handling photo operations with AWS S3 and DynamoDB
  */
 export const awsPhotoService = {
+    // Cache for matched photos to avoid repeated scans
+    matchedPhotosCache: new Map(),
     /**
      * Upload a photo with metadata to S3 and DynamoDB
      * @param {File} file - The file to upload
@@ -593,113 +595,224 @@ export const awsPhotoService = {
         }
     },
     /**
-     * Fetch photos WHERE THE CURRENT USER IS MATCHED from DynamoDB
-     * @param {string} userId - The ID of the user viewing their matches
-     * @returns {Promise<PhotoMetadata[]>} Array of photo metadata where the user is matched
+     * Fetch photos where the user's face is matched
+     * @param {string} userId - The user ID
+     * @returns {Promise<Array>} - Array of matched photos
      */
-    fetchPhotos: async (userId) => {
+    fetchMatchedPhotos: async (userId) => {
         console.log(`📥 [PhotoService] Fetching matched photos for user: ${userId}`);
         if (!userId) {
             console.error('[PhotoService] Cannot fetch matched photos without userId');
             return [];
         }
+        
         try {
-            // 1. Get the user's registered face IDs first
+            // Check cache first
+            const cacheKey = `matched_photos_${userId}`;
+            const cacheData = awsPhotoService.matchedPhotosCache.get(cacheKey);
+            
+            // Check if cache exists AND is not expired (cache should be invalidated if it's older than 30 seconds after a face registration)
+            const now = new Date();
+            const isCacheValid = cacheData && 
+                (now.getTime() - cacheData.timestamp < 30000) && // Increased from 10 to 30 seconds
+                cacheData.items && 
+                cacheData.items.length > 0;
+                
+            if (isCacheValid) {
+                console.log(`[PhotoService] Using cached data for ${userId} (${cacheData.items.length} photos). Cache created at ${new Date(cacheData.timestamp).toISOString()}`);
+                return cacheData.items;
+            }
+            
+            // If no valid cache, proceed with fetching fresh data
+            console.log(`[PhotoService] Cache invalid or expired for ${userId}, fetching fresh data`);
+            
+            // Get user's registered face IDs from FaceStorageService
             const faceData = await getFaceDataForUser(userId);
-            const userFaceIds = faceData?.faceId ? [faceData.faceId] : [];
-            console.log(`[PhotoService] User ${userId} has registered face IDs:`, userFaceIds);
+            if (!faceData || !faceData.faceId) {
+                console.log(`[PhotoService] User ${userId} has no registered face IDs`);
+                return [];
+            }
             
-            // 2. Scan all photos in the database
-            console.log(`[PhotoService] Scanning ${PHOTOS_TABLE} to find matches for ${userId}...`);
+            console.log(`[PhotoService] User ${userId} has registered face IDs: ['${faceData.faceId}']`);
             
-            let allPhotos = [];
-            let lastEvaluatedKey;
-            
-            do {
-                const scanParams = {
-                    TableName: PHOTOS_TABLE,
-                    ExclusiveStartKey: lastEvaluatedKey
-                };
+            // Step 1: Get historical matches from face data (if available)
+            let historicalMatches = [];
+            if (faceData && faceData.historicalMatches) {
+                let parsedHistoricalMatches = [];
                 
-                const response = await docClient.send(new ScanCommand(scanParams));
-                
-                if (!response.Items || response.Items.length === 0) {
-                    console.log(`[PhotoService] No photos found in scan.`);
-                    break;
+                // Parse historicalMatches if it's a string
+                if (typeof faceData.historicalMatches === 'string') {
+                    try {
+                        parsedHistoricalMatches = JSON.parse(faceData.historicalMatches);
+                        console.log(`[PhotoService] Found ${parsedHistoricalMatches.length} historical matches in face data`);
+                    } catch(e) {
+                        console.error(`[PhotoService] Error parsing historical matches: ${e.message}`);
+                    }
+                } else if (Array.isArray(faceData.historicalMatches)) {
+                    parsedHistoricalMatches = faceData.historicalMatches;
+                    console.log(`[PhotoService] Found ${parsedHistoricalMatches.length} historical matches in face data (array)`);
                 }
                 
-                allPhotos = [...allPhotos, ...response.Items];
-                lastEvaluatedKey = response.LastEvaluatedKey;
+                // Create a set for faster lookups
+                const historicalPhotoIds = new Set();
+                parsedHistoricalMatches.forEach(match => {
+                    const photoId = typeof match === 'object' ? match.id : match;
+                    if (photoId) historicalPhotoIds.add(photoId);
+                });
                 
-            } while (lastEvaluatedKey);
-            
-            console.log(`[PhotoService] Scanned ${allPhotos.length} total photos.`);
-
-            // 3. Filter for photos where this user is matched
-            const matchedPhotos = allPhotos.filter(photo => {
-                // a. Check direct matches in the matched_users array
-                if (photo.matched_users) {
-                    let matchedUsers = photo.matched_users;
+                console.log(`[PhotoService] Searching for ${historicalPhotoIds.size} historical photo IDs in DynamoDB`);
+                
+                // Step 2: Now scan for both direct matches and historical matches
+                const scanParams = {
+                    TableName: PHOTOS_TABLE
+                };
+                
+                // Scan photos and filter for matches
+                const scanResults = [];
+                let items;
+                let scannedCount = 0;
+                
+                do {
+                    items = await docClient.send(new ScanCommand(scanParams));
+                    scannedCount += items.ScannedCount || 0;
                     
-                    // Parse matched_users if it's a string
-                    if (typeof matchedUsers === 'string') {
-                        try { 
-                            matchedUsers = JSON.parse(matchedUsers); 
-                        } catch(e) { 
-                            console.log(`[PhotoService] Invalid JSON in matched_users for photo ${photo.id}`);
-                            return false;
+                    items.Items.forEach((item) => {
+                        // First check if this is a historical match
+                        if (historicalPhotoIds.has(item.id)) {
+                            scanResults.push(item);
+                            return;
                         }
-                    }
-                    
-                    // Handle different data structures for matched_users
-                    if (Array.isArray(matchedUsers)) {
-                        for (const match of matchedUsers) {
-                            // Check for matches in various formats
-                            if (typeof match === 'string' && match === userId) {
-                                console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: direct string match in matched_users`);
-                                return true;
-                            } else if (typeof match === 'object' && match !== null) {
-                                const matchUserId = match.userId || match.user_id;
-                                if (matchUserId === userId) {
-                                    console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: direct object match in matched_users`);
-                                    return true;
+                        
+                        // Also check for direct matches in matched_users array
+                        if (item.matched_users) {
+                            let matchedUsers = item.matched_users;
+                            
+                            // Parse matched_users if it's a string
+                            if (typeof matchedUsers === 'string') {
+                                try { 
+                                    matchedUsers = JSON.parse(matchedUsers); 
+                                } catch(e) { 
+                                    console.log(`[PhotoService] Invalid JSON in matched_users for photo ${item.id}`);
+                                    return;
+                                }
+                            }
+                            
+                            // Look for this user in the matched_users array
+                            if (Array.isArray(matchedUsers)) {
+                                for (const match of matchedUsers) {
+                                    // Check for matches in various formats
+                                    if (typeof match === 'string' && match === userId) {
+                                        scanResults.push(item);
+                                        return;
+                                    } else if (typeof match === 'object' && match !== null) {
+                                        const matchUserId = match.userId || match.user_id;
+                                        if (matchUserId === userId) {
+                                            scanResults.push(item);
+                                            return;
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
-                }
-                
-                // b. Check historical matches from face data
-                if (faceData && faceData.historicalMatches && Array.isArray(faceData.historicalMatches)) {
-                    // Only match with items that have "photo" matchType or have valid image URLs
-                    const validPhotoMatches = faceData.historicalMatches.filter(match => 
-                        (match.matchType === 'photo' || match.imageUrl) && 
-                        match.id === photo.id
-                    );
+                    });
                     
-                    if (validPhotoMatches.length > 0) {
-                        console.log(`[PhotoService] Found match for user ${userId} in photo ${photo.id} - Reason: historical match`);
-                        return true;
-                    }
-                }
-
-                return false;
-            });
-            
-            console.log(`[PhotoService] Found ${matchedPhotos.length} potentially matched photos for user ${userId} (before visibility filter).`);
-            
-            // 4. Apply visibility filter
-            const visibleMatchedPhotos = await filterPhotosByVisibility(userId, matchedPhotos, 'VISIBLE');
-            
-            // 5. Sort by creation date (newest first)
-            const sortedVisiblePhotos = visibleMatchedPhotos.sort((a, b) => {
-                return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-            });
-            
-            console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} matched photos visible to user ${userId}.`);
-            return sortedVisiblePhotos;
+                    scanParams.ExclusiveStartKey = items.LastEvaluatedKey;
+                } while (typeof items.LastEvaluatedKey !== 'undefined');
+                
+                console.log(`[PhotoService] Scanned ${scannedCount} total photos.`);
+                console.log(`[PhotoService] Found ${scanResults.length} matched photos for user ${userId}.`);
+                
+                // Apply visibility filter
+                const visibleMatchedPhotos = await filterPhotosByVisibility(userId, scanResults, 'VISIBLE');
+                
+                // Sort by creation date (newest first)
+                const sortedVisiblePhotos = visibleMatchedPhotos.sort((a, b) => {
+                    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+                });
+                
+                // Store in cache with timestamp
+                awsPhotoService.matchedPhotosCache.set(cacheKey, {
+                    items: sortedVisiblePhotos,
+                    timestamp: now.getTime()
+                });
+                
+                console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} visible matched photos for user ${userId}.`);
+                return sortedVisiblePhotos;
+            } else {
+                console.log(`[PhotoService] No historical matches found in face data, scanning for direct matches only.`);
+                // Continue with just scan for direct matches in matched_users array
+                const scanParams = {
+                    TableName: PHOTOS_TABLE
+                };
+                
+                // Scan photos and filter for matches
+                const scanResults = [];
+                let items;
+                let scannedCount = 0;
+                
+                do {
+                    items = await docClient.send(new ScanCommand(scanParams));
+                    scannedCount += items.ScannedCount || 0;
+                    
+                    items.Items.forEach((item) => {
+                        // Only check for direct matches in matched_users array
+                        if (item.matched_users) {
+                            let matchedUsers = item.matched_users;
+                            
+                            // Parse matched_users if it's a string
+                            if (typeof matchedUsers === 'string') {
+                                try { 
+                                    matchedUsers = JSON.parse(matchedUsers); 
+                                } catch(e) { 
+                                    console.log(`[PhotoService] Invalid JSON in matched_users for photo ${item.id}`);
+                                    return;
+                                }
+                            }
+                            
+                            // Look for this user in the matched_users array
+                            if (Array.isArray(matchedUsers)) {
+                                for (const match of matchedUsers) {
+                                    // Check for matches in various formats
+                                    if (typeof match === 'string' && match === userId) {
+                                        scanResults.push(item);
+                                        return;
+                                    } else if (typeof match === 'object' && match !== null) {
+                                        const matchUserId = match.userId || match.user_id;
+                                        if (matchUserId === userId) {
+                                            scanResults.push(item);
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    
+                    scanParams.ExclusiveStartKey = items.LastEvaluatedKey;
+                } while (typeof items.LastEvaluatedKey !== 'undefined');
+                
+                console.log(`[PhotoService] Scanned ${scannedCount} total photos.`);
+                console.log(`[PhotoService] Found ${scanResults.length} matched photos for user ${userId}.`);
+                
+                // Apply visibility filter
+                const visibleMatchedPhotos = await filterPhotosByVisibility(userId, scanResults, 'VISIBLE');
+                
+                // Sort by creation date (newest first)
+                const sortedVisiblePhotos = visibleMatchedPhotos.sort((a, b) => {
+                    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+                });
+                
+                // Store in cache with timestamp
+                awsPhotoService.matchedPhotosCache.set(cacheKey, {
+                    items: sortedVisiblePhotos,
+                    timestamp: now.getTime()
+                });
+                
+                console.log(`[PhotoService] Returning ${sortedVisiblePhotos.length} visible matched photos for user ${userId}.`);
+                return sortedVisiblePhotos;
+            }
         } catch (error) {
-            console.error('[PhotoService] Error fetching matched photos:', error);
+            console.error(`[PhotoService] Error fetching matched photos: ${error}`);
             return [];
         }
     },
@@ -1260,6 +1373,41 @@ export const awsPhotoService = {
             }
         } catch (error) {
             console.error('[PhotoService] Error fetching uploaded photos:', error);
+            return [];
+        }
+    },
+    /**
+     * Fetch photos where the user's face is matched - convenience method for getVisiblePhotos that ensures fresh data on each call
+     * @param {string} userId - The user ID
+     * @returns {Promise<Array>} - Array of matched photos
+     */
+    fetchPhotos: async (userId) => {
+        console.log(`📥 [PhotoService] Fetching matched photos (with cache validation) for user: ${userId}`);
+        if (!userId) {
+            console.error('[PhotoService] Cannot fetch matched photos without userId');
+            return [];
+        }
+        
+        try {
+            // Check if cache exists and when it was last updated
+            const cacheKey = `matched_photos_${userId}`;
+            const cacheData = awsPhotoService.matchedPhotosCache.get(cacheKey);
+            const now = new Date().getTime();
+            
+            // Only clear cache if it's older than 5 minutes (300000ms)
+            const cacheMaxAge = 300000; // 5 minutes in milliseconds
+            
+            if (cacheData && cacheData.timestamp && (now - cacheData.timestamp > cacheMaxAge)) {
+                console.log(`[PhotoService] Cache for user ${userId} is older than 5 minutes, clearing for refresh`);
+                awsPhotoService.matchedPhotosCache.delete(cacheKey);
+            } else if (cacheData && cacheData.timestamp) {
+                console.log(`[PhotoService] Cache for user ${userId} is still valid (${Math.round((now - cacheData.timestamp)/1000)}s old)`);
+            }
+            
+            // Call the fetchMatchedPhotos method which will now use the cache if it exists
+            return await awsPhotoService.fetchMatchedPhotos(userId);
+        } catch (error) {
+            console.error(`[PhotoService] Error in fetchPhotos: ${error}`);
             return [];
         }
     }
