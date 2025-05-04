@@ -310,13 +310,11 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           Authorization: `Bearer ${user?.accessToken || ''}`,
         },
         companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL],
-        target: 'body',
         locale: {
           strings: {
             // Add any custom strings here
           }
         },
-        // Add additional Dropbox configuration
         oauth: {
           transport: 'session',
           domain: import.meta.env.VITE_COMPANION_URL
@@ -330,7 +328,11 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           Authorization: `Bearer ${user?.accessToken || ''}`,
         },
         companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL],
-        target: 'body',
+        locale: {
+          strings: {
+            // Add any custom strings here
+          }
+        },
         oauth: {
           transport: 'session',
           domain: import.meta.env.VITE_COMPANION_URL
@@ -344,7 +346,11 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           Authorization: `Bearer ${user?.accessToken || ''}`,
         },
         companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL],
-        target: 'body'
+        locale: {
+          strings: {
+            // Add any custom strings here
+          }
+        },
       });
 
       // Add listeners using the refs
