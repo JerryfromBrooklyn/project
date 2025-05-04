@@ -2,7 +2,7 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 // src/components/PhotoManager.tsx
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { PhotoUploader } from './PhotoUploader';
-import { PhotoGrid } from './PhotoGrid';
+import { PhotoGrid } from './PhotoGrid.jsx';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, RefreshCw, ChevronLeft, ChevronRight, Upload, Image as ImageIcon } from 'lucide-react';
