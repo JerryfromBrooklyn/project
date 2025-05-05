@@ -32,6 +32,12 @@ console.log('COMPANION_DROPBOX_SECRET:', process.env.COMPANION_DROPBOX_SECRET ? 
 console.log('\nURL Configuration:');
 console.log('----------------------------------------');
 console.log('VITE_COMPANION_URL:', process.env.VITE_COMPANION_URL || '❌ Not Set');
+console.log('\nS3 Configuration:');
+console.log('----------------------------------------');
+console.log('COMPANION_AWS_KEY:', process.env.COMPANION_AWS_KEY ? '✅ Set' : '❌ Not Set');
+console.log('COMPANION_AWS_SECRET:', process.env.COMPANION_AWS_SECRET ? '✅ Set' : '❌ Not Set');
+console.log('COMPANION_AWS_BUCKET:', process.env.COMPANION_AWS_BUCKET || '❌ Not Set');
+console.log('COMPANION_AWS_REGION:', process.env.COMPANION_AWS_REGION || '❌ Not Set');
 console.log('----------------------------------------\n');
 
 const app = express();
@@ -64,6 +70,36 @@ const companionOptions = {
       }
     }
   },
+  s3: {
+    key: process.env.COMPANION_AWS_KEY,
+    secret: process.env.COMPANION_AWS_SECRET,
+    bucket: process.env.COMPANION_AWS_BUCKET,
+    region: process.env.COMPANION_AWS_REGION || 'us-east-1',
+    useAccelerateEndpoint: false,
+    expires: 3600,
+    acl: 'private',
+    getKey: (req, filename) => {
+      // Generate a unique key for the file
+      const fileId = Math.random().toString(36).substring(2, 15);
+      
+      // Use the original filename if available, otherwise use a default
+      const originalFilename = filename || 'unnamed-file';
+      
+      // For now, use a default user ID since we can't get it from the request
+      const userId = 'default-user';
+      
+      // Construct the key following the same structure as local uploads
+      const key = `photos/${userId}/${fileId}_${originalFilename}`;
+      
+      console.log('📤 S3 Upload - Generated key:', key, {
+        userId,
+        fileId,
+        filename: originalFilename
+      });
+      
+      return key;
+    }
+  },
   server: {
     host: process.env.COMPANION_HOST || 'localhost:3020',
     protocol: process.env.COMPANION_PROTOCOL || 'http'
@@ -83,6 +119,23 @@ const companionOptions = {
   encryption: {
     key: process.env.COMPANION_ENCRYPTION_KEY || process.env.COMPANION_SECRET,
     algorithm: 'aes-256-gcm'
+  },
+  logger: {
+    debug: (...args) => {
+      if (args[0]?.includes('upload')) {
+        console.log('📤 Upload Debug:', ...args);
+      }
+    },
+    info: (...args) => {
+      if (args[0]?.includes('upload')) {
+        console.log('📤 Upload Info:', ...args);
+      }
+    },
+    error: (...args) => {
+      if (args[0]?.includes('upload')) {
+        console.error('❌ Upload Error:', ...args);
+      }
+    }
   }
 };
 
