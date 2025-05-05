@@ -4,7 +4,8 @@
       "AllowedHeaders": ["*"],
       "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
       "AllowedOrigins": ["*"],
-      "ExposeHeaders": []
+      "ExposeHeaders": ["ETag", "x-amz-meta-custom-header", "x-amz-server-side-encryption"],
+      "MaxAgeSeconds": 3600
     }
   ]
 } 

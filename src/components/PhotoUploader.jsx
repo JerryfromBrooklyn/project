@@ -218,6 +218,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   const [uppy, setUppy] = useState(null);
   const [dropboxConfigured, setDropboxConfigured] = useState(false);
   const [googleDriveConfigured, setGoogleDriveConfigured] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
   
   // Get auth context
   const { user } = useAuth();
@@ -239,6 +240,21 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     }
     
     console.log('🚀 [Uppy] Initializing Uppy instance');
+    
+    // Initialize handlers before creating Uppy
+    handlersRef.current = {
+      handleFileAdded,
+      handleFileRemoved,
+      handleUploadProgress,
+      handleUploadError,
+      handleBatchComplete: (result) => {
+        console.log('✅ [Uppy] Upload batch complete:', result);
+        setUploadComplete(true);
+        if (onUploadComplete) {
+          onUploadComplete(result);
+        }
+      }
+    };
     
     try {
       const uppyInstance = new Uppy({
@@ -265,6 +281,8 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         getUploadParameters: async (file) => {
           console.log('📤 [Uppy] Getting upload parameters for file:', file.name);
           try {
+            // Use the existing awsPhotoService directly instead of a presigned URL
+            // Create a proper File object from the Uppy file
             const fileData = new File([file.data], file.name, { type: file.type });
             
             // Include metadata in the upload
@@ -273,24 +291,61 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
               user_id: user?.id || '',
               uploadedBy: user?.id || '',
               uploaded_by: user?.id || '',
-              externalAlbumLink: metadata.albumLink || ''
+              externalAlbumLink: metadata.albumLink || '',
+              event_details: {
+                name: metadata.eventName || '',
+                date: metadata.date || '',
+                promoter: metadata.promoterName || '',
+                type: 'event'
+              },
+              venue: {
+                id: null,
+                name: metadata.venueName || ''
+              },
+              location: metadata.location || null
             };
 
-            const result = await awsPhotoService.uploadPhoto(fileData, eventId, file.meta?.folderPath || '', uploadMetadata);
-
+            // Upload file directly to S3 using the awsPhotoService
+            console.log('📤 [Uppy] Uploading directly with awsPhotoService');
+            
+            // Track progress with a callback
+            const trackProgress = (progress) => {
+              console.log(`📊 [Uppy] Upload progress: ${progress}%`);
+              // Uppy will handle progress itself, so we don't need to update it here
+            };
+            
+            // Use the existing uploadPhoto service
+            const result = await awsPhotoService.uploadPhoto(
+              fileData,
+              metadata.eventId || '',
+              null, // folderPath
+              uploadMetadata,
+              trackProgress
+            );
+            
             if (!result.success) {
-              console.error('❌ [Uppy] Failed to get upload parameters:', result.error);
-              throw new Error(result.error || 'Failed to get upload parameters');
+              throw new Error(result.error || 'Upload failed');
             }
-
+            
+            console.log('📤 [Uppy] Direct upload success:', result);
+            
+            // Return a dummy success response that Uppy expects
             return {
               method: 'PUT',
-              url: result.s3Url || '',
+              url: result.s3Url || result.photoMetadata.url,
               fields: {},
-              headers: {},
+              headers: {
+                'Content-Type': file.type
+              },
             };
           } catch (error) {
             console.error('❌ [Uppy] Error getting upload parameters:', error);
+            // Make sure we throw a proper Error object
+            if (typeof error === 'string') {
+              throw new Error(error);
+            } else if (!(error instanceof Error)) {
+              throw new Error('Unknown upload error');
+            }
             throw error;
           }
         },
@@ -329,6 +384,19 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       uppyInstance.on('upload-progress', handlersRef.current.handleUploadProgress);
       uppyInstance.on('complete', handlersRef.current.handleBatchComplete);
       uppyInstance.on('error', handlersRef.current.handleUploadError);
+      
+      // Add upload-error handler for specific error handling
+      uppyInstance.on('upload-error', (file, error, response) => {
+        console.error('❌ [Uppy] Upload error:', file, error, response);
+        // Check if error is defined before accessing properties
+        if (error) {
+          setUploadError(`Upload failed: ${error.message || 'Unknown error'}`);
+        } else if (response && response.status) {
+          setUploadError(`Upload failed with status: ${response.status} ${response.statusText || ''}`);
+        } else {
+          setUploadError('Upload failed due to an unknown error. Please check S3 bucket permissions.');
+        }
+      });
 
       // Save to both ref and state
       uppyRef.current = uppyInstance;
@@ -479,18 +547,42 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       return;
     }
     console.error('❌ [Uppy] Upload error:', {
-      file: file.name,
-      error: error,
-      response: response
+      file: file.name || 'Unknown file',
+      error: error || 'No error details',
+      response: response || 'No response'
     });
+    
+    // Update the uploads state with error information
     setUploads(prev => prev.map(upload => 
       upload.id === file.id 
-        ? { ...upload, status: 'error', error: error.message || 'Upload failed' }
+        ? { 
+            ...upload, 
+            status: 'error', 
+            error: error && error.message 
+              ? error.message 
+              : response && response.status
+                ? `Upload failed with status ${response.status}`
+                : 'Upload failed due to an unknown error'
+          }
         : upload
     ));
 
+    // Set the global error message
+    if (error && error.message) {
+      setUploadError(`Upload failed: ${error.message}`);
+    } else if (response && response.status) {
+      setUploadError(`Upload failed with status: ${response.status} ${response.statusText || ''}`);
+    } else {
+      setUploadError('Upload failed. Please check your S3 bucket permissions and network connection.');
+    }
+
+    // Call the onError callback if provided
     if (onError) {
-      onError(error.message || 'An upload error occurred');
+      onError(
+        error && error.message 
+          ? error.message 
+          : 'An upload error occurred. Please try again.'
+      );
     }
   }, [onError]); // Dependency: onError prop
 
@@ -592,18 +684,21 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       setUploads(prev => prev.map(upload => {
         const successfulUpload = successfulUploads.find(u => u.id === upload.id);
         if (successfulUpload) {
-          // Extract response data from the successful upload
+          // Extract response data from the successful upload - adapt to our awsPhotoService format
           const responseData = successfulUpload.response?.body || {};
+          
+          // Handle the response format from our direct upload method
+          const photoDetails = responseData.photoMetadata || responseData;
           
           return {
             ...upload,
             status: 'complete',
             progress: 100,
             photoDetails: {
-              id: responseData.id || successfulUpload.id,
-              url: responseData.url || successfulUpload.uploadURL,
-              matched_users: responseData.matched_users || [],
-              faces: responseData.faces || []
+              id: photoDetails.id || responseData.photoId || successfulUpload.id,
+              url: photoDetails.url || photoDetails.public_url || responseData.s3Url || successfulUpload.uploadURL,
+              matched_users: photoDetails.matched_users || [],
+              faces: photoDetails.faces || []
             }
           };
         }
@@ -616,14 +711,30 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       setUploads(prev => prev.map(upload => {
         const failedUpload = failedUploads.find(u => u.id === upload.id);
         if (failedUpload) {
+          let errorMessage = 'Upload failed';
+          
+          // Extract error message from different possible formats
+          if (failedUpload.error && typeof failedUpload.error === 'string') {
+            errorMessage = failedUpload.error;
+          } else if (failedUpload.error && failedUpload.error.message) {
+            errorMessage = failedUpload.error.message;
+          } else if (failedUpload.response && failedUpload.response.status) {
+            errorMessage = `Upload failed with status ${failedUpload.response.status}`;
+          }
+          
           return {
             ...upload,
             status: 'error',
-            error: failedUpload.error || 'Upload failed'
+            error: errorMessage
           };
         }
         return upload;
       }));
+      
+      // If there are failed uploads, set a global error message
+      if (failedUploads.length > 0) {
+        setUploadError(`${failedUploads.length} ${failedUploads.length === 1 ? 'file' : 'files'} failed to upload. Please try again.`);
+      }
     }
 
     // Check if there are any files that haven't even started or completed yet
@@ -884,6 +995,25 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
             <div className="h-full bg-apple-blue-500 transition-all duration-300" style={{ width: `${(totalStorage / storageLimit) * 100}%` }}></div>
           </div>
         </div>
+
+        {/* Display Upload Errors */}
+        {uploadError && (
+          <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded">
+            <div className="flex items-start">
+              <LucideIcons.AlertCircle className="w-5 h-5 text-red-500 mr-2 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-red-700 font-medium">Upload Error</p>
+                <p className="text-red-600 text-sm">{uploadError}</p>
+              </div>
+              <button 
+                onClick={() => setUploadError(null)} 
+                className="text-red-400 hover:text-red-600"
+              >
+                <LucideIcons.X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Uppy Dashboard with adjusted positioning */}
         {uppy && (
