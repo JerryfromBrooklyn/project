@@ -71,7 +71,7 @@ class FaceIndexingService {
         const params = {
           CollectionId: this.faceCollectionId,
           FaceId: faceId,
-          MaxFaces: 150,
+          MaxFaces: 250,
           FaceMatchThreshold: 95 // Adjust threshold as needed
         };
         
@@ -118,7 +118,7 @@ class FaceIndexingService {
         const params = {
           CollectionId: this.faceCollectionId,
           FaceId: faceId,
-          MaxFaces: 150,
+          MaxFaces: 250,
           FaceMatchThreshold: 95 // Use high confidence threshold
         };
         

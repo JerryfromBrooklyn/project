@@ -1,7 +1,7 @@
 import { PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { PutCommand, GetCommand, DeleteCommand, QueryCommand, ScanCommand, BatchGetCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
-import { s3Client, docClient, rekognitionClient, PHOTO_BUCKET, PHOTOS_TABLE, COLLECTION_ID, AWS_REGION, FACE_DATA_BUCKET } from '../lib/awsClient';
+import { s3Client, docClient, rekognitionClient, PHOTO_BUCKET, PHOTOS_TABLE, COLLECTION_ID, AWS_REGION, FACE_DATA_BUCKET, USERS_TABLE } from '../lib/awsClient';
 import { IndexFacesCommand, CompareFacesCommand, SearchFacesCommand, SearchFacesByImageCommand, DetectLabelsCommand } from '@aws-sdk/client-rekognition';
 import { getFaceDataForUser } from './FaceStorageService';
 import { marshall } from '@aws-sdk/util-dynamodb';
@@ -10,12 +10,34 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { filterPhotosByVisibility } from './userVisibilityService';
 import axios from 'axios';
 import { API_URL } from '../config';
+
 /**
  * Service for handling photo operations with AWS S3 and DynamoDB
  */
 export const awsPhotoService = {
     // Cache for matched photos to avoid repeated scans
     matchedPhotosCache: new Map(),
+    /**
+     * Clear all caches
+     * Call this when you need to ensure fresh data
+     */
+    clearCache: function() {
+        console.log('[PhotoService] Clearing all caches');
+        try {
+            if (this.matchedPhotosCache) {
+                this.matchedPhotosCache.clear();
+                console.log('[PhotoService] Cache cleared successfully');
+            } else {
+                // Initialize cache if it doesn't exist
+                this.matchedPhotosCache = new Map();
+                console.log('[PhotoService] Initialized new cache because it did not exist');
+            }
+        } catch (error) {
+            console.error('[PhotoService] Error clearing cache:', error.message);
+            // Ensure cache is initialized even if an error occurred
+            this.matchedPhotosCache = new Map();
+        }
+    },
     /**
      * Upload a photo with metadata to S3 and DynamoDB
      * @param {File} file - The file to upload
@@ -631,19 +653,140 @@ export const awsPhotoService = {
         }
         
         try {
-            // Check cache first
+            // Get current timestamp for cache validation
+            const now = new Date();
+
+            // Check if this is a new registration (user created in last 5 minutes)
+            const isNewRegistration = await (async () => {
+                try {
+                    // Verify USERS_TABLE is defined
+                    if (!USERS_TABLE) {
+                        console.warn(`[PhotoService] USERS_TABLE constant is not defined, skipping new user check`);
+                        return false;
+                    }
+                    
+                    console.log(`[PhotoService] Checking if user ${userId} is new by querying ${USERS_TABLE} table`);
+                    
+                    // Get the user from DynamoDB
+                    const userResponse = await docClient.send(new GetCommand({
+                        TableName: USERS_TABLE,
+                        Key: { id: userId }
+                    }));
+                    
+                    if (!userResponse.Item) {
+                        console.log(`[PhotoService] User ${userId} not found in ${USERS_TABLE}`);
+                        return false;
+                    }
+                    
+                    if (userResponse.Item.created_at) {
+                        const userCreated = new Date(userResponse.Item.created_at);
+                        const isNew = (now.getTime() - userCreated.getTime()) < 5 * 60 * 1000; // 5 minutes
+                        console.log(`[PhotoService] User created: ${userCreated.toISOString()}, isNewRegistration: ${isNew}`);
+                        return isNew;
+                    }
+                    
+                    return false;
+                } catch (err) {
+                    // Check for specific error types for better debugging
+                    if (err.name === 'ResourceNotFoundException') {
+                        console.warn(`[PhotoService] Table ${USERS_TABLE} not found: ${err.message}`);
+                    } else {
+                        console.error(`[PhotoService] Error checking if user is new: ${err.message}`);
+                    }
+                    return false;
+                }
+            })();
+            
+            // Check for force fresh data flag in localStorage
+            let forceFreshData = false;
+            try {
+                if (typeof localStorage !== 'undefined') {
+                    forceFreshData = localStorage.getItem('force_fresh_match_data') === 'true';
+                    if (forceFreshData) {
+                        console.log(`[PhotoService] force_fresh_match_data flag detected, bypassing cache`);
+                        // Safely clear the cache
+                        try {
+                            if (awsPhotoService.matchedPhotosCache) {
+                                awsPhotoService.matchedPhotosCache.delete(cacheKey);
+                                console.log(`[PhotoService] Successfully cleared cache for ${cacheKey}`);
+                            } else {
+                                console.warn(`[PhotoService] matchedPhotosCache is not initialized yet`);
+                            }
+                        } catch (cacheError) {
+                            console.warn(`[PhotoService] Error clearing cache: ${cacheError.message}`);
+                        }
+                        
+                        // Clear the flag after using it
+                        localStorage.setItem('force_fresh_match_data', 'false');
+                    }
+                }
+            } catch (e) {
+                console.warn(`[PhotoService] Error checking localStorage: ${e.message}`);
+            }
+            
+            // Also check for recent face registration (last 15 minutes)
+            let recentRegistration = false;
+            try {
+                if (typeof localStorage !== 'undefined') {
+                    const lastRegistration = localStorage.getItem(`last_face_registration_${userId}`);
+                    if (lastRegistration) {
+                        const registrationTime = parseInt(lastRegistration, 10);
+                        recentRegistration = (now.getTime() - registrationTime) < 15 * 60 * 1000; // 15 minutes
+                        console.log(`[PhotoService] Last face registration: ${new Date(registrationTime).toISOString()}, isRecentRegistration: ${recentRegistration}`);
+                    }
+                }
+            } catch (e) {
+                console.warn(`[PhotoService] Error checking registration time: ${e.message}`);
+            }
+
+            // Check cache first if not forced to bypass
             const cacheKey = `matched_photos_${userId}`;
             const cacheData = awsPhotoService.matchedPhotosCache.get(cacheKey);
             
-            // Check if cache exists AND is not expired (cache should be invalidated if it's older than 30 seconds after a face registration)
-            const now = new Date();
-            const isCacheValid = cacheData && 
-                (now.getTime() - cacheData.timestamp < 30000) && // Increased from 10 to 30 seconds
+            // Set cache TTL based on user status
+            const CACHE_TTL = {
+                NEW_USER: 5 * 1000,            // 5 seconds for brand new users
+                RECENT_REGISTRATION: 10 * 1000, // 10 seconds for users who just registered
+                REGULAR_USER: 5 * 60 * 1000     // 5 minutes for established users
+            };
+            
+            // Determine which TTL to use
+            let cacheTTL = CACHE_TTL.REGULAR_USER; // Default to 5 minutes
+            if (isNewRegistration) {
+                cacheTTL = CACHE_TTL.NEW_USER;
+                console.log(`[PhotoService] Using NEW_USER cache TTL (5 seconds) for user ${userId}`);
+            } else if (recentRegistration) {
+                cacheTTL = CACHE_TTL.RECENT_REGISTRATION;
+                console.log(`[PhotoService] Using RECENT_REGISTRATION cache TTL (10 seconds) for user ${userId}`);
+            } else {
+                console.log(`[PhotoService] Using REGULAR_USER cache TTL (5 minutes) for user ${userId}`);
+            }
+            
+            // Completely bypass cache for face registrations and forced fresh data
+            if (forceFreshData) {
+                console.log(`[PhotoService] Completely bypassing cache due to force_fresh_match_data flag`);
+                // Safely clear the cache
+                try {
+                    if (awsPhotoService.matchedPhotosCache) {
+                        awsPhotoService.matchedPhotosCache.delete(cacheKey);
+                        console.log(`[PhotoService] Successfully cleared cache for ${cacheKey}`);
+                    } else {
+                        console.warn(`[PhotoService] matchedPhotosCache is not initialized yet`);
+                    }
+                } catch (cacheError) {
+                    console.warn(`[PhotoService] Error clearing cache: ${cacheError.message}`);
+                }
+            }
+            
+            // Check if cache exists AND is not expired
+            const isCacheValid = !forceFreshData && 
+                cacheData && 
+                (now.getTime() - cacheData.timestamp < cacheTTL) && 
                 cacheData.items && 
                 cacheData.items.length > 0;
                 
             if (isCacheValid) {
-                console.log(`[PhotoService] Using cached data for ${userId} (${cacheData.items.length} photos). Cache created at ${new Date(cacheData.timestamp).toISOString()}`);
+                console.log(`[PhotoService] Using cached data for ${userId} (${cacheData.items.length} photos). Cache created ${Math.round((now.getTime() - cacheData.timestamp)/1000)}s ago, expires in ${Math.round((cacheTTL - (now.getTime() - cacheData.timestamp))/1000)}s`);
                 return cacheData.items;
             }
             
@@ -1498,6 +1641,74 @@ export const awsPhotoService = {
             return await awsPhotoService.fetchMatchedPhotos(userId);
         } catch (error) {
             console.error(`[PhotoService] Error in fetchPhotos: ${error}`);
+            return [];
+        }
+    },
+    /**
+     * Fetch matched photos with cache validation
+     * @param {string} userId - User ID
+     * @returns {Promise<Array>} Matched photos
+     */
+    fetchMatchedPhotosWithValidation: async (userId) => {
+        console.log(`📥 [PhotoService] Fetching matched photos (with cache validation) for user: ${userId}`);
+        if (!userId) {
+            console.error('[PhotoService] Cannot fetch matched photos without userId');
+            return [];
+        }
+        
+        try {
+            const now = Date.now();
+            
+            // Check if cache exists and when it was last updated
+            const cacheKey = `matched_photos_${userId}`;
+            const cacheData = awsPhotoService.matchedPhotosCache.get(cacheKey);
+            
+            // Check for force fresh data flag in localStorage
+            let forceFreshData = false;
+            try {
+                if (typeof localStorage !== 'undefined') {
+                    forceFreshData = localStorage.getItem('force_fresh_match_data') === 'true';
+                    if (forceFreshData) {
+                        console.log(`[PhotoService] force_fresh_match_data flag detected, bypassing cache`);
+                        awsPhotoService.matchedPhotosCache.delete(cacheKey);
+                        // Clear the flag after using it
+                        localStorage.setItem('force_fresh_match_data', 'false');
+                    }
+                }
+            } catch (e) {
+                console.warn(`[PhotoService] Error checking localStorage: ${e.message}`);
+            }
+            
+            // Check if this is a recent registration from localStorage
+            let cacheMaxAge = 5 * 60 * 1000; // Default 5 minutes for regular users
+            try {
+                if (typeof localStorage !== 'undefined') {
+                    const lastRegistration = localStorage.getItem(`last_face_registration_${userId}`);
+                    if (lastRegistration) {
+                        const registrationTime = parseInt(lastRegistration, 10);
+                        const isRecentRegistration = (now - registrationTime) < 15 * 60 * 1000; // 15 minutes
+                        if (isRecentRegistration) {
+                            console.log(`[PhotoService] Recent registration detected, using shorter cache TTL`);
+                            cacheMaxAge = 10 * 1000; // 10 seconds for recent registrations
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn(`[PhotoService] Error checking registration time: ${e.message}`);
+            }
+            
+            // Clear cache if it's older than the max age
+            if (cacheData && cacheData.timestamp && (now - cacheData.timestamp > cacheMaxAge)) {
+                console.log(`[PhotoService] Cache for user ${userId} is older than ${Math.round(cacheMaxAge/1000)} seconds, clearing for refresh`);
+                awsPhotoService.matchedPhotosCache.delete(cacheKey);
+            } else if (cacheData && cacheData.timestamp) {
+                console.log(`[PhotoService] Cache for user ${userId} is still valid (${Math.round((now - cacheData.timestamp)/1000)}s old, expires in ${Math.round((cacheMaxAge - (now - cacheData.timestamp))/1000)}s)`);
+            }
+            
+            // Call the fetchMatchedPhotos method which will now use the cache if it exists
+            return await awsPhotoService.fetchMatchedPhotos(userId);
+        } catch (error) {
+            console.error('Error validating matched photos cache:', error);
             return [];
         }
     }
