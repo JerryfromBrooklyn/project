@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, User, Calendar, MapPin, Building, Tag, Download, Image, FileType,
          Smile, Eye, Glasses, Sliders, Ruler, Laugh, AlertCircle, Clock, Globe, Link,
-         FileImage, ZoomIn, Palette, Database, LayoutGrid, Info, Share2 } from 'lucide-react';
+         FileImage, ZoomIn, Palette, Database, LayoutGrid, Info, Share2, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../utils/cn';
 import FaceStorageService from '../services/FaceStorageService';
 import { useAuth } from '../context/AuthContext';
+import { movePhotosToTrash } from '../services/userVisibilityService';
 
 /**
  * A modern, iOS-inspired photo information modal
@@ -25,6 +27,8 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
   const [backgroundColors, setBackgroundColors] = useState(null);
   const [imageQuality, setImageQuality] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   // Helper function to format dates
   const formatDate = (dateString) => {
@@ -1184,6 +1188,47 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
     }
   };
 
+  // Open delete confirmation dialog
+  const confirmDelete = () => {
+    setShowDeleteConfirmation(true);
+  };
+
+  // Cancel delete action
+  const cancelDelete = () => {
+    setShowDeleteConfirmation(false);
+  };
+
+  // Handle delete action (move to trash)
+  const handleDelete = async () => {
+    if (!user?.id || !safePhoto.id) {
+      console.error('Cannot delete photo: Missing user ID or photo ID');
+      return;
+    }
+    
+    try {
+      setIsDeleting(true);
+      console.log(`[SimplePhotoInfoModal] Moving photo ${safePhoto.id} to trash for user ${user.id}`);
+      
+      const result = await movePhotosToTrash(user.id, [safePhoto.id]);
+      
+      if (result.success) {
+        console.log(`[SimplePhotoInfoModal] Successfully moved photo ${safePhoto.id} to trash`);
+        // Close the modal after successful deletion
+        setShowDeleteConfirmation(false);
+        onClose();
+      } else {
+        console.error(`[SimplePhotoInfoModal] Error moving photo to trash:`, result.error);
+        alert('Failed to move photo to trash. Please try again.');
+      }
+    } catch (err) {
+      console.error(`[SimplePhotoInfoModal] Exception moving photo to trash:`, err);
+      alert('An error occurred while deleting the photo. Please try again.');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirmation(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black/60 dark:bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-hidden"
@@ -1377,6 +1422,18 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
           </div>
         )}
 
+        {/* Top action buttons with Close button only */}
+        <div className="absolute top-3 right-3 z-20">
+          {/* Close Button - Apple HIG styled */}
+          <button
+            onClick={onClose}
+            className="p-3 rounded-full bg-[#8E8E93]/90 hover:bg-[#8E8E93] text-white transition-colors shadow-sm min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Close modal"
+          >
+            <X size={20} strokeWidth={2.5} />
+          </button>
+        </div>
+
         {/* Bottom Buttons Toolbar */}
         <div className="p-3 border-t border-gray-300/70 dark:border-gray-700/70 bg-gray-100/90 dark:bg-gray-800/90 backdrop-blur-sm flex-shrink-0">
           {/* Use grid-cols-2 for mobile, sm:flex for larger screens */}
@@ -1433,6 +1490,19 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
               Download
             </button>
 
+            {/* Delete Button - Apple HIG styled (positioned next to Close) */}
+            <button
+              onClick={confirmDelete}
+              className="sm:w-auto px-4 py-2 text-sm font-medium rounded-md transition-colors
+                         bg-[#FF3B30] text-white
+                         hover:bg-[#FF2D20] active:bg-[#FF453A]
+                         flex items-center justify-center"
+              aria-label="Delete photo"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              Delete
+            </button>
+            
             {/* Close Button (Primary Action) */}
             <button
               onClick={onClose}
@@ -1445,16 +1515,59 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
             </button>
           </div>
         </div>
-
-        {/* Absolute Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-2 right-2 p-1.5 rounded-full bg-gray-500/40 hover:bg-gray-500/60 text-white/80 hover:text-white transition-colors z-10"
-          aria-label="Close modal"
-        >
-          <X size={18} />
-        </button>
       </div>
+
+      {/* iOS-style Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteConfirmation && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4"
+            onClick={cancelDelete}
+          >
+            <motion.div 
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 20, stiffness: 300 }}
+              className="w-full max-w-sm bg-white dark:bg-[#1C1C1E] rounded-xl overflow-hidden shadow-xl sm:rounded-lg mb-safe"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Action Sheet Header */}
+              <div className="px-4 py-4 text-center border-b border-gray-200 dark:border-gray-800">
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Delete Photo</h3>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Are you sure you want to move this photo to trash?
+                </p>
+              </div>
+              
+              {/* Action Sheet Buttons - iOS style puts destructive actions first */}
+              <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                <button
+                  className="w-full py-3.5 px-4 text-[#FF3B30] font-medium text-sm flex items-center justify-center"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <div className="w-5 h-5 mr-2 border-2 border-[#FF3B30] border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Trash2 className="w-4 h-4 mr-2" />
+                  )}
+                  Delete Photo
+                </button>
+                <button
+                  className="w-full py-3.5 px-4 text-[#007AFF] font-medium text-sm"
+                  onClick={cancelDelete}
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

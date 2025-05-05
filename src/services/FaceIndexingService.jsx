@@ -340,7 +340,7 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
       const searchParams = {
         CollectionId: COLLECTION_ID,
         FaceId: faceId,
-        MaxFaces: 1000,
+        MaxFaces: 250,
         FaceMatchThreshold: FACE_MATCH_THRESHOLD
       };
       
@@ -467,8 +467,8 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
         console.log(`[FaceIndexing] Processed matches by type: photos=${photoMatches.length}, users=${userMatches.length}, unknown=${unknownMatches.length}`);
         
         // Always prioritize photo matches, then add user matches if we have space left
-        // Hard limit of 150 total for DynamoDB storage
-        const MAX_MATCHES = 150;
+        // Hard limit of 250 total for DynamoDB storage
+        const MAX_MATCHES = 250;
         let photoLimit = Math.min(photoMatches.length, MAX_MATCHES);
         let selectedPhotoMatches = photoMatches.slice(0, photoLimit);
         
@@ -501,9 +501,9 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
             : JSON.stringify(historicalMatches, null, 2));
 
         // If we have too many matches, prioritize photo matches over user matches
-        // and keep only the 150 most recent ones (sorted by timestamp if available)
-        if (historicalMatches.length > 150) {
-          console.log(`[FaceIndexing] Found ${historicalMatches.length} matches, limiting to most recent 150`);
+        // and keep only the 250 most recent ones (sorted by timestamp if available)
+        if (historicalMatches.length > 250) {
+          console.log(`[FaceIndexing] Found ${historicalMatches.length} matches, limiting to most recent 250`);
           
           // First sort by timestamp (most recent first) if available
           historicalMatches.sort((a, b) => {
@@ -518,8 +518,8 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
             return b.similarity - a.similarity;
           });
           
-          // Limit to most recent 150
-          historicalMatches = historicalMatches.slice(0, 150);
+          // Limit to most recent 250
+          historicalMatches = historicalMatches.slice(0, 250);
         }
         
         // Step 5.5: Update the shmong-photos table to add this user to matched_users
@@ -782,7 +782,7 @@ const matchAgainstExistingFaces = async (userId, faceId) => {
     const command = new SearchFacesCommand({
       CollectionId: COLLECTION_ID,
       FaceId: faceId,
-      MaxFaces: 150,
+      MaxFaces: 250,
       FaceMatchThreshold: FACE_MATCH_THRESHOLD
     });
     
