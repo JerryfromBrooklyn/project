@@ -393,7 +393,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
               file: f.data
             }));
             
-          // If we have completed uploads, trigger a final callback to ensure they're captured
+          // If we have completed uploads, trigger a final callback
           if (completedUploads.length > 0 && onUploadComplete) {
             console.log(`[PhotoUploader] Final cleanup with ${completedUploads.length} completed uploads.`);
             onUploadComplete();
@@ -406,8 +406,8 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           instance.off('complete', handlersRef.current.handleBatchComplete);
           instance.off('error', handlersRef.current.handleUploadError);
           
-          // Reset the instance
-          instance.reset();
+          // Close the instance
+          instance.close();
           
           // Destroy the instance
           instance.destroy();
@@ -444,32 +444,32 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       id: file.id,
       name: file.name,
       type: file.type,
-      size: file.size
+      size: file.size,
+      source: file.source
     });
 
     setTotalStorage(prev => prev + (file.size || 0));
     
-    // Basic folder structure handling (can be enhanced)
-    if (file.source === 'Client' && file.meta?.relativePath) {
-        const folderPath = file.meta.relativePath.substring(0, file.meta.relativePath.lastIndexOf('/'));
-        if (folderPath) {
-            // Logic to update folderStructure state if needed
-            // console.log(`Folder path derived: ${folderPath}`);
-        }
-    }
-
-    // Add to our internal state for rendering the list/grid
-    setUploads(prev => [...prev, {
+    // Create a file object that works for both local and companion files
+    const fileObject = {
       id: file.id,
-      file: file.data || file, // Store the file object itself
+      file: {
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        size: file.size,
+        preview: file.preview || (file.data ? URL.createObjectURL(file.data) : null)
+      },
       progress: 0,
       status: 'pending',
-      metadata: { ...metadata }, // Use current metadata state
+      metadata: { ...metadata },
       folderPath: file.meta?.folderPath || null,
       error: null,
-      photoDetails: null // Initialize photoDetails
-    }]);
-  }, [metadata]); // Dependency: metadata (if used inside, which it is for the initial state)
+      photoDetails: null,
+      source: file.source || 'local'
+    };
+
+    setUploads(prev => [...prev, fileObject]);
+  }, [metadata]);
 
   const handleFileRemoved = useCallback((file) => {
     if (!file) {
@@ -1155,9 +1155,9 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                       viewMode.mode === 'grid' ? "aspect-square" : "w-20 h-20"
                     )}
                   >
-                    {upload.file.type.startsWith('image/') && (
+                    {upload.file && (
                       <img
-                        src={URL.createObjectURL(upload.file)}
+                        src={upload.file.preview || URL.createObjectURL(upload.file)}
                         alt={upload.file.name}
                         className="w-full h-full object-cover rounded-tl-lg rounded-tr-lg cursor-pointer"
                         onClick={() => setPreviewImage(upload.file)}
@@ -1186,13 +1186,22 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                   <div className="p-4 flex-1">
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="font-medium text-apple-gray-900 truncate max-w-[200px]">{upload.file.name}</p>
+                        <p className="font-medium text-apple-gray-900 truncate max-w-[200px]">
+                          {upload.file?.name || 'Unknown file'}
+                        </p>
                         <p className="text-sm text-apple-gray-500">
+                          {upload.source && (
+                            <span className="text-apple-gray-400">
+                              {upload.source === 'dropbox' ? 'Dropbox' : 
+                               upload.source === 'googledrive' ? 'Google Drive' : 
+                               'Local'} / 
+                            </span>
+                          )}
                           {upload.folderPath && (
                             <span className="text-apple-gray-400">{upload.folderPath} /</span>
                           )}
                           {' '}
-                          {(upload.file.size / 1024 / 1024).toFixed(2)} MB
+                          {upload.file?.size ? (upload.file.size / 1024 / 1024).toFixed(2) : '0'} MB
                         </p>
                       </div>
                       
@@ -1232,24 +1241,6 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                         {upload.error && (
                           <p className="mt-1 text-sm text-apple-red-500">{upload.error}</p>
                         )}
-                      </div>
-                    )}
-                    
-                    {upload.status === 'complete' && upload.photoDetails && (
-                      <div className="mt-4">
-                        <div className="flex items-center space-x-2">
-                          {upload.photoDetails.matched_users?.length ? (
-                            <div className="bg-apple-green-500 text-white px-2 py-1 rounded-full text-sm flex items-center">
-                              <LucideIcons.Users className="w-4 h-4 mr-1" />
-                              {upload.photoDetails.matched_users.length} {upload.photoDetails.matched_users.length === 1 ? 'Match' : 'Matches'}
-                            </div>
-                          ) : (
-                            <div className="bg-apple-gray-200 text-apple-gray-600 px-2 py-1 rounded-full text-sm flex items-center">
-                              <LucideIcons.Users className="w-4 h-4 mr-1" />
-                              No Matches
-                            </div>
-                          )}
-                        </div>
                       </div>
                     )}
                   </div>
