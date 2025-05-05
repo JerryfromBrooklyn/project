@@ -257,7 +257,7 @@ export const searchFacesByFaceId = async (faceId) => {
     CollectionId: REKOGNITION_COLLECTION_ID,
     FaceId: faceId,
     FaceMatchThreshold: FACE_MATCH_THRESHOLD,
-    MaxFaces: 150, // Adjust as needed, limits the number of matches returned *per call*
+    MaxFaces: 500, // Increased from 150 to 500 for more comprehensive matching
   });
   
   try {
