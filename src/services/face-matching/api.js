@@ -96,6 +96,36 @@ export async function signUpUser(userData) {
 }
 
 /**
+ * Force fresh data by clearing all caches
+ * Call this when you need to ensure no cached data is used
+ */
+export function forceFreshData() {
+  console.log('[API] Forcing fresh data by clearing all caches');
+  
+  // Set localStorage flag to bypass caches
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('force_fresh_match_data', 'true');
+      console.log('[API] Set force_fresh_match_data flag in localStorage');
+    }
+  } catch (e) {
+    console.warn('[API] Error setting localStorage flag:', e);
+  }
+  
+  // Clear global photo service cache if available
+  if (typeof global !== 'undefined' && global.awsPhotoService) {
+    console.log('[API] Clearing global awsPhotoService cache');
+    global.awsPhotoService.clearCache();
+  }
+  
+  // Clear window photo service cache if available
+  if (typeof window !== 'undefined' && window.awsPhotoService) {
+    console.log('[API] Clearing window awsPhotoService cache');
+    window.awsPhotoService.clearCache();
+  }
+}
+
+/**
  * Register a user's face
  * @param {string} userId - User ID
  * @param {Uint8Array} imageBytes - Face image data
@@ -105,10 +135,45 @@ export async function registerFace(userId, imageBytes) {
   try {
     console.log('[API] Starting face registration for user:', userId);
     
+    // Force fresh data before registration
+    forceFreshData();
+    
+    // Set registration timestamp in localStorage
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const timestamp = Date.now();
+        localStorage.setItem(`last_face_registration_${userId}`, timestamp.toString());
+        console.log(`[API] Set last_face_registration_${userId} = ${timestamp} (${new Date(timestamp).toISOString()})`);
+      }
+    } catch (storageError) {
+      console.warn('[API] Error setting registration timestamp:', storageError);
+    }
+    
     // Call FaceMatchingService to register the face
     const result = await FaceMatchingService.registerUserFace(imageBytes, userId);
     
     console.log('[API] Face registration result:', result);
+    
+    // IMPORTANT: Wait longer for AWS changes to propagate and database to update
+    // Increased from 2 seconds to 3 seconds for better reliability
+    console.log('[API] Waiting for AWS changes to propagate...');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    // Force fresh data again after registration
+    forceFreshData();
+    
+    // Force refresh user matches immediately after registration
+    try {
+      console.log('[API] Force refreshing user matches after registration');
+      await FaceMatchingService.updateUserMatches(userId);
+      
+      // Additional refresh attempt after a short delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('[API] Running second refresh attempt for better reliability');
+      await FaceMatchingService.updateUserMatches(userId);
+    } catch (refreshError) {
+      console.error('[API] Non-fatal error during force refresh:', refreshError);
+    }
     
     return result;
   } catch (error) {
