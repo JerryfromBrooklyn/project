@@ -79,22 +79,54 @@ const companionOptions = {
     expires: 3600,
     acl: 'private',
     getKey: (req, filename) => {
+      // Log the full request for debugging
+      console.log('📋 Request data:', {
+        body: req?.body || 'No body',
+        metadata: req?.body?.metadata || 'No metadata',
+        headers: req?.headers || 'No headers',
+        path: req?.path || 'No path',
+        originalUrl: req?.originalUrl || 'No URL',
+        query: req?.query || 'No query params'
+      });
+
+      // Get user ID from metadata (check multiple possible fields)
+      let userId = 'default-user';
+      if (req?.body?.metadata) {
+        userId = req.body.metadata.userId || 
+                req.body.metadata.user_id || 
+                req.body.metadata.uploadedBy || 
+                req.body.metadata.uploaded_by || 
+                'default-user';
+        
+        console.log('🔑 Found user ID in metadata:', userId);
+      } else {
+        console.log('⚠️ No metadata found in request body');
+      }
+
+      // Get folder path from metadata
+      const folderPath = req?.body?.metadata?.folderPath || '';
+
       // Generate a unique key for the file
       const fileId = Math.random().toString(36).substring(2, 15);
       
       // Use the original filename if available, otherwise use a default
       const originalFilename = filename || 'unnamed-file';
       
-      // For now, use a default user ID since we can't get it from the request
-      const userId = 'default-user';
-      
-      // Construct the key following the same structure as local uploads
-      const key = `photos/${userId}/${fileId}_${originalFilename}`;
+      // Construct the key with folder path if provided
+      const key = folderPath 
+        ? `photos/${userId}/${folderPath}/${fileId}_${originalFilename}`
+        : `photos/${userId}/${fileId}_${originalFilename}`;
       
       console.log('📤 S3 Upload - Generated key:', key, {
         userId,
+        folderPath,
         fileId,
-        filename: originalFilename
+        filename: originalFilename,
+        fullPath: `s3://${process.env.COMPANION_AWS_BUCKET}/${key}`,
+        localPath: path.join(process.env.COMPANION_DATADIR || './uploads', key),
+        requestType: req?.method || 'unknown',
+        contentType: req?.headers?.['content-type'] || 'unknown',
+        metadata: req?.body?.metadata || 'No metadata'
       });
       
       return key;
@@ -124,16 +156,39 @@ const companionOptions = {
     debug: (...args) => {
       if (args[0]?.includes('upload')) {
         console.log('📤 Upload Debug:', ...args);
+        // Add specific logging for file paths
+        if (args[0]?.includes('getKey')) {
+          console.log('📁 File Path Details:', {
+            requestPath: args[1]?.path,
+            filePath: args[1]?.filePath,
+            uploadPath: args[1]?.uploadPath,
+            metadata: args[1]?.metadata
+          });
+        }
       }
     },
     info: (...args) => {
       if (args[0]?.includes('upload')) {
         console.log('📤 Upload Info:', ...args);
+        // Add specific logging for file paths
+        if (args[0]?.includes('path')) {
+          console.log('📁 File Path Info:', {
+            path: args[1],
+            metadata: args[2]
+          });
+        }
       }
     },
     error: (...args) => {
       if (args[0]?.includes('upload')) {
         console.error('❌ Upload Error:', ...args);
+        // Add specific logging for file path errors
+        if (args[0]?.includes('path')) {
+          console.error('❌ File Path Error:', {
+            error: args[1],
+            path: args[2]
+          });
+        }
       }
     }
   }

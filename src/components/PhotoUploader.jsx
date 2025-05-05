@@ -249,7 +249,11 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           allowedFileTypes: ['image/*', '.jpg', '.jpeg', '.png', '.webp', '.raw', '.cr2', '.nef', '.arw', '.rw2']
         },
         meta: {
-          userId: user?.id || '',
+          // Get user ID from localStorage
+          userId: JSON.parse(localStorage.getItem('authUser'))?.id || '',
+          user_id: JSON.parse(localStorage.getItem('authUser'))?.id || '',
+          uploadedBy: JSON.parse(localStorage.getItem('authUser'))?.id || '',
+          uploaded_by: JSON.parse(localStorage.getItem('authUser'))?.id || '',
           eventId: eventId || '',
           timestamp: Date.now()
         }
