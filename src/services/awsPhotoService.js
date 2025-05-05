@@ -1,7 +1,7 @@
 import { PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { PutCommand, GetCommand, DeleteCommand, QueryCommand, ScanCommand, BatchGetCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
-import { s3Client, docClient, rekognitionClient, PHOTO_BUCKET, PHOTOS_TABLE, COLLECTION_ID, AWS_REGION, FACE_DATA_BUCKET } from '../lib/awsClient';
+import { s3Client, docClient, rekognitionClient, PHOTO_BUCKET, PHOTOS_TABLE, COLLECTION_ID, AWS_REGION, FACE_DATA_BUCKET, USERS_TABLE } from '../lib/awsClient';
 import { IndexFacesCommand, CompareFacesCommand, SearchFacesCommand, SearchFacesByImageCommand, DetectLabelsCommand } from '@aws-sdk/client-rekognition';
 import { getFaceDataForUser } from './FaceStorageService';
 import { marshall } from '@aws-sdk/util-dynamodb';
@@ -10,6 +10,7 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { filterPhotosByVisibility } from './userVisibilityService';
 import axios from 'axios';
 import { API_URL } from '../config';
+
 /**
  * Service for handling photo operations with AWS S3 and DynamoDB
  */
@@ -22,8 +23,20 @@ export const awsPhotoService = {
      */
     clearCache: function() {
         console.log('[PhotoService] Clearing all caches');
-        this.matchedPhotosCache.clear();
-        console.log('[PhotoService] Cache cleared successfully');
+        try {
+            if (this.matchedPhotosCache) {
+                this.matchedPhotosCache.clear();
+                console.log('[PhotoService] Cache cleared successfully');
+            } else {
+                // Initialize cache if it doesn't exist
+                this.matchedPhotosCache = new Map();
+                console.log('[PhotoService] Initialized new cache because it did not exist');
+            }
+        } catch (error) {
+            console.error('[PhotoService] Error clearing cache:', error.message);
+            // Ensure cache is initialized even if an error occurred
+            this.matchedPhotosCache = new Map();
+        }
     },
     /**
      * Upload a photo with metadata to S3 and DynamoDB
@@ -646,6 +659,14 @@ export const awsPhotoService = {
             // Check if this is a new registration (user created in last 5 minutes)
             const isNewRegistration = await (async () => {
                 try {
+                    // Verify USERS_TABLE is defined
+                    if (!USERS_TABLE) {
+                        console.warn(`[PhotoService] USERS_TABLE constant is not defined, skipping new user check`);
+                        return false;
+                    }
+                    
+                    console.log(`[PhotoService] Checking if user ${userId} is new by querying ${USERS_TABLE} table`);
+                    
                     // Get the user from DynamoDB
                     const userResponse = await docClient.send(new GetCommand({
                         TableName: USERS_TABLE,
@@ -653,7 +674,7 @@ export const awsPhotoService = {
                     }));
                     
                     if (!userResponse.Item) {
-                        console.log(`[PhotoService] User ${userId} not found in USERS_TABLE`);
+                        console.log(`[PhotoService] User ${userId} not found in ${USERS_TABLE}`);
                         return false;
                     }
                     
@@ -666,7 +687,12 @@ export const awsPhotoService = {
                     
                     return false;
                 } catch (err) {
-                    console.error(`[PhotoService] Error checking if user is new: ${err.message}`);
+                    // Check for specific error types for better debugging
+                    if (err.name === 'ResourceNotFoundException') {
+                        console.warn(`[PhotoService] Table ${USERS_TABLE} not found: ${err.message}`);
+                    } else {
+                        console.error(`[PhotoService] Error checking if user is new: ${err.message}`);
+                    }
                     return false;
                 }
             })();
@@ -678,6 +704,18 @@ export const awsPhotoService = {
                     forceFreshData = localStorage.getItem('force_fresh_match_data') === 'true';
                     if (forceFreshData) {
                         console.log(`[PhotoService] force_fresh_match_data flag detected, bypassing cache`);
+                        // Safely clear the cache
+                        try {
+                            if (awsPhotoService.matchedPhotosCache) {
+                                awsPhotoService.matchedPhotosCache.delete(cacheKey);
+                                console.log(`[PhotoService] Successfully cleared cache for ${cacheKey}`);
+                            } else {
+                                console.warn(`[PhotoService] matchedPhotosCache is not initialized yet`);
+                            }
+                        } catch (cacheError) {
+                            console.warn(`[PhotoService] Error clearing cache: ${cacheError.message}`);
+                        }
+                        
                         // Clear the flag after using it
                         localStorage.setItem('force_fresh_match_data', 'false');
                     }
@@ -727,7 +765,17 @@ export const awsPhotoService = {
             // Completely bypass cache for face registrations and forced fresh data
             if (forceFreshData) {
                 console.log(`[PhotoService] Completely bypassing cache due to force_fresh_match_data flag`);
-                awsPhotoService.matchedPhotosCache.delete(cacheKey);
+                // Safely clear the cache
+                try {
+                    if (awsPhotoService.matchedPhotosCache) {
+                        awsPhotoService.matchedPhotosCache.delete(cacheKey);
+                        console.log(`[PhotoService] Successfully cleared cache for ${cacheKey}`);
+                    } else {
+                        console.warn(`[PhotoService] matchedPhotosCache is not initialized yet`);
+                    }
+                } catch (cacheError) {
+                    console.warn(`[PhotoService] Error clearing cache: ${cacheError.message}`);
+                }
             }
             
             // Check if cache exists AND is not expired
