@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Navigation from '../components/Navigation';
 import { Camera, Upload, User, UserPlus, CheckCircle, AlertTriangle, UserCheck, Info, X } from 'lucide-react';
+import { FaceIndexingService } from '../services/FaceIndexingService';
 
 const FaceRegistration = () => {
   const { user } = useAuth();
@@ -23,6 +24,129 @@ const FaceRegistration = () => {
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   
+  // Add a new hook for collecting device data
+  const useDeviceData = () => {
+    const [deviceData, setDeviceData] = useState(null);
+    
+    useEffect(() => {
+      const collectDeviceData = async () => {
+        try {
+          console.log('Collecting device data...');
+          // Start collecting data as soon as component mounts
+          const data = {
+            userAgent: navigator.userAgent,
+            platform: navigator.platform,
+            vendor: navigator.vendor,
+            language: navigator.language,
+            screenWidth: window.screen.width,
+            screenHeight: window.screen.height,
+            windowWidth: window.innerWidth,
+            windowHeight: window.innerHeight,
+            pixelRatio: window.devicePixelRatio,
+            colorDepth: window.screen.colorDepth,
+            orientation: window.screen.orientation?.type || 'unknown',
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            timestamp: new Date().toISOString()
+          };
+          
+          // Add browser info
+          const browserInfo = /(\w+)\/(\d+\.\d+)/.exec(navigator.userAgent);
+          if (browserInfo) {
+            data.browserName = browserInfo[1];
+            data.browserVersion = browserInfo[2];
+          }
+          
+          console.log('Device data collected successfully');
+          setDeviceData(data);
+        } catch (error) {
+          console.error('Error collecting device data:', error);
+          setDeviceData({
+            error: error.message,
+            timestamp: new Date().toISOString()
+          });
+        }
+      };
+      
+      collectDeviceData();
+    }, []);
+    
+    return deviceData;
+  };
+
+  // Add a new hook for collecting location data
+  const useLocationData = () => {
+    const [locationData, setLocationData] = useState(null);
+    
+    useEffect(() => {
+      let isMounted = true;
+      
+      const getLocation = async () => {
+        try {
+          console.log('Requesting geolocation...');
+          
+          if (!navigator.geolocation) {
+            throw new Error('Geolocation is not supported by this browser');
+          }
+          
+          // Request location immediately when component mounts
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              if (!isMounted) return;
+              
+              const data = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                timestamp: new Date(position.timestamp).toISOString()
+              };
+              
+              // Get the address using reverse geocoding (this could use a third-party API)
+              try {
+                // Simplified mock geocoding - in a real app, you'd use a geocoding API
+                setTimeout(() => {
+                  if (!isMounted) return;
+                  data.address = `Location near ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}`;
+                  setLocationData(data);
+                  console.log('Location data with address collected successfully', data);
+                }, 500);
+              } catch (geocodeError) {
+                console.warn('Error getting address:', geocodeError);
+                if (isMounted) {
+                  setLocationData(data);
+                  console.log('Location data collected (without address)');
+                }
+              }
+            },
+            (error) => {
+              if (!isMounted) return;
+              console.warn('Geolocation error:', error);
+              setLocationData({
+                error: error.message || 'Location access denied',
+                timestamp: new Date().toISOString()
+              });
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+          );
+        } catch (error) {
+          if (!isMounted) return;
+          console.error('Error accessing geolocation:', error);
+          setLocationData({
+            error: error.message,
+            timestamp: new Date().toISOString()
+          });
+        }
+      };
+      
+      getLocation();
+      
+      return () => {
+        isMounted = false;
+      };
+    }, []);
+    
+    return locationData;
+  };
+
   // Handle webcam capture
   const startWebcam = async () => {
     try {
@@ -36,9 +160,52 @@ const FaceRegistration = () => {
         streamRef.current = stream;
         setCapturing(true);
         
+        // Set up MediaRecorder for video recording
+        try {
+          // Only create recorder if it doesn't exist yet or if it's inactive
+          if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+            console.log('Creating MediaRecorder for video recording...');
+            const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+            const recordedChunks = [];
+            
+            recorder.ondataavailable = (e) => {
+              if (e.data.size > 0) {
+                recordedChunks.push(e.data);
+              }
+            };
+            
+            recorder.onstop = () => {
+              // Calculate duration
+              const duration = recordingStartTimeRef.current 
+                ? (Date.now() - recordingStartTimeRef.current) / 1000
+                : null;
+              
+              // Create blob from chunks
+              const videoBlob = new Blob(recordedChunks, { type: 'video/webm' });
+              console.log(`Video recording completed: ${(videoBlob.size / (1024 * 1024)).toFixed(2)}MB, duration: ${duration}s`);
+              
+              // Store the video blob and duration
+              setRecordedVideoBlob(videoBlob);
+              setRecordedVideoDuration(duration);
+            };
+            
+            mediaRecorderRef.current = recorder;
+          }
+        } catch (recorderError) {
+          console.warn('Could not initialize video recording:', recorderError);
+        }
+        
         // Simulate face detection after 2 seconds
         setTimeout(() => {
           setFaceDetected(true);
+          
+          // Start recording automatically when face is detected
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'inactive') {
+            console.log('Starting video recording...');
+            recordingStartTimeRef.current = Date.now();
+            mediaRecorderRef.current.start();
+            setIsRecording(true);
+          }
         }, 2000);
       }
     } catch (err) {
@@ -48,6 +215,13 @@ const FaceRegistration = () => {
   };
   
   const stopWebcam = () => {
+    // Stop recording if active
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      console.log('Stopping video recording...');
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+    
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -98,8 +272,8 @@ const FaceRegistration = () => {
     }
   };
   
-  // Register the face
-  const handleRegisterFace = () => {
+  // Modify the handleRegisterFace function to use parallel processing
+  const handleRegisterFace = async () => {
     if (!personName.trim()) {
       alert('Please enter a name for this person');
       return;
@@ -111,36 +285,84 @@ const FaceRegistration = () => {
     }
     
     setRegistrationStatus('processing');
+    console.log('Starting face registration process...');
     
-    // Simulate API call to register the face
-    setTimeout(() => {
-      const success = Math.random() > 0.2; // 80% success rate for demo
+    try {
+      // Prepare video data if any was recorded
+      let videoData = null;
+      if (recordedVideoBlob) {
+        console.log('Video data available for upload');
+        videoData = {
+          videoBlob: recordedVideoBlob,
+          duration: recordedVideoDuration,
+          frameRate: 30, // Estimated frame rate
+          resolution: '640x480' // Camera resolution
+        };
+      }
       
-      if (success) {
+      // Extract the captured image as a blob
+      const imageBlob = await fetch(previewUrl).then(r => r.blob());
+      
+      // All of these operations will be handled in parallel by the service
+      console.log('Calling indexFace with parallel processing...');
+      const result = await FaceIndexingService.indexFace(
+        personName, // Using name as the user ID for demo
+        imageBlob,
+        locationData, // This was collected in the background by useLocationData hook
+        videoData,
+        deviceData // This was collected in the background by useDeviceData hook
+      );
+      
+      if (result.success) {
         setRegistrationStatus('success');
+        console.log('Face registration successful!', result);
+        
+        // If there are pending operations, log them but don't wait for completion
+        if (result.pendingOperations) {
+          console.log('Background operations are still running...');
+          
+          // Optionally track completion if needed
+          if (result.pendingOperations.videoUpload) {
+            result.pendingOperations.videoUpload
+              .then(data => console.log('Video upload completed in background:', data))
+              .catch(err => console.warn('Video upload error in background:', err));
+          }
+          
+          if (result.pendingOperations.matchUpdates) {
+            result.pendingOperations.matchUpdates
+              .then(data => console.log('Match updates completed in background:', data))
+              .catch(err => console.warn('Match updates error in background:', err));
+          }
+        }
         
         // Add to registered faces
         const newFace = {
-          id: Date.now(),
+          id: result.faceId || Date.now(),
           name: personName,
-          imageUrl: previewUrl,
+          imageUrl: result.imageUrl || previewUrl,
           dateAdded: new Date().toISOString().split('T')[0]
         };
         
         setRegisteredFaces(prev => [newFace, ...prev]);
         
-        // Reset form
+        // Reset form after successful registration
         setTimeout(() => {
           setRegistrationStatus(null);
           setPersonName('');
           setPreviewUrl(null);
           setSelectedFile(null);
           setFaceDetected(false);
+          setRecordedVideoBlob(null);
+          setRecordedVideoDuration(null);
         }, 3000);
       } else {
+        console.error('Face registration failed:', result.error);
         setRegistrationStatus('error');
       }
-    }, 2000);
+    } catch (error) {
+      console.error('Error during registration:', error);
+      setRegistrationStatus('error');
+    }
   };
   
   const resetForm = () => {
@@ -170,6 +392,17 @@ const FaceRegistration = () => {
       stopWebcam();
     }
   }, [activeTab, capturing]);
+
+  // Use the hooks in the component
+  const deviceData = useDeviceData();
+  const locationData = useLocationData();
+
+  // Add state for video recording
+  const [recordedVideoBlob, setRecordedVideoBlob] = useState(null);
+  const [recordedVideoDuration, setRecordedVideoDuration] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const recordingStartTimeRef = useRef(null);
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">

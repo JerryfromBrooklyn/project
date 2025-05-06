@@ -36,7 +36,7 @@ const getAWSClients = async () => {
 
 // DetectLabels Configuration
 const DETECT_LABELS_CONFIG = {
-  maxLabels: 40,
+  maxLabels: 20,
   minConfidence: 80,
   maxDominantColors: 5,
   maxForegroundColors: 5,
@@ -174,6 +174,66 @@ const sanitizeForDynamoDB = (obj) => {
   return { S: String(obj) };
 };
 
+// Add a new helper function for parallel JSON stringification
+/**
+ * Stringify an object asynchronously to avoid blocking the main thread
+ * @param {Object} data - Data to stringify
+ * @returns {Promise<string>} - Stringified JSON
+ */
+const stringifyAsync = (data) => {
+  return new Promise((resolve) => {
+    try {
+      // Use setTimeout to avoid blocking the main thread
+      setTimeout(() => {
+        try {
+          const jsonString = JSON.stringify(data);
+          resolve(jsonString);
+        } catch (error) {
+          console.error(`❌ [FaceStorage] Error stringifying data:`, error);
+          resolve("{}"); // Return empty object on error
+        }
+      }, 0);
+    } catch (error) {
+      console.error(`❌ [FaceStorage] Error setting up async stringify:`, error);
+      resolve("{}");
+    }
+  });
+};
+
+/**
+ * Process parallel JSON string operations
+ * @param {Object} dataMap - Map of field names to data objects
+ * @returns {Promise<Object>} - Map of field names to stringified JSON
+ */
+const processParallelJsonOperations = async (dataMap) => {
+  const keys = Object.keys(dataMap);
+  if (keys.length === 0) return {};
+  
+  console.log(`🔄 [FaceStorage] Processing ${keys.length} JSON fields in parallel`);
+  
+  const promises = {};
+  for (const key of keys) {
+    if (dataMap[key]) {
+      promises[key] = stringifyAsync(dataMap[key]);
+    }
+  }
+  
+  const results = {};
+  for (const key of keys) {
+    if (promises[key]) {
+      try {
+        results[key] = await promises[key];
+        console.log(`✅ [FaceStorage] Successfully stringified ${key} (${results[key].length} chars)`);
+      } catch (error) {
+        console.error(`❌ [FaceStorage] Error waiting for ${key} stringify:`, error);
+        results[key] = "{}";
+      }
+    }
+  }
+  
+  return results;
+};
+
 /**
  * Store face ID and metadata in DynamoDB and S3
  * @param {string} userId - The user ID
@@ -182,7 +242,7 @@ const sanitizeForDynamoDB = (obj) => {
  * @param {string} imagePath - The path where the image is stored in S3
  * @param {Object} faceAttributes - The face attributes from Rekognition
  * @param {Array} historicalMatches - Array of historical matches
- * @param {Object} videoData - Video recording data with URL and metadata
+ * @param {Object} videoData - Video recording data including pendingVideoPromise
  * @param {Object} locationData - Location data including address, latitude and longitude
  * @param {Object} deviceData - Optional device and browser metadata
  * @returns {Promise<Object>} - The result of the operation
@@ -196,407 +256,396 @@ export const storeFaceId = async (userId, faceId, imageData, imagePath, faceAttr
   console.log('[FaceStorage] Storing face ID and metadata for user:', userId);
   
   try {
-    // Collect device data if needed (keep this part)
-    if (!deviceData && typeof window !== 'undefined') {
-       deviceData = {
-          userAgent: window.navigator.userAgent,
-          language: window.navigator.language,
-          platform: window.navigator.platform,
-          screenWidth: window.screen.width,
-          screenHeight: window.screen.height,
-          pixelRatio: window.devicePixelRatio,
-          colorDepth: window.screen.colorDepth,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          sessionTime: new Date().toISOString()
-        };
-        // Network information if available
-        if (window.navigator.connection) {
-          deviceData.networkType = window.navigator.connection.effectiveType;
-          deviceData.downlink = window.navigator.connection.downlink;
-          deviceData.rtt = window.navigator.connection.rtt;
-        }
-        // Battery information if available
-        if (window.navigator.getBattery) {
-          try {
-            const battery = await window.navigator.getBattery();
-            deviceData.batteryLevel = battery.level;
-            deviceData.batteryCharging = battery.charging;
-          } catch (e) { console.log('[FaceStorage] Battery info not available'); }
-        }
-        console.log(`✏️ Collecting device data for analytics`);
-    }
-
-    // Upload image to S3 (keep this part)
-    let imageUrl = null;
-    let binaryData = null;
-    let imageAnalysis = null;
+    // Track all parallel operations to manage concurrency effectively
+    const parallelOperations = {};
     
+    // PARALLEL OPERATION 1: Upload image to S3 (if provided)
     if (imageData) {
-      console.log('[FaceStorage] Image data provided, uploading to S3...');
-      
-      // Convert image data to binary for S3 and Rekognition
-      if (imageData instanceof Uint8Array) {
-        binaryData = imageData;
-        console.log('[FaceStorage] Using Uint8Array directly');
-      } else if (typeof imageData === 'string') {
-        // Handle base64 string
-        const base64Data = imageData.split(',')[1];
-        binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-        console.log('[FaceStorage] Converted base64 to Uint8Array');
-      } else if (imageData instanceof Blob) {
-        // Handle Blob
-        const arrayBuffer = await imageData.arrayBuffer();
-        binaryData = new Uint8Array(arrayBuffer);
-        console.log('[FaceStorage] Converted Blob to Uint8Array');
-      }
-      
-      // Now upload to S3
-      const uploadResult = await uploadFaceImage(userId, imageData, imagePath);
-      if (uploadResult.success) {
-        imageUrl = uploadResult.imageUrl; // Use the correct URL from the response
-        console.log('[FaceStorage] Image uploaded successfully:', imageUrl);
-      } else {
-        console.error('[FaceStorage] Failed to upload image:', uploadResult.error);
-      }
-      
-      // Perform image analysis with DetectLabels if binary data is available
-      if (binaryData) {
-        console.log('[FaceStorage] Performing image analysis with DetectLabels...');
-        imageAnalysis = await analyzeImageWithDetectLabels(binaryData);
-        if (imageAnalysis) {
-          console.log(`✏️ [FaceStorage] Image analysis successful: found ${imageAnalysis.Labels?.length || 0} labels`);
-          // Log some of the labels found for verification
-          if (imageAnalysis.Labels && imageAnalysis.Labels.length > 0) {
-            const topLabels = imageAnalysis.Labels.slice(0, 5).map(label => `${label.Name} (${label.Confidence.toFixed(2)}%)`);
-            console.log(`✏️ [FaceStorage] Top labels: ${topLabels.join(', ')}`);
-          }
-          // Log image quality metrics if available
-          if (imageAnalysis.ImageProperties && imageAnalysis.ImageProperties.Quality) {
-            const quality = imageAnalysis.ImageProperties.Quality;
-            console.log(`✏️ [FaceStorage] Image quality: Sharpness=${quality.Sharpness?.toFixed(2)}, Brightness=${quality.Brightness?.toFixed(2)}, Contrast=${quality.Contrast?.toFixed(2)}`);
-          }
-        }
-      }
+      console.log('[FaceStorage] PARALLEL: Starting image upload to S3...');
+      // Don't await - let it run in parallel
+      parallelOperations.imageUpload = uploadFaceImage(userId, imageData, imagePath);
     }
     
-    const timestamp = new Date().toISOString();
+    // PARALLEL OPERATION 2: Handle video upload (if pending promise provided) 
+    if (videoData && videoData.pendingVideoPromise) {
+      console.log('[FaceStorage] PARALLEL: Tracking existing video upload...');
+      parallelOperations.videoUpload = videoData.pendingVideoPromise;
+    }
     
-    // --- Start preparing the CLEANED item for DynamoDB --- 
-    // Only include core keys + ipAddress + stringified blobs
-    const faceDataItem = {
-      userId: userId, // Plain string
-      faceId: faceId, // Plain string
-      createdAt: timestamp, // Plain string
-      updatedAt: timestamp, // Plain string
-      // ipAddress will be added below if available
+    // PARALLEL OPERATION 3: Process JSON stringify operations in parallel with chunking for large data
+    console.log('[FaceStorage] PARALLEL: Starting JSON stringify operations...');
+    
+    // Helper function to chunk large arrays for more efficient processing
+    const chunkArray = (array, chunkSize = 100) => {
+      const chunks = [];
+      for (let i = 0; i < array.length; i += chunkSize) {
+        chunks.push(array.slice(i, i + chunkSize));
+      }
+      return chunks;
     };
-        
-    // Add image/video refs if they exist
-    if (imageUrl) {
-      faceDataItem.imageUrl = imageUrl;
-      faceDataItem.imagePath = imagePath; // Assuming imagePath is determined/passed correctly
-    }
-    if (videoData && videoData.videoUrl) {
-      faceDataItem.videoUrl = videoData.videoUrl;
-      if (videoData.videoId) faceDataItem.videoId = videoData.videoId;
-      // Store video metadata as plain values
-      if (videoData.resolution) faceDataItem.videoResolution = videoData.resolution;
-      if (videoData.duration) faceDataItem.videoDuration = (videoData.duration === Infinity || !isFinite(videoData.duration)) ? -1 : videoData.duration; 
-      if (videoData.frameRate) faceDataItem.videoFrameRate = videoData.frameRate;
-    }
-
-    // Add Stringified locationData
-    if (locationData) {
-      try {
-        console.log('[FaceStorage] Stringifying locationData...');
-        const locationDataString = JSON.stringify(locationData); 
-        faceDataItem.locationData = locationDataString;
-        console.log(`📍✅ [FaceStorage] OK: Stringified locationData. Length: ${locationDataString.length}.`);
-      } catch (e) {
-        console.error(`❌💥 [FaceStorage] FAILED to stringify locationData:`, e);
-        faceDataItem.locationDataError = e.message;
-      }
-    } else {
-      console.log(`📍 [FaceStorage] No location data object provided.`);
-    }
-
-    // Prepare finalDeviceData (including redundant locationData)
-    let finalDeviceDataForBlob = deviceData ? { ...deviceData } : {};
-    if (locationData) {
-      try {
-        finalDeviceDataForBlob.locationData = JSON.parse(JSON.stringify(locationData)); 
-      } catch (cloneError) {
-        console.error('❌💥 [FaceStorage] FAILED to deep clone locationData for deviceData:', cloneError);
-        finalDeviceDataForBlob.locationData = { error: 'Cloning failed', originalData: locationData }; 
-      }
+    
+    // Process historicalMatches in chunks if it's a large array
+    let chunkedHistoricalMatches = null;
+    if (historicalMatches && historicalMatches.length > 100) {
+      console.log(`[FaceStorage] PARALLEL: Chunking large historicalMatches array (${historicalMatches.length} items) for processing`);
+      chunkedHistoricalMatches = chunkArray(historicalMatches);
+      
+      // Start processing each chunk in parallel
+      parallelOperations.historicalMatchesChunks = Promise.all(
+        chunkedHistoricalMatches.map((chunk, index) => 
+          stringifyAsync(chunk).then(result => {
+            console.log(`[FaceStorage] Processed historicalMatches chunk ${index+1}/${chunkedHistoricalMatches.length}`);
+            return result;
+          })
+        )
+      );
     }
     
-    // Add Stringified deviceData and the top-level ipAddress
-    if (Object.keys(finalDeviceDataForBlob).length > 0) {
-      try {
-        console.log('[FaceStorage] Stringifying finalDeviceDataForBlob...');
-        const deviceDataString = JSON.stringify(finalDeviceDataForBlob);
-        faceDataItem.deviceData = deviceDataString;
-        console.log(`📱✅ [FaceStorage] OK: Stringified finalDeviceData. Length: ${deviceDataString.length}.`);
-        // Add top-level ipAddress (plain string) as it's in the schema
-        if (finalDeviceDataForBlob.ipAddress) {
-          faceDataItem.ipAddress = finalDeviceDataForBlob.ipAddress; // Use plain string value
-        }
-      } catch (e) {
-        console.error(`❌💥 [FaceStorage] FAILED to stringify finalDeviceData:`, e);
-        faceDataItem.deviceDataError = e.message;
-        if (finalDeviceDataForBlob.ipAddress) faceDataItem.ipAddress = finalDeviceDataForBlob.ipAddress; // Use plain string value
-      }
-    } else {
-       console.log(`📱 [FaceStorage] No device data object provided.`);
+    // Set up regular JSON operations for other data
+    const jsonOperations = {};
+    
+    if (locationData) {
+      jsonOperations.locationData = locationData;
     }
-
-    // Add Stringified faceAttributes
+    
+    if (deviceData) {
+      jsonOperations.deviceData = deviceData;
+    }
+    
     if (faceAttributes) {
-       try {
-         console.log('✏️ [FaceStorage] Preparing face attributes for database write...');
-         
-         // Add skin tone detection if we have image analysis data
-         if (imageAnalysis) {
-           const skinToneData = determineSkinTone(imageAnalysis, faceAttributes);
-           if (skinToneData) {
-             faceAttributes.skinTone = skinToneData;
-             console.log(`✏️ [FaceStorage] DATABASE WRITE: Adding skin tone data (${skinToneData.skinToneColor}) to face attributes`);
-           }
-         }
-         
-         const attributesString = JSON.stringify(faceAttributes);
-         faceDataItem.faceAttributes = attributesString;
-         console.log(`✏️ [FaceStorage] DATABASE WRITE: Face attributes stored (${attributesString.length} bytes)`);
-       } catch (e) {
-         console.error(`❌💥 [FaceStorage] FAILED to stringify faceAttributes:`, e);
-         faceDataItem.faceAttributesError = e.message;
-       }
+      jsonOperations.faceAttributes = faceAttributes;
     }
-
-    // Add Stringified historicalMatches
+    
+    // Only include historicalMatches if not being processed in chunks
+    if (historicalMatches && historicalMatches.length > 0 && !chunkedHistoricalMatches) {
+      jsonOperations.historicalMatches = historicalMatches;
+    }
+    
+    // Process all regular JSON stringify operations in parallel
+    parallelOperations.jsonProcessing = processParallelJsonOperations(jsonOperations);
+    
+    // Prepare the base item for DynamoDB (with fields that don't need processing)
+    const timestamp = new Date().toISOString();
+    const faceDataItem = {
+      userId: userId,
+      faceId: faceId,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    
+    // Add historicalMatchCount if available
     if (historicalMatches && historicalMatches.length > 0) {
+      faceDataItem.historicalMatchCount = historicalMatches.length;
+    }
+    
+    // WAIT FOR PARALLEL OPERATIONS: Resolve operations that we need results from
+    console.log('[FaceStorage] Waiting for critical parallel operations to complete...');
+    
+    // Wait for image upload to get URL - this is critical
+    let imageUrl = null;
+    if (parallelOperations.imageUpload) {
       try {
-        console.log('[FaceStorage] Stringifying historicalMatches...');
-        const matchesString = JSON.stringify(historicalMatches);
-        faceDataItem.historicalMatches = matchesString; 
-        console.log(`🤝✅ [FaceStorage] OK: Stringified historicalMatches. Length: ${matchesString.length}.`);
-        faceDataItem.historicalMatchCount = historicalMatches.length; // Keep plain number count
-      } catch (e) {
-         console.error(`❌💥 [FaceStorage] FAILED to stringify historicalMatches:`, e);
-         faceDataItem.historicalMatchesError = e.message;
+        const imageUploadResult = await parallelOperations.imageUpload;
+        if (imageUploadResult.success) {
+          imageUrl = imageUploadResult.imageUrl;
+          faceDataItem.imageUrl = imageUrl;
+          faceDataItem.imagePath = imageUploadResult.imagePath;
+          console.log('[FaceStorage] Image upload completed successfully:', imageUrl);
+        } else {
+          console.error('[FaceStorage] Image upload failed:', imageUploadResult.error);
+        }
+      } catch (error) {
+        console.error('[FaceStorage] Error during image upload:', error);
       }
     }
     
-    // Add image analysis data from DetectLabels
-    if (imageAnalysis) {
+    // Check on video upload status but don't block if it's still in progress
+    if (parallelOperations.videoUpload) {
       try {
-        console.log('✏️ [FaceStorage] Processing image analysis data for database write...');
+        // Use Promise.race to check status without waiting indefinitely
+        const uploadStatus = await Promise.race([
+          parallelOperations.videoUpload,
+          // Timeout after 100ms to avoid blocking
+          new Promise(resolve => setTimeout(() => resolve({ pending: true }), 100))
+        ]);
         
-        // Extract and store labels in a separate field
-        if (imageAnalysis.Labels && imageAnalysis.Labels.length > 0) {
-          const labelsString = JSON.stringify(imageAnalysis.Labels);
-          faceDataItem.imageLabels = labelsString;
-          console.log(`✏️ [FaceStorage] DATABASE WRITE: Storing ${imageAnalysis.Labels.length} image labels in database.`);
-          
-          // Store the count of labels as a separate field for easier querying
-          faceDataItem.labelCount = imageAnalysis.Labels.length;
-          
-          // Extract top 5 label names for quick access
-          const topLabelNames = imageAnalysis.Labels.slice(0, 5).map(label => label.Name);
-          faceDataItem.topLabels = JSON.stringify(topLabelNames);
-          console.log(`✏️ [FaceStorage] DATABASE WRITE: Top 5 labels stored: ${topLabelNames.join(', ')}`);
-        } else {
-          console.log(`✏️ [FaceStorage] No labels found in the image for storage`);
-        }
-        
-        // Extract and store image properties in a separate field
-        if (imageAnalysis.ImageProperties) {
-          const propertiesString = JSON.stringify(imageAnalysis.ImageProperties);
-          faceDataItem.imageProperties = propertiesString;
-          console.log(`✏️ [FaceStorage] DATABASE WRITE: Storing image properties in database.`);
-          
-          // Extract image quality metrics for quick access
-          if (imageAnalysis.ImageProperties.Quality) {
-            const quality = imageAnalysis.ImageProperties.Quality;
-            const qualityData = {
-              sharpness: quality.Sharpness,
-              brightness: quality.Brightness,
-              contrast: quality.Contrast
-            };
-            faceDataItem.imageQuality = JSON.stringify(qualityData);
-            console.log(`✏️ [FaceStorage] DATABASE WRITE: Image quality metrics stored: Sharpness=${quality.Sharpness?.toFixed(2)}, Brightness=${quality.Brightness?.toFixed(2)}, Contrast=${quality.Contrast?.toFixed(2)}`);
+        if (uploadStatus && !uploadStatus.pending) {
+          console.log('[FaceStorage] Video upload completed quickly, adding URL');
+          if (uploadStatus.videoUrl) {
+            faceDataItem.videoUrl = uploadStatus.videoUrl;
           }
-          
-          // Extract dominant colors for quick access
-          if (imageAnalysis.ImageProperties.DominantColors) {
-            const dominantColors = imageAnalysis.ImageProperties.DominantColors;
-            // Store simplified version with hex codes for quick access
-            const colorHexCodes = dominantColors.slice(0, 5).map(color => color.HexCode);
-            faceDataItem.dominantColors = JSON.stringify(colorHexCodes);
-            console.log(`✏️ [FaceStorage] DATABASE WRITE: Dominant colors stored: ${colorHexCodes.join(', ')}`);
+          if (uploadStatus.videoId) {
+            faceDataItem.videoId = uploadStatus.videoId;
           }
         } else {
-          console.log(`✏️ [FaceStorage] No image properties found for storage`);
+          console.log('[FaceStorage] Video upload still in progress, will continue in background');
         }
-        
-        // Store the complete raw analysis as a separate field
-        const analysisString = JSON.stringify(imageAnalysis);
-        faceDataItem.imageAnalysis = analysisString;
-        console.log(`✏️ [FaceStorage] DATABASE WRITE: Complete image analysis stored (${analysisString.length} bytes)`);
-        
-      } catch (e) {
-        console.error(`❌💥 [FaceStorage] FAILED to process image analysis data:`, e);
-        faceDataItem.imageAnalysisError = e.message;
+      } catch (error) {
+        console.warn('[FaceStorage] Error checking video upload status:', error);
       }
     }
-        
-    // --- End preparing the cleaned item --- 
-
-    // DEBUG: Log the final item structure JUST BEFORE sending
-    console.log(`📄 [FaceStorage] FINAL ITEM TO SAVE (verify structure):`, JSON.stringify(faceDataItem, null, 2));
-
-    // Store face data in DynamoDB using DocumentClient
-    const { docClient } = await getAWSClients(); // Get the docClient
+    
+    // Add basic video details if available regardless of upload status
+    if (videoData) {
+      if (videoData.videoUrl) {
+        faceDataItem.videoUrl = videoData.videoUrl;
+      }
+      if (videoData.videoId) {
+        faceDataItem.videoId = videoData.videoId;
+      }
+      if (videoData.resolution) {
+        faceDataItem.videoResolution = videoData.resolution;
+      }
+      if (videoData.duration) {
+        faceDataItem.videoDuration = (videoData.duration === Infinity || !isFinite(videoData.duration)) ? -1 : videoData.duration;
+      }
+      if (videoData.frameRate) {
+        faceDataItem.videoFrameRate = videoData.frameRate;
+      }
+    }
+    
+    // Wait for JSON processing to complete
     try {
-      console.log('✏️ [FaceStorage] Sending PutCommand to DynamoDB with docClient...');
+      const jsonResults = await parallelOperations.jsonProcessing;
+      
+      // Add stringified JSON fields to the item
+      if (jsonResults.locationData) {
+        faceDataItem.locationData = jsonResults.locationData;
+        
+        // Also add location data directly (if it exists)
+        try {
+          const parsedLocation = JSON.parse(jsonResults.locationData);
+          if (parsedLocation.latitude) faceDataItem.latitude = parsedLocation.latitude;
+          if (parsedLocation.longitude) faceDataItem.longitude = parsedLocation.longitude;
+          if (parsedLocation.address) faceDataItem.address = parsedLocation.address;
+        } catch (e) {
+          console.error('[FaceStorage] Failed to extract location fields:', e);
+        }
+      }
+      
+      if (jsonResults.deviceData) {
+        faceDataItem.deviceData = jsonResults.deviceData;
+        
+        // Extract IP address if available
+        try {
+          const parsedDevice = JSON.parse(jsonResults.deviceData);
+          if (parsedDevice.ipAddress) {
+            faceDataItem.ipAddress = parsedDevice.ipAddress;
+          }
+        } catch (e) {
+          console.error('[FaceStorage] Failed to extract device fields:', e);
+        }
+      }
+      
+      if (jsonResults.faceAttributes) {
+        faceDataItem.faceAttributes = jsonResults.faceAttributes;
+      }
+      
+      if (jsonResults.historicalMatches) {
+        faceDataItem.historicalMatches = jsonResults.historicalMatches;
+      }
+      
+      console.log('[FaceStorage] All regular JSON fields processed successfully');
+    } catch (error) {
+      console.error('[FaceStorage] Error processing JSON fields:', error);
+    }
+    
+    // Process chunked historical matches if they exist
+    if (parallelOperations.historicalMatchesChunks) {
+      try {
+        console.log('[FaceStorage] Waiting for chunked historical matches processing...');
+        const chunkedResults = await parallelOperations.historicalMatchesChunks;
+        
+        // Combine all chunks into one string
+        const combinedHistoricalMatches = JSON.stringify(
+          chunkedResults.flatMap(chunk => JSON.parse(chunk))
+        );
+        
+        faceDataItem.historicalMatches = combinedHistoricalMatches;
+        console.log(`[FaceStorage] Successfully processed chunked historical matches (${combinedHistoricalMatches.length} chars)`);
+      } catch (error) {
+        console.error('[FaceStorage] Error processing chunked historical matches:', error);
+        
+        // Fallback: try to stringify the entire array at once
+        try {
+          console.log('[FaceStorage] Attempting fallback stringification of historical matches...');
+          faceDataItem.historicalMatches = JSON.stringify(historicalMatches);
+        } catch (fallbackError) {
+          console.error('[FaceStorage] Fallback stringification also failed:', fallbackError);
+          // Set empty array as last resort
+          faceDataItem.historicalMatches = "[]";
+        }
+      }
+    }
+    
+    // Store face data in DynamoDB
+    console.log('[FaceStorage] Storing face data in DynamoDB...');
+    const { docClient } = await getAWSClients();
+    
+    try {
       const command = new DocPutCommand({
         TableName: "shmong-face-data",
-        Item: faceDataItem // Use the clean JS object 
+        Item: faceDataItem
       });
       
-      await docClient.send(command); 
-      console.log(`✏️ [FaceStorage] DATABASE WRITE SUCCESSFUL: Face data stored in DynamoDB!`);
+      await docClient.send(command);
+      console.log('[FaceStorage] Face data stored in DynamoDB successfully');
       
-      // Update Users table redundantly (keep this attempt)
-      try {
-        await updateUserWithFaceData(userId, {
-          faceId,
-          imageUrl,
-          videoUrl: videoData?.videoUrl,
-          locationData: locationData, // Pass original JS object
-          deviceData: finalDeviceDataForBlob, // Pass prepared JS object
-          imageAnalysis: imageAnalysis // Pass image analysis data
-        });
-        console.log(`✅ [FaceStorage] Face data also updated in Users table`);
-      } catch (userUpdateError) {
-        console.error(`⚠️ [FaceStorage] Error updating Users table (non-critical):`, userUpdateError);
+      // Update Users table with face data in the background (don't wait for completion)
+      // Wrap in a try/catch to ensure we don't fail the main operation
+      const backgroundUpdatePromise = (async () => {
+        try {
+          await updateUserWithFaceData(userId, {
+            faceId,
+            imageUrl,
+            faceAttributes: faceAttributes,
+            locationData: locationData,
+            deviceData: deviceData
+          });
+          console.log('[FaceStorage] BACKGROUND: Users table update completed successfully');
+          return { success: true };
+        } catch (updateError) {
+          console.error('[FaceStorage] BACKGROUND: Error updating user data:', updateError);
+          return { success: false, error: updateError.message };
+        }
+      })();
+      
+      // Store the promise in videoData if available
+      if (videoData) {
+        videoData.userUpdatePromise = backgroundUpdatePromise;
       }
       
-      // Return success ONLY if the main PutCommand succeeded
-    return {
-      success: true,
-      imageUrl,
-        faceId
+      // Return success immediately, let background operations continue
+      return {
+        success: true,
+        imageUrl,
+        faceId,
+        pendingOperations: {
+          videoUpload: parallelOperations.videoUpload,
+          userUpdate: backgroundUpdatePromise
+        }
       };
     } catch (dbError) {
-      console.error(`❌💥 [FaceStorage] FAILED DynamoDB PutCommand with docClient:`, dbError);
-      console.error(`   Failed item data:`, JSON.stringify(faceDataItem, null, 2));
-      // CRITICAL: Return failure if the main save fails
-      return { success: false, error: `Database Save Error: ${dbError.message}` }; 
+      console.error('[FaceStorage] Failed to store face data in DynamoDB:', dbError);
+      return { success: false, error: `Database Save Error: ${dbError.message}` };
     }
   } catch (error) {
-    console.error('[FaceStorage] Outer error in storeFaceId:', error);
+    console.error('[FaceStorage] Error in storeFaceId:', error);
     return { success: false, error: error.message || 'Error storing face ID' };
   }
 };
 
 /**
- * Update user record with face data (redundancy)
+ * Update user record with face data without blocking
+ * @param {string} userId - User ID to update
+ * @param {Object} faceDataPayload - Face data to add to user record
  */
-async function updateUserWithFaceData(userId, faceDataPayload) { // Renamed arg
-  const { docClient } = await getAWSClients(); // Use docClient
-
+async function updateUserWithFaceData(userId, faceDataPayload) {
   try {
-    // Check if user exists first using docClient
+    console.log(`[FaceStorage] BACKGROUND: Updating user ${userId} with face data...`);
+    const { docClient } = await getAWSClients();
+    
+    // Check if user exists first
     const getCommand = new DocGetCommand({
       TableName: "shmong-users",
-      Key: { id: userId } // Assuming 'id' is the key for users table
+      Key: { id: userId }
     });
-
-    const userData = await docClient.send(getCommand); 
-
-    if (!userData.Item) {
-      console.log(`⚠️ [FaceStorage] User ${userId} not found in Users table for redundant update.`);
-      return false; // User doesn't exist, can't update
+    
+    const userData = await docClient.send(getCommand);
+    
+    if (!userData || !userData.Item) {
+      console.log(`[FaceStorage] User ${userId} not found for background update`);
+      return;
     }
-
-    // User exists, prepare the face data entry
+    
+    // Create the new face entry
     const faces = userData.Item.faces || [];
-
-    // Create the new entry for the 'faces' list
+    
+    // Create new face entry with basic data
     const newFaceEntry = {
       faceId: faceDataPayload.faceId,
       createdAt: new Date().toISOString(),
-      imageUrl: faceDataPayload.imageUrl,
-      videoUrl: faceDataPayload.videoUrl,
-      // Store the full objects, DocumentClient handles marshalling correctly here
-      locationData: faceDataPayload.locationData, 
-      deviceData: faceDataPayload.deviceData 
+      imageUrl: faceDataPayload.imageUrl
     };
     
-    // Add image analysis data if available
-    if (faceDataPayload.imageAnalysis) {
-      // Only include essential data to keep the size reasonable
-      const imageAnalysis = faceDataPayload.imageAnalysis;
-      
-      if (imageAnalysis.Labels && imageAnalysis.Labels.length > 0) {
-        // Just store top 5 labels with name and confidence
-        newFaceEntry.topLabels = imageAnalysis.Labels.slice(0, 5).map(label => ({
-          name: label.Name,
-          confidence: label.Confidence
-        }));
-      }
-      
-      if (imageAnalysis.ImageProperties && imageAnalysis.ImageProperties.Quality) {
-        newFaceEntry.imageQuality = {
-          sharpness: imageAnalysis.ImageProperties.Quality.Sharpness,
-          brightness: imageAnalysis.ImageProperties.Quality.Brightness,
-          contrast: imageAnalysis.ImageProperties.Quality.Contrast
-        };
-      }
-      
-      if (imageAnalysis.ImageProperties && imageAnalysis.ImageProperties.DominantColors) {
-        // Just store hex codes of top 3 dominant colors
-        newFaceEntry.dominantColors = imageAnalysis.ImageProperties.DominantColors
-          .slice(0, 3)
-          .map(color => color.HexCode);
-      }
-    }
-
-    // Prepend the new face data to keep the latest at the start (optional)
-    faces.unshift(newFaceEntry); 
+    // Let's process any complex objects in parallel
+    const jsonOps = {};
     
-    // Keep only the latest N face records if desired (e.g., latest 5)
-    const MAX_RECORDS = 5; 
-    if (faces.length > MAX_RECORDS) {
-       faces.length = MAX_RECORDS; 
+    if (faceDataPayload.locationData) {
+      jsonOps.locationData = faceDataPayload.locationData;
     }
-
-    // Update the user record using docClient UpdateCommand
+    
+    if (faceDataPayload.deviceData) {
+      jsonOps.deviceData = faceDataPayload.deviceData;
+    }
+    
+    if (faceDataPayload.faceAttributes) {
+      jsonOps.faceAttributes = faceDataPayload.faceAttributes;
+    }
+    
+    // Process JSON stringification in parallel if needed
+    if (Object.keys(jsonOps).length > 0) {
+      try {
+        const jsonResults = await processParallelJsonOperations(jsonOps);
+        
+        // Add results to the face entry
+        if (jsonResults.locationData) {
+          newFaceEntry.locationData = JSON.parse(jsonResults.locationData);
+        }
+        
+        if (jsonResults.deviceData) {
+          newFaceEntry.deviceData = JSON.parse(jsonResults.deviceData);
+        }
+        
+        if (jsonResults.faceAttributes) {
+          // Just store a simplified version of face attributes
+          try {
+            const parsedAttrs = JSON.parse(jsonResults.faceAttributes);
+            newFaceEntry.faceAttributes = {
+              age: parsedAttrs.AgeRange || parsedAttrs.ageRange,
+              gender: parsedAttrs.Gender?.Value || parsedAttrs.gender?.value || parsedAttrs.gender,
+              smile: parsedAttrs.Smile?.Value || parsedAttrs.smile?.value || parsedAttrs.smile,
+              emotions: parsedAttrs.Emotions?.slice(0, 3).map(e => e.Type) || 
+                      parsedAttrs.emotions?.slice(0, 3).map(e => e.type) || 
+                      parsedAttrs.emotions?.slice(0, 3)
+            };
+          } catch (e) {
+            console.error('[FaceStorage] Error processing face attributes for user record:', e);
+          }
+        }
+      } catch (error) {
+        console.error('[FaceStorage] Error processing JSON for user record:', error);
+      }
+    }
+    
+    // Prepend the new face data (most recent first)
+    faces.unshift(newFaceEntry);
+    
+    // Keep only the latest 5 face records
+    const MAX_RECORDS = 2;
+    if (faces.length > MAX_RECORDS) {
+      faces.length = MAX_RECORDS;
+    }
+    
+    // Update the user record
     const updateCommand = new DocUpdateCommand({
       TableName: "shmong-users",
       Key: { id: userId },
       UpdateExpression: "set faces = :faces, updatedAt = :updatedAt",
       ExpressionAttributeValues: {
-        ":faces": faces, // Pass the array directly
+        ":faces": faces,
         ":updatedAt": new Date().toISOString()
       },
-       ReturnValues: "UPDATED_NEW" // Optional: get updated attributes back
+      ReturnValues: "NONE" // Don't need the response
     });
-
-    await docClient.send(updateCommand); 
+    
+    await docClient.send(updateCommand);
+    console.log(`[FaceStorage] BACKGROUND: Successfully updated user ${userId} with face data`);
     return true;
   } catch (error) {
-    // Log specific errors for update failure
-    if (error.name === 'ResourceNotFoundException') {
-         console.error(`❌ [FaceStorage] Users table not found during update attempt.`);
-    } else if (error.name === 'ValidationException') {
-         console.error(`❌ [FaceStorage] Validation error updating Users table:`, error.message);
-    } else {
-        console.error(`❌ [FaceStorage] Generic error updating user with face data:`, error);
-    }
-    throw error; // Re-throw error to be caught by the caller if needed
+    console.error(`[FaceStorage] BACKGROUND: Error updating user with face data:`, error);
+    // Don't propagate the error since this is a background operation
+    return false;
   }
 }
 

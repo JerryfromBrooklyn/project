@@ -247,7 +247,7 @@ export const indexUserFace = async (imageData, userId) => {
 };
 
 /**
- * Indexes a user's face with AWS Rekognition - Simplified wrapper for components
+ * Indexes a user's face with AWS Rekognition - Optimized with parallel processing
  * @param {string} userId - User ID
  * @param {Blob|string} imageData - Image data (Blob or base64 string)
  * @param {Object} locationData - Location data containing address, latitude and longitude
@@ -284,11 +284,28 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
       console.log('🔍 [FaceIndexing] Device data provided with browser, OS, and user interaction metrics');
     }
     
-    // Step 1: Get AWS clients
-    const { rekognitionClient } = await getAWSClients();
+    // PARALLEL OPERATION 1: Start video upload immediately if provided
+    // This allows the upload to proceed while we process the face
+    let videoUploadPromise = null;
+    if (videoData && videoData.videoBlob && !videoData.videoUrl) {
+      console.log('[FaceIndexing] PARALLEL: Starting video upload to S3...');
+      videoUploadPromise = uploadVideoToS3(videoData.videoBlob, userId);
+      
+      // Add the promise to videoData so it can be tracked/waited on by other services
+      videoData.pendingVideoPromise = videoUploadPromise;
+    }
     
-    // Step 2: Convert image to base64 buffer
-    const buffer = await imageToBuffer(imageBlob);
+    // PARALLEL OPERATION 2: Prepare AWS clients - this can happen concurrently
+    const awsClientsPromise = getAWSClients();
+    
+    // PARALLEL OPERATION 3: Convert image to buffer - this can happen concurrently
+    const imageBufferPromise = imageToBuffer(imageBlob);
+    
+    // Wait for these critical parallel operations to complete
+    const [{ rekognitionClient }, buffer] = await Promise.all([
+      awsClientsPromise,
+      imageBufferPromise
+    ]);
     
     // Step 3: Detect faces first to get attributes
     console.log('[FaceIndexing] Detecting faces to extract attributes...');
@@ -340,7 +357,12 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
       const searchParams = {
         CollectionId: COLLECTION_ID,
         FaceId: faceId,
-        MaxFaces: 250,
+        
+        // CRITICAL: Controls the maximum number of historical face matches to return
+        // Increasing this from 250 to 1000 ensures more comprehensive matching results
+        // This directly affects how many historical faces/photos a person can be matched with
+
+        MaxFaces: 1000,
         FaceMatchThreshold: FACE_MATCH_THRESHOLD
       };
       
@@ -354,8 +376,8 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
           console.log(`  Match #${idx+1}: ID: ${match.Face.ExternalImageId}, Similarity: ${match.Similarity.toFixed(2)}%`);
         });
         
-        // Process each match without randomization
-        const processedMatches = await Promise.all(searchResponse.FaceMatches
+        // Process each match in parallel
+        const matchProcessingPromises = searchResponse.FaceMatches
           // Skip exact self-matches where the face IDs are the same
           .filter(match => {
             if (match.Face.FaceId === faceId) {
@@ -436,7 +458,10 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
                 createdAt: new Date().toISOString()
               };
             }
-          }));
+          });
+        
+        // Wait for all match processing promises to resolve in parallel
+        const processedMatches = await Promise.all(matchProcessingPromises);
         
         // After processing all matches, group them by type and apply appropriate filtering
         // Separate photo matches from user matches
@@ -468,7 +493,7 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
         
         // Always prioritize photo matches, then add user matches if we have space left
         // Hard limit of 250 total for DynamoDB storage
-        const MAX_MATCHES = 250;
+        const MAX_MATCHES = 300;
         let photoLimit = Math.min(photoMatches.length, MAX_MATCHES);
         let selectedPhotoMatches = photoMatches.slice(0, photoLimit);
         
@@ -523,8 +548,8 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
         }
         
         // Step 5.5: Update the shmong-photos table to add this user to matched_users
-        // for each photo that was matched
-        console.log('[FaceIndexing] Updating matched photos to include current user...');
+        // for each photo that was matched - BUT DO IT IN PARALLEL with concurrency limits
+        console.log('[FaceIndexing] PARALLEL: Updating matched photos to include current user...');
         if (historicalMatches.length > 0) {
           // Only try to update actual photo records, not user records
           const photoIdsToUpdate = historicalMatches
@@ -533,165 +558,88 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
             
           console.log(`[FaceIndexing] Found ${photoIdsToUpdate.length} unique photos to update with user ID: ${userId}`);
           
-          // Add retry logic configuration
-          const MAX_RETRIES = 3;
-          const RETRY_DELAY = 1000; // ms
-          
-          // Helper function to sleep
-          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-          
-          for (const photoId of photoIdsToUpdate) {
-            let retries = 0;
-            let success = false;
+          if (photoIdsToUpdate.length > 0) {
+            // Add parallel batch update with concurrency control
             
-            while (!success && retries < MAX_RETRIES) {
-              try {
-                // Get the current photo data
-                const getPhotoCommand = new GetCommand({
-                  TableName: PHOTOS_TABLE,
-                  Key: {
-                    id: photoId
-                  }
-                });
-                
-                const photoData = await docClient.send(getPhotoCommand);
-                
-                if (!photoData || !photoData.Item) {
-                  console.log(`[FaceIndexing] Photo not found with ID: ${photoId}`);
-                  break; // Skip to the next photo
-                }
-                
-                // Extract and ensure matched_users is an array
-                let matchedUsers = photoData.Item.matched_users || [];
-                if (!Array.isArray(matchedUsers)) {
-                  matchedUsers = [];
-                }
-                
-                // Check if current user is already in the matched_users array
-                const alreadyMatched = matchedUsers.some(match => {
-                  if (typeof match === 'object' && match !== null) {
-                    const matchUserId = match.userId || match.user_id || '';
-                    return matchUserId.toLowerCase() === userId.toLowerCase();
-                  } else if (typeof match === 'string') {
-                    return match.toLowerCase() === userId.toLowerCase();
-                  }
-                  return false;
-                });
-                
-                if (alreadyMatched) {
-                  console.log(`[FaceIndexing] User ${userId} already in matched_users for photo ${photoId}`);
-                  success = true; // Consider this a success and move to next photo
-                  continue;
-                }
-                
-                // Get the match details for this photo
-                const matchInfo = historicalMatches.find(match => match.id === photoId);
-                
-                // Add the current user to matched_users
-                const newMatchEntry = {
-                  userId: userId,
-                  faceId: faceId,
-                  similarity: matchInfo.similarity,
-                  matchedAt: new Date().toISOString()
-                };
-                
-                console.log(`[FaceIndexing] Adding user ${userId} to matched_users for photo ${photoId}:`, 
-                  JSON.stringify(newMatchEntry));
+            // Helper function to update a single photo
+            const updatePhotoMatchedUsers = async (photoId) => {
+              // Add retry logic configuration with exponential backoff
+              const MAX_RETRIES = 5;  // Increased from 3 to 5 for more resilience
+              const BASE_RETRY_DELAY = 200; // Start with a shorter delay (ms)
+              
+              // Helper function to sleep with exponential backoff
+              const sleep = (attempt) => {
+                // Exponential backoff with jitter to prevent thundering herd problem
+                const delay = Math.min(
+                  BASE_RETRY_DELAY * Math.pow(2, attempt) + Math.random() * 100,
+                  5000 // Cap at 5 seconds max delay
+                );
+                console.log(`[FaceIndexing] Retry delay: ${Math.round(delay)}ms`);
+                return new Promise(resolve => setTimeout(resolve, delay));
+              };
+              
+              let retries = 0;
+              let success = false;
+              
+              while (!success && retries < MAX_RETRIES) {
+                try {
+                  // Get the current photo data
+                  const getPhotoCommand = new GetCommand({
+                    TableName: PHOTOS_TABLE,
+                    Key: {
+                      id: photoId
+                    }
+                  });
                   
-                matchedUsers.push(newMatchEntry);
-                
-                // Update the photo record
-                console.log(`[FaceIndexing] Updating photo ${photoId} with modified matched_users array (${matchedUsers.length} entries)`);
-                
-                const updatePhotoCommand = new PutCommand({
-                  TableName: PHOTOS_TABLE,
-                  Item: {
-                    ...photoData.Item,
-                    matched_users: matchedUsers,
-                    updated_at: new Date().toISOString()
-                  }
-                });
-                
-                await docClient.send(updatePhotoCommand);
-                console.log(`[FaceIndexing] ✅ Successfully updated matched_users for photo ${photoId}`);
-                success = true;
-              } catch (error) {
-                retries++;
-                console.error(`[FaceIndexing] Error updating matched_users for photo ${photoId} (Retry ${retries}/${MAX_RETRIES}):`, error);
-                
-                if (retries < MAX_RETRIES) {
-                  console.log(`[FaceIndexing] Retrying in ${RETRY_DELAY}ms...`);
-                  await sleep(RETRY_DELAY);
-                } else {
-                  console.error(`[FaceIndexing] Failed to update matched_users after ${MAX_RETRIES} retries for photo ${photoId}`);
-                }
-              }
-            }
-          }
-          console.log('[FaceIndexing] Finished updating all matched photos with current user ID');
-          
-          // Verification step - double check for any photos we might have missed
-          try {
-            // Wait 500ms to allow any eventual consistency issues to resolve
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            console.log('[FaceIndexing] Running verification check to ensure all photos were updated...');
-            
-            // Count types of matches for reporting
-            const matchTypes = {};
-            historicalMatches.forEach(match => {
-              matchTypes[match.matchType] = (matchTypes[match.matchType] || 0) + 1;
-            });
-            console.log(`[FaceIndexing] Match type breakdown: ${JSON.stringify(matchTypes)}`);
-            
-            // Only verify actual photo matches
-            const photoMatches = historicalMatches.filter(match => match.matchType === 'photo');
-            console.log(`[FaceIndexing] Verifying ${photoMatches.length} photo matches out of ${historicalMatches.length} total matches`);
-            
-            let missingUpdates = 0;
-            
-            for (const match of photoMatches) {
-              const photoId = match.id;
-              try {
-                const verifyCommand = new GetCommand({
-                  TableName: PHOTOS_TABLE,
-                  Key: { id: photoId }
-                });
-                
-                const photoData = await docClient.send(verifyCommand);
-                
-                if (!photoData || !photoData.Item) {
-                  continue;
-                }
-                
-                // Check if user is in matched_users
-                const matchedUsers = photoData.Item.matched_users || [];
-                const userIncluded = matchedUsers.some(match => {
-                  if (typeof match === 'object' && match !== null) {
-                    return (match.userId === userId || match.user_id === userId);
-                  } else if (typeof match === 'string') {
-                    return match === userId;
-                  }
-                  return false;
-                });
-                
-                if (!userIncluded) {
-                  missingUpdates++;
-                  console.log(`[FaceIndexing] ⚠️ User ${userId} missing from matched_users for photo ${photoId} - fixing`);
+                  const photoData = await docClient.send(getPhotoCommand);
                   
-                  // Add the user to matched_users
+                  if (!photoData || !photoData.Item) {
+                    console.log(`[FaceIndexing] Photo not found with ID: ${photoId}`);
+                    return false; // Skip to the next photo
+                  }
+                  
+                  // Extract and ensure matched_users is an array
+                  let matchedUsers = photoData.Item.matched_users || [];
+                  if (!Array.isArray(matchedUsers)) {
+                    matchedUsers = [];
+                  }
+                  
+                  // Check if current user is already in the matched_users array
+                  const alreadyMatched = matchedUsers.some(match => {
+                    if (typeof match === 'object' && match !== null) {
+                      const matchUserId = match.userId || match.user_id || '';
+                      return matchUserId.toLowerCase() === userId.toLowerCase();
+                    } else if (typeof match === 'string') {
+                      return match.toLowerCase() === userId.toLowerCase();
+                    }
+                    return false;
+                  });
+                  
+                  if (alreadyMatched) {
+                    console.log(`[FaceIndexing] User ${userId} already in matched_users for photo ${photoId}`);
+                    return true; // Consider this a success and move to next photo
+                  }
+                  
+                  // Get the match details for this photo
                   const matchInfo = historicalMatches.find(match => match.id === photoId);
+                  
+                  // Add the current user to matched_users
                   const newMatchEntry = {
                     userId: userId,
                     faceId: faceId,
-                    similarity: matchInfo ? matchInfo.similarity : 99, // Default if similarity not found
+                    similarity: matchInfo.similarity,
                     matchedAt: new Date().toISOString()
                   };
                   
+                  console.log(`[FaceIndexing] Adding user ${userId} to matched_users for photo ${photoId}:`, 
+                    JSON.stringify(newMatchEntry));
+                    
                   matchedUsers.push(newMatchEntry);
                   
-                  // Update the photo
-                  const updateCommand = new PutCommand({
+                  // Update the photo record
+                  console.log(`[FaceIndexing] Updating photo ${photoId} with modified matched_users array (${matchedUsers.length} entries)`);
+                  
+                  const updatePhotoCommand = new PutCommand({
                     TableName: PHOTOS_TABLE,
                     Item: {
                       ...photoData.Item,
@@ -700,20 +648,87 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
                     }
                   });
                   
-                  await docClient.send(updateCommand);
+                  await docClient.send(updatePhotoCommand);
+                  console.log(`[FaceIndexing] ✅ Successfully updated matched_users for photo ${photoId}`);
+                  success = true;
+                  return true;
+                } catch (error) {
+                  retries++;
+                  
+                  // Special handling for DynamoDB capacity errors
+                  if (error.name === 'ProvisionedThroughputExceededException' || 
+                      error.name === 'ThrottlingException' ||
+                      error.message?.includes('throughput exceeds') ||
+                      error.message?.includes('throttling')) {
+                    console.warn(`[FaceIndexing] DynamoDB capacity limit hit for photo ${photoId} (Retry ${retries}/${MAX_RETRIES})`);
+                  } else {
+                    console.error(`[FaceIndexing] Error updating matched_users for photo ${photoId} (Retry ${retries}/${MAX_RETRIES}):`, error);
+                  }
+                  
+                  if (retries < MAX_RETRIES) {
+                    console.log(`[FaceIndexing] Retrying with exponential backoff...`);
+                    await sleep(retries);
+                  } else {
+                    console.error(`[FaceIndexing] Failed to update matched_users after ${MAX_RETRIES} retries for photo ${photoId}`);
+                    return false;
+                  }
                 }
-              } catch (verifyError) {
-                console.error(`[FaceIndexing] Error verifying photo ${photoId}:`, verifyError);
               }
-            }
+              return false;
+            };
             
-            if (missingUpdates > 0) {
-              console.log(`[FaceIndexing] Fixed ${missingUpdates} photos that were missing the user in matched_users`);
-            } else {
-              console.log('[FaceIndexing] ✅ All photos correctly updated with user in matched_users');
+            // Process photos in parallel batches with concurrency control
+            const processBatchesInParallel = async (items, batchSize) => {
+              // Create batches of items
+              const batches = [];
+              for (let i = 0; i < items.length; i += batchSize) {
+                batches.push(items.slice(i, i + batchSize));
+              }
+              
+              console.log(`[FaceIndexing] PARALLEL: Created ${batches.length} batches of max ${batchSize} items each`);
+              
+              // Process ALL batches in parallel (not just items within batches)
+              // This is true massively parallel processing - multiple batches process simultaneously
+              const batchPromises = batches.map((batch, batchIndex) => {
+                console.log(`[FaceIndexing] PARALLEL: Starting batch ${batchIndex + 1}/${batches.length} with ${batch.length} items`);
+                
+                // Each batch processes its items in parallel
+                return Promise.all(
+                  batch.map(photoId => updatePhotoMatchedUsers(photoId))
+                ).then(results => {
+                  const successCount = results.filter(success => success).length;
+                  console.log(`[FaceIndexing] PARALLEL: Completed batch ${batchIndex + 1}/${batches.length}, ${successCount}/${batch.length} successful`);
+                  return results;
+                });
+              });
+              
+              // Wait for ALL batches to complete in parallel
+              const batchResults = await Promise.all(batchPromises);
+              
+              // Flatten results from all batches
+              return batchResults.flat();
+            };
+            
+            // Start the parallel update process in the background - don't wait for completion
+            // This allows us to return faster while updates continue in the background
+            const BATCH_SIZE = 40; // Process 40 photos at a time in parallel (increased from 25 for higher throughput)
+            
+            // Start the background update process but don't wait for it
+            const backgroundUpdatePromise = processBatchesInParallel(photoIdsToUpdate, BATCH_SIZE)
+              .then(results => {
+                const successCount = results.filter(success => success).length;
+                console.log(`[FaceIndexing] BACKGROUND: Completed matched_users updates: ${successCount}/${photoIdsToUpdate.length} successful`);
+                return { success: true, updatedCount: successCount };
+              })
+              .catch(error => {
+                console.error('[FaceIndexing] BACKGROUND: Error in batch processing:', error);
+                return { success: false, error: error.message };
+              });
+            
+            // Store the promise in case callers want to await completion
+            if (videoData) {
+              videoData.matchUpdatePromise = backgroundUpdatePromise;
             }
-          } catch (verifyError) {
-            console.error('[FaceIndexing] Error during verification step:', verifyError);
           }
         }
       } else {
@@ -724,7 +739,28 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
       // Don't fail the whole process if historical matching fails
     }
     
-    // Step 6: Store image and face data
+    // PARALLEL OPERATION 4: Check if video upload has completed
+    if (videoUploadPromise) {
+      try {
+        // Check status but don't await - it may still be uploading
+        const uploadStatus = await Promise.race([
+          videoUploadPromise,
+          new Promise(resolve => setTimeout(() => resolve({ pending: true }), 100))
+        ]);
+        
+        if (uploadStatus && !uploadStatus.pending && uploadStatus.videoUrl) {
+          console.log('[FaceIndexing] Video upload completed quickly, adding URL:', uploadStatus.videoUrl);
+          videoData.videoUrl = uploadStatus.videoUrl;
+        } else {
+          console.log('[FaceIndexing] Video upload still in progress, will continue in background');
+        }
+      } catch (error) {
+        console.warn('[FaceIndexing] Error checking video upload status:', error);
+        // Don't fail - video upload continues in background
+      }
+    }
+    
+    // Step 6: Store image and face data - storage service handles parallelization internally
     const imagePath = `${userId}/${Date.now()}.jpg`;
     console.log('[FaceIndexing] Storing face data with videoData, locationData, and deviceData');
     
@@ -757,13 +793,76 @@ export const indexFace = async (userId, imageBlob, locationData = null, videoDat
       imageUrl: storageResult.imageUrl || null,
       videoUrl: videoData?.videoUrl || null,
       locationData: locationData || null,
-      deviceData: deviceData || null
+      deviceData: deviceData || null,
+      // Include promises for background operations so caller can await them if needed
+      pendingOperations: {
+        videoUpload: videoUploadPromise,
+        matchUpdates: videoData?.matchUpdatePromise
+      }
     };
   } catch (error) {
     console.error('[FaceIndexing] Error indexing face:', error);
     return { success: false, error: error.message || 'Error indexing face' };
   }
 };
+
+/**
+ * Upload a video to S3 asynchronously
+ * @param {Blob} videoBlob - The video blob to upload
+ * @param {string} userId - User ID for the video path
+ * @returns {Promise<object>} Result with videoUrl if successful
+ */
+async function uploadVideoToS3(videoBlob, userId) {
+  if (!videoBlob || !userId) {
+    return { success: false, error: 'Missing video data or user ID' };
+  }
+  
+  try {
+    console.log('[FaceIndexing] Starting video upload to S3 for user:', userId);
+    
+    // Generate a unique video path
+    const videoId = Date.now().toString();
+    const videoPath = `videos/${userId}/${videoId}.mp4`;
+    
+    // Get the S3 client
+    const { s3Client } = await getAWSClients();
+    
+    // Convert video blob to buffer or Uint8Array
+    let videoBuffer;
+    if (videoBlob instanceof Blob) {
+      const arrayBuffer = await videoBlob.arrayBuffer();
+      videoBuffer = new Uint8Array(arrayBuffer);
+    } else {
+      // If it's already a buffer or Uint8Array, use it directly
+      videoBuffer = videoBlob;
+    }
+    
+    // Upload to S3
+    const params = {
+      Bucket: 'shmong', // Use your bucket name
+      Key: videoPath,
+      Body: videoBuffer,
+      ContentType: 'video/mp4'
+    };
+    
+    console.log('[FaceIndexing] Uploading video to S3:', videoPath);
+    await s3Client.send(new PutObjectCommand(params));
+    
+    // Generate a public URL for the video
+    const videoUrl = `https://shmong.s3.amazonaws.com/${videoPath}`;
+    console.log('[FaceIndexing] Video uploaded successfully:', videoUrl);
+    
+    return {
+      success: true,
+      videoUrl,
+      videoId,
+      videoPath
+    };
+  } catch (error) {
+    console.error('[FaceIndexing] Error uploading video to S3:', error);
+    return { success: false, error: error.message || 'Error uploading video' };
+  }
+}
 
 /**
  * Match a face against existing faces in the collection
@@ -782,7 +881,7 @@ const matchAgainstExistingFaces = async (userId, faceId) => {
     const command = new SearchFacesCommand({
       CollectionId: COLLECTION_ID,
       FaceId: faceId,
-      MaxFaces: 250,
+      MaxFaces: 1000,
       FaceMatchThreshold: FACE_MATCH_THRESHOLD
     });
     
