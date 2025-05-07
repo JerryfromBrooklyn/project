@@ -413,7 +413,10 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         // Add metadata for all files from Google Drive
         metaFields: [
           { id: 'userId', name: 'userId', getValue: () => userId },
-          { id: 'username', name: 'username', getValue: () => username }
+          { id: 'username', name: 'username', getValue: () => username },
+          { id: 'user_id', name: 'user_id', getValue: () => userId },
+          { id: 'uploadedBy', name: 'uploadedBy', getValue: () => userId },
+          { id: 'uploaded_by', name: 'uploaded_by', getValue: () => userId }
         ],
         locale: {
           strings: {
@@ -435,6 +438,35 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           scope: ['https://www.googleapis.com/auth/drive.readonly'],
           responseType: 'token',
           redirectUri: `${window.location.origin}/oauth/callback`
+        },
+        // Add this to ensure consistent file naming
+        getFileData: (file) => {
+          // Generate a unique identifier using timestamp and random string
+          const timestamp = Date.now();
+          const randomStr = Math.random().toString(36).substring(2, 8);
+          const uniqueId = `${timestamp}_${randomStr}`;
+          
+          // Get the file extension
+          const extension = file.name.split('.').pop();
+          const baseName = file.name.substring(0, file.name.lastIndexOf('.'));
+          
+          // Create a unique filename
+          const uniqueFileName = `${uniqueId}_${baseName}.${extension}`;
+          
+          return {
+            ...file,
+            name: uniqueFileName,
+            meta: {
+              ...file.meta,
+              userId: userId,
+              user_id: userId,
+              uploadedBy: userId,
+              uploaded_by: userId,
+              username: username,
+              originalName: file.name, // Store original name in metadata
+              uniqueId: uniqueId // Store the unique ID in metadata
+            }
+          };
         }
       });
 
