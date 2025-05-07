@@ -28,8 +28,25 @@ export const awsPhotoService = {
         // Generate a unique ID for this upload operation for better log tracking
         const uploadId = Math.random().toString(36).substring(2, 8);
         console.log(`🚀 [Upload ${uploadId}] Starting upload for ${file.name}`);
+        console.log(`📋 [Upload ${uploadId}] Received metadata:`, JSON.stringify(metadata, null, 2));
         
         try {
+            // Extract user ID from metadata (ensuring it's available)
+            // Look in all potential places where userId might be stored
+            const userId = metadata.userId || 
+                          metadata.user_id || 
+                          metadata.uploadedBy || 
+                          metadata.uploaded_by || 
+                          'default-user';
+            
+            // Extract username from metadata
+            const username = metadata.username || 'default-user';
+            
+            console.log(`👤 [Upload ${uploadId}] User info from metadata:`, {
+                userId: userId,
+                username: username
+            });
+            
             // IMPROVED EVENT DATA DEBUGGING
             console.log(`📋 [Upload ${uploadId}] EVENT DATA RECEIVED:`, {
                 // Flat properties
@@ -55,48 +72,6 @@ export const awsPhotoService = {
             console.log('   Folder Path:', folderPath);
             console.log('   Metadata:', JSON.stringify(metadata, null, 2));
             
-            // Get user ID from metadata or localStorage
-            let userId = metadata?.user_id || metadata?.uploaded_by || metadata?.uploadedBy;
-            console.log(`   User ID from metadata: ${userId}`);
-            
-            // If userId is not in metadata, try to get it from localStorage
-            if (!userId) {
-                try {
-                    // Try to get the user from authUser in localStorage
-                    const userStr = localStorage.getItem('authUser');
-                    if (userStr) {
-                        const user = JSON.parse(userStr);
-                        if (user && user.id) {
-                            userId = user.id;
-                            console.log(`   User ID from localStorage authUser: ${userId}`);
-                        } else {
-                            console.warn(`   Invalid user object in localStorage authUser: ${userStr}`);
-                        }
-                    } else {
-                        // Try the aws_auth_session as a fallback
-                        const sessionStr = localStorage.getItem('aws_auth_session');
-                        if (sessionStr) {
-                            console.log(`   Found aws_auth_session, attempting to get current user...`);
-                            // This is an async operation but we're inside an async function, so we can await
-                            const { getCurrentUser } = await import('./awsAuthService');
-                            const currentUser = await getCurrentUser();
-                            if (currentUser && currentUser.id) {
-                                userId = currentUser.id;
-                                console.log(`   User ID from AWS auth service: ${userId}`);
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error(`   Error retrieving user from storage:`, error);
-                }
-            }
-            
-            // Use 'unknown' as fallback if userId is still not found
-            if (!userId) {
-                console.warn(`⚠️ No user ID found in metadata or localStorage. Using 'unknown' as default.`);
-                userId = 'unknown';
-            }
-            
             // Generate UUID for the file
             const fileId = uuidv4();
             
@@ -111,11 +86,11 @@ export const awsPhotoService = {
                 }
             }
             
-            // File path with userId (which now has a fallback)
+            // File path with userId and username 
             const fileName = `${fileId}_${file.name}`;
             const path = cleanFolderPath 
-                ? `photos/${userId}/${cleanFolderPath}${fileName}` // Folder path included
-                : `photos/${userId}/${fileName}`; // No folder path
+                ? `photos/${userId}/${username}/${cleanFolderPath}${fileName}` // Folder path included
+                : `photos/${userId}/${username}/${fileName}`; // No folder path
                 
             console.log(`   Generated S3 path: ${path}`);
             console.log(`   Generated photo ID: ${fileId}`);
@@ -143,6 +118,7 @@ export const awsPhotoService = {
             let photoMetadata = {
                 id: fileId,
                 user_id: userId,
+                username: username,
                 storage_path: path,
                 url: publicUrl,
                 public_url: publicUrl,

@@ -241,6 +241,15 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     console.log('🚀 [Uppy] Initializing Uppy instance');
     
     try {
+      // Get user info
+      const userId = user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '';
+      const username = user?.username || JSON.parse(localStorage.getItem('authUser'))?.username || '';
+      
+      console.log('👤 [Uppy] User info for initialization:', { userId, username });
+      
+      // Don't append params to base URL as it breaks provider connections
+      const companionBaseUrl = import.meta.env.VITE_COMPANION_URL;
+      
       const uppyInstance = new Uppy({
         id: 'photo-uploader',
         autoProceed: false,
@@ -250,10 +259,11 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         },
         meta: {
           // Get user ID from localStorage
-          userId: JSON.parse(localStorage.getItem('authUser'))?.id || '',
-          user_id: JSON.parse(localStorage.getItem('authUser'))?.id || '',
-          uploadedBy: JSON.parse(localStorage.getItem('authUser'))?.id || '',
-          uploaded_by: JSON.parse(localStorage.getItem('authUser'))?.id || '',
+          userId: userId,
+          user_id: userId,
+          uploadedBy: userId,
+          uploaded_by: userId,
+          username: username,
           eventId: eventId || '',
           timestamp: Date.now()
         }
@@ -261,22 +271,70 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       .use(AwsS3Multipart, {
         limit: 5,
         retryDelays: [0, 1000, 3000, 5000],
-        companionUrl: import.meta.env.VITE_COMPANION_URL,
+        companionUrl: companionBaseUrl,
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
+          'X-User-Data': JSON.stringify({
+            userId: userId,
+            username: username
+          })
+        },
+        getChunkSize: () => 10 * 1024 * 1024, // 10MB chunks
+        allowedMetaFields: [
+          'userId', 'user_id', 'uploadedBy', 'uploaded_by', 
+          'username', 'eventId', 'folderPath', 'timestamp',
+          'eventName', 'venueName', 'promoterName', 'date', 'albumLink',
+          'location', 'event_details', 'venue', 'promoter', 'externalAlbumLink',
+          'title', 'description', 'tags', 'isPrivate', 'source'
+        ],
+        metadata: {
+          userId: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+          user_id: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+          uploadedBy: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+          uploaded_by: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+          username: user?.username || JSON.parse(localStorage.getItem('authUser'))?.username || ''
         },
         getUploadParameters: async (file) => {
           console.log('📤 [Uppy] Getting upload parameters for file:', file.name);
+          console.log('🔑 [Uppy] File metadata before upload:', JSON.stringify(file.meta));
+          
           try {
             const fileData = new File([file.data], file.name, { type: file.type });
             
+            // Make sure user info is available
+            console.log('👤 [Uppy] Current user info:', {
+              id: user?.id || 'not set',
+              username: user?.username || 'not set',
+              localStorage: {
+                userId: JSON.parse(localStorage.getItem('authUser'))?.id || 'not in localStorage',
+                username: JSON.parse(localStorage.getItem('authUser'))?.username || 'not in localStorage'
+              }
+            });
+            
+            // Ensure metadata is set for this specific file (may be needed if file.meta is missing some fields)
+            if (!file.meta.userId && !file.meta.user_id) {
+              console.log('⚠️ [Uppy] Adding missing user ID to file metadata');
+              uppy.setFileMeta(file.id, {
+                userId: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+                user_id: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+                uploadedBy: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+                uploaded_by: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+                username: user?.username || JSON.parse(localStorage.getItem('authUser'))?.username || ''
+              });
+            }
+            
             const uploadMetadata = {
               ...metadata,
-              user_id: user?.id || '',
-              uploadedBy: user?.id || '',
-              uploaded_by: user?.id || '',
+              ...file.meta, // Include the file's own metadata
+              userId: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '', // Add userId explicitly
+              user_id: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+              uploadedBy: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+              uploaded_by: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+              username: user?.username || JSON.parse(localStorage.getItem('authUser'))?.username || '',
               externalAlbumLink: metadata.albumLink || ''
             };
+
+            console.log('📤 [Uppy] Sending metadata to companion:', JSON.stringify(uploadMetadata));
 
             const result = await awsPhotoService.uploadPhoto(fileData, eventId, file.meta?.folderPath || '', uploadMetadata);
 
@@ -309,14 +367,30 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
 
       // Initialize Dropbox plugin with proper configuration
       uppyInstance.use(DropboxPlugin, {
-        companionUrl: import.meta.env.VITE_COMPANION_URL,
+        companionUrl: companionBaseUrl, // Use the base URL without query params
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
+          'X-User-Data': JSON.stringify({
+            userId: userId,
+            username: username
+          })
         },
         companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL],
+        // Add metadata for all files from Dropbox
+        metaFields: [
+          { id: 'userId', name: 'userId', getValue: () => userId },
+          { id: 'username', name: 'username', getValue: () => username }
+        ],
         locale: {
           strings: {
             // Add any custom strings here
+          }
+        },
+        socketOptions: {
+          // Add user data to socket connection query params
+          query: {
+            userId: userId,
+            username: username
           }
         },
         oauth: {
@@ -327,34 +401,110 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
 
       // Initialize Google Drive plugin
       uppyInstance.use(GoogleDrivePlugin, {
-        companionUrl: import.meta.env.VITE_COMPANION_URL,
+        companionUrl: companionBaseUrl,
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
+          'X-User-Data': JSON.stringify({
+            userId: userId,
+            username: username
+          })
         },
         companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL],
+        // Add metadata for all files from Google Drive
+        metaFields: [
+          { id: 'userId', name: 'userId', getValue: () => userId },
+          { id: 'username', name: 'username', getValue: () => username }
+        ],
         locale: {
           strings: {
             // Add any custom strings here
           }
         },
+        socketOptions: {
+          // Add user data to socket connection query params
+          query: {
+            userId: userId,
+            username: username
+          }
+        },
         oauth: {
           transport: 'session',
-          domain: import.meta.env.VITE_COMPANION_URL
+          domain: import.meta.env.VITE_COMPANION_URL,
+          // Add these options to handle authentication better
+          clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+          scope: ['https://www.googleapis.com/auth/drive.readonly'],
+          responseType: 'token',
+          redirectUri: `${window.location.origin}/oauth/callback`
         }
       });
 
       // Initialize URL plugin
       uppyInstance.use(UrlPlugin, {
-        companionUrl: import.meta.env.VITE_COMPANION_URL,
+        companionUrl: companionBaseUrl, // Use the base URL without query params
         companionHeaders: {
           Authorization: `Bearer ${user?.accessToken || ''}`,
+          'X-User-Data': JSON.stringify({
+            userId: userId,
+            username: username
+          })
         },
         companionAllowedHosts: [import.meta.env.VITE_COMPANION_URL],
+        // Add metadata for all files from URL
+        metaFields: [
+          { id: 'userId', name: 'userId', getValue: () => userId },
+          { id: 'username', name: 'username', getValue: () => username }
+        ],
         locale: {
           strings: {
             // Add any custom strings here
           }
         },
+      });
+
+      // Add authentication to socket connection
+      uppyInstance.on('connect', (target) => {
+        console.log('🔌 [Uppy] Socket connected to', target);
+        
+        // Send auth data through socket connection
+        if (uppyInstance.getPlugin('DropboxPlugin')?.socket || 
+            uppyInstance.getPlugin('GoogleDrivePlugin')?.socket) {
+          try {
+            console.log('🔑 [Uppy] Sending auth data via socket connection');
+            const socket = uppyInstance.getPlugin('DropboxPlugin')?.socket || 
+                          uppyInstance.getPlugin('GoogleDrivePlugin')?.socket;
+            
+            if (socket && socket.emit) {
+              socket.emit('auth', {
+                userId: userId,
+                username: username
+              });
+            }
+          } catch (error) {
+            console.error('❌ [Uppy] Error sending auth via socket:', error);
+          }
+        }
+      });
+
+      // For all remote source files, make sure they have user info
+      uppyInstance.on('file-added', (file) => {
+        console.log(`📄 [Uppy] File added from source ${file.source || 'local'}:`, file.name);
+        
+        // If file comes from a remote source, ensure it has the required metadata
+        if (file.source && (file.source === 'dropbox' || file.source === 'drive' || file.source === 'url')) {
+          console.log(`🔄 [Uppy] Setting metadata for file from ${file.source}:`, file.name);
+          uppyInstance.setFileMeta(file.id, {
+            userId: userId,
+            user_id: userId,
+            uploadedBy: userId,
+            uploaded_by: userId,
+            username: username,
+            eventId: eventId || '',
+            timestamp: Date.now(),
+            ...metadata,
+            // Add source info
+            source: file.source
+          });
+        }
       });
 
       // Add listeners using the refs
@@ -410,8 +560,8 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           instance.off('complete', handlersRef.current.handleBatchComplete);
           instance.off('error', handlersRef.current.handleUploadError);
           
-          // Close the instance
-          instance.close();
+          // Reset the instance
+          instance.reset();
           
           // Destroy the instance
           instance.destroy();
@@ -429,13 +579,23 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   // Update Uppy metadata when user or event changes
   useEffect(() => {
     if (uppyRef.current && (user?.id || eventId)) {
+      console.log('🔄 [Uppy] Updating global metadata with user/event info:', {
+        userId: user?.id,
+        eventId: eventId,
+        username: user?.username
+      });
+      
       uppyRef.current.setMeta({
         userId: user?.id || '',
+        user_id: user?.id || '',
+        uploadedBy: user?.id || '',
+        uploaded_by: user?.id || '',
+        username: user?.username || '',
         eventId: eventId || '',
         ...metadata
       });
     }
-  }, [user?.id, eventId, metadata]);
+  }, [user?.id, user?.username, eventId, metadata]);
 
   // Ensure handleFileAdded, handleFileRemoved, etc. are defined with useCallback or outside the component
   const handleFileAdded = useCallback((file) => {
@@ -730,6 +890,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       location: metadata.location || { address: null, lat: null, lng: null },
       externalAlbumLink: metadata.albumLink || null,
       uploaded_by: user?.id,
+      username: user?.username || JSON.parse(localStorage.getItem('authUser'))?.username || '',
       created_at: new Date().toISOString()
     };
 
@@ -852,14 +1013,29 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   // Handle file drops
   const onDrop = (acceptedFiles) => {
     acceptedFiles.forEach(file => {
+      // Log the current user info
+      console.log('👤 [Uppy] Adding file with user context:', {
+        id: user?.id || 'not set',
+        username: user?.username || 'not set'
+      });
+      
+      const fileMeta = {
+        ...metadata,
+        userId: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+        user_id: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+        uploadedBy: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+        uploaded_by: user?.id || JSON.parse(localStorage.getItem('authUser'))?.id || '',
+        username: user?.username || JSON.parse(localStorage.getItem('authUser'))?.username || '',
+        folderPath: file.path || '' // If available from the file system
+      };
+      
+      console.log('🔖 [Uppy] Adding file with metadata:', JSON.stringify(fileMeta));
+      
       uppy?.addFile({
         name: file.name,
         type: file.type,
         data: file,
-        meta: {
-          ...metadata,
-          folderPath: file.path // If available from the file system
-        }
+        meta: fileMeta
       });
     });
   };
