@@ -400,134 +400,215 @@ const DETECTED_FACES_TABLE = process.env.DYNAMODB_FACES_TABLE || 'shmong-detecte
 
 // Function to process an uploaded file (similar to awsPhotoService.uploadPhoto)
 const processUploadedFile = async (s3Path, fileData, metadata) => {
-  console.log('------------------------------------');
-  console.log(`🔍 [COMPANION] Processing file: ${s3Path}`);
-  console.log('Metadata:', metadata);
-  console.log('------------------------------------');
-
   try {
-    // Ensure AWS services are initialized
+    console.log('------------------------------------');
+    console.log(`🔍 [COMPANION] PROCESSING UPLOADED FILE: ${s3Path}`);
+    console.log('------------------------------------');
+    
+    // Validate AWS services are available
     if (!s3Client || !rekognitionClient || !docClient) {
-      throw new Error('AWS services not initialized');
+      console.error('❌ [COMPANION] AWS services not initialized');
+      return { success: false, error: 'AWS services not initialized' };
     }
-
-    const userId = metadata.userId || 'default-user';
+    
+    // Parse metadata
+    const userId = metadata.userId || metadata.user_id || 'default-user';
     const username = metadata.username || 'default-user';
+    
+    // Generate photo ID
     const photoId = uuid();
     
-    // Format S3 path to remove any leading slashes
-    const formattedS3Path = s3Path.replace(/^\/+/, '');
+    // 1. File should already be in S3, construct URL
+    const bucketName = process.env.COMPANION_AWS_BUCKET;
     
-    // 1. Verify the file exists in S3
+    // Format S3 paths consistently - ensure no double-slashes
+    let formattedS3Path = s3Path;
+    if (formattedS3Path.startsWith('/')) {
+      formattedS3Path = formattedS3Path.substring(1);
+    }
+    
+    // Construct S3 URL
+    const s3Url = `https://${bucketName}.s3.amazonaws.com/${formattedS3Path}`;
+    console.log(`🔗 [COMPANION] S3 URL: ${s3Url}`);
+    
+    // 2. Check if the file exists in S3
+    let s3FileExists = false;
     try {
       await s3Client.headObject({
-        Bucket: process.env.COMPANION_AWS_BUCKET,
+        Bucket: bucketName,
         Key: formattedS3Path
       }).promise();
-      console.log('✅ [COMPANION] File exists in S3');
+      s3FileExists = true;
+      console.log(`✅ [COMPANION] File exists in S3: ${formattedS3Path}`);
     } catch (error) {
-      console.error('❌ [COMPANION] File not found in S3:', error);
-      throw new Error('File not found in S3');
+      console.error(`❌ [COMPANION] File not found in S3 or access error: ${formattedS3Path}`, error);
+      // We'll continue and try to create database record anyway
     }
-
-    // 2. Detect faces using Rekognition
-    console.log('👥 [COMPANION] Detecting faces...');
-    const detectFacesResponse = await rekognitionClient.detectFaces({
-      Image: {
-        S3Object: {
-          Bucket: process.env.COMPANION_AWS_BUCKET,
-          Name: formattedS3Path
-        }
-      },
-      Attributes: ['ALL']
-    }).promise();
-
-    const faces = detectFacesResponse.FaceDetails || [];
-    console.log(`✅ [COMPANION] Detected ${faces.length} faces`);
-
-    // 3. If faces found, search for matches
-    let matched_users = [];
-    if (faces.length > 0) {
-      console.log(`🔍 [COMPANION] Searching for matches in collection: ${FACE_COLLECTION_ID}`);
+    
+    // 3. Process faces with Amazon Rekognition
+    let facesData = [];
+    let matchedUsers = [];
+    
+    if (s3FileExists) {
       try {
-        const searchFacesResponse = await rekognitionClient.searchFacesByImage({
-          CollectionId: FACE_COLLECTION_ID,
+        console.log(`🔍 [COMPANION] Detecting faces in: ${formattedS3Path}`);
+        const detectFacesResponse = await rekognitionClient.detectFaces({
           Image: {
             S3Object: {
-              Bucket: process.env.COMPANION_AWS_BUCKET,
+              Bucket: bucketName,
               Name: formattedS3Path
             }
           },
-          MaxFaces: 5,
-          FaceMatchThreshold: 80
+          Attributes: ['ALL']
         }).promise();
-
-        if (searchFacesResponse.FaceMatches && searchFacesResponse.FaceMatches.length > 0) {
-          console.log(`✅ [COMPANION] Found ${searchFacesResponse.FaceMatches.length} matches`);
+        
+        console.log(`🧠 [COMPANION] Face detection results:`, JSON.stringify(detectFacesResponse, null, 2));
+        
+        if (detectFacesResponse.FaceDetails && detectFacesResponse.FaceDetails.length > 0) {
+          facesData = detectFacesResponse.FaceDetails.map((face, index) => ({
+            id: `face-${photoId}-${index}`,
+            confidence: face.Confidence,
+            boundingBox: face.BoundingBox,
+            landmarks: face.Landmarks,
+            pose: face.Pose,
+            quality: face.Quality,
+            emotions: face.Emotions,
+            age_range: face.AgeRange,
+            gender: face.Gender,
+            face_index: index
+          }));
           
-          // Get user details for each matched face
-          matched_users = await Promise.all(
-            searchFacesResponse.FaceMatches.map(async (match) => {
-              const faceId = match.Face.FaceId;
-              try {
-                const userResult = await docClient.query({
-                  TableName: DETECTED_FACES_TABLE,
-                  KeyConditionExpression: 'face_id = :faceId',
-                  ExpressionAttributeValues: {
-                    ':faceId': faceId
+          console.log(`🧠 [COMPANION] Detected ${facesData.length} faces in photo`);
+          
+          // Skip face search if no faces detected
+          if (facesData.length > 0) {
+            // Search for matching faces in our collection
+            console.log(`🔍 [COMPANION] Searching for matches in collection: ${FACE_COLLECTION_ID}`);
+            try {
+              const searchFacesResponse = await rekognitionClient.searchFacesByImage({
+                CollectionId: FACE_COLLECTION_ID,
+                Image: {
+                  S3Object: {
+                    Bucket: bucketName,
+                    Name: formattedS3Path
                   }
-                }).promise();
-
-                const userData = userResult.Items[0] || {};
-                return {
-                  faceId,
-                  similarity: match.Similarity,
-                  userId: userData.user_id,
-                  name: userData.name
-                };
-              } catch (error) {
-                console.error(`❌ [COMPANION] Error getting user data for face ${faceId}:`, error);
-                return { faceId, similarity: match.Similarity };
+                },
+                MaxFaces: 5,
+                FaceMatchThreshold: 80
+              }).promise();
+              
+              console.log(`🔍 [COMPANION] Face match results:`, JSON.stringify(searchFacesResponse, null, 2));
+              
+              if (searchFacesResponse.FaceMatches && searchFacesResponse.FaceMatches.length > 0) {
+                // Process each matched face
+                for (const match of searchFacesResponse.FaceMatches) {
+                  const faceId = match.Face.FaceId;
+                  const similarity = match.Similarity;
+                  
+                  // Get user associated with this face from DynamoDB
+                  const getUserParams = {
+                    TableName: DETECTED_FACES_TABLE,
+                    KeyConditionExpression: 'face_id = :faceId',
+                    ExpressionAttributeValues: {
+                      ':faceId': faceId
+                    }
+                  };
+                  
+                  const userResult = await docClient.query(getUserParams).promise();
+                  
+                  if (userResult.Items && userResult.Items.length > 0) {
+                    const userItem = userResult.Items[0];
+                    console.log(`🔍 [COMPANION] Found user for face ${faceId}:`, userItem);
+                    
+                    // Add to matched users array
+                    matchedUsers.push({
+                      userId: userItem.user_id,
+                      faceId: faceId,
+                      similarity: similarity,
+                      name: userItem.username || userItem.name || 'Unknown User'
+                    });
+                  } else {
+                    console.log(`🔍 [COMPANION] No user found for face ${faceId}`);
+                  }
+                }
+                
+                console.log(`🔍 [COMPANION] Found ${matchedUsers.length} matching users`);
+              } else {
+                console.log(`🔍 [COMPANION] No matching faces found in collection`);
               }
-            })
-          );
+            } catch (error) {
+              console.error(`❌ [COMPANION] Error searching for faces:`, error);
+              // Continue with the upload without face matches
+            }
+          }
+        } else {
+          console.log(`🧠 [COMPANION] No faces detected in photo`);
         }
       } catch (error) {
-        console.error('❌ [COMPANION] Error searching faces:', error);
+        console.error(`❌ [COMPANION] Error processing faces:`, error);
+        // Continue with the upload without face processing
       }
+    } else {
+      console.warn(`⚠️ [COMPANION] Skipping face processing because file not found in S3`);
     }
-
-    // 4. Save photo metadata to DynamoDB
-    const photoData = {
-      photo_id: photoId,
+    
+    // 4. Save metadata to DynamoDB
+    console.log(`💾 [COMPANION] Saving photo metadata to DynamoDB`);
+    
+    const now = new Date().toISOString();
+    const photoMetadata = {
+      id: photoId,
       user_id: userId,
+      userId: userId, // duplicate for consistent access
       username: username,
-      upload_date: new Date().toISOString(),
-      s3_path: formattedS3Path,
-      url: `https://${process.env.COMPANION_AWS_BUCKET}.s3.amazonaws.com/${formattedS3Path}`,
-      faces: faces,
-      matched_users: matched_users,
-      metadata: metadata
+      created_at: now,
+      updated_at: now,
+      storage_path: formattedS3Path,
+      url: s3Url,
+      public_url: s3Url, // duplicate for consistent access
+      file_size: fileData.size || 0,
+      file_type: fileData.type || 'image/jpeg',
+      // Add optional metadata fields if provided
+      eventId: metadata.eventId || '',
+      eventName: metadata.eventName || '',
+      venueName: metadata.venueName || '',
+      promoterName: metadata.promoterName || '',
+      date: metadata.date || now.split('T')[0],
+      // Add nested structures if available
+      event_details: metadata.event_details || {},
+      venue: metadata.venue || {},
+      promoter: metadata.promoter || {},
+      location: metadata.location || {},
+      // Add face data
+      faces: facesData,
+      matched_users: matchedUsers,
+      matched_users_list: matchedUsers, // Add extra field for consistent access
+      // Source tracking (for UI filtering and identification) 
+      source: metadata.source || 'companion',
+      // Timestamp for sorting
+      timestamp: Date.now()
     };
-
-    await docClient.put({
+    
+    // Save to DynamoDB
+    const params = {
       TableName: PHOTOS_TABLE,
-      Item: photoData
-    }).promise();
-
-    console.log('✅ [COMPANION] Saved photo metadata to DynamoDB');
-
+      Item: photoMetadata
+    };
+    
+    await docClient.put(params).promise();
+    console.log(`✅ [COMPANION] Saved photo metadata to DynamoDB: ${photoId}`);
+    
     return {
       success: true,
-      photoId,
-      url: photoData.url,
-      faces,
-      matched_users,
-      storage_path: formattedS3Path
+      photoId: photoId,
+      photoMetadata: photoMetadata
     };
   } catch (error) {
-    console.error('❌ [COMPANION] Error in processUploadedFile:', error);
-    throw error;
+    console.error(`❌ [COMPANION] Error processing uploaded file:`, error);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 };
 
@@ -1046,63 +1127,153 @@ if (companionSocket && companionSocket.on) {
     
     // Listen for upload complete events from client
     socket.on('upload-complete', async (data) => {
-      console.log('------------------------------------');
-      console.log('📥 [COMPANION] Received upload-complete event:', data);
-      console.log('------------------------------------');
-
       try {
-        const { uploadId, userId, username, source, fileData, metadata } = data;
+        console.log('------------------------------------');
+        console.log('🚨🚨🚨 [COMPANION] UPLOAD COMPLETE EVENT RECEIVED 🚨🚨🚨');
+        console.log('------------------------------------');
+        console.log('📤 [COMPANION] Upload complete event received on socket:', JSON.stringify(data, null, 2));
         
-        // Get the storage path from the companion metadata
-        const storagePath = await getStoragePath(uploadId);
-        if (!storagePath) {
-          console.error('❌ [COMPANION] No storage path found for upload:', uploadId);
-          socket.emit('upload-processed', {
-            success: false,
-            uploadId,
-            error: 'No storage path found'
+        // Store mapping from upload ID to S3 path/URL if available
+        if (data.uploadURL) {
+          const bucketName = process.env.COMPANION_AWS_BUCKET;
+          const s3Path = data.uploadURL.replace(`https://${bucketName}.s3.amazonaws.com/`, '');
+          console.log(`🔄 [COMPANION] Storing mapping for upload ${data.uploadId} to path ${s3Path}`);
+          
+          // Store by multiple identifiers to improve matching chances
+          if (data.uploadId) userMetadataStore.set(`uploadId:${data.uploadId}`, { s3Path, uploadId: data.uploadId });
+          if (s3Path) userMetadataStore.set(`s3key:${s3Path}`, { 
+            userId: data.metadata?.userId || userMetadataStore.get(socket.id)?.userId,
+            username: data.metadata?.username || userMetadataStore.get(socket.id)?.username,
+            uploadId: data.uploadId
           });
-          return;
         }
-
-        console.log(`📁 [COMPANION] Found storage path: ${storagePath}`);
-
-        // Process the uploaded file with explicit logging
-        const result = await processUploadedFile(storagePath, fileData, {
-          ...metadata,
-          userId,
-          username,
-          source,
-          uploadId
-        });
-
-        console.log('------------------------------------');
-        console.log('✅ [COMPANION] Processing result:', result);
-        console.log('------------------------------------');
-
-        // Send the processing result back to the client
-        socket.emit('upload-processed', {
-          success: true,
-          uploadId,
-          photoId: result.photoId,
-          url: result.url,
-          faces: result.faces,
-          matched_users: result.matched_users,
-          storage_path: storagePath,
-          processing_complete: true
-        });
+        
+        // Add socket ID to the payload
+        data.socketId = socket.id;
+        
+        // Get user data from our store for this socket
+        const userData = userMetadataStore.get(socket.id) || {};
+        
+        // Combine with data from the event
+        const enhancedData = {
+          ...data,
+          metadata: {
+            ...data.metadata,
+            userId: userData.userId || data.metadata?.userId,
+            user_id: userData.userId || data.metadata?.user_id,
+            username: userData.username || data.metadata?.username,
+            eventId: userData.eventId || data.metadata?.eventId,
+            timestamp: Date.now(),
+            source: data.metadata?.source || 'dropbox'
+          }
+        };
+        
+        console.log('📦 [COMPANION] Enhanced data for processing:', JSON.stringify(enhancedData, null, 2));
+        
+        // ADDED: Check if this is a Dropbox or Google Drive file that needs explicit processing
+        const isRemoteUpload = 
+          data.source === 'dropbox' || 
+          data.source === 'googledrive' || 
+          data.isDropbox || 
+          data.isGoogleDrive ||
+          (data.metadata && (data.metadata.source === 'dropbox' || data.metadata.source === 'googledrive'));
+        
+        if (isRemoteUpload) {
+          console.log('------------------------------------');
+          console.log('🚨🚨🚨 DETECTED REMOTE UPLOAD - FORCING FACE PROCESSING 🚨🚨🚨');
+          console.log('------------------------------------');
+          
+          // Determine the S3 path - multiple ways to get it
+          let s3Path = null;
+          
+          // Option 1: Direct uploadURL to S3
+          if (data.uploadURL) {
+            const bucketName = process.env.COMPANION_AWS_BUCKET;
+            s3Path = data.uploadURL.replace(`https://${bucketName}.s3.amazonaws.com/`, '');
+            console.log(`🔄 [COMPANION] Using uploadURL to determine S3 path: ${s3Path}`);
+          } 
+          // Option 2: Constructed based on userId and fileId
+          else {
+            // Format: photos/userId/source/fileId
+            const userId = enhancedData.metadata.userId || userData.userId || DEFAULT_USER_ID;
+            const source = data.source || 'dropbox';
+            const fileId = data.uploadId || data.id || data.photoId || 'unknown';
+            s3Path = `photos/${userId}/${source}/${fileId}`;
+            console.log(`🔄 [COMPANION] Constructed S3 path for remote file: ${s3Path}`);
+          }
+          
+          // Ensure we have the file information for processing
+          const fileData = {
+            size: data.fileSize || data.size || 0,
+            type: data.fileType || data.type || data.file?.type || 'image/jpeg'
+          };
+          
+          // Process the file using the Rekognition handling
+          console.log(`🔄 [COMPANION] EXPLICITLY PROCESSING REMOTE UPLOAD: ${s3Path}`);
+          const processingResult = await processUploadedFile(s3Path, fileData, enhancedData.metadata);
+          
+          console.log('🔄 [COMPANION] EXPLICIT PROCESSING RESULT:', JSON.stringify(processingResult, null, 2));
+          
+          // Use this result for the response
+          if (processingResult.success) {
+            // Send success back to client
+            console.log(`🔔 [COMPANION] Emitting explicit success for remote file to socket ${socket.id}`);
+            socket.emit('upload-processed', {
+              success: true,
+              photoId: processingResult.photoId,
+              photoMetadata: processingResult.photoMetadata,
+              uploadId: data.uploadId,
+              explicitProcessing: true // Flag to indicate this was processed explicitly
+            });
+            
+            return; // Skip normal processing flow
+          }
+        }
+        
+        // Process the upload with combined data (normal flow for non-remote uploads)
+        const result = await handleUploadComplete(enhancedData);
+        
+        if (result && result.success) {
+          // Emit success back to client
+          console.log(`🔔 [COMPANION] Emitting success to socket ${socket.id} for photo ${result.photoId}`);
+          socket.emit('upload-processed', {
+            success: true,
+            photoId: result.photoId,
+            photoMetadata: result.photoMetadata,
+            uploadId: data.uploadId // Include the original uploadId for client-side matching
+          });
+          
+          // Also broadcast a global event in case this socket gets disconnected
+          socket.broadcast.emit('global-upload-processed', {
+            success: true,
+            photoId: result.photoId,
+            uploadId: data.uploadId,
+            s3Path: result.photoMetadata.storage_path,
+            userId: result.photoMetadata.user_id || result.photoMetadata.userId
+          });
+        } else {
+          throw new Error(result?.error || 'Unknown error processing upload');
+        }
       } catch (error) {
-        console.error('❌ [COMPANION] Error processing upload:', error);
+        console.error('❌ [COMPANION] Error processing upload-complete event:', error);
         socket.emit('upload-processed', {
           success: false,
-          uploadId: data.uploadId,
-          error: error.message
+          error: error.message,
+          uploadId: data.uploadId // Include uploadId even on errors for client-side matching
         });
       }
     });
     
     socket.on('disconnect', () => {
       console.log(`🔌 [COMPANION] Socket disconnected: ${socket.id}`);
+      // Clean up metadata for this socket
+      userMetadataStore.delete(socket.id);
+      
+      // Don't delete session mappings as they might be needed for other connections
     });
   });
-}
+  
+  console.log('✅ [COMPANION] Registered socket event handlers');
+} else {
+  console.warn('⚠️ [COMPANION] No socket handler available, falling back to hooks');
+} 
