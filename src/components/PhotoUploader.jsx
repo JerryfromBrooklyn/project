@@ -733,7 +733,19 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       });
 
       // For all remote source files, make sure they have user info
+      // Track already processed files to prevent duplicates
+      const processedFileIds = new Set();
+      
       uppyInstance.on('file-added', (file) => {
+        // Skip if we've already processed this file
+        if (processedFileIds.has(file.id)) {
+          console.log(`⚠️ [Uppy] Skipping duplicate file-added event for ${file.id}`);
+          return;
+        }
+        
+        // Mark this file as processed
+        processedFileIds.add(file.id);
+        
         console.log(`📄 [Uppy] File added from source ${file.source || 'local'}:`, file.name);
         
         // Set metadata for all files, regardless of source
@@ -939,6 +951,13 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   const handleFileAdded = useCallback((file) => {
     if (!file) {
       console.error('❌ [Uppy] handleFileAdded: No file object provided');
+      return;
+    }
+
+    // Check if file already exists in uploads array
+    const fileExists = uploads.some(u => u.id === file.id);
+    if (fileExists) {
+      console.log(`⚠️ [Uppy] Skipping duplicate file in handleFileAdded: ${file.id}`);
       return;
     }
 
@@ -1568,8 +1587,10 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
               source: uploadSource
             };
             
-            // Add it to our collection for processing
-            missingRemoteUploads.push(upload);
+            // Only add this upload if it doesn't already exist
+            if (!uploads.some(u => u.id === successfulUpload.id)) {
+              missingRemoteUploads.push(upload);
+            }
           }
         } else {
           // Ensure existing upload has the correct source
