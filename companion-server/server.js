@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuid } = require('uuid');
 const AWS = require('aws-sdk');
+const axios = require('axios');
 
 // Debug: Check if .env file exists
 const envPath = path.join(__dirname, '.env');
@@ -420,91 +421,162 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
     
     console.log(`📊 [COMPANION] Starting face detection and indexing for ${s3Path}`);
     
-    // 2. Index faces using Rekognition
-    const indexParams = {
-      CollectionId: COLLECTION_ID,
-      Image: {
-        S3Object: {
-          Bucket: bucketName,
-          Name: s3Path
-        }
-      },
-      DetectionAttributes: ["ALL"],
-      ExternalImageId: `photo_${photoId}`,
-      MaxFaces: 10,
-      QualityFilter: "AUTO"
-    };
+    // Check if this is a remote source (Dropbox or Google Drive)
+    const isRemoteSource = metadata.source === 'dropbox' || 
+                          metadata.source === 'googledrive' || 
+                          s3Path.includes('dropbox') || 
+                          s3Path.includes('googledrive');
     
+    // CRITICAL FIX: First download the image data
+    let imageBuffer;
+    try {
+      // Different download strategy based on source
+      if (isRemoteSource && metadata.url) {
+        // For remote sources, we need to download from the provider URL first
+        console.log(`🔄 [COMPANION] Downloading remote file from URL for face processing: ${metadata.url}`);
+        const response = await axios.get(metadata.url, { responseType: 'arraybuffer' });
+        imageBuffer = Buffer.from(response.data);
+        console.log(`✅ [COMPANION] Successfully downloaded remote file (${imageBuffer.length} bytes)`);
+        
+        // Now that we have the file, upload it to S3 directly to ensure it's properly stored
+        const newS3Key = `photos/${userId}/${metadata.source || 'remote'}/${photoId}_${path.basename(s3Path)}`;
+        console.log(`📤 [COMPANION] Uploading downloaded file to S3 at ${newS3Key}`);
+        
+        await s3Client.putObject({
+          Bucket: bucketName,
+          Key: newS3Key,
+          Body: imageBuffer,
+          ContentType: fileData.type || 'image/jpeg'
+        }).promise();
+        
+        // Update s3Path to use the new location
+        s3Path = newS3Key;
+        
+        // Update publicUrl to use new S3 location
+        publicUrl = `https://${bucketName}.s3.amazonaws.com/${newS3Key}`;
+        
+        console.log(`✅ [COMPANION] Successfully uploaded file to S3 at new location: ${newS3Key}`);
+      } else {
+        // For files already in S3, just download from there
+        console.log(`🔄 [COMPANION] Downloading file from S3 for face processing: ${s3Path}`);
+        const getParams = {
+          Bucket: bucketName,
+          Key: s3Path
+        };
+        
+        const s3Object = await s3Client.getObject(getParams).promise();
+        imageBuffer = s3Object.Body;
+        console.log(`✅ [COMPANION] Successfully downloaded file (${imageBuffer.length} bytes)`);
+      }
+    } catch (error) {
+      console.error(`❌ [COMPANION] Error downloading file:`, error);
+      // Continue without image processing if download fails
+      // We'll still save the metadata, but without face detection
+      console.log(`⚠️ [COMPANION] Will proceed without face detection for ${s3Path}`);
+    }
+    
+    // 2. Index faces using Rekognition (only if we successfully downloaded the image)
     let allDetectedFaces = [];
     let faceIds = [];
     let matchedUsers = [];
     
-    try {
-      // Index faces
-      const indexResult = await rekognitionClient.indexFaces(indexParams).promise();
-      
-      if (indexResult.FaceRecords && indexResult.FaceRecords.length > 0) {
-        console.log(`✅ [COMPANION] Successfully indexed ${indexResult.FaceRecords.length} face(s)`);
+    if (imageBuffer) {
+      try {
+        console.log(`🔎 [COMPANION] Running face detection on downloaded image (${imageBuffer.length} bytes)`);
         
-        // Store face info
-        allDetectedFaces = indexResult.FaceRecords.map(record => ({ 
-          faceId: record.Face.FaceId,
-          boundingBox: record.Face.BoundingBox,
-          confidence: record.Face.Confidence,
-          attributes: record.FaceDetail 
-        }));
-        
-        faceIds = allDetectedFaces.map(f => f.faceId);
-        
-        // 3. Search for matching faces using SearchFacesByImage
-        const searchParams = {
-          CollectionId: COLLECTION_ID,
+        // 2.1 First, detect faces to verify image quality and face presence
+        const detectParams = {
           Image: {
-            S3Object: {
-              Bucket: bucketName,
-              Name: s3Path
-            }
+            Bytes: imageBuffer
           },
-          MaxFaces: 1000,
-          FaceMatchThreshold: 80
+          Attributes: ['ALL']
         };
         
-        const searchResult = await rekognitionClient.searchFacesByImage(searchParams).promise();
+        const detectResult = await rekognitionClient.detectFaces(detectParams).promise();
         
-        // Process matches
-        if (searchResult.FaceMatches && searchResult.FaceMatches.length > 0) {
-          console.log(`✅ [COMPANION] Found ${searchResult.FaceMatches.length} potential face matches`);
+        if (detectResult.FaceDetails && detectResult.FaceDetails.length > 0) {
+          console.log(`✅ [COMPANION] Detected ${detectResult.FaceDetails.length} faces in image`);
           
-          // Track unique user IDs
-          const uniqueMatchedUserIds = new Set();
+          // 2.2 Now index the faces in the Rekognition collection
+          const indexParams = {
+            CollectionId: COLLECTION_ID,
+            Image: {
+              Bytes: imageBuffer
+            },
+            DetectionAttributes: ["ALL"],
+            ExternalImageId: `photo_${photoId}`,
+            MaxFaces: 10,
+            QualityFilter: "AUTO"
+          };
           
-          // Process each match
-          for (const match of searchResult.FaceMatches) {
-            const matchedFaceId = match.Face?.FaceId;
-            const matchedExternalId = match.Face?.ExternalImageId;
-            const similarity = match.Similarity;
+          // Index faces
+          const indexResult = await rekognitionClient.indexFaces(indexParams).promise();
+          
+          if (indexResult.FaceRecords && indexResult.FaceRecords.length > 0) {
+            console.log(`✅ [COMPANION] Successfully indexed ${indexResult.FaceRecords.length} face(s)`);
             
-            // Only process user_ prefixed IDs (registered faces)
-            if (matchedExternalId && matchedExternalId.startsWith('user_')) {
-              const potentialUserId = matchedExternalId.substring(5);
+            // Store face info
+            allDetectedFaces = indexResult.FaceRecords.map(record => ({ 
+              faceId: record.Face.FaceId,
+              boundingBox: record.Face.BoundingBox,
+              confidence: record.Face.Confidence,
+              attributes: record.FaceDetail 
+            }));
+            
+            faceIds = allDetectedFaces.map(f => f.faceId);
+            
+            // 3. Search for matching faces using SearchFacesByImage
+            const searchParams = {
+              CollectionId: COLLECTION_ID,
+              Image: {
+                Bytes: imageBuffer
+              },
+              MaxFaces: 1000,
+              FaceMatchThreshold: 80
+            };
+            
+            const searchResult = await rekognitionClient.searchFacesByImage(searchParams).promise();
+            
+            // Process matches
+            if (searchResult.FaceMatches && searchResult.FaceMatches.length > 0) {
+              console.log(`✅ [COMPANION] Found ${searchResult.FaceMatches.length} potential face matches`);
               
-              // Add user to list if not already added
-              if (!uniqueMatchedUserIds.has(potentialUserId)) {
-                matchedUsers.push({
-                  userId: potentialUserId,
-                  faceId: matchedFaceId,
-                  similarity: similarity,
-                  matchedAt: new Date().toISOString()
-                });
-                uniqueMatchedUserIds.add(potentialUserId);
+              // Track unique user IDs
+              const uniqueMatchedUserIds = new Set();
+              
+              // Process each match
+              for (const match of searchResult.FaceMatches) {
+                const matchedFaceId = match.Face?.FaceId;
+                const matchedExternalId = match.Face?.ExternalImageId;
+                const similarity = match.Similarity;
+                
+                // Only process user_ prefixed IDs (registered faces)
+                if (matchedExternalId && matchedExternalId.startsWith('user_')) {
+                  const potentialUserId = matchedExternalId.substring(5);
+                  
+                  // Add user to list if not already added
+                  if (!uniqueMatchedUserIds.has(potentialUserId)) {
+                    matchedUsers.push({
+                      userId: potentialUserId,
+                      faceId: matchedFaceId,
+                      similarity: similarity,
+                      matchedAt: new Date().toISOString()
+                    });
+                    uniqueMatchedUserIds.add(potentialUserId);
+                  }
+                }
               }
             }
           }
+        } else {
+          console.log(`ℹ️ [COMPANION] No faces detected in the image`);
         }
+      } catch (rekError) {
+        console.error(`❌ [COMPANION] Error in face processing:`, rekError);
+        // Continue with the upload even if face processing fails
       }
-    } catch (rekError) {
-      console.error(`❌ [COMPANION] Error in face processing:`, rekError);
-      // Continue with the upload even if face processing fails
+    } else {
+      console.log(`⚠️ [COMPANION] Skipping face detection/indexing (imageBuffer not available)`);
     }
     
     // 4. Store photo metadata in DynamoDB
@@ -527,7 +599,10 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
       matched_users: matchedUsers,
       face_ids: faceIds,
       // Add additional metadata from the request
-      ...metadata
+      ...metadata,
+      // Explicitly track that face processing was attempted
+      face_processing_attempted: !!imageBuffer,
+      face_processing_completed: !!imageBuffer && rekognitionClient !== null
     };
     
     // Convert matched_users to string if it's an array (for GSI compatibility)
@@ -562,7 +637,9 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
       success: true,
       photoId: photoId,
       photoMetadata,
-      s3Url: publicUrl
+      s3Url: publicUrl,
+      facesDetected: allDetectedFaces.length,
+      isRemoteSource: isRemoteSource
     };
   } catch (error) {
     console.error(`❌ [COMPANION] Error processing uploaded file:`, error);
