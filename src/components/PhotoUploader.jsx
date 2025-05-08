@@ -1530,59 +1530,103 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   // Initialize socket connection when component mounts
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const socketInstance = io(process.env.NEXT_PUBLIC_COMPANION_URL || 'http://localhost:3020', {
-        transports: ['websocket'],
-      });
+      // Check what URL is actually available
+      const socketUrl = import.meta.env.VITE_COMPANION_URL || 'http://localhost:3020';
+      console.log('🔌 [PhotoUploader] Attempting to connect to socket at:', socketUrl);
       
-      console.log('🔌 [PhotoUploader] Initializing socket connection');
-      
-      socketInstance.on('connect', () => {
-        console.log(`🔌 [PhotoUploader] Socket connected with ID: ${socketInstance.id}`);
-        // Send auth data immediately after connection
-        socketInstance.emit('auth', {
-          userId: user?.id,
-          username: user?.username,
+      try {
+        const socketInstance = io(socketUrl, {
+          transports: ['websocket'],
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          timeout: 20000
         });
-      });
-      
-      socketInstance.on('upload-processed', (data) => {
-        console.log('%c📤 [PhotoUploader] UPLOAD PROCESSED EVENT:', 'background: #2196f3; color: white; padding: 2px 5px; border-radius: 3px;', data);
         
-        if (data.faces) {
-          console.log('%c👥 [PhotoUploader] Face Detection Results:', 'background: #4caf50; color: white; padding: 2px 5px; border-radius: 3px;', data.faces);
-        }
+        console.log('🔌 [PhotoUploader] Socket instance created:', socketInstance);
         
-        if (data.matched_users) {
-          console.log('%c🎯 [PhotoUploader] Face Matching Results:', 'background: #9c27b0; color: white; padding: 2px 5px; border-radius: 3px;', data.matched_users);
-        }
-        
-        // Update the upload state with the processed data
-        setUploads(prevUploads => {
-          return prevUploads.map(upload => {
-            if (upload.id === data.uploadId) {
-              return {
-                ...upload,
-                photoDetails: {
-                  ...upload.photoDetails,
-                  ...data,
-                  faces: data.faces || [],
-                  matched_users: data.matched_users || [],
-                  matched_users_list: data.matched_users || [],
-                  processing_complete: true
-                }
-              };
-            }
-            return upload;
+        socketInstance.on('connect', () => {
+          console.log(`🔌 [PhotoUploader] Socket connected with ID: ${socketInstance.id}`);
+          // Send auth data immediately after connection
+          socketInstance.emit('auth', {
+            userId: user?.id,
+            username: user?.username,
           });
         });
-      });
-      
-      setSocket(socketInstance);
-      
-      return () => {
-        console.log('🔌 [PhotoUploader] Cleaning up socket connection');
-        socketInstance.disconnect();
-      };
+        
+        socketInstance.on('connect_error', (error) => {
+          console.error('❌ [PhotoUploader] Socket connection error:', error);
+        });
+        
+        socketInstance.on('connect_timeout', () => {
+          console.error('❌ [PhotoUploader] Socket connection timeout');
+        });
+        
+        socketInstance.on('error', (error) => {
+          console.error('❌ [PhotoUploader] Socket error:', error);
+        });
+        
+        socketInstance.on('disconnect', (reason) => {
+          console.log(`🔌 [PhotoUploader] Socket disconnected: ${reason}`);
+        });
+        
+        socketInstance.on('reconnect', (attemptNumber) => {
+          console.log(`🔌 [PhotoUploader] Socket reconnected after ${attemptNumber} attempts`);
+        });
+        
+        socketInstance.on('reconnect_attempt', (attemptNumber) => {
+          console.log(`🔌 [PhotoUploader] Socket reconnection attempt ${attemptNumber}`);
+        });
+        
+        socketInstance.on('reconnect_error', (error) => {
+          console.error('❌ [PhotoUploader] Socket reconnection error:', error);
+        });
+        
+        socketInstance.on('reconnect_failed', () => {
+          console.error('❌ [PhotoUploader] Socket reconnection failed');
+        });
+        
+        socketInstance.on('upload-processed', (data) => {
+          console.log('%c📤 [PhotoUploader] UPLOAD PROCESSED EVENT:', 'background: #2196f3; color: white; padding: 2px 5px; border-radius: 3px;', data);
+          
+          if (data.faces) {
+            console.log('%c👥 [PhotoUploader] Face Detection Results:', 'background: #4caf50; color: white; padding: 2px 5px; border-radius: 3px;', data.faces);
+          }
+          
+          if (data.matched_users) {
+            console.log('%c🎯 [PhotoUploader] Face Matching Results:', 'background: #9c27b0; color: white; padding: 2px 5px; border-radius: 3px;', data.matched_users);
+          }
+          
+          // Update the upload state with the processed data
+          setUploads(prevUploads => {
+            return prevUploads.map(upload => {
+              if (upload.id === data.uploadId) {
+                return {
+                  ...upload,
+                  photoDetails: {
+                    ...upload.photoDetails,
+                    ...data,
+                    faces: data.faces || [],
+                    matched_users: data.matched_users || [],
+                    matched_users_list: data.matched_users || [],
+                    processing_complete: true
+                  }
+                };
+              }
+              return upload;
+            });
+          });
+        });
+        
+        setSocket(socketInstance);
+        
+        return () => {
+          console.log('🔌 [PhotoUploader] Cleaning up socket connection');
+          socketInstance.disconnect();
+        };
+      } catch (error) {
+        console.error('❌ [PhotoUploader] Error initializing socket:', error);
+      }
     }
   }, [user]);
 
@@ -1633,31 +1677,86 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       // For remote uploads, ensure socket communication
       if (sourceType === 'dropbox' || sourceType === 'googledrive') {
         if (!socket) {
-          console.error('❌ [PhotoUploader] No socket connection available for remote upload!');
+          console.error('❌ [PhotoUploader] No socket connection available for remote upload!', {
+            socketExists: !!socket,
+            socketId: socket?.id,
+            socketConnected: socket?.connected,
+            url: import.meta.env.VITE_COMPANION_URL || 'http://localhost:3020'
+          });
+          
+          // Try to reconnect the socket
+          console.log('🔄 [PhotoUploader] Attempting to reconnect socket for remote upload');
+          try {
+            const socketUrl = import.meta.env.VITE_COMPANION_URL || 'http://localhost:3020';
+            const reconnectSocket = io(socketUrl, {
+              transports: ['websocket'],
+              reconnection: true,
+              forceNew: true
+            });
+            
+            reconnectSocket.on('connect', () => {
+              console.log(`🔌 [PhotoUploader] Socket reconnected with ID: ${reconnectSocket.id}`);
+              // Use the reconnected socket for this upload
+              reconnectSocket.emit('upload-complete', {
+                uploadId: successfulUpload.id,
+                userId: user?.id,
+                username: user?.username,
+                source: sourceType,
+                fileData: {
+                  name: successfulUpload.name,
+                  type: successfulUpload.type,
+                  size: successfulUpload.size,
+                },
+                metadata: {
+                  ...successfulUpload.meta,
+                  userId: user?.id,
+                  username: user?.username,
+                }
+              });
+              
+              console.log(`📤 [PhotoUploader] Emitted upload-complete event for ${successfulUpload.id} on reconnected socket`);
+            });
+            
+            reconnectSocket.on('connect_error', (error) => {
+              console.error('❌ [PhotoUploader] Reconnection socket error:', error);
+            });
+          } catch (error) {
+            console.error('❌ [PhotoUploader] Error in socket reconnection attempt:', error);
+          }
+          
           continue;
         }
         
         console.log(`🔄 [PhotoUploader] Processing remote upload: ${successfulUpload.id}`);
-        
-        // Emit upload complete event with all necessary data
-        socket.emit('upload-complete', {
-          uploadId: successfulUpload.id,
-          userId: user?.id,
-          username: user?.username,
-          source: sourceType,
-          fileData: {
-            name: successfulUpload.name,
-            type: successfulUpload.type,
-            size: successfulUpload.size,
-          },
-          metadata: {
-            ...successfulUpload.meta,
-            userId: user?.id,
-            username: user?.username,
-          }
+        console.log(`🔄 [PhotoUploader] Socket status:`, {
+          id: socket.id,
+          connected: socket.connected,
+          disconnected: socket.disconnected
         });
         
-        console.log(`📤 [PhotoUploader] Emitted upload-complete event for ${successfulUpload.id}`);
+        // Emit upload complete event with all necessary data
+        try {
+          socket.emit('upload-complete', {
+            uploadId: successfulUpload.id,
+            userId: user?.id,
+            username: user?.username,
+            source: sourceType,
+            fileData: {
+              name: successfulUpload.name,
+              type: successfulUpload.type,
+              size: successfulUpload.size,
+            },
+            metadata: {
+              ...successfulUpload.meta,
+              userId: user?.id,
+              username: user?.username,
+            }
+          });
+          
+          console.log(`📤 [PhotoUploader] Emitted upload-complete event for ${successfulUpload.id}`);
+        } catch (error) {
+          console.error('❌ [PhotoUploader] Error emitting upload-complete event:', error);
+        }
       }
     }
   }, [socket, user, checkIsRemoteUpload]);
