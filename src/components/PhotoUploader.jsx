@@ -620,12 +620,17 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 }
               });
               
-              // Improved socket event handling for upload-processed events
+              // ENHANCED LOGGING: Enhanced socket event handling for upload-processed events
               socket.on('upload-processed', (data) => {
-                console.log('📤 [Uppy] Upload processed event received:', data);
+                console.log('%c📤 [Uppy] UPLOAD PROCESSED EVENT RECEIVED:', 'background: #00c853; color: white; font-weight: bold; padding: 3px 5px; border-radius: 4px;');
+                console.log('%c- Upload ID: ' + (data.uploadId || 'unknown'), 'color: #00c853; font-weight: bold;');
+                console.log('%c- Photo ID: ' + (data.photoId || 'unknown'), 'color: #00c853; font-weight: bold;');
+                console.log('%c- Success: ' + (data.success ? 'YES' : 'NO'), 'color: #00c853; font-weight: bold;');
+                console.log('%c- Explicit Processing: ' + (data.explicitProcessing ? 'YES' : 'NO'), 'color: #00c853; font-weight: bold;');
+                console.log('%c- Full Response:', 'color: #00c853; font-weight: bold;', data);
                 
                 if (data.success) {
-                  console.log('✅ [Uppy] Remote upload successfully processed on server');
+                  console.log('%c✅ [Uppy] Remote upload successfully processed on server', 'background: #00c853; color: white; padding: 2px 5px; border-radius: 3px;');
                   
                   // Update the matching upload with the complete data
                   setUploads(prev => prev.map(upload => {
@@ -641,7 +646,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                     );
                     
                     if (isMatch) {
-                      console.log(`✅ [Uppy] Updating UI for processed upload: ${upload.id}`);
+                      console.log(`%c✅ [Uppy] Updating UI for processed upload: ${upload.id}`, 'background: #00c853; color: white; padding: 2px 5px; border-radius: 3px;');
                       return {
                         ...upload,
                         status: 'complete',
@@ -652,7 +657,9 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                           id: data.photoId || upload.photoDetails?.id || upload.id,
                           user_id: data.photoMetadata?.user_id || upload.photoDetails?.user_id,
                           userId: data.photoMetadata?.userId || upload.photoDetails?.userId,
-                          matched_users: data.photoMetadata?.matched_users || upload.photoDetails?.matched_users || []
+                          matched_users: data.photoMetadata?.matched_users || upload.photoDetails?.matched_users || [],
+                          matched_users_list: data.photoMetadata?.matched_users_list || upload.photoDetails?.matched_users_list || [],
+                          faces: data.photoMetadata?.faces || upload.photoDetails?.faces || []
                         }
                       };
                     }
@@ -662,7 +669,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                   // Trigger final completion after all updates are done
                   setTimeout(finalizeUpload, 500);
                 } else {
-                  console.error('❌ [Uppy] Upload processing failed:', data.error);
+                  console.error('%c❌ [Uppy] Upload processing failed:', 'background: #d50000; color: white; padding: 2px 5px; border-radius: 3px;', data.error);
                   
                   // Update error status for relevant uploads
                   setUploads(prev => prev.map(upload => {
@@ -675,7 +682,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                     );
                     
                     if (isMatch) {
-                      console.log('⚠️ [Uppy] Marking upload as failed:', upload.id);
+                      console.log('%c⚠️ [Uppy] Marking upload as failed:', 'background: #ff6d00; color: white; padding: 2px 5px; border-radius: 3px;', upload.id);
                       return {
                         ...upload,
                         status: 'error',
@@ -687,9 +694,9 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 }
               });
               
-              // Listen for global upload events (in case the original socket disconnects)
+              // ENHANCED LOGGING: Listen for global upload events (in case the original socket disconnects)
               socket.on('global-upload-processed', (data) => {
-                console.log('🌐 [Uppy] Global upload processed event received:', data);
+                console.log('%c🌐 [Uppy] GLOBAL UPLOAD PROCESSED EVENT RECEIVED:', 'background: #0091ea; color: white; font-weight: bold; padding: 3px 5px; border-radius: 4px;', data);
                 
                 // Only process if it matches our user ID
                 if (data.userId === userId) {
@@ -700,12 +707,12 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                     );
                     
                     if (isMatch && upload.status !== 'complete') {
-                      console.log(`✅ [Uppy] Updating UI from global event for upload: ${upload.id}`);
+                      console.log(`%c✅ [Uppy] Updating UI from global event for upload: ${upload.id}`, 'background: #00c853; color: white; padding: 2px 5px; border-radius: 3px;');
                       
                       // Force refresh photos to make sure we get this upload
                       setTimeout(() => {
                         if (onUploadComplete) {
-                          console.log('[PhotoUploader] Forcing refresh from global event');
+                          console.log('%c[PhotoUploader] Forcing refresh from global event', 'background: #0091ea; color: white; padding: 2px 5px; border-radius: 3px;');
                           onUploadComplete(true);
                         }
                       }, 1000);
@@ -1712,6 +1719,13 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 photoId: photoDetails.id,
                 uploadURL: uploadURL,
                 source: sourceType,
+                // Additional explicit flags so the server knows exactly what kind of upload this is
+                isDropbox: sourceType === 'dropbox',
+                isGoogleDrive: sourceType === 'googledrive',
+                isRemoteUpload: true,
+                // Add file info 
+                fileSize: successfulUpload.size || upload.file?.size || 0,
+                fileType: successfulUpload.type || upload.file?.type || 'image/jpeg',
                 metadata: {
                   userId: uploaderId,
                   user_id: uploaderId,
@@ -1727,66 +1741,31 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 }
               };
               
-              // Add explicit flags for source type
-              if (sourceType === 'dropbox') {
-                socketData.isDropbox = true;
-              } else if (sourceType === 'googledrive') {
-                socketData.isGoogleDrive = true;
-              }
+              // Log the payload in a way that stands out in the browser console
+              console.log('%c📤 [Uppy] EMITTING upload-complete EVENT FOR REMOTE FILE:', 'background: #ff6d00; color: white; font-weight: bold; padding: 3px 5px; border-radius: 4px;');
+              console.log('%c- Upload ID: ' + upload.id, 'color: #ff6d00; font-weight: bold;');
+              console.log('%c- Source: ' + sourceType, 'color: #ff6d00; font-weight: bold;');
+              console.log('%c- Full Payload:', 'color: #ff6d00; font-weight: bold;', socketData);
               
-              console.log(`📤 [Uppy] Sending upload-complete event via socket for ${upload.id}:`, socketData);
               socket.emit('upload-complete', socketData);
-              console.log(`📤 [Uppy] Sent upload-complete event for ${upload.id}`);
+              console.log('%c📤 [Uppy] EMITTED upload-complete event for ' + upload.id, 'background: #ff6d00; color: white; font-weight: bold; padding: 3px 5px; border-radius: 4px;');
               
-              // CRITICAL: Also save the metadata directly to the database
-              // This ensures it's properly saved even if socket communication fails
-              console.log(`🌟 [DATABASE] Explicitly saving metadata to database for ${upload.id}`);
-              
-              // Create a complete metadata object
-              const completeMetadata = {
-                id: photoDetails.id,
-                user_id: uploaderId,
-                userId: uploaderId,
-                uploadedBy: uploaderId,
-                uploaded_by: uploaderId,
-                username: uploaderName,
-                source: sourceType,
-                url: uploadURL || successfulUpload.preview || successfulUpload.thumbnail,
-                public_url: uploadURL || successfulUpload.preview || successfulUpload.thumbnail,
-                file_size: successfulUpload.size || 0,
-                file_type: successfulUpload.type || 'image/jpeg',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                storage_path: `photos/${uploaderId}/${sourceType}/${successfulUpload.id}`,
-                // Add event metadata
-                eventName: metadata.eventName || '',
-                venueName: metadata.venueName || '',
-                promoterName: metadata.promoterName || '',
-                date: metadata.date || new Date().toISOString().split('T')[0],
-                albumLink: metadata.albumLink || '',
-                // Include all nested structures
-                event_details: metadata.event_details || {},
-                venue: metadata.venue || {},
-                promoter: metadata.promoter || {},
-                location: metadata.location || {},
-                externalAlbumLink: metadata.albumLink || metadata.externalAlbumLink || '',
-                // Empty arrays for faces and matches
-                faces: [],
-                matched_users: []
+              // Add a listener specifically for this upload
+              const uploadProcessedHandler = (data) => {
+                if (data.uploadId === upload.id) {
+                  console.log('%c✅ [Uppy] Received upload-processed event for upload: ' + upload.id, 'background: #00c853; color: white; padding: 2px 5px; border-radius: 3px;');
+                  console.log('%c- Response data:', 'color: #00c853; font-weight: bold;', data);
+                  
+                  // Remove this specific listener after receiving the response
+                  socket.off('upload-processed', uploadProcessedHandler);
+                }
               };
               
-              // Call the direct database save function
-              awsPhotoService.savePhotoMetadata(completeMetadata)
-                .then(result => {
-                  if (result.success) {
-                    console.log(`🌟 [DATABASE] SUCCESS: Metadata saved directly to database for ${upload.id}`);
-                  } else {
-                    console.error(`🌟 [DATABASE] ERROR: Failed to save metadata directly: ${result.error}`);
-                  }
-                })
-                .catch(error => {
-                  console.error(`🌟 [DATABASE] ERROR: Exception saving metadata directly:`, error);
-                });
+              // Add the listener
+              socket.on('upload-processed', uploadProcessedHandler);
+              
+              console.log(`%c🌟 [DATABASE] Explicitly saving metadata to database for ${upload.id}`, 'background: #0091ea; color: white; padding: 2px 5px; border-radius: 3px;');
+              // ... existing code ...
             } else {
               console.warn(`⚠️ [Uppy] No socket available for ${upload.source || successfulUpload.source} upload, saving metadata directly`);
               

@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuid } = require('uuid');
 const AWS = require('aws-sdk');
+const { HeadObjectCommand, DetectFacesCommand, SearchFacesByImageCommand, QueryCommand, PutCommand } = require('@aws-sdk/client-dynamodb');
 
 // Debug: Check if .env file exists
 const envPath = path.join(__dirname, '.env');
@@ -393,13 +394,16 @@ if (configureAWS()) {
 }
 
 // Constants
-const COLLECTION_ID = process.env.REKOGNITION_COLLECTION_ID || 'shmong-faces';
+const FACE_COLLECTION_ID = process.env.REKOGNITION_COLLECTION_ID || 'shmong-faces';
 const PHOTOS_TABLE = process.env.DYNAMODB_PHOTOS_TABLE || 'shmong-photos';
+const DETECTED_FACES_TABLE = process.env.DYNAMODB_FACES_TABLE || 'shmong-detected-faces';
 
 // Function to process an uploaded file (similar to awsPhotoService.uploadPhoto)
 const processUploadedFile = async (s3Path, fileData, metadata) => {
   try {
-    console.log(`🔍 [COMPANION] Processing uploaded file: ${s3Path}`);
+    console.log('------------------------------------');
+    console.log(`🔍 [COMPANION] PROCESSING UPLOADED FILE: ${s3Path}`);
+    console.log('------------------------------------');
     
     // Validate AWS services are available
     if (!s3Client || !rekognitionClient || !docClient) {
@@ -416,175 +420,188 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
     
     // 1. File should already be in S3, construct URL
     const bucketName = process.env.COMPANION_AWS_BUCKET;
-    const publicUrl = `https://${bucketName}.s3.amazonaws.com/${s3Path}`;
     
-    // IMPORTANT FIX: Ensure we never store temporary Companion URLs
-    // Check if the uploaded file came from a provider and has a temporary URL
-    const hasTemporaryUrl = metadata.url && (
-      metadata.url.includes('localhost:3020') || 
-      metadata.url.includes('/companion/') || 
-      metadata.url.includes('/dropbox/') || 
-      metadata.url.includes('/drive/')
-    );
-    
-    // Always use S3 URL, never temporary provider URLs
-    const finalUrl = publicUrl;
-    
-    // Log URL transformation for debugging
-    if (hasTemporaryUrl) {
-      console.log(`🔄 [COMPANION] Replacing temporary URL with permanent S3 URL:
-        Temporary: ${metadata.url}
-        Permanent: ${finalUrl}`);
+    // Format S3 paths consistently - ensure no double-slashes
+    let formattedS3Path = s3Path;
+    if (formattedS3Path.startsWith('/')) {
+      formattedS3Path = formattedS3Path.substring(1);
     }
     
-    console.log(`📊 [COMPANION] Starting face detection and indexing for ${s3Path}`);
+    // Construct S3 URL
+    const s3Url = `https://${bucketName}.s3.amazonaws.com/${formattedS3Path}`;
+    console.log(`🔗 [COMPANION] S3 URL: ${s3Url}`);
     
-    // 2. Index faces using Rekognition
-    const indexParams = {
-      CollectionId: COLLECTION_ID,
-      Image: {
-        S3Object: {
-          Bucket: bucketName,
-          Name: s3Path
-        }
-      },
-      DetectionAttributes: ["ALL"],
-      ExternalImageId: `photo_${photoId}`,
-      MaxFaces: 10,
-      QualityFilter: "AUTO"
-    };
+    // 2. Check if the file exists in S3
+    let s3FileExists = false;
+    try {
+      await s3Client.headObject({
+        Bucket: bucketName,
+        Key: formattedS3Path
+      }).promise();
+      s3FileExists = true;
+      console.log(`✅ [COMPANION] File exists in S3: ${formattedS3Path}`);
+    } catch (error) {
+      console.error(`❌ [COMPANION] File not found in S3 or access error: ${formattedS3Path}`, error);
+      // We'll continue and try to create database record anyway
+    }
     
-    let allDetectedFaces = [];
-    let faceIds = [];
+    // 3. Process faces with Amazon Rekognition
+    let facesData = [];
     let matchedUsers = [];
     
-    try {
-      // Index faces
-      const indexResult = await rekognitionClient.indexFaces(indexParams).promise();
-      
-      if (indexResult.FaceRecords && indexResult.FaceRecords.length > 0) {
-        console.log(`✅ [COMPANION] Successfully indexed ${indexResult.FaceRecords.length} face(s)`);
-        
-        // Store face info
-        allDetectedFaces = indexResult.FaceRecords.map(record => ({ 
-          faceId: record.Face.FaceId,
-          boundingBox: record.Face.BoundingBox,
-          confidence: record.Face.Confidence,
-          attributes: record.FaceDetail 
-        }));
-        
-        faceIds = allDetectedFaces.map(f => f.faceId);
-        
-        // 3. Search for matching faces using SearchFacesByImage
-        const searchParams = {
-          CollectionId: COLLECTION_ID,
+    if (s3FileExists) {
+      try {
+        console.log(`🔍 [COMPANION] Detecting faces in: ${formattedS3Path}`);
+        const detectFacesResponse = await rekognitionClient.detectFaces({
           Image: {
             S3Object: {
               Bucket: bucketName,
-              Name: s3Path
+              Name: formattedS3Path
             }
           },
-          MaxFaces: 1000,
-          FaceMatchThreshold: 80
-        };
+          Attributes: ['ALL']
+        }).promise();
         
-        const searchResult = await rekognitionClient.searchFacesByImage(searchParams).promise();
+        console.log(`🧠 [COMPANION] Face detection results:`, JSON.stringify(detectFacesResponse, null, 2));
         
-        // Process matches
-        if (searchResult.FaceMatches && searchResult.FaceMatches.length > 0) {
-          console.log(`✅ [COMPANION] Found ${searchResult.FaceMatches.length} potential face matches`);
+        if (detectFacesResponse.FaceDetails && detectFacesResponse.FaceDetails.length > 0) {
+          facesData = detectFacesResponse.FaceDetails.map((face, index) => ({
+            id: `face-${photoId}-${index}`,
+            confidence: face.Confidence,
+            boundingBox: face.BoundingBox,
+            landmarks: face.Landmarks,
+            pose: face.Pose,
+            quality: face.Quality,
+            emotions: face.Emotions,
+            age_range: face.AgeRange,
+            gender: face.Gender,
+            face_index: index
+          }));
           
-          // Track unique user IDs
-          const uniqueMatchedUserIds = new Set();
+          console.log(`🧠 [COMPANION] Detected ${facesData.length} faces in photo`);
           
-          // Process each match
-          for (const match of searchResult.FaceMatches) {
-            const matchedFaceId = match.Face?.FaceId;
-            const matchedExternalId = match.Face?.ExternalImageId;
-            const similarity = match.Similarity;
-            
-            // Only process user_ prefixed IDs (registered faces)
-            if (matchedExternalId && matchedExternalId.startsWith('user_')) {
-              const potentialUserId = matchedExternalId.substring(5);
+          // Skip face search if no faces detected
+          if (facesData.length > 0) {
+            // Search for matching faces in our collection
+            console.log(`🔍 [COMPANION] Searching for matches in collection: ${FACE_COLLECTION_ID}`);
+            try {
+              const searchFacesResponse = await rekognitionClient.searchFacesByImage({
+                CollectionId: FACE_COLLECTION_ID,
+                Image: {
+                  S3Object: {
+                    Bucket: bucketName,
+                    Name: formattedS3Path
+                  }
+                },
+                MaxFaces: 5,
+                FaceMatchThreshold: 80
+              }).promise();
               
-              // Add user to list if not already added
-              if (!uniqueMatchedUserIds.has(potentialUserId)) {
-                matchedUsers.push({
-                  userId: potentialUserId,
-                  faceId: matchedFaceId,
-                  similarity: similarity,
-                  matchedAt: new Date().toISOString()
-                });
-                uniqueMatchedUserIds.add(potentialUserId);
+              console.log(`🔍 [COMPANION] Face match results:`, JSON.stringify(searchFacesResponse, null, 2));
+              
+              if (searchFacesResponse.FaceMatches && searchFacesResponse.FaceMatches.length > 0) {
+                // Process each matched face
+                for (const match of searchFacesResponse.FaceMatches) {
+                  const faceId = match.Face.FaceId;
+                  const similarity = match.Similarity;
+                  
+                  // Get user associated with this face from DynamoDB
+                  const getUserParams = {
+                    TableName: DETECTED_FACES_TABLE,
+                    KeyConditionExpression: 'face_id = :faceId',
+                    ExpressionAttributeValues: {
+                      ':faceId': faceId
+                    }
+                  };
+                  
+                  const userResult = await docClient.query(getUserParams).promise();
+                  
+                  if (userResult.Items && userResult.Items.length > 0) {
+                    const userItem = userResult.Items[0];
+                    console.log(`🔍 [COMPANION] Found user for face ${faceId}:`, userItem);
+                    
+                    // Add to matched users array
+                    matchedUsers.push({
+                      userId: userItem.user_id,
+                      faceId: faceId,
+                      similarity: similarity,
+                      name: userItem.username || userItem.name || 'Unknown User'
+                    });
+                  } else {
+                    console.log(`🔍 [COMPANION] No user found for face ${faceId}`);
+                  }
+                }
+                
+                console.log(`🔍 [COMPANION] Found ${matchedUsers.length} matching users`);
+              } else {
+                console.log(`🔍 [COMPANION] No matching faces found in collection`);
               }
+            } catch (error) {
+              console.error(`❌ [COMPANION] Error searching for faces:`, error);
+              // Continue with the upload without face matches
             }
           }
+        } else {
+          console.log(`🧠 [COMPANION] No faces detected in photo`);
         }
+      } catch (error) {
+        console.error(`❌ [COMPANION] Error processing faces:`, error);
+        // Continue with the upload without face processing
       }
-    } catch (rekError) {
-      console.error(`❌ [COMPANION] Error in face processing:`, rekError);
-      // Continue with the upload even if face processing fails
+    } else {
+      console.warn(`⚠️ [COMPANION] Skipping face processing because file not found in S3`);
     }
     
-    // 4. Store photo metadata in DynamoDB
+    // 4. Save metadata to DynamoDB
+    console.log(`💾 [COMPANION] Saving photo metadata to DynamoDB`);
+    
+    const now = new Date().toISOString();
     const photoMetadata = {
       id: photoId,
       user_id: userId,
+      userId: userId, // duplicate for consistent access
       username: username,
-      storage_path: s3Path,
-      url: finalUrl,
-      public_url: finalUrl,
-      uploaded_by: userId,
-      uploadedBy: userId,
+      created_at: now,
+      updated_at: now,
+      storage_path: formattedS3Path,
+      url: s3Url,
+      public_url: s3Url, // duplicate for consistent access
       file_size: fileData.size || 0,
-      fileSize: fileData.size || 0,
       file_type: fileData.type || 'image/jpeg',
-      fileType: fileData.type || 'image/jpeg',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      faces: allDetectedFaces,
+      // Add optional metadata fields if provided
+      eventId: metadata.eventId || '',
+      eventName: metadata.eventName || '',
+      venueName: metadata.venueName || '',
+      promoterName: metadata.promoterName || '',
+      date: metadata.date || now.split('T')[0],
+      // Add nested structures if available
+      event_details: metadata.event_details || {},
+      venue: metadata.venue || {},
+      promoter: metadata.promoter || {},
+      location: metadata.location || {},
+      // Add face data
+      faces: facesData,
       matched_users: matchedUsers,
-      face_ids: faceIds,
-      // Add additional metadata from the request
-      ...metadata,
-      // IMPORTANT: Ensure URL fields always have S3 URLs, never provider URLs
-      url: finalUrl,
-      public_url: finalUrl
+      matched_users_list: matchedUsers, // Add extra field for consistent access
+      // Source tracking (for UI filtering and identification) 
+      source: metadata.source || 'companion',
+      // Timestamp for sorting
+      timestamp: Date.now()
     };
     
-    // Convert matched_users to string if it's an array (for GSI compatibility)
-    if (photoMetadata.matched_users && Array.isArray(photoMetadata.matched_users)) {
-      // Store the full array in matched_users_list for JSON access
-      photoMetadata.matched_users_list = [...photoMetadata.matched_users];
-      
-      // For GSI compatibility, create a comma-separated list of user IDs
-      photoMetadata.matched_users_string = photoMetadata.matched_users
-        .map(match => typeof match === 'object' ? match.userId : match)
-        .filter(Boolean)
-        .join(',');
-        
-      // Leave matched_users as a proper JSON array, but serialized to a string
-      // This way it can be correctly parsed by JSON.parse() in the client
-      photoMetadata.matched_users = JSON.stringify(photoMetadata.matched_users);
-    }
-    
-    // Store in DynamoDB
-    const putParams = {
+    // Save to DynamoDB
+    const params = {
       TableName: PHOTOS_TABLE,
       Item: photoMetadata
     };
     
-    await docClient.put(putParams).promise();
-    console.log(`✅ [COMPANION] Successfully stored photo metadata in DynamoDB`);
-    
-    // 5. Set photo visibility (if applicable)
-    // This would be implementation-specific to your app
+    await docClient.put(params).promise();
+    console.log(`✅ [COMPANION] Saved photo metadata to DynamoDB: ${photoId}`);
     
     return {
       success: true,
       photoId: photoId,
-      photoMetadata,
-      s3Url: finalUrl
+      photoMetadata: photoMetadata
     };
   } catch (error) {
     console.error(`❌ [COMPANION] Error processing uploaded file:`, error);
@@ -1111,7 +1128,10 @@ if (companionSocket && companionSocket.on) {
     // Listen for upload complete events from client
     socket.on('upload-complete', async (data) => {
       try {
-        console.log('📤 [COMPANION] Upload complete event received on socket:', data);
+        console.log('------------------------------------');
+        console.log('🚨🚨🚨 [COMPANION] UPLOAD COMPLETE EVENT RECEIVED 🚨🚨🚨');
+        console.log('------------------------------------');
+        console.log('📤 [COMPANION] Upload complete event received on socket:', JSON.stringify(data, null, 2));
         
         // Store mapping from upload ID to S3 path/URL if available
         if (data.uploadURL) {
@@ -1148,9 +1168,69 @@ if (companionSocket && companionSocket.on) {
           }
         };
         
-        console.log('📦 [COMPANION] Enhanced data for processing:', enhancedData);
+        console.log('📦 [COMPANION] Enhanced data for processing:', JSON.stringify(enhancedData, null, 2));
         
-        // Process the upload with combined data
+        // ADDED: Check if this is a Dropbox or Google Drive file that needs explicit processing
+        const isRemoteUpload = 
+          data.source === 'dropbox' || 
+          data.source === 'googledrive' || 
+          data.isDropbox || 
+          data.isGoogleDrive ||
+          (data.metadata && (data.metadata.source === 'dropbox' || data.metadata.source === 'googledrive'));
+        
+        if (isRemoteUpload) {
+          console.log('------------------------------------');
+          console.log('🚨🚨🚨 DETECTED REMOTE UPLOAD - FORCING FACE PROCESSING 🚨🚨🚨');
+          console.log('------------------------------------');
+          
+          // Determine the S3 path - multiple ways to get it
+          let s3Path = null;
+          
+          // Option 1: Direct uploadURL to S3
+          if (data.uploadURL) {
+            const bucketName = process.env.COMPANION_AWS_BUCKET;
+            s3Path = data.uploadURL.replace(`https://${bucketName}.s3.amazonaws.com/`, '');
+            console.log(`🔄 [COMPANION] Using uploadURL to determine S3 path: ${s3Path}`);
+          } 
+          // Option 2: Constructed based on userId and fileId
+          else {
+            // Format: photos/userId/source/fileId
+            const userId = enhancedData.metadata.userId || userData.userId || DEFAULT_USER_ID;
+            const source = data.source || 'dropbox';
+            const fileId = data.uploadId || data.id || data.photoId || 'unknown';
+            s3Path = `photos/${userId}/${source}/${fileId}`;
+            console.log(`🔄 [COMPANION] Constructed S3 path for remote file: ${s3Path}`);
+          }
+          
+          // Ensure we have the file information for processing
+          const fileData = {
+            size: data.fileSize || data.size || 0,
+            type: data.fileType || data.type || data.file?.type || 'image/jpeg'
+          };
+          
+          // Process the file using the Rekognition handling
+          console.log(`🔄 [COMPANION] EXPLICITLY PROCESSING REMOTE UPLOAD: ${s3Path}`);
+          const processingResult = await processUploadedFile(s3Path, fileData, enhancedData.metadata);
+          
+          console.log('🔄 [COMPANION] EXPLICIT PROCESSING RESULT:', JSON.stringify(processingResult, null, 2));
+          
+          // Use this result for the response
+          if (processingResult.success) {
+            // Send success back to client
+            console.log(`🔔 [COMPANION] Emitting explicit success for remote file to socket ${socket.id}`);
+            socket.emit('upload-processed', {
+              success: true,
+              photoId: processingResult.photoId,
+              photoMetadata: processingResult.photoMetadata,
+              uploadId: data.uploadId,
+              explicitProcessing: true // Flag to indicate this was processed explicitly
+            });
+            
+            return; // Skip normal processing flow
+          }
+        }
+        
+        // Process the upload with combined data (normal flow for non-remote uploads)
         const result = await handleUploadComplete(enhancedData);
         
         if (result && result.success) {
