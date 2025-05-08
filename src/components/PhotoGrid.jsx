@@ -8,6 +8,38 @@ import SimplePhotoInfoModal from './SimplePhotoInfoModal.jsx';
 import { cn } from '../utils/cn';
 import { FixedSizeGrid } from 'react-window';
 
+// Helper function to ensure image URLs are valid
+const sanitizeImageUrl = (photo) => {
+    if (!photo || !photo.url) return '';
+    
+    // If it's already an S3 URL, return it
+    if (photo.url.includes('.s3.amazonaws.com/')) {
+        return photo.url;
+    }
+    
+    // Replace temporary provider URLs with proper S3 URLs
+    if (photo.url.includes('localhost:3020') || 
+        photo.url.includes('/companion/') || 
+        photo.url.includes('/dropbox/') || 
+        photo.url.includes('/drive/')) {
+        
+        console.log(`[PhotoGrid] Detected temporary URL: ${photo.url}`);
+        
+        // Check if we have storage_path to construct a proper S3 URL
+        if (photo.storage_path) {
+            // Assume standard bucket if not specified
+            const bucketName = photo.bucket_name || 'shmong-photos';
+            const s3Url = `https://${bucketName}.s3.amazonaws.com/${photo.storage_path}`;
+            
+            console.log(`[PhotoGrid] Fixing temporary URL by replacing with: ${s3Url}`);
+            return s3Url;
+        }
+    }
+    
+    // Return the original URL if we couldn't transform it
+    return photo.url;
+};
+
 export const PhotoGrid = memo(({ photos, onDelete, onShare, onTrash }) => {
     const [selectedPhoto, setSelectedPhoto] = useState(null);
     const [isMobile, setIsMobile] = useState(false);
@@ -84,6 +116,9 @@ export const PhotoGrid = memo(({ photos, onDelete, onShare, onTrash }) => {
         
         const photo = photos[index];
         
+        // Sanitize the URL to ensure it's an S3 URL, not a temporary provider URL
+        const sanitizedUrl = sanitizeImageUrl(photo);
+        
         const motionProps = { 
             layout: true, 
             initial: { opacity: 0, scale: 0.9 }, 
@@ -139,7 +174,7 @@ export const PhotoGrid = memo(({ photos, onDelete, onShare, onTrash }) => {
                         style: { cursor: 'pointer', position: 'relative', zIndex: 2 },
                         children: _jsx(LazyLoadImage, {
                             alt: photo.title || `Photo ${photo.id}`,
-                            src: photo.url,
+                            src: sanitizedUrl,
                             effect: "blur",
                             threshold: 200,
                             className: "w-full h-full object-cover transition-transform duration-300 group-hover:scale-105",

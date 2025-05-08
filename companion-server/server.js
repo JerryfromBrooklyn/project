@@ -418,6 +418,25 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
     const bucketName = process.env.COMPANION_AWS_BUCKET;
     const publicUrl = `https://${bucketName}.s3.amazonaws.com/${s3Path}`;
     
+    // IMPORTANT FIX: Ensure we never store temporary Companion URLs
+    // Check if the uploaded file came from a provider and has a temporary URL
+    const hasTemporaryUrl = metadata.url && (
+      metadata.url.includes('localhost:3020') || 
+      metadata.url.includes('/companion/') || 
+      metadata.url.includes('/dropbox/') || 
+      metadata.url.includes('/drive/')
+    );
+    
+    // Always use S3 URL, never temporary provider URLs
+    const finalUrl = publicUrl;
+    
+    // Log URL transformation for debugging
+    if (hasTemporaryUrl) {
+      console.log(`🔄 [COMPANION] Replacing temporary URL with permanent S3 URL:
+        Temporary: ${metadata.url}
+        Permanent: ${finalUrl}`);
+    }
+    
     console.log(`📊 [COMPANION] Starting face detection and indexing for ${s3Path}`);
     
     // 2. Index faces using Rekognition
@@ -513,8 +532,8 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
       user_id: userId,
       username: username,
       storage_path: s3Path,
-      url: publicUrl,
-      public_url: publicUrl,
+      url: finalUrl,
+      public_url: finalUrl,
       uploaded_by: userId,
       uploadedBy: userId,
       file_size: fileData.size || 0,
@@ -527,7 +546,10 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
       matched_users: matchedUsers,
       face_ids: faceIds,
       // Add additional metadata from the request
-      ...metadata
+      ...metadata,
+      // IMPORTANT: Ensure URL fields always have S3 URLs, never provider URLs
+      url: finalUrl,
+      public_url: finalUrl
     };
     
     // Convert matched_users to string if it's an array (for GSI compatibility)
@@ -562,7 +584,7 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
       success: true,
       photoId: photoId,
       photoMetadata,
-      s3Url: publicUrl
+      s3Url: finalUrl
     };
   } catch (error) {
     console.error(`❌ [COMPANION] Error processing uploaded file:`, error);
@@ -682,6 +704,30 @@ const handleUploadComplete = async (payload) => {
     const result = await processUploadedFile(storagePath, fileData, enhancedMetadata);
     
     console.log('✅ [COMPANION] Upload processing result:', JSON.stringify(result, null, 2));
+    
+    // If successful, explicitly send the proper S3 URL back to the client 
+    // This ensures the client uses the S3 URL, not any temporary provider URL
+    if (result.success && result.photoMetadata) {
+      // Ensure we're using S3 URLs, not temporary provider URLs
+      const s3Url = result.photoMetadata.url;
+      
+      // Update URL fields to ensure they're using S3 URLs
+      if (result.photoMetadata.url && (
+        result.photoMetadata.url.includes('localhost:3020') || 
+        result.photoMetadata.url.includes('/companion/') || 
+        result.photoMetadata.url.includes('/dropbox/') ||
+        result.photoMetadata.url.includes('/drive/')
+      )) {
+        console.log(`🔄 [COMPANION] Fixing photoMetadata URLs before sending to client:
+          From: ${result.photoMetadata.url}
+          To: ${s3Url}`);
+        
+        // Force update URLs to use S3
+        result.photoMetadata.url = s3Url;
+        result.photoMetadata.public_url = s3Url;
+      }
+    }
+    
     return result;
     
   } catch (error) {

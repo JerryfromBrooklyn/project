@@ -302,14 +302,79 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
   };
 
   // Normalize the photo data structure to prevent errors
+  const sanitizeImageUrl = (url) => {
+    if (!url) return '';
+    
+    // If it's already an S3 URL, return it
+    if (url.includes('.s3.amazonaws.com/')) {
+      return url;
+    }
+    
+    // Replace localhost temporary URLs with valid S3 URLs if we can identify the path
+    if (url.includes('localhost:3020') || url.includes('/companion/') || 
+        url.includes('/dropbox/') || url.includes('/drive/')) {
+      
+      console.log(`🔄 [SimplePhotoInfoModal] Detected temporary URL: ${url}`);
+      
+      // Check if we have a proper S3 URL in storage_path
+      if (completePhotoData?.storage_path) {
+        const bucketName = completePhotoData.bucket_name || 
+                          (completePhotoData.storage_path.includes('s3://') ? 
+                            completePhotoData.storage_path.split('/')[2] : 'shmong-photos');
+        
+        const s3Path = completePhotoData.storage_path;
+        const s3Url = `https://${bucketName}.s3.amazonaws.com/${s3Path}`;
+        
+        console.log(`🔄 [SimplePhotoInfoModal] Replacing with S3 URL: ${s3Url}`);
+        return s3Url;
+      }
+    }
+    
+    // Return the original URL if we couldn't transform it
+    return url;
+  };
+
+  // Helper function to properly parse matched_users if it's a string
+  const parseMatchedUsers = (matchedUsers) => {
+    if (!matchedUsers) return [];
+    
+    // If already an array, return it
+    if (Array.isArray(matchedUsers)) {
+      return matchedUsers;
+    }
+    
+    // If it's a string (stringified JSON), try to parse it
+    if (typeof matchedUsers === 'string') {
+      try {
+        const parsed = JSON.parse(matchedUsers);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (error) {
+        console.error('❌ [SimplePhotoInfoModal] Error parsing matched_users string:', error);
+        return [];
+      }
+    }
+    
+    return [];
+  };
+
   const safePhoto = {
     id: (completePhotoData?.id || photo?.id) || 'unknown',
-    url: (completePhotoData?.url || completePhotoData?.public_url || photo?.url || photo?.public_url) || '',
+    url: sanitizeImageUrl(completePhotoData?.url || completePhotoData?.public_url || photo?.url || photo?.public_url),
     title: (completePhotoData?.title || photo?.title) || 'Untitled Photo',
     file_size: (completePhotoData?.file_size || completePhotoData?.fileSize || photo?.file_size || photo?.fileSize) || 0,
     file_type: (completePhotoData?.file_type || completePhotoData?.fileType || photo?.file_type || photo?.fileType) || 'unknown',
     created_at: (completePhotoData?.created_at || photo?.created_at) || new Date().toISOString(),
     faces: Array.isArray(completePhotoData?.faces) ? completePhotoData.faces : (Array.isArray(photo?.faces) ? photo.faces : []),
+    
+    // Add matched users data with proper parsing
+    matched_users: parseMatchedUsers(completePhotoData?.matched_users || photo?.matched_users),
+    matched_users_list: Array.isArray(completePhotoData?.matched_users_list) ? 
+      completePhotoData.matched_users_list : 
+      (Array.isArray(photo?.matched_users_list) ? photo.matched_users_list : 
+       parseMatchedUsers(completePhotoData?.matched_users || photo?.matched_users)),
+    
+    // Add storage path which can be useful for building S3 URLs
+    storage_path: completePhotoData?.storage_path || photo?.storage_path || '',
     
     // Add uploader information
     uploader: completePhotoData?.uploader || photo?.uploader || null,
@@ -1242,14 +1307,19 @@ export const SimplePhotoInfoModal = ({ photo, onClose }) => {
         {!showDetails && (
           <div className="w-full bg-black flex items-center justify-center relative flex-grow min-h-0">
             <img
-              src={encodeURI(safePhoto.url || '')}
+              src={encodeURI(safePhoto.url)}
               alt={safePhoto.title}
               className={cn(
                 "object-contain max-w-full max-h-full transition-opacity duration-300",
                 imageLoaded ? 'opacity-100' : 'opacity-0'
               )}
               onLoad={handleImageLoad}
-              onError={(e) => { e.target.onerror = null; e.target.src='/placeholder.png'; }}
+              onError={(e) => { 
+                console.error(`❌ [SimplePhotoInfoModal] Error loading image: ${safePhoto.url}`);
+                setIsImageError(true);
+                e.target.onerror = null; 
+                e.target.src='/placeholder.png'; 
+              }}
             />
             {!imageLoaded && (
               <div className="absolute inset-0 flex items-center justify-center">

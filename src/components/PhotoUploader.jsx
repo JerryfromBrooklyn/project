@@ -1124,6 +1124,23 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     // First, ensure any remote uploads are properly processed
     const processedRemotes = processRemoteUploads();
     
+    // Helper function to determine if a URL is a temporary Companion URL
+    const isTemporaryUrl = (url) => {
+      if (!url) return false;
+      return url.includes('localhost:3020') || 
+             url.includes('/companion/') || 
+             url.includes('/dropbox/') || 
+             url.includes('/drive/');
+    };
+    
+    // Helper function to convert a temporary URL to a potential S3 URL
+    const getS3UrlFromStoragePath = (userId, source, fileId) => {
+      // Expected S3 path format: photos/userId/source/fileId
+      const storagePath = `photos/${userId}/${source}/${fileId}`;
+      // We don't know the bucket name here, but server.js will handle that
+      return storagePath;
+    };
+    
     // Ensure we mark uploads as complete in the UI
     const completedFiles = uppy?.getFiles().filter(f => f.progress?.uploadComplete) || [];
     if (completedFiles.length > 0) {
@@ -1133,11 +1150,36 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         completedFiles.forEach(file => {
           const index = updatedUploads.findIndex(u => u.id === file.id);
           if (index !== -1) {
+            // Get the potential final S3 path if this is a remote upload with a temporary URL
+            const isRemote = file.source === 'dropbox' || file.source === 'googledrive';
+            const currentUrl = file.response?.body?.url || updatedUploads[index].photoDetails?.url;
+            const hasTemporaryUrl = isTemporaryUrl(currentUrl);
+            
+            // If it's a remote upload with a temporary URL, generate a proper S3 path
+            let properUrl = currentUrl;
+            let storagePath = '';
+            
+            if (isRemote && hasTemporaryUrl) {
+              storagePath = getS3UrlFromStoragePath(
+                user?.id || '', 
+                file.source, 
+                file.id
+              );
+              console.log(`[PhotoUploader] Detected temporary URL for remote upload. 
+                File: ${file.name}
+                URL: ${currentUrl}
+                Generated storage path: ${storagePath}`);
+            }
+            
             updatedUploads[index] = {
               ...updatedUploads[index],
               status: 'complete',
               progress: 100,
-              photoDetails: file.response?.body || updatedUploads[index].photoDetails || {}
+              photoDetails: {
+                ...updatedUploads[index].photoDetails,
+                ...file.response?.body,
+                storage_path: storagePath || file.response?.body?.storage_path || updatedUploads[index].photoDetails?.storage_path
+              }
             };
           }
         });
@@ -1956,14 +1998,14 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         
         <div className="md:col-span-2">
           <h4 className="font-medium text-apple-gray-900 mb-1">Recognition Results</h4>
-          {upload.photoDetails.matched_users && upload.photoDetails.matched_users.length > 0 ? (
+          {upload.photoDetails.matched_users_list && upload.photoDetails.matched_users_list.length > 0 ? (
             <div>
-              <p className="text-sm text-apple-gray-500 mb-2">Matched Users: {upload.photoDetails.matched_users.length}</p>
+              <p className="text-sm text-apple-gray-500 mb-2">Matched Users: {upload.photoDetails.matched_users_list.length}</p>
               <div className="grid grid-cols-2 gap-2">
-                {upload.photoDetails.matched_users.map((user, index) => (
+                {upload.photoDetails.matched_users_list.map((user, index) => (
                   <div key={index} className="bg-apple-gray-100 p-2 rounded">
-                    <p className="text-sm font-medium text-apple-gray-900">{user.name || `User ${index + 1}`}</p>
-                    <p className="text-xs text-apple-gray-500">Confidence: {user.confidence}%</p>
+                    <p className="text-sm font-medium text-apple-gray-900">{user.name || user.userId || `User ${index + 1}`}</p>
+                    <p className="text-xs text-apple-gray-500">Confidence: {user.similarity ? `${user.similarity.toFixed(2)}%` : (user.confidence ? `${user.confidence}%` : 'N/A')}</p>
                   </div>
                 ))}
               </div>
@@ -2304,7 +2346,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                   >
                     {upload.file && (
                       <img
-                        src={upload.file.preview || URL.createObjectURL(upload.file)}
+                        src={upload.photoDetails?.url || upload.file?.preview || (upload.file?.data ? URL.createObjectURL(upload.file.data) : undefined)}
                         alt={upload.file.name}
                         className="w-full h-full object-cover rounded-tl-lg rounded-tr-lg cursor-pointer"
                         onClick={() => setPreviewImage(upload.file)}
