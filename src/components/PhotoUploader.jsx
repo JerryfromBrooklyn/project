@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { updatePhotoVisibility } from '../services/userVisibilityService';
 import { useDropzone } from 'react-dropzone';
 import PropTypes from 'prop-types';
+import { io } from 'socket.io-client';
 
 // Import Uppy and its plugins
 import Uppy from '@uppy/core';
