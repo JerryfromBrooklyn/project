@@ -532,11 +532,18 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
     
     // Convert matched_users to string if it's an array (for GSI compatibility)
     if (photoMetadata.matched_users && Array.isArray(photoMetadata.matched_users)) {
+      // Store the full array in matched_users_list for JSON access
       photoMetadata.matched_users_list = [...photoMetadata.matched_users];
-      photoMetadata.matched_users = photoMetadata.matched_users
+      
+      // For GSI compatibility, create a comma-separated list of user IDs
+      photoMetadata.matched_users_string = photoMetadata.matched_users
         .map(match => typeof match === 'object' ? match.userId : match)
         .filter(Boolean)
         .join(',');
+        
+      // Leave matched_users as a proper JSON array, but serialized to a string
+      // This way it can be correctly parsed by JSON.parse() in the client
+      photoMetadata.matched_users = JSON.stringify(photoMetadata.matched_users);
     }
     
     // Store in DynamoDB
@@ -566,38 +573,123 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
   }
 };
 
-// Hook into Companion's upload complete event
-const handleUploadComplete = (payload) => {
+// Add this after the companionOptions definition but before the companion app initialization
+const handleUploadComplete = async (payload) => {
   try {
-    console.log('🎉 [COMPANION] Upload complete event received:', payload.url);
+    console.log('🎉 [COMPANION] Upload complete event received:', JSON.stringify(payload, null, 2));
     
     // Extract key from S3 URL 
-    // Example URL: https://bucket-name.s3.amazonaws.com/photos/user-id/fileId_filename.jpg
     const s3Url = payload.url;
     const bucketName = process.env.COMPANION_AWS_BUCKET;
-    const s3Path = s3Url.replace(`https://${bucketName}.s3.amazonaws.com/`, '');
+    const s3Path = s3Url ? s3Url.replace(`https://${bucketName}.s3.amazonaws.com/`, '') : null;
     
-    console.log(`🔍 [COMPANION] Extracted S3 path: ${s3Path}`);
+    // Extract storage path in various formats (handle socket events and companion events differently)
+    let storagePath = s3Path;
+    if (!storagePath && payload.uploadURL) {
+      storagePath = payload.uploadURL.replace(`https://${bucketName}.s3.amazonaws.com/`, '');
+    }
+    
+    console.log(`🔍 [COMPANION] Processing upload: ${storagePath || 'Unknown path'}`);
     
     // Get metadata from the payload
-    const metadata = payload.metadata || {};
+    let fileMetadata = payload.metadata || {};
     const fileData = payload.file || {};
     
-    // Process asynchronously
-    processUploadedFile(s3Path, fileData, metadata)
-      .then(result => {
-        if (result.success) {
-          console.log(`✅ [COMPANION] Successfully processed file: ${result.photoId}`);
-        } else {
-          console.error(`❌ [COMPANION] Failed to process file:`, result.error);
-        }
-      })
-      .catch(err => {
-        console.error(`❌ [COMPANION] Unexpected error processing file:`, err);
-      });
-      
+    console.log(`📋 [COMPANION] Initial metadata:`, JSON.stringify(fileMetadata, null, 2));
+    
+    // Get user data from our store - try multiple possible keys
+    let userData = null;
+    
+    // First check if we have a direct mapping for this upload ID
+    if (payload.uploadId && userMetadataStore.has(`uploadId:${payload.uploadId}`)) {
+      userData = userMetadataStore.get(`uploadId:${payload.uploadId}`);
+      console.log(`👤 [COMPANION] Found user data for upload ID ${payload.uploadId}:`, userData);
+    }
+    
+    // Then check for S3 key mapping
+    if (!userData && storagePath && userMetadataStore.has(`s3key:${storagePath}`)) {
+      userData = userMetadataStore.get(`s3key:${storagePath}`);
+      console.log(`👤 [COMPANION] Found user data for S3 key ${storagePath}:`, userData);
+    }
+    
+    // Try socket ID
+    if (!userData && payload.socketId) {
+      userData = userMetadataStore.get(payload.socketId);
+      console.log(`👤 [COMPANION] Found user data for socket ${payload.socketId}:`, userData);
+    }
+    
+    // Try session ID
+    if (!userData && payload.sessionId) {
+      userData = userMetadataStore.get(payload.sessionId);
+      console.log(`👤 [COMPANION] Found user data for session ${payload.sessionId}:`, userData);
+    }
+    
+    // Extract user ID directly from S3 path as a last resort
+    // Format: photos/userId/fileId_filename
+    if (!userData && storagePath) {
+      const pathParts = storagePath.split('/');
+      if (pathParts.length >= 2 && pathParts[0] === 'photos') {
+        const pathUserId = pathParts[1];
+        console.log(`👤 [COMPANION] Extracted user ID from S3 path: ${pathUserId}`);
+        userData = {
+          userId: pathUserId,
+          username: fileMetadata.username || DEFAULT_USERNAME
+        };
+      }
+    }
+    
+    // If we still don't have user data, try to use metadata from the payload
+    if (!userData && (fileMetadata.userId || fileMetadata.user_id)) {
+      console.log('👤 [COMPANION] Using user data from payload metadata');
+      userData = {
+        userId: fileMetadata.userId || fileMetadata.user_id,
+        username: fileMetadata.username || DEFAULT_USERNAME,
+        eventId: fileMetadata.eventId || ''
+      };
+    }
+    
+    // If we still don't have user data, use defaults
+    if (!userData) {
+      console.log('⚠️ [COMPANION] No user data found, using defaults');
+      userData = {
+        userId: DEFAULT_USER_ID,
+        username: DEFAULT_USERNAME
+      };
+    }
+    
+    // Ensure the metadata has all the necessary user fields
+    const enhancedMetadata = {
+      ...fileMetadata,
+      userId: userData.userId,
+      user_id: userData.userId,
+      uploadedBy: userData.userId,
+      uploaded_by: userData.userId,
+      username: userData.username,
+      eventId: userData.eventId || fileMetadata.eventId || '',
+      timestamp: Date.now(),
+      source: fileMetadata.source || 'companion'
+    };
+    
+    console.log('📤 [COMPANION] Processing with enhanced metadata:', JSON.stringify(enhancedMetadata, null, 2));
+    
+    // If we don't have a storage path, we can't process the upload
+    if (!storagePath) {
+      console.error('❌ [COMPANION] No storage path found, cannot process upload');
+      throw new Error('No storage path found in payload');
+    }
+    
+    // Process the upload
+    const result = await processUploadedFile(storagePath, fileData, enhancedMetadata);
+    
+    console.log('✅ [COMPANION] Upload processing result:', JSON.stringify(result, null, 2));
+    return result;
+    
   } catch (error) {
-    console.error(`❌ [COMPANION] Error in handleUploadComplete:`, error);
+    console.error(`❌ [COMPANION] Error processing upload:`, error);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 };
 
@@ -662,43 +754,65 @@ const companionOptions = {
               foundMetadata = possibleMetadataLocations[0];
               console.log('✅ [COMPANION] Found metadata in request:', JSON.stringify(foundMetadata, null, 2));
             } else {
-              console.log('❌ [COMPANION] No metadata found in any location, using empty object');
+              console.log('❌ [COMPANION] No metadata found in any location, checking session');
+              
+              // Check for session-based metadata
+              if (req.session && req.session.userData) {
+                try {
+                  const sessionData = typeof req.session.userData === 'string' 
+                    ? JSON.parse(req.session.userData) 
+                    : req.session.userData;
+                    
+                  if (sessionData.userId || sessionData.user_id) {
+                    foundMetadata = sessionData;
+                    console.log('✅ [COMPANION] Using metadata from session:', JSON.stringify(foundMetadata, null, 2));
+                  }
+                } catch (e) {
+                  console.error('❌ [COMPANION] Error parsing session userData:', e);
+                }
+              } else {
+                console.log('❌ [COMPANION] No session metadata found, using empty object');
+              }
             }
           } else {
             console.log('⚠️ [COMPANION] req object is null or undefined');
+          }
             
-            // If req is null, try to get metadata from our global store
-            // Check if we have a socket connection ID or session ID
-            const socketId = req?.socketId || (req?.uppy && req?.uppy.sessionID);
-            
-            // Try all possible session keys
-            const possibleKeys = [
-              socketId,
-              req?.session?.id,
-              'default-session'
-            ].filter(Boolean);
-            
-            console.log('🔍 [COMPANION] Looking for metadata with session keys:', possibleKeys);
-            
-            // Try each key
-            for (const key of possibleKeys) {
-              if (userMetadataStore.has(key)) {
-                foundMetadata = userMetadataStore.get(key);
+          // Try to get metadata from our global store
+          // Check if we have a socket connection ID or session ID
+          const socketId = req?.socketId || (req?.uppy && req?.uppy.sessionID);
+          
+          // Try all possible session keys
+          const possibleKeys = [
+            socketId,
+            req?.session?.id,
+            'default-session'
+          ].filter(Boolean);
+          
+          console.log('🔍 [COMPANION] Looking for metadata with session keys:', possibleKeys);
+          
+          // Try each key
+          for (const key of possibleKeys) {
+            if (userMetadataStore.has(key)) {
+              const storeMetadata = userMetadataStore.get(key);
+              // Only use if we don't already have better metadata
+              if (Object.keys(foundMetadata).length === 0 || !foundMetadata.userId) {
+                foundMetadata = storeMetadata;
                 console.log(`✅ [COMPANION] Found metadata in global store with key ${key}:`, 
                     JSON.stringify(foundMetadata, null, 2));
                 break;
               }
             }
-            
-            // If we still don't have metadata, check all entries in the store
-            if (Object.keys(foundMetadata).length === 0 && userMetadataStore.size > 0) {
-              console.log(`🔍 [COMPANION] Searching all ${userMetadataStore.size} entries in metadata store`);
-              // Just get the first entry as a fallback
-              const firstKey = Array.from(userMetadataStore.keys())[0];
-              foundMetadata = userMetadataStore.get(firstKey);
-              console.log(`✅ [COMPANION] Using first available metadata with key ${firstKey}:`, 
-                  JSON.stringify(foundMetadata, null, 2));
-            }
+          }
+          
+          // If we still don't have metadata, check all entries in the store
+          if (Object.keys(foundMetadata).length === 0 && !foundMetadata.userId && userMetadataStore.size > 0) {
+            console.log(`🔍 [COMPANION] Searching all ${userMetadataStore.size} entries in metadata store`);
+            // Just get the first entry as a fallback
+            const firstKey = Array.from(userMetadataStore.keys())[0];
+            foundMetadata = userMetadataStore.get(firstKey);
+            console.log(`✅ [COMPANION] Using first available metadata with key ${firstKey}:`, 
+                JSON.stringify(foundMetadata, null, 2));
           }
         }
         
@@ -743,6 +857,18 @@ const companionOptions = {
           contentType: req?.headers?.['content-type'] || 'unknown',
           metadata: foundMetadata || 'No metadata'
         });
+        
+        // Store this mapping for later use
+        // This helps us associate the S3 key with the correct user during afterComplete
+        if (req?.session?.id) {
+          userMetadataStore.set(`s3key:${key}`, {
+            userId: userId,
+            username: username,
+            sessionId: req.session.id,
+            timestamp: Date.now()
+          });
+          console.log(`📦 [COMPANION] Stored metadata mapping for S3 key: ${key}`);
+        }
         
         return key;
       } catch (error) {
@@ -815,6 +941,9 @@ const companionOptions = {
         }
       }
     }
+  },
+  hooks: {
+    afterComplete: handleUploadComplete
   }
 };
 
@@ -882,40 +1011,143 @@ if (companionSocket && companionSocket.on) {
     socket.on('auth', (data) => {
       try {
         console.log(`🔑 [COMPANION] Received auth data on socket ${socket.id}:`, data);
-        if (data && data.userId) {
+        if (data && (data.userId || data.user_id)) {
+          // Use the best available user ID
+          const userId = data.userId || data.user_id;
+          const username = data.username || DEFAULT_USERNAME;
+          
           // Store in our global map using socket ID as key
-          userMetadataStore.set(socket.id, data);
+          userMetadataStore.set(socket.id, {
+            userId: userId,
+            username: username,
+            eventId: data.eventId || '',
+            metadata: data,
+            timestamp: Date.now()
+          });
+          
+          // Also store with a longer session ID if available
+          if (socket.handshake && socket.handshake.session && socket.handshake.session.id) {
+            userMetadataStore.set(socket.handshake.session.id, {
+              userId: userId,
+              username: username,
+              socketId: socket.id,
+              eventId: data.eventId || '',
+              metadata: data,
+              timestamp: Date.now()
+            });
+            console.log(`📦 [COMPANION] Stored user metadata with session ID: ${socket.handshake.session.id}`);
+          }
+          
           console.log(`📦 [COMPANION] Stored user metadata in global map with socket ID: ${socket.id}`);
+          
+          // Acknowledge the auth with a success message
+          socket.emit('auth-response', {
+            success: true,
+            userId: userId,
+            username: username
+          });
+        } else {
+          console.warn(`⚠️ [COMPANION] Received auth event without user ID data`);
+          socket.emit('auth-response', {
+            success: false,
+            error: 'No user ID provided'
+          });
         }
       } catch (error) {
         console.error(`❌ [COMPANION] Error processing socket auth:`, error);
+        socket.emit('auth-response', {
+          success: false,
+          error: error.message
+        });
       }
     });
     
-    // Set user data in global store if passed as query param in socket connection
-    if (socket.handshake && socket.handshake.query) {
-      const { userId, username } = socket.handshake.query;
-      if (userId) {
-        userMetadataStore.set(socket.id, { userId, username: username || DEFAULT_USERNAME });
-        console.log(`📦 [COMPANION] Stored user metadata from socket handshake: ${socket.id}`);
+    // Listen for upload complete events from client
+    socket.on('upload-complete', async (data) => {
+      try {
+        console.log('📤 [COMPANION] Upload complete event received on socket:', data);
+        
+        // Store mapping from upload ID to S3 path/URL if available
+        if (data.uploadURL) {
+          const bucketName = process.env.COMPANION_AWS_BUCKET;
+          const s3Path = data.uploadURL.replace(`https://${bucketName}.s3.amazonaws.com/`, '');
+          console.log(`🔄 [COMPANION] Storing mapping for upload ${data.uploadId} to path ${s3Path}`);
+          
+          // Store by multiple identifiers to improve matching chances
+          if (data.uploadId) userMetadataStore.set(`uploadId:${data.uploadId}`, { s3Path, uploadId: data.uploadId });
+          if (s3Path) userMetadataStore.set(`s3key:${s3Path}`, { 
+            userId: data.metadata?.userId || userMetadataStore.get(socket.id)?.userId,
+            username: data.metadata?.username || userMetadataStore.get(socket.id)?.username,
+            uploadId: data.uploadId
+          });
+        }
+        
+        // Add socket ID to the payload
+        data.socketId = socket.id;
+        
+        // Get user data from our store for this socket
+        const userData = userMetadataStore.get(socket.id) || {};
+        
+        // Combine with data from the event
+        const enhancedData = {
+          ...data,
+          metadata: {
+            ...data.metadata,
+            userId: userData.userId || data.metadata?.userId,
+            user_id: userData.userId || data.metadata?.user_id,
+            username: userData.username || data.metadata?.username,
+            eventId: userData.eventId || data.metadata?.eventId,
+            timestamp: Date.now(),
+            source: data.metadata?.source || 'dropbox'
+          }
+        };
+        
+        console.log('📦 [COMPANION] Enhanced data for processing:', enhancedData);
+        
+        // Process the upload with combined data
+        const result = await handleUploadComplete(enhancedData);
+        
+        if (result && result.success) {
+          // Emit success back to client
+          console.log(`🔔 [COMPANION] Emitting success to socket ${socket.id} for photo ${result.photoId}`);
+          socket.emit('upload-processed', {
+            success: true,
+            photoId: result.photoId,
+            photoMetadata: result.photoMetadata,
+            uploadId: data.uploadId // Include the original uploadId for client-side matching
+          });
+          
+          // Also broadcast a global event in case this socket gets disconnected
+          socket.broadcast.emit('global-upload-processed', {
+            success: true,
+            photoId: result.photoId,
+            uploadId: data.uploadId,
+            s3Path: result.photoMetadata.storage_path,
+            userId: result.photoMetadata.user_id || result.photoMetadata.userId
+          });
+        } else {
+          throw new Error(result?.error || 'Unknown error processing upload');
+        }
+      } catch (error) {
+        console.error('❌ [COMPANION] Error processing upload-complete event:', error);
+        socket.emit('upload-processed', {
+          success: false,
+          error: error.message,
+          uploadId: data.uploadId // Include uploadId even on errors for client-side matching
+        });
       }
-    }
+    });
     
     socket.on('disconnect', () => {
       console.log(`🔌 [COMPANION] Socket disconnected: ${socket.id}`);
       // Clean up metadata for this socket
       userMetadataStore.delete(socket.id);
+      
+      // Don't delete session mappings as they might be needed for other connections
     });
   });
   
-  companionSocket.on('upload-complete', handleUploadComplete);
-  console.log('✅ [COMPANION] Registered upload-complete event handler');
+  console.log('✅ [COMPANION] Registered socket event handlers');
 } else {
-  // Fallback method using companionOptions hooks
-  if (companionOptions.hooks) {
-    companionOptions.hooks.afterComplete = handleUploadComplete;
-    console.log('✅ [COMPANION] Registered afterComplete hook for uploads');
-  } else {
-    console.warn('⚠️ [COMPANION] Could not register upload handlers, face processing may not work');
-  }
+  console.warn('⚠️ [COMPANION] No socket handler available, falling back to hooks');
 } 

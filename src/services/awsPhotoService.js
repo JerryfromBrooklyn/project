@@ -10,6 +10,32 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { filterPhotosByVisibility } from './userVisibilityService';
 import axios from 'axios';
 import { API_URL } from '../config';
+import { updatePhotoVisibility } from './userVisibilityService';
+import { dynamoClient } from '../lib/awsClient';
+
+/**
+ * Ensures all user ID fields have the same value for consistency
+ * @param {Object} metadata - The metadata object to process
+ * @returns {Object} - The processed metadata with consistent user ID fields
+ */
+export const ensureUserIdConsistency = (metadata) => {
+  if (!metadata) return metadata;
+  
+  // Make sure these fields are all consistently set with the same value
+  const userId = metadata.user_id || metadata.userId || metadata.uploadedBy || metadata.uploaded_by;
+  
+  if (userId) {
+    metadata.user_id = userId;
+    metadata.userId = userId;
+    metadata.uploadedBy = userId;
+    metadata.uploaded_by = userId;
+    
+    console.log(`[PhotoService] Ensuring consistent user ID fields for metadata: ${userId}`);
+  }
+  
+  return metadata;
+};
+
 /**
  * Service for handling photo operations with AWS S3 and DynamoDB
  */
@@ -146,25 +172,6 @@ export const awsPhotoService = {
             progressCallback(60);
 
             // Add consistency check for user ID fields
-            const ensureUserIdConsistency = (metadata) => {
-              if (!metadata) return metadata;
-              
-              // Make sure these fields are all consistently set with the same value
-              const userId = metadata.user_id || metadata.userId || metadata.uploadedBy || metadata.uploaded_by;
-              
-              if (userId) {
-                metadata.user_id = userId;
-                metadata.userId = userId;
-                metadata.uploadedBy = userId;
-                metadata.uploaded_by = userId;
-                
-                console.log(`[PhotoService] Ensuring consistent user ID fields for upload: ${userId}`);
-              }
-              
-              return metadata;
-            };
-            
-            // Apply to initial metadata preparation
             photoMetadata = ensureUserIdConsistency(photoMetadata);
 
             // --- Rekognition Face Indexing & Comparison --- 
@@ -689,8 +696,8 @@ export const awsPhotoService = {
                             
                             // Handle both string and array formats (after our fix)
                             if (typeof matchedUsers === 'string') {
-                                // First check if it's a comma-separated list from our fix
-                                if (matchedUsers.includes(',')) {
+                                // First check if it's a comma-separated list 
+                                if (matchedUsers.includes(',') && !matchedUsers.includes('{') && !matchedUsers.includes('[')) {
                                     // Convert comma-separated string back to array of user IDs
                                     const userIds = matchedUsers.split(',');
                                     if (userIds.includes(userId)) {
@@ -699,16 +706,34 @@ export const awsPhotoService = {
                                     }
                                 } else {
                                     try { 
-                                        // Check if it's JSON format from older data
-                                        matchedUsers = JSON.parse(matchedUsers); 
+                                        // Try to parse as JSON (properly formatted by our updated server code)
+                                        const parsedUsers = JSON.parse(matchedUsers);
+                                        
+                                        // Update the item's matched_users with the parsed array for later use
+                                        item.matched_users = parsedUsers;
+                                        
+                                        // Check if the current user is in the parsed array
+                                        if (Array.isArray(parsedUsers)) {
+                                            for (const match of parsedUsers) {
+                                                if (typeof match === 'string' && match === userId) {
+                                                    scanResults.push(item);
+                                                    return;
+                                                } else if (typeof match === 'object' && match !== null) {
+                                                    const matchUserId = match.userId || match.user_id;
+                                                    if (matchUserId === userId) {
+                                                        scanResults.push(item);
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
                                     } catch(e) { 
-                                        // If not JSON and not comma-separated, check if it's a single user ID
+                                        // If not valid JSON, check if it's a single user ID
                                         if (matchedUsers === userId) {
                                             scanResults.push(item);
                                             return;
                                         }
                                         console.log(`[PhotoService] Invalid JSON in matched_users for photo ${item.id}`);
-                                        return;
                                     }
                                 }
                             }
@@ -794,8 +819,8 @@ export const awsPhotoService = {
                             
                             // Handle both string and array formats (after our fix)
                             if (typeof matchedUsers === 'string') {
-                                // First check if it's a comma-separated list from our fix
-                                if (matchedUsers.includes(',')) {
+                                // First check if it's a comma-separated list 
+                                if (matchedUsers.includes(',') && !matchedUsers.includes('{') && !matchedUsers.includes('[')) {
                                     // Convert comma-separated string back to array of user IDs
                                     const userIds = matchedUsers.split(',');
                                     if (userIds.includes(userId)) {
@@ -804,16 +829,34 @@ export const awsPhotoService = {
                                     }
                                 } else {
                                     try { 
-                                        // Check if it's JSON format from older data
-                                        matchedUsers = JSON.parse(matchedUsers); 
+                                        // Try to parse as JSON (properly formatted by our updated server code)
+                                        const parsedUsers = JSON.parse(matchedUsers);
+                                        
+                                        // Update the item's matched_users with the parsed array for later use
+                                        item.matched_users = parsedUsers;
+                                        
+                                        // Check if the current user is in the parsed array
+                                        if (Array.isArray(parsedUsers)) {
+                                            for (const match of parsedUsers) {
+                                                if (typeof match === 'string' && match === userId) {
+                                                    scanResults.push(item);
+                                                    return;
+                                                } else if (typeof match === 'object' && match !== null) {
+                                                    const matchUserId = match.userId || match.user_id;
+                                                    if (matchUserId === userId) {
+                                                        scanResults.push(item);
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
                                     } catch(e) { 
-                                        // If not JSON and not comma-separated, check if it's a single user ID
+                                        // If not valid JSON, check if it's a single user ID
                                         if (matchedUsers === userId) {
                                             scanResults.push(item);
                                             return;
                                         }
                                         console.log(`[PhotoService] Invalid JSON in matched_users for photo ${item.id}`);
-                                        return;
                                     }
                                 }
                             }
@@ -1475,6 +1518,212 @@ export const awsPhotoService = {
         } catch (error) {
             console.error(`[PhotoService] Error in fetchPhotos: ${error}`);
             return [];
+        }
+    },
+    /**
+     * Save or update photo metadata in DynamoDB without uploading the file again
+     * This function is used to ensure remote uploads (Dropbox, Google Drive) have their
+     * metadata properly saved in the database
+     * 
+     * @param {Object} metadata - The photo metadata to save
+     * @returns {Promise<Object>} Result object with success flag
+     */
+    savePhotoMetadata: async (metadata) => {
+        if (!metadata || !metadata.id) {
+            console.error('❌ [awsPhotoService] Cannot save metadata without an ID');
+            return { success: false, error: 'Missing photo ID' };
+        }
+
+        const photoId = metadata.id;
+        console.log(`📝 [awsPhotoService] Saving metadata for photo ${photoId} to DynamoDB`);
+        console.log(`📝 [awsPhotoService] Source: ${metadata.source || 'unknown'}`);
+        console.log(`📝 [awsPhotoService] User ID: ${metadata.user_id || metadata.userId || metadata.uploadedBy || 'unknown'}`);
+
+        try {
+            // Log the incoming metadata
+            console.log(`📝 [awsPhotoService] Incoming metadata:`, JSON.stringify({
+                id: metadata.id,
+                user_id: metadata.user_id,
+                userId: metadata.userId,
+                uploadedBy: metadata.uploadedBy,
+                uploaded_by: metadata.uploaded_by,
+                source: metadata.source,
+                url: metadata.url?.substring(0, 50) + '...',
+                file_size: metadata.file_size,
+                file_type: metadata.file_type
+            }, null, 2));
+            
+            // Ensure we have all required fields
+            const requiredFields = [
+                'user_id', 'uploaded_by', 'storage_path', 'url', 'public_url', 
+                'file_size', 'file_type', 'created_at', 'updated_at'
+            ];
+
+            const missingFields = requiredFields.filter(field => !metadata[field]);
+            if (missingFields.length > 0) {
+                console.warn(`⚠️ [awsPhotoService] Missing required fields for photo ${photoId}: ${missingFields.join(', ')}`);
+                
+                // Add defaults for missing fields
+                if (!metadata.created_at) metadata.created_at = new Date().toISOString();
+                if (!metadata.updated_at) metadata.updated_at = new Date().toISOString();
+                if (!metadata.storage_path && metadata.url) {
+                    // Try to extract storage path from URL
+                    const match = metadata.url.match(/amazonaws\.com\/(.+)$/);
+                    if (match && match[1]) {
+                        metadata.storage_path = match[1];
+                    } else {
+                        // For Dropbox/Google Drive, we'll create a synthetic path
+                        const source = metadata.source || 'remote';
+                        const userId = metadata.user_id || metadata.userId || metadata.uploadedBy || metadata.uploaded_by;
+                        const fileName = metadata.id; // Use the ID as the filename
+                        
+                        // Create a storage path format similar to S3 uploads
+                        metadata.storage_path = `photos/${userId}/${source}/${fileName}`;
+                        console.log(`📝 [awsPhotoService] Created synthetic storage path: ${metadata.storage_path}`);
+                    }
+                }
+                
+                // If URL is missing but we have a source
+                if (!metadata.url || !metadata.public_url) {
+                    const imageUrl = metadata.url || '';
+                    metadata.url = imageUrl || `https://source.unsplash.com/random/?${metadata.source || 'photo'}`;
+                    metadata.public_url = metadata.url;
+                    console.log(`📝 [awsPhotoService] Created URL: ${metadata.url}`);
+                }
+                
+                // If file size is missing, use a default
+                if (!metadata.file_size) metadata.file_size = 0;
+                
+                // If file type is missing, infer from extension if possible
+                if (!metadata.file_type) {
+                    const filename = metadata.url || '';
+                    if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) {
+                        metadata.file_type = 'image/jpeg';
+                    } else if (filename.endsWith('.png')) {
+                        metadata.file_type = 'image/png';
+                    } else if (filename.endsWith('.gif')) {
+                        metadata.file_type = 'image/gif';
+                    } else {
+                        metadata.file_type = 'image/jpeg'; // Default to JPEG
+                    }
+                    console.log(`📝 [awsPhotoService] Inferred file type: ${metadata.file_type}`);
+                }
+                
+                // Set user_id and uploaded_by to same value if one is missing
+                if (!metadata.user_id && metadata.uploaded_by) metadata.user_id = metadata.uploaded_by;
+                if (!metadata.uploaded_by && metadata.user_id) metadata.uploaded_by = metadata.user_id;
+                if (!metadata.userId && metadata.user_id) metadata.userId = metadata.user_id;
+                if (!metadata.uploadedBy && metadata.user_id) metadata.uploadedBy = metadata.user_id;
+                
+                // If we still have missing critical fields, we can't proceed
+                const criticalFields = ['user_id', 'uploaded_by'];
+                const missingCritical = criticalFields.filter(field => !metadata[field]);
+                if (missingCritical.length > 0) {
+                    return { 
+                        success: false, 
+                        error: `Missing critical fields: ${missingCritical.join(', ')}` 
+                    };
+                }
+            }
+            
+            // Add source field if missing - default to 'remote' for this function
+            if (!metadata.source) {
+                metadata.source = 'remote';
+            }
+            
+            // Apply consistent user ID fields using our exported helper
+            metadata = ensureUserIdConsistency(metadata);
+            
+            // Add empty matched_users array if missing
+            if (!metadata.matched_users) {
+                metadata.matched_users = [];
+            }
+            
+            // Add empty faces array if missing
+            if (!metadata.faces) {
+                metadata.faces = [];
+            }
+            
+            // Log the final metadata before saving
+            console.log(`📝 [awsPhotoService] Final metadata prepared. User: ${metadata.user_id}, Source: ${metadata.source}`);
+            
+            // Marshal item for DynamoDB
+            console.log(`✏️ [awsPhotoService] DATABASE WRITE: Saving metadata to DynamoDB table ${PHOTOS_TABLE}...`);
+            
+            // FIX: Convert the matched_users array to a string to avoid GSI type mismatch error
+            if (metadata.matched_users && Array.isArray(metadata.matched_users)) {
+                console.log(`   ⚠️ Converting matched_users array to string to avoid GSI validation error`);
+                // Store the original array as matched_users_list for app processing
+                metadata.matched_users_list = [...metadata.matched_users];
+                // Convert to comma-separated string of user IDs for GSI compatibility
+                metadata.matched_users = metadata.matched_users
+                    .map(match => typeof match === 'object' ? match.userId : match)
+                    .filter(Boolean)
+                    .join(',');
+                console.log(`   ✏️ Converted matched_users to string format: "${metadata.matched_users}"`);
+            }
+            
+            // Convert the item to DynamoDB format
+            const marshalledItem = marshall(metadata, {
+                convertEmptyValues: true,
+                removeUndefinedValues: true,
+                convertClassInstanceToMap: true
+            });
+
+            const putParams = {
+                TableName: PHOTOS_TABLE,
+                Item: marshalledItem 
+            };
+            
+            console.log(`   PutItem Params ready. Writing to table: ${PHOTOS_TABLE}`);
+            
+            try {
+                await dynamoClient.send(new PutItemCommand(putParams));
+                console.log(`✅ [awsPhotoService] DATABASE WRITE SUCCESSFUL: Metadata saved for photo ${photoId}`);
+            } catch (dbError) {
+                console.error(`❌ [awsPhotoService] DynamoDB Error:`, dbError);
+                throw new Error(`DynamoDB Error: ${dbError.message}`);
+            }
+            
+            // Set visibility to VISIBLE
+            try {
+                const userId = metadata.user_id || metadata.userId;
+                console.log(`   Setting photo visibility to VISIBLE for user ${userId}, photo ${photoId}`);
+                await updatePhotoVisibility(userId, [photoId], 'VISIBLE');
+                console.log(`   ✅ Successfully set photo visibility to VISIBLE`);
+            } catch (visibilityError) {
+                console.error(`   ❌ Error setting photo visibility:`, visibilityError);
+                // Continue even if this fails - the photo metadata is still saved
+            }
+            
+            // Force a cache refresh for this user's photos
+            const userId = metadata.user_id || metadata.userId;
+            if (userId) {
+                const cacheKey = `matched_photos_${userId}`;
+                if (awsPhotoService.matchedPhotosCache.has(cacheKey)) {
+                    console.log(`🔄 [awsPhotoService] Clearing cached photos for user ${userId} to ensure fresh data`);
+                    awsPhotoService.matchedPhotosCache.delete(cacheKey);
+                }
+                
+                // Also clear the uploaded photos cache
+                const uploadedCacheKey = `uploaded_photos_${userId}`;
+                if (awsPhotoService.uploadedPhotosCache && awsPhotoService.uploadedPhotosCache.has(uploadedCacheKey)) {
+                    console.log(`🔄 [awsPhotoService] Clearing cached uploaded photos for user ${userId}`);
+                    awsPhotoService.uploadedPhotosCache.delete(uploadedCacheKey);
+                }
+            }
+            
+            return {
+                success: true,
+                photoId,
+                photoMetadata: metadata
+            };
+        } catch (error) {
+            console.error(`❌ [awsPhotoService] Error saving metadata:`, error);
+            return {
+                success: false,
+                error: error.message || 'Unknown error saving metadata'
+            };
         }
     }
 };

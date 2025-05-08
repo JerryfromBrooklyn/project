@@ -240,15 +240,10 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       source: file.source,
       metaSource: file.meta?.source
     });
-    
-    // Add explicit check for Dropbox IDs which start with "id:"
-    const isDropboxId = typeof file.id === 'string' && file.id.startsWith('id:');
-    
     return file.source === 'dropbox' || 
            file.source === 'googledrive' ||
            file.meta?.source === 'dropbox' || 
-           file.meta?.source === 'googledrive' ||
-           isDropboxId;
+           file.meta?.source === 'googledrive';
   }, []);
   
   // Initialize Uppy only once
@@ -752,23 +747,21 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         console.log('🔖 [Uppy] Setting metadata for file:', JSON.stringify(fileMeta));
         uppyInstance.setFileMeta(file.id, fileMeta);
         
-        // For remote files (Dropbox/Google Drive), ensure we have the preview
-        const isRemoteFile = file.source === 'dropbox' || file.source === 'googledrive' || 
-                             (typeof file.id === 'string' && file.id.startsWith('id:'));
-                             
-        if (isRemoteFile) {
+        // For remote files, ensure we have the preview
+        if (file.source && (file.source === 'dropbox' || file.source === 'googledrive')) {
           console.log(`🌟 [DATABASE] Remote file detected from ${file.source}. Will ensure database entry is created.`);
           
-          // Set preview if available
           if (file.thumbnail) {
             file.preview = file.thumbnail;
           } else if (file.remote && file.remote.url) {
             file.preview = file.remote.url;
           }
           
-          // NEW: Track the remote upload for special handling
-          const remoteUploadsKey = `remote_uploads_${userId}`;
+          // NEW: Keep a special record of remote uploads to ensure they're handled properly
+          console.log(`🌐 [Uppy] Tracking remote upload from ${file.source}: ${file.name} with ID ${file.id}`);
+          // Save an additional session record to identify this as a remote upload
           try {
+            const remoteUploadsKey = `remote_uploads_${userId}`;
             let remoteUploads = JSON.parse(localStorage.getItem(remoteUploadsKey) || '[]');
             remoteUploads.push({
               id: file.id,
@@ -778,65 +771,8 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
               userId: userId
             });
             localStorage.setItem(remoteUploadsKey, JSON.stringify(remoteUploads));
-            console.log(`🌐 [Uppy] Tracking remote upload from ${file.source}: ${file.name} with ID ${file.id}`);
           } catch (error) {
             console.error('❌ [Uppy] Error saving remote upload tracking data:', error);
-          }
-          
-          // NEW: Set up a fallback save to database even before upload completes
-          // This ensures metadata is saved to database regardless of socket status
-          try {
-            // Only do this for Dropbox and Google Drive files
-            setTimeout(() => {
-              // Basic metadata for the file
-              const basicMetadata = {
-                id: file.id,
-                user_id: userId,
-                userId: userId,
-                uploadedBy: userId,
-                uploaded_by: userId,
-                username: username,
-                source: file.source,
-                url: file.thumbnail || file.preview || '',
-                public_url: file.thumbnail || file.preview || '',
-                file_size: file.size || 0,
-                file_type: file.type || 'image/jpeg',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                storage_path: `photos/${userId}/${file.source}/${file.id}`,
-                // Include event metadata if available
-                ...metadata,
-                // Empty arrays for faces and matches
-                faces: [],
-                matched_users: []
-              };
-              
-              console.log(`🌟 [DATABASE] Setting up fallback save to database for ${file.id} from ${file.source}`);
-              
-              // Wait a bit to ensure upload process has started
-              setTimeout(() => {
-                // Check if this file is still in Uppy
-                if (uppyInstance.getFile(file.id)) {
-                  console.log(`🌟 [DATABASE] Fallback saving metadata to database for ${file.id}`);
-                  
-                  awsPhotoService.savePhotoMetadata(basicMetadata)
-                    .then(result => {
-                      if (result.success) {
-                        console.log(`🌟 [DATABASE] SUCCESS: Fallback metadata save successful for ${file.id}`);
-                      } else {
-                        console.warn(`🌟 [DATABASE] WARNING: Fallback metadata save failed: ${result.error}`);
-                      }
-                    })
-                    .catch(error => {
-                      console.error(`🌟 [DATABASE] ERROR: Fallback metadata save exception:`, error);
-                    });
-                } else {
-                  console.log(`🌟 [DATABASE] File ${file.id} no longer in Uppy, skipping fallback save`);
-                }
-              }, 10000); // Wait 10 seconds to ensure upload has had time to start
-            }, 2000); // Small delay to ensure proper setup
-          } catch (fallbackError) {
-            console.error('❌ [DATABASE] Error setting up fallback database save:', fallbackError);
           }
         }
       });
@@ -1218,7 +1154,8 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       ]);
     }
     
-    // Check for remote uploads (Dropbox/Google Drive)
+    // NEW: Ensure all remote uploads are saved to the database correctly
+    // This fixes the issue with Dropbox/Google Drive uploads not appearing in "My uploads"
     const remoteUploads = uploads.filter(upload => 
       (upload.source === 'dropbox' || upload.source === 'googledrive' || 
        upload.file?.source === 'dropbox' || upload.file?.source === 'googledrive') &&
@@ -1226,102 +1163,65 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     );
     
     if (remoteUploads.length > 0) {
-      console.log(`[PhotoUploader] Ensuring ${remoteUploads.length} remote uploads are properly saved to database`);
+      console.log(`[PhotoUploader] Ensuring ${remoteUploads.length} remote uploads are saved to database`);
       
-      // Process each remote upload to save it to the database
-      const dbSavePromises = remoteUploads.map(async (upload) => {
+      // Process each remote upload to ensure it's saved correctly
+      remoteUploads.forEach(async (upload) => {
         try {
           // Only process if we have the necessary data
-          if (!upload.id) {
-            console.warn(`[PhotoUploader] Cannot save remote upload without ID`);
+          if (!upload.photoDetails?.id) {
+            console.warn(`[PhotoUploader] Cannot save remote upload without ID: ${upload.id}`);
             return;
           }
           
-          // Determine if this is a Dropbox or Google Drive upload
-          const source = upload.source || upload.file?.source || 
-                       (typeof upload.id === 'string' && upload.id.startsWith('id:') ? 'dropbox' : 'remote');
-          
           // Create metadata object with required fields for DynamoDB
           const uploadMetadata = {
-            id: upload.photoDetails?.id || upload.id,
+            id: upload.photoDetails.id,
             user_id: user?.id || upload.metadata?.userId || upload.photoDetails?.userId,
-            userId: user?.id || upload.metadata?.userId || upload.photoDetails?.userId,
             uploaded_by: user?.id || upload.metadata?.uploadedBy || upload.photoDetails?.uploadedBy,
-            uploadedBy: user?.id || upload.metadata?.uploadedBy || upload.photoDetails?.uploadedBy,
             username: user?.username || upload.metadata?.username || upload.photoDetails?.username,
-            storage_path: upload.photoDetails?.storage_path || `photos/${user?.id}/${source}/${upload.id}`,
-            url: upload.photoDetails?.url || upload.file?.preview || '',
-            public_url: upload.photoDetails?.url || upload.file?.preview || '',
-            file_size: upload.file?.size || 0,
-            file_type: upload.file?.type || 'image/jpeg',
+            storage_path: upload.photoDetails.storage_path || upload.photoDetails.s3Path,
+            url: upload.photoDetails.url || upload.file.preview,
+            public_url: upload.photoDetails.url || upload.file.preview,
+            file_size: upload.file.size,
+            file_type: upload.file.type,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            faces: upload.photoDetails?.faces || [],
-            matched_users: upload.photoDetails?.matched_users || [],
-            face_ids: upload.photoDetails?.face_ids || [],
-            source: source,
+            faces: upload.photoDetails.faces || [],
+            matched_users: upload.photoDetails.matched_users || [],
+            face_ids: upload.photoDetails.face_ids || [],
+            source: upload.source || upload.file?.source || 'remote',
             // Include event metadata
-            eventName: metadata.eventName || upload.metadata?.eventName || '',
-            venueName: metadata.venueName || upload.metadata?.venueName || '',
-            promoterName: metadata.promoterName || upload.metadata?.promoterName || '',
-            date: metadata.date || upload.metadata?.date || new Date().toISOString().split('T')[0],
-            albumLink: metadata.albumLink || upload.metadata?.albumLink || '',
-            // Include nested structures
             event_details: upload.metadata?.event_details || metadata?.event_details || {
-              name: metadata.eventName || 'Event',
-              date: metadata.date || new Date().toISOString().split('T')[0],
+              name: metadata.eventName,
+              date: metadata.date,
               type: 'event'
             },
             venue: upload.metadata?.venue || {
-              name: metadata.venueName || 'Venue',
+              name: metadata.venueName,
               id: null
             },
             promoter: upload.metadata?.promoter || {
-              name: metadata.promoterName || 'Promoter'
+              name: metadata.promoterName
             },
             location: upload.metadata?.location || metadata.location || {},
             externalAlbumLink: upload.metadata?.albumLink || metadata.albumLink
           };
           
-          console.log(`[PhotoUploader] Saving metadata for remote upload ${upload.id} to database`, {
-            id: uploadMetadata.id,
-            source: uploadMetadata.source,
-            user_id: uploadMetadata.user_id
-          });
+          console.log(`[PhotoUploader] Re-saving metadata for remote upload ${upload.id} to database:`, uploadMetadata);
           
           // Use the awsPhotoService to save metadata (without re-uploading the file)
           const result = await awsPhotoService.savePhotoMetadata(uploadMetadata);
           
           if (result.success) {
-            console.log(`[PhotoUploader] ✅ Successfully saved remote upload metadata to database: ${upload.id}`);
-            return true;
+            console.log(`[PhotoUploader] Successfully saved remote upload metadata to database: ${upload.id}`);
           } else {
-            console.error(`[PhotoUploader] ❌ Failed to save remote upload metadata: ${result.error}`);
-            return false;
+            console.error(`[PhotoUploader] Failed to save remote upload metadata: ${result.error}`);
           }
         } catch (error) {
-          console.error(`[PhotoUploader] ❌ Error saving remote upload metadata:`, error);
-          return false;
+          console.error(`[PhotoUploader] Error saving remote upload metadata:`, error);
         }
       });
-      
-      // Wait for all database saves to complete before continuing
-      Promise.all(dbSavePromises)
-        .then(results => {
-          const successCount = results.filter(Boolean).length;
-          console.log(`[PhotoUploader] Database save operations completed: ${successCount} successful, ${results.length - successCount} failed`);
-          
-          // After database save, force refresh photos
-          setTimeout(() => {
-            if (onUploadComplete) {
-              console.log('[PhotoUploader] Database save complete, refreshing display');
-              onUploadComplete(true);
-            }
-          }, 1000);
-        })
-        .catch(error => {
-          console.error('[PhotoUploader] Error during database save operations:', error);
-        });
     }
     
     // Create a small delay to ensure backend processing completes
@@ -1341,134 +1241,9 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           console.log('[PhotoUploader] Secondary refresh to ensure photos are displayed.');
           onUploadComplete(true);
         }
-      }, 3000); // Small delay to ensure backend processing completes
+      }, 3000);
     }, 1000); // Small delay to ensure backend processing completes
   }, [uppy, onUploadComplete, uploads, user, processRemoteUploads, metadata]);
-
-  // Process successful uploads
-  const processSuccessfulUploads = useCallback((successfulUploads) => {
-    if (!successfulUploads || successfulUploads.length === 0) return;
-    
-    console.log(`🧾 [Uppy] Processing ${successfulUploads.length} successful uploads...`);
-    
-    // Update the uploads state
-    setUploads(prev => prev.map(upload => {
-      const successfulUpload = successfulUploads.find(u => u.id === upload.id);
-      if (successfulUpload) {
-        // Extract response data consistently
-        const responseData = successfulUpload.response?.body || {};
-        const uploadURL = successfulUpload.uploadURL || responseData.url || '';
-        
-        // For all uploads, store additional metadata to help with identification
-        const uploaderId = user?.id || upload.metadata?.userId || upload.file.meta?.userId;
-        const uploaderName = user?.username || upload.metadata?.username || upload.file.meta?.username;
-        
-        // Determine the source with explicit checking
-        let sourceType = 'local';
-        const isDropboxId = typeof successfulUpload.id === 'string' && successfulUpload.id.startsWith('id:');
-        
-        if (successfulUpload.source === 'dropbox' || upload.source === 'dropbox' || 
-            successfulUpload.meta?.source === 'dropbox' || isDropboxId) {
-          sourceType = 'dropbox';
-        } else if (successfulUpload.source === 'googledrive' || upload.source === 'googledrive' || 
-                  successfulUpload.meta?.source === 'googledrive') {
-          sourceType = 'googledrive';
-        }
-        
-        console.log(`🧾 [Uppy] Processing upload with source: ${sourceType}`);
-        
-        // Create a complete photoDetails object with all required fields
-        const photoDetails = {
-          id: responseData.id || successfulUpload.id,
-          url: uploadURL || successfulUpload.preview || successfulUpload.thumbnail,
-          matched_users: responseData.matched_users || [],
-          faces: responseData.faces || [],
-          userId: uploaderId,
-          user_id: uploaderId,
-          username: uploaderName,
-          uploadedBy: uploaderId,
-          uploaded_by: uploaderId,
-          file_size: upload.file.size,
-          file_type: upload.file.type || 'image/jpeg',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          storage_path: responseData.storage_path || `photos/${uploaderId}/${sourceType}/${successfulUpload.id}`,
-          public_url: uploadURL || successfulUpload.preview || successfulUpload.thumbnail,
-          source: sourceType,
-          // Include additional metadata
-          metadata: {
-            ...upload.metadata,
-            userId: uploaderId,
-            username: uploaderName,
-            source: sourceType
-          },
-          // Event data
-          event_details: metadata.event_details || {
-            name: metadata.eventName || 'Event',
-            date: metadata.date || new Date().toISOString().split('T')[0],
-            type: 'event'
-          },
-          venue: {
-            name: metadata.venueName || 'Venue',
-            id: null
-          },
-          promoter: {
-            name: metadata.promoterName || 'Promoter'
-          },
-          location: metadata.location || {},
-          externalAlbumLink: metadata.albumLink || ''
-        };
-        
-        // Log the created photoDetails
-        console.log(`🌟 [DATABASE] Created photoDetails for upload: ${upload.id}, Source: ${sourceType}`);
-        
-        // Check if this is a remote upload (Dropbox/Google Drive)
-        const isRemoteSource = sourceType === 'dropbox' || sourceType === 'googledrive';
-                           
-        if (isRemoteSource) {
-          console.log(`🌟 [DATABASE] Remote upload completed. Will save metadata directly to database for ${upload.id}`);
-          
-          // Save metadata to database immediately
-          awsPhotoService.savePhotoMetadata(photoDetails)
-            .then(result => {
-              if (result.success) {
-                console.log(`🌟 [DATABASE] SUCCESS: Saved remote upload metadata to database for ${upload.id}`);
-                
-                // Refresh the list of uploads after successful save to database
-                setTimeout(() => {
-                  if (onUploadComplete) {
-                    console.log(`🔄 [Uppy] Refreshing display after successful database save for ${upload.id}`);
-                    onUploadComplete(true);
-                  }
-                }, 2000); // Give database operation time to complete
-              } else {
-                console.error(`🌟 [DATABASE] ERROR: Failed to save remote upload metadata for ${upload.id}: ${result.error}`);
-              }
-            })
-            .catch(error => {
-              console.error(`🌟 [DATABASE] ERROR: Exception while saving remote upload metadata:`, error);
-            });
-        }
-        
-        // Return updated upload object with additional details
-        return {
-          ...upload,
-          status: 'complete',
-          progress: {
-            ...upload.progress,
-            uploadComplete: true,
-            percentage: 100
-          },
-          successResponse: responseData,
-          uploadURL,
-          photoDetails,
-          source: sourceType
-        };
-      }
-      return upload;
-    }));
-    
-  }, [user, metadata, onUploadComplete]);
 
   // Add handleBatchComplete with explicit checks for remote uploads
   const handleBatchComplete = useCallback((result) => {
@@ -1487,8 +1262,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       id: file.id,
       source: file.source,
       metaSource: file.meta?.source,
-      hasRemote: file.remote ? true : false,
-      isDropboxId: typeof file.id === 'string' && file.id.startsWith('id:')
+      hasRemote: file.remote ? true : false
     }));
     
     console.log('🔍 [Uppy] Upload sources:', uploadSources);
@@ -1504,24 +1278,10 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       // Create temporary upload objects for any remote uploads not in state
       const missingRemoteUploads = [];
       
-      // Process each upload to identify Dropbox/Google Drive
+      // For Dropbox uploads, we might not have the upload in state yet
       successfulUploads.forEach(successfulUpload => {
         // Dropbox upload IDs start with "id:"
-        const isDropboxId = typeof successfulUpload.id === 'string' && successfulUpload.id.startsWith('id:');
-        
-        // Determine the source with explicit checking
-        let uploadSource = 'local';
-        if (successfulUpload.source === 'dropbox' || isDropboxId) {
-          uploadSource = 'dropbox';
-        } else if (successfulUpload.source === 'googledrive') {
-          uploadSource = 'googledrive';
-        } else if (successfulUpload.meta?.source === 'dropbox') {
-          uploadSource = 'dropbox';
-        } else if (successfulUpload.meta?.source === 'googledrive') {
-          uploadSource = 'googledrive';
-        }
-        
-        console.log(`🔍 [Uppy] Determined upload source for ${successfulUpload.id}: ${uploadSource}`);
+        const isDropboxId = successfulUpload.id.startsWith('id:');
         
         // Check if this upload is already in our state
         let upload = uploads.find(u => u.id === successfulUpload.id);
@@ -1529,8 +1289,8 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         if (!upload) {
           console.log(`⚠️ [Uppy] Could not find upload in state for ID: ${successfulUpload.id}, creating one`);
           
-          // Check if this is a remote upload
-          const isRemote = uploadSource === 'dropbox' || uploadSource === 'googledrive';
+          // Check if this is a remote upload by ID format or source
+          const isRemote = isDropboxId || checkIsRemoteUpload(successfulUpload);
           
           if (isRemote) {
             console.log(`🌟 [DATABASE] Creating temporary upload object for remote file: ${successfulUpload.id}`);
@@ -1543,10 +1303,10 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 type: successfulUpload.type || 'application/octet-stream',
                 size: successfulUpload.size || 0,
                 preview: successfulUpload.preview || successfulUpload.thumbnail,
-                source: uploadSource,
+                source: successfulUpload.source || successfulUpload.meta?.source || (isDropboxId ? 'dropbox' : 'remote'),
                 meta: {
                   ...successfulUpload.meta,
-                  source: uploadSource
+                  source: successfulUpload.source || successfulUpload.meta?.source || (isDropboxId ? 'dropbox' : 'remote')
                 }
               },
               progress: {
@@ -1563,22 +1323,13 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 uploadedBy: uploaderId,
                 uploaded_by: uploaderId,
                 username: uploaderName,
-                source: uploadSource
+                source: successfulUpload.source || successfulUpload.meta?.source || (isDropboxId ? 'dropbox' : 'remote')
               },
-              source: uploadSource
+              source: successfulUpload.source || successfulUpload.meta?.source || (isDropboxId ? 'dropbox' : 'remote')
             };
             
             // Add it to our collection for processing
             missingRemoteUploads.push(upload);
-          }
-        } else {
-          // Ensure existing upload has the correct source
-          upload.source = uploadSource;
-          if (upload.file) {
-            upload.file.source = uploadSource;
-          }
-          if (upload.metadata) {
-            upload.metadata.source = uploadSource;
           }
         }
       });
@@ -1654,22 +1405,11 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 source: upload.source || successfulUpload.source || successfulUpload.meta?.source || 'remote'
               };
               
-              // Explicitly determine the source
-              let sourceType = 'remote';
-              if (upload.source === 'dropbox' || successfulUpload.source === 'dropbox' || 
-                  successfulUpload.meta?.source === 'dropbox' || successfulUpload.id.startsWith('id:')) {
-                sourceType = 'dropbox';
-              } else if (upload.source === 'googledrive' || successfulUpload.source === 'googledrive' || 
-                         successfulUpload.meta?.source === 'googledrive') {
-                sourceType = 'googledrive';
-              }
-              
               // Inform the server about this upload so it can match it later
               const socketData = {
                 uploadId: upload.id,
                 photoId: photoDetails.id,
                 uploadURL: uploadURL,
-                source: sourceType,
                 metadata: {
                   userId: uploaderId,
                   user_id: uploaderId,
@@ -1678,108 +1418,29 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                   username: uploaderName,
                   eventId: eventId || '',
                   timestamp: Date.now(),
-                  source: sourceType,
+                  source: upload.source || successfulUpload.source || successfulUpload.meta?.source || 'remote',
                   // Include all metadata for consistent processing
                   ...metadata,
                   ...upload.metadata || {}
                 }
               };
               
-              // Add explicit flags for source type
-              if (sourceType === 'dropbox') {
+              // NEW: Add explicit flags for source type
+              if (upload.source === 'dropbox' || successfulUpload.source === 'dropbox' || successfulUpload.meta?.source === 'dropbox' || successfulUpload.id.startsWith('id:')) {
                 socketData.isDropbox = true;
-              } else if (sourceType === 'googledrive') {
+                socketData.source = 'dropbox';
+                socketData.metadata.source = 'dropbox';
+              } else if (upload.source === 'googledrive' || successfulUpload.source === 'googledrive' || successfulUpload.meta?.source === 'googledrive') {
                 socketData.isGoogleDrive = true;
+                socketData.source = 'googledrive';
+                socketData.metadata.source = 'googledrive';
               }
               
               console.log(`📤 [Uppy] Sending upload-complete event via socket for ${upload.id}:`, socketData);
               socket.emit('upload-complete', socketData);
               console.log(`📤 [Uppy] Sent upload-complete event for ${upload.id}`);
-              
-              // CRITICAL: Also save the metadata directly to the database
-              // This ensures it's properly saved even if socket communication fails
-              console.log(`🌟 [DATABASE] Explicitly saving metadata to database for ${upload.id}`);
-              
-              // Create a complete metadata object
-              const completeMetadata = {
-                id: photoDetails.id,
-                user_id: uploaderId,
-                userId: uploaderId,
-                uploadedBy: uploaderId,
-                uploaded_by: uploaderId,
-                username: uploaderName,
-                source: sourceType,
-                url: uploadURL || successfulUpload.preview || successfulUpload.thumbnail,
-                public_url: uploadURL || successfulUpload.preview || successfulUpload.thumbnail,
-                file_size: successfulUpload.size || 0,
-                file_type: successfulUpload.type || 'image/jpeg',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                storage_path: `photos/${uploaderId}/${sourceType}/${successfulUpload.id}`,
-                // Add event metadata
-                eventName: metadata.eventName || '',
-                venueName: metadata.venueName || '',
-                promoterName: metadata.promoterName || '',
-                date: metadata.date || new Date().toISOString().split('T')[0],
-                albumLink: metadata.albumLink || '',
-                // Include all nested structures
-                event_details: metadata.event_details || {},
-                venue: metadata.venue || {},
-                promoter: metadata.promoter || {},
-                location: metadata.location || {},
-                externalAlbumLink: metadata.albumLink || metadata.externalAlbumLink || '',
-                // Empty arrays for faces and matches
-                faces: [],
-                matched_users: []
-              };
-              
-              // Call the direct database save function
-              awsPhotoService.savePhotoMetadata(completeMetadata)
-                .then(result => {
-                  if (result.success) {
-                    console.log(`🌟 [DATABASE] SUCCESS: Metadata saved directly to database for ${upload.id}`);
-                  } else {
-                    console.error(`🌟 [DATABASE] ERROR: Failed to save metadata directly: ${result.error}`);
-                  }
-                })
-                .catch(error => {
-                  console.error(`🌟 [DATABASE] ERROR: Exception saving metadata directly:`, error);
-                });
             } else {
-              console.warn(`⚠️ [Uppy] No socket available for ${upload.source || successfulUpload.source} upload, saving metadata directly`);
-              
-              // If no socket is available, save metadata directly
-              const directMetadata = {
-                id: successfulUpload.id,
-                user_id: uploaderId,
-                userId: uploaderId,
-                uploadedBy: uploaderId,
-                uploaded_by: uploaderId,
-                username: uploaderName,
-                source: upload.source || successfulUpload.source || successfulUpload.meta?.source || 'remote',
-                url: successfulUpload.preview || successfulUpload.thumbnail || '',
-                public_url: successfulUpload.preview || successfulUpload.thumbnail || '',
-                file_size: successfulUpload.size || 0,
-                file_type: successfulUpload.type || 'image/jpeg',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                storage_path: `photos/${uploaderId}/${upload.source || 'remote'}/${successfulUpload.id}`,
-                // Add event metadata
-                ...metadata
-              };
-              
-              // Save directly to database
-              awsPhotoService.savePhotoMetadata(directMetadata)
-                .then(result => {
-                  if (result.success) {
-                    console.log(`🌟 [DATABASE] SUCCESS: Metadata saved directly (fallback) for ${upload.id}`);
-                  } else {
-                    console.error(`🌟 [DATABASE] ERROR: Failed to save metadata directly (fallback): ${result.error}`);
-                  }
-                })
-                .catch(error => {
-                  console.error(`🌟 [DATABASE] ERROR: Exception saving metadata directly (fallback):`, error);
-                });
+              console.warn(`⚠️ [Uppy] No socket available for ${upload.source || successfulUpload.source} upload`);
             }
           } else {
             console.warn('⚠️ [Uppy] Unable to get plugin info for socket communication');
@@ -2036,6 +1697,113 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       });
     }
   };
+
+  // Process successful uploads
+  const processSuccessfulUploads = useCallback((successfulUploads) => {
+    if (!successfulUploads || successfulUploads.length === 0) return;
+    
+    console.log(`🧾 [Uppy] Processing ${successfulUploads.length} successful uploads...`);
+    
+    // Update the uploads state
+    setUploads(prev => prev.map(upload => {
+      const successfulUpload = successfulUploads.find(u => u.id === upload.id);
+      if (successfulUpload) {
+        // Extract response data consistently
+        const responseData = successfulUpload.response?.body || {};
+        const uploadURL = successfulUpload.uploadURL || responseData.url || '';
+        
+        // For all uploads, store additional metadata to help with identification
+        const uploaderId = user?.id || upload.metadata?.userId || upload.file.meta?.userId;
+        const uploaderName = user?.username || upload.metadata?.username || upload.file.meta?.username;
+        
+        // Create a complete photoDetails object with all required fields
+        const photoDetails = {
+          id: responseData.id || successfulUpload.id,
+          url: uploadURL || successfulUpload.preview || successfulUpload.thumbnail,
+          matched_users: responseData.matched_users || [],
+          faces: responseData.faces || [],
+          userId: uploaderId,
+          user_id: uploaderId,
+          username: uploaderName,
+          uploadedBy: uploaderId,
+          uploaded_by: uploaderId,
+          file_size: upload.file.size,
+          file_type: upload.file.type || 'image/jpeg',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          storage_path: responseData.storage_path || successfulUpload.id,
+          public_url: uploadURL || successfulUpload.preview || successfulUpload.thumbnail,
+          source: upload.source || successfulUpload.source || successfulUpload.meta?.source || 'local',
+          // Include additional metadata
+          metadata: {
+            ...upload.metadata,
+            userId: uploaderId,
+            username: uploaderName,
+            source: upload.source || successfulUpload.source || successfulUpload.meta?.source || 'local'
+          },
+          // Event data
+          event_details: metadata.event_details || {
+            name: metadata.eventName || 'Event',
+            date: metadata.date || new Date().toISOString().split('T')[0],
+            type: 'event'
+          },
+          venue: {
+            name: metadata.venueName || 'Venue',
+            id: null
+          },
+          promoter: {
+            name: metadata.promoterName || 'Promoter'
+          },
+          location: metadata.location || {},
+          externalAlbumLink: metadata.albumLink || ''
+        };
+        
+        // Log the created photoDetails
+        console.log(`🌟 [DATABASE] Created photoDetails for upload: ${upload.id}, Source: ${upload.source || successfulUpload.source || successfulUpload.meta?.source}`);
+        
+        // Check if this is a remote upload (Dropbox/Google Drive)
+        const isRemoteUpload = successfulUpload.source === 'dropbox' || 
+                           successfulUpload.source === 'googledrive' ||
+                           successfulUpload.meta?.source === 'dropbox' || 
+                           successfulUpload.meta?.source === 'googledrive' ||
+                           upload.source === 'dropbox' || 
+                           upload.source === 'googledrive';
+                           
+        if (isRemoteUpload) {
+          console.log(`🌟 [DATABASE] Remote upload completed. Will save metadata directly to database for ${upload.id}`);
+          
+          // Ensure we're actually calling the AWS service to save the metadata
+          awsPhotoService.savePhotoMetadata(photoDetails)
+            .then(result => {
+              if (result.success) {
+                console.log(`🌟 [DATABASE] SUCCESS: Saved remote upload metadata to database for ${upload.id}`);
+              } else {
+                console.error(`🌟 [DATABASE] ERROR: Failed to save remote upload metadata for ${upload.id}: ${result.error}`);
+              }
+            })
+            .catch(error => {
+              console.error(`🌟 [DATABASE] ERROR: Exception while saving remote upload metadata:`, error);
+            });
+        }
+        
+        // Return updated upload object with additional details
+        return {
+          ...upload,
+          status: 'complete',
+          progress: {
+            ...upload.progress,
+            uploadComplete: true,
+            percentage: 100
+          },
+          successResponse: responseData,
+          uploadURL,
+          photoDetails
+        };
+      }
+      return upload;
+    }));
+    
+  }, [user, metadata]);
 
   return (
     <div className="relative w-full max-w-full bg-white shadow-lg rounded-lg border border-gray-200 mb-8 mt-16">
