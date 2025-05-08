@@ -1523,304 +1523,143 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     
   }, [user, metadata, onUploadComplete]);
 
-  // Add handleBatchComplete with explicit checks for remote uploads
-  const handleBatchComplete = useCallback((result) => {
-    console.log('✅ [Uppy] Batch Upload Result:', result);
-    
-    const successfulUploads = result.successful || [];
-    const failedUploads = result.failed || [];
-    console.log(`📊 [Uppy] Batch Summary: ${successfulUploads.length} successful, ${failedUploads.length} failed.`);
+  // Add socket initialization at component level
+  const [socket, setSocket] = useState(null);
+  
+  // Initialize socket connection when component mounts
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const socketInstance = io(process.env.NEXT_PUBLIC_COMPANION_URL || 'http://localhost:3020', {
+        transports: ['websocket'],
+      });
+      
+      console.log('🔌 [PhotoUploader] Initializing socket connection');
+      
+      socketInstance.on('connect', () => {
+        console.log(`🔌 [PhotoUploader] Socket connected with ID: ${socketInstance.id}`);
+        // Send auth data immediately after connection
+        socketInstance.emit('auth', {
+          userId: user?.id,
+          username: user?.username,
+        });
+      });
+      
+      socketInstance.on('upload-processed', (data) => {
+        console.log('%c📤 [PhotoUploader] UPLOAD PROCESSED EVENT:', 'background: #2196f3; color: white; padding: 2px 5px; border-radius: 3px;', data);
+        
+        if (data.faces) {
+          console.log('%c👥 [PhotoUploader] Face Detection Results:', 'background: #4caf50; color: white; padding: 2px 5px; border-radius: 3px;', data.faces);
+        }
+        
+        if (data.matched_users) {
+          console.log('%c🎯 [PhotoUploader] Face Matching Results:', 'background: #9c27b0; color: white; padding: 2px 5px; border-radius: 3px;', data.matched_users);
+        }
+        
+        // Update the upload state with the processed data
+        setUploads(prevUploads => {
+          return prevUploads.map(upload => {
+            if (upload.id === data.uploadId) {
+              return {
+                ...upload,
+                photoDetails: {
+                  ...upload.photoDetails,
+                  ...data,
+                  faces: data.faces || [],
+                  matched_users: data.matched_users || [],
+                  matched_users_list: data.matched_users || [],
+                  processing_complete: true
+                }
+              };
+            }
+            return upload;
+          });
+        });
+      });
+      
+      setSocket(socketInstance);
+      
+      return () => {
+        console.log('🔌 [PhotoUploader] Cleaning up socket connection');
+        socketInstance.disconnect();
+      };
+    }
+  }, [user]);
 
-    // Get user ID from the user object or state
-    const uploaderId = user?.id || '';
-    const uploaderName = user?.username || '';
+  // Update the handleBatchComplete function to use the socket
+  const handleBatchComplete = useCallback(async (result) => {
+    console.log('✅ [Uppy] Batch Upload Result:', result);
+    const { successful, failed, uploadID } = result;
     
-    // Check if any of the successful uploads are from remote sources
-    const uploadSources = successfulUploads.map(file => ({
-      id: file.id,
-      source: file.source,
-      metaSource: file.meta?.source,
-      hasRemote: file.remote ? true : false,
-      isDropboxId: typeof file.id === 'string' && file.id.startsWith('id:')
+    console.log(`📊 [Uppy] Batch Summary: ${successful.length} successful, ${failed.length} failed.`);
+    
+    // Process successful uploads
+    const uploadSources = successful.map(upload => ({
+      id: upload.id,
+      source: upload.source,
+      metaSource: upload.meta?.source
     }));
     
     console.log('🔍 [Uppy] Upload sources:', uploadSources);
     
-    // Explicitly check each upload for remote source
-    const hasRemoteUploads = successfulUploads.some(file => 
-      checkIsRemoteUpload(file)
-    );
+    // Check for remote uploads (Dropbox/Google Drive)
+    const hasRemoteUploads = uploadSources.some(upload => checkIsRemoteUpload(upload));
+    console.log('🔍 [Uppy] Has remote uploads:', hasRemoteUploads);
     
-    console.log(`🔍 [Uppy] Has remote uploads: ${hasRemoteUploads}`);
-
-    if (successfulUploads.length > 0) {
-      // Create temporary upload objects for any remote uploads not in state
-      const missingRemoteUploads = [];
+    // Helper function to determine upload source
+    const determineUploadSource = (file) => {
+      // Dropbox upload IDs start with "id:"
+      const isDropboxId = typeof file.id === 'string' && file.id.startsWith('id:');
       
-      // Process each upload to identify Dropbox/Google Drive
-      successfulUploads.forEach(successfulUpload => {
-        // Dropbox upload IDs start with "id:"
-        const isDropboxId = typeof successfulUpload.id === 'string' && successfulUpload.id.startsWith('id:');
-        
-        // Determine the source with explicit checking
-        let uploadSource = 'local';
-        if (successfulUpload.source === 'dropbox' || isDropboxId) {
-          uploadSource = 'dropbox';
-        } else if (successfulUpload.source === 'googledrive') {
-          uploadSource = 'googledrive';
-        } else if (successfulUpload.meta?.source === 'dropbox') {
-          uploadSource = 'dropbox';
-        } else if (successfulUpload.meta?.source === 'googledrive') {
-          uploadSource = 'googledrive';
-        }
-        
-        console.log(`🔍 [Uppy] Determined upload source for ${successfulUpload.id}: ${uploadSource}`);
-        
-        // Check if this upload is already in our state
-        let upload = uploads.find(u => u.id === successfulUpload.id);
-        
-        if (!upload) {
-          console.log(`⚠️ [Uppy] Could not find upload in state for ID: ${successfulUpload.id}, creating one`);
-          
-          // Check if this is a remote upload
-          const isRemote = uploadSource === 'dropbox' || uploadSource === 'googledrive';
-          
-          if (isRemote) {
-            console.log(`🌟 [DATABASE] Creating temporary upload object for remote file: ${successfulUpload.id}`);
-            
-            // Create a temporary upload object
-            upload = {
-              id: successfulUpload.id,
-              file: {
-                name: successfulUpload.name,
-                type: successfulUpload.type || 'application/octet-stream',
-                size: successfulUpload.size || 0,
-                preview: successfulUpload.preview || successfulUpload.thumbnail,
-                source: uploadSource,
-                meta: {
-                  ...successfulUpload.meta,
-                  source: uploadSource
-                }
-              },
-              progress: {
-                percentage: 100,
-                bytesUploaded: successfulUpload.size || 0,
-                bytesTotal: successfulUpload.size || 0,
-                uploadComplete: true
-              },
-              status: 'complete',
-              metadata: { 
-                ...metadata,
-                userId: uploaderId,
-                user_id: uploaderId,
-                uploadedBy: uploaderId,
-                uploaded_by: uploaderId,
-                username: uploaderName,
-                source: uploadSource
-              },
-              source: uploadSource
-            };
-            
-            // Add it to our collection for processing
-            missingRemoteUploads.push(upload);
-          }
-        } else {
-          // Ensure existing upload has the correct source
-          upload.source = uploadSource;
-          if (upload.file) {
-            upload.file.source = uploadSource;
-          }
-          if (upload.metadata) {
-            upload.metadata.source = uploadSource;
-          }
-        }
-      });
-      
-      // Add any missing remote uploads to state so they can be processed properly
-      if (missingRemoteUploads.length > 0) {
-        console.log(`🌟 [Uppy] Adding ${missingRemoteUploads.length} missing remote uploads to state`);
-        setUploads(prev => [...prev, ...missingRemoteUploads]);
-        
-        // Since state updates are batched and asynchronous, we need to include these in our current processing
-        successfulUploads.forEach(su => {
-          const matching = missingRemoteUploads.find(mru => mru.id === su.id);
-          if (matching) {
-            // Add the remote metadata to the successful upload to ensure it's properly tagged
-            su.source = matching.source;
-            if (su.meta) {
-              su.meta.source = matching.source;
-            } else {
-              su.meta = { source: matching.source };
-            }
-          }
-        });
+      // Determine the source with explicit checking
+      if (file.source === 'dropbox' || isDropboxId) {
+        return 'dropbox';
+      } else if (file.source === 'googledrive') {
+        return 'googledrive';
+      } else if (file.meta?.source === 'dropbox') {
+        return 'dropbox';
+      } else if (file.meta?.source === 'googledrive') {
+        return 'googledrive';
       }
       
-      // Process all uploads with our specialized handler
-      processSuccessfulUploads(successfulUploads);
+      return 'local';
+    };
+    
+    // Process each successful upload
+    for (const successfulUpload of successful) {
+      const sourceType = determineUploadSource(successfulUpload);
+      console.log(`🔍 [Uppy] Determined upload source for ${successfulUpload.id}: ${sourceType}`);
       
-      // For each upload, check if it needs socket communication
-      successfulUploads.forEach(successfulUpload => {
-        // Find the upload in our state (or the newly created one)
-        const upload = uploads.find(u => u.id === successfulUpload.id) || 
-                     missingRemoteUploads.find(mru => mru.id === successfulUpload.id);
-        
-        if (!upload) {
-          console.log(`⚠️ [Uppy] Still cannot find upload in state for ID: ${successfulUpload.id}`);
-          return;
+      // For remote uploads, ensure socket communication
+      if (sourceType === 'dropbox' || sourceType === 'googledrive') {
+        if (!socket) {
+          console.error('❌ [PhotoUploader] No socket connection available for remote upload!');
+          continue;
         }
         
-        // Extract uploader info
-        const uploaderId = user?.id || upload.metadata?.userId || upload.file.meta?.userId;
-        const uploaderName = user?.username || upload.metadata?.username || upload.file.meta?.username;
+        console.log(`🔄 [PhotoUploader] Processing remote upload: ${successfulUpload.id}`);
         
-        // Check if this is a remote upload (Dropbox/Google Drive)
-        const isRemoteSource = successfulUpload.source === 'dropbox' || 
-                           successfulUpload.source === 'googledrive' ||
-                           successfulUpload.meta?.source === 'dropbox' || 
-                           successfulUpload.meta?.source === 'googledrive' ||
-                           upload.source === 'dropbox' || 
-                           upload.source === 'googledrive';
-        
-        // For remote uploads, try to set up socket communication
-        if (isRemoteSource) {
-          console.log(`🔄 [Uppy] Remote upload completed: ${upload.id}. Checking for socket communication.`);
-          
-          // For remote uploads, we need to register with the server to help identify this upload
-          if (typeof uppy?.getPlugin === 'function') {
-            const socket = uppy.getPlugin('DropboxPlugin')?.socket || 
-                         uppy.getPlugin('GoogleDrivePlugin')?.socket;
-            
-            if (socket && socket.emit) {
-              // Extract response data consistently
-              const responseData = successfulUpload.response?.body || {};
-              const uploadURL = successfulUpload.uploadURL || responseData.url || '';
-              
-              // Create photo details for socket data
-              const photoDetails = {
-                id: responseData.id || successfulUpload.id,
-                url: uploadURL || successfulUpload.preview || successfulUpload.thumbnail,
-                userId: uploaderId,
-                user_id: uploaderId,
-                uploadedBy: uploaderId,
-                uploaded_by: uploaderId,
-                source: upload.source || successfulUpload.source || successfulUpload.meta?.source || 'remote'
-              };
-              
-              // Explicitly determine the source
-              let sourceType = 'remote';
-              if (upload.source === 'dropbox' || successfulUpload.source === 'dropbox' || 
-                  successfulUpload.meta?.source === 'dropbox' || successfulUpload.id.startsWith('id:')) {
-                sourceType = 'dropbox';
-              } else if (upload.source === 'googledrive' || successfulUpload.source === 'googledrive' || 
-                         successfulUpload.meta?.source === 'googledrive') {
-                sourceType = 'googledrive';
-              }
-              
-              // Inform the server about this upload so it can match it later
-              const socketData = {
-                uploadId: upload.id,
-                photoId: photoDetails.id,
-                uploadURL: uploadURL,
-                source: sourceType,
-                // Additional explicit flags so the server knows exactly what kind of upload this is
-                isDropbox: sourceType === 'dropbox',
-                isGoogleDrive: sourceType === 'googledrive',
-                isRemoteUpload: true,
-                // Add file info 
-                fileSize: successfulUpload.size || upload.file?.size || 0,
-                fileType: successfulUpload.type || upload.file?.type || 'image/jpeg',
-                metadata: {
-                  userId: uploaderId,
-                  user_id: uploaderId,
-                  uploadedBy: uploaderId,
-                  uploaded_by: uploaderId,
-                  username: uploaderName,
-                  eventId: eventId || '',
-                  timestamp: Date.now(),
-                  source: sourceType,
-                  // Include all metadata for consistent processing
-                  ...metadata,
-                  ...upload.metadata || {}
-                }
-              };
-              
-              // Log the payload in a way that stands out in the browser console
-              console.log('%c📤 [Uppy] EMITTING upload-complete EVENT FOR REMOTE FILE:', 'background: #ff6d00; color: white; font-weight: bold; padding: 3px 5px; border-radius: 4px;');
-              console.log('%c- Upload ID: ' + upload.id, 'color: #ff6d00; font-weight: bold;');
-              console.log('%c- Source: ' + sourceType, 'color: #ff6d00; font-weight: bold;');
-              console.log('%c- Full Payload:', 'color: #ff6d00; font-weight: bold;', socketData);
-              
-              socket.emit('upload-complete', socketData);
-              console.log('%c📤 [Uppy] EMITTED upload-complete event for ' + upload.id, 'background: #ff6d00; color: white; font-weight: bold; padding: 3px 5px; border-radius: 4px;');
-              
-              // Add a listener specifically for this upload
-              const uploadProcessedHandler = (data) => {
-                if (data.uploadId === upload.id) {
-                  console.log('%c✅ [Uppy] Received upload-processed event for upload: ' + upload.id, 'background: #00c853; color: white; padding: 2px 5px; border-radius: 3px;');
-                  console.log('%c- Response data:', 'color: #00c853; font-weight: bold;', data);
-                  
-                  // Remove this specific listener after receiving the response
-                  socket.off('upload-processed', uploadProcessedHandler);
-                }
-              };
-              
-              // Add the listener
-              socket.on('upload-processed', uploadProcessedHandler);
-              
-              console.log(`%c🌟 [DATABASE] Explicitly saving metadata to database for ${upload.id}`, 'background: #0091ea; color: white; padding: 2px 5px; border-radius: 3px;');
-              // ... existing code ...
-            } else {
-              console.warn(`⚠️ [Uppy] No socket available for ${upload.source || successfulUpload.source} upload, saving metadata directly`);
-              
-              // If no socket is available, save metadata directly
-              const directMetadata = {
-                id: successfulUpload.id,
-                user_id: uploaderId,
-                userId: uploaderId,
-                uploadedBy: uploaderId,
-                uploaded_by: uploaderId,
-                username: uploaderName,
-                source: upload.source || successfulUpload.source || successfulUpload.meta?.source || 'remote',
-                url: successfulUpload.preview || successfulUpload.thumbnail || '',
-                public_url: successfulUpload.preview || successfulUpload.thumbnail || '',
-                file_size: successfulUpload.size || 0,
-                file_type: successfulUpload.type || 'image/jpeg',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                storage_path: `photos/${uploaderId}/${upload.source || 'remote'}/${successfulUpload.id}`,
-                // Add event metadata
-                ...metadata
-              };
-              
-              // Save directly to database
-              awsPhotoService.savePhotoMetadata(directMetadata)
-                .then(result => {
-                  if (result.success) {
-                    console.log(`🌟 [DATABASE] SUCCESS: Metadata saved directly (fallback) for ${upload.id}`);
-                  } else {
-                    console.error(`🌟 [DATABASE] ERROR: Failed to save metadata directly (fallback): ${result.error}`);
-                  }
-                })
-                .catch(error => {
-                  console.error(`🌟 [DATABASE] ERROR: Exception saving metadata directly (fallback):`, error);
-                });
-            }
-          } else {
-            console.warn('⚠️ [Uppy] Unable to get plugin info for socket communication');
+        // Emit upload complete event with all necessary data
+        socket.emit('upload-complete', {
+          uploadId: successfulUpload.id,
+          userId: user?.id,
+          username: user?.username,
+          source: sourceType,
+          fileData: {
+            name: successfulUpload.name,
+            type: successfulUpload.type,
+            size: successfulUpload.size,
+          },
+          metadata: {
+            ...successfulUpload.meta,
+            userId: user?.id,
+            username: user?.username,
           }
-        }
-      });
+        });
+        
+        console.log(`📤 [PhotoUploader] Emitted upload-complete event for ${successfulUpload.id}`);
+      }
     }
-    
-    // Always ensure we complete the process, even if we couldn't match all uploads
-    // This will run the finalizeUpload function after a delay to ensure any async operations complete
-    setTimeout(() => {
-      console.log('✅ [Uppy] All files processed. Upload process fully complete.');
-      finalizeUpload();
-    }, 1000);
-    
-  }, [user, eventId, metadata, uploads, finalizeUpload, checkIsRemoteUpload, processSuccessfulUploads]);
+  }, [socket, user, checkIsRemoteUpload]);
 
   // Now that all handlers are defined, update the handlers ref
   useEffect(() => {
@@ -2069,125 +1908,6 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       });
     }
   };
-
-  // Add socket initialization at component level
-  const [socket, setSocket] = useState(null);
-  
-  // Initialize socket connection when component mounts
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const socketInstance = io(process.env.NEXT_PUBLIC_COMPANION_URL || 'http://localhost:3020', {
-        transports: ['websocket'],
-      });
-      
-      console.log('🔌 [PhotoUploader] Initializing socket connection');
-      
-      socketInstance.on('connect', () => {
-        console.log(`🔌 [PhotoUploader] Socket connected with ID: ${socketInstance.id}`);
-        // Send auth data immediately after connection
-        socketInstance.emit('auth', {
-          userId: currentUser?.id,
-          username: currentUser?.username,
-        });
-      });
-      
-      socketInstance.on('upload-processed', (data) => {
-        console.log('%c📤 [PhotoUploader] UPLOAD PROCESSED EVENT:', 'background: #2196f3; color: white; padding: 2px 5px; border-radius: 3px;', data);
-        
-        if (data.faces) {
-          console.log('%c👥 [PhotoUploader] Face Detection Results:', 'background: #4caf50; color: white; padding: 2px 5px; border-radius: 3px;', data.faces);
-        }
-        
-        if (data.matched_users) {
-          console.log('%c🎯 [PhotoUploader] Face Matching Results:', 'background: #9c27b0; color: white; padding: 2px 5px; border-radius: 3px;', data.matched_users);
-        }
-        
-        // Update the upload state with the processed data
-        setUploads(prevUploads => {
-          return prevUploads.map(upload => {
-            if (upload.id === data.uploadId) {
-              return {
-                ...upload,
-                photoDetails: {
-                  ...upload.photoDetails,
-                  ...data,
-                  faces: data.faces || [],
-                  matched_users: data.matched_users || [],
-                  matched_users_list: data.matched_users || [],
-                  processing_complete: true
-                }
-              };
-            }
-            return upload;
-          });
-        });
-      });
-      
-      setSocket(socketInstance);
-      
-      return () => {
-        console.log('🔌 [PhotoUploader] Cleaning up socket connection');
-        socketInstance.disconnect();
-      };
-    }
-  }, [currentUser]);
-
-  // Update the handleBatchComplete function to use the socket
-  const handleBatchComplete = useCallback(async (result) => {
-    console.log('✅ [Uppy] Batch Upload Result:', result);
-    const { successful, failed, uploadID } = result;
-    
-    console.log(`📊 [Uppy] Batch Summary: ${successful.length} successful, ${failed.length} failed.`);
-    
-    // Process successful uploads
-    const uploadSources = successful.map(upload => ({
-      id: upload.id,
-      source: upload.source,
-      metaSource: upload.meta?.source
-    }));
-    
-    console.log('🔍 [Uppy] Upload sources:', uploadSources);
-    
-    // Check for remote uploads (Dropbox/Google Drive)
-    const hasRemoteUploads = uploadSources.some(upload => isRemoteSource(upload));
-    console.log('🔍 [Uppy] Has remote uploads:', hasRemoteUploads);
-    
-    // Process each successful upload
-    for (const successfulUpload of successful) {
-      const sourceType = determineUploadSource(successfulUpload);
-      console.log(`🔍 [Uppy] Determined upload source for ${successfulUpload.id}: ${sourceType}`);
-      
-      // For remote uploads, ensure socket communication
-      if (sourceType === 'dropbox' || sourceType === 'googledrive') {
-        if (!socket) {
-          console.error('❌ [PhotoUploader] No socket connection available for remote upload!');
-          continue;
-        }
-        
-        console.log(`🔄 [PhotoUploader] Processing remote upload: ${successfulUpload.id}`);
-        
-        // Emit upload complete event with all necessary data
-        socket.emit('upload-complete', {
-          uploadId: successfulUpload.id,
-          userId: currentUser?.id,
-          username: currentUser?.username,
-          source: sourceType,
-          fileData: {
-            name: successfulUpload.name,
-            type: successfulUpload.type,
-            size: successfulUpload.size,
-          },
-          metadata: {
-            ...successfulUpload.meta,
-            userId: currentUser?.id,
-            username: currentUser?.username,
-          }
-        });
-        
-        console.log(`📤 [PhotoUploader] Emitted upload-complete event for ${successfulUpload.id}`);
-      }
-    }
-  }, [socket, currentUser]);
 
   return (
     <div className="relative w-full max-w-full bg-white shadow-lg rounded-lg border border-gray-200 mb-8 mt-16">
