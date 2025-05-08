@@ -451,8 +451,11 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
     
     if (s3FileExists) {
       try {
-        console.log(`🔍 [COMPANION] Detecting faces in: ${formattedS3Path}`);
-        const detectFacesResponse = await rekognitionClient.detectFaces({
+        console.log(`\n🔍🔍🔍 [REKOGNITION] STARTING FACE DETECTION FOR: ${formattedS3Path}`);
+        console.log(`🔍 [REKOGNITION] Image source: s3://${bucketName}/${formattedS3Path}`);
+        console.log(`🔍 [REKOGNITION] Collection ID: ${FACE_COLLECTION_ID}`);
+        
+        const detectParams = {
           Image: {
             S3Object: {
               Bucket: bucketName,
@@ -460,9 +463,15 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
             }
           },
           Attributes: ['ALL']
-        }).promise();
+        };
         
-        console.log(`🧠 [COMPANION] Face detection results:`, JSON.stringify(detectFacesResponse, null, 2));
+        console.log(`🔍 [REKOGNITION] Detect faces request params:`, JSON.stringify(detectParams, null, 2));
+        
+        // Detect faces in the image
+        const detectFacesResponse = await rekognitionClient.detectFaces(detectParams).promise();
+        
+        console.log(`\n🧠 [REKOGNITION] FACE DETECTION COMPLETE - Detected ${detectFacesResponse.FaceDetails?.length || 0} faces`);
+        console.log(`🧠 [REKOGNITION] Face detection response:`, JSON.stringify(detectFacesResponse, null, 2));
         
         if (detectFacesResponse.FaceDetails && detectFacesResponse.FaceDetails.length > 0) {
           facesData = detectFacesResponse.FaceDetails.map((face, index) => ({
@@ -478,32 +487,43 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
             face_index: index
           }));
           
-          console.log(`🧠 [COMPANION] Detected ${facesData.length} faces in photo`);
+          console.log(`🧠 [REKOGNITION] Processed ${facesData.length} face details into structured data`);
+          console.log(`🧠 [REKOGNITION] First face data:`, JSON.stringify(facesData[0], null, 2));
           
           // Skip face search if no faces detected
           if (facesData.length > 0) {
             // Search for matching faces in our collection
-            console.log(`🔍 [COMPANION] Searching for matches in collection: ${FACE_COLLECTION_ID}`);
+            console.log(`\n🔍 [REKOGNITION] STARTING FACE MATCHING in collection: ${FACE_COLLECTION_ID}`);
+            
+            const searchParams = {
+              CollectionId: FACE_COLLECTION_ID,
+              Image: {
+                S3Object: {
+                  Bucket: bucketName,
+                  Name: formattedS3Path
+                }
+              },
+              MaxFaces: 5,
+              FaceMatchThreshold: 80
+            };
+            
+            console.log(`🔍 [REKOGNITION] Face search request params:`, JSON.stringify(searchParams, null, 2));
+            
             try {
-              const searchFacesResponse = await rekognitionClient.searchFacesByImage({
-                CollectionId: FACE_COLLECTION_ID,
-                Image: {
-                  S3Object: {
-                    Bucket: bucketName,
-                    Name: formattedS3Path
-                  }
-                },
-                MaxFaces: 5,
-                FaceMatchThreshold: 80
-              }).promise();
+              const searchFacesResponse = await rekognitionClient.searchFacesByImage(searchParams).promise();
               
-              console.log(`🔍 [COMPANION] Face match results:`, JSON.stringify(searchFacesResponse, null, 2));
+              console.log(`\n🔍 [REKOGNITION] FACE MATCHING COMPLETE - Found ${searchFacesResponse.FaceMatches?.length || 0} matches`);
+              console.log(`🔍 [REKOGNITION] Face match response:`, JSON.stringify(searchFacesResponse, null, 2));
               
               if (searchFacesResponse.FaceMatches && searchFacesResponse.FaceMatches.length > 0) {
+                console.log(`\n👤 [REKOGNITION] PROCESSING ${searchFacesResponse.FaceMatches.length} FACE MATCHES to find users`);
+                
                 // Process each matched face
                 for (const match of searchFacesResponse.FaceMatches) {
                   const faceId = match.Face.FaceId;
                   const similarity = match.Similarity;
+                  
+                  console.log(`👤 [REKOGNITION] Processing match for face ID ${faceId} with similarity ${similarity}`);
                   
                   // Get user associated with this face from DynamoDB
                   const getUserParams = {
@@ -514,46 +534,55 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
                     }
                   };
                   
+                  console.log(`👤 [REKOGNITION] Querying DynamoDB for face ID ${faceId} in table ${DETECTED_FACES_TABLE}`);
+                  console.log(`👤 [REKOGNITION] DynamoDB query params:`, JSON.stringify(getUserParams, null, 2));
+                  
                   const userResult = await docClient.query(getUserParams).promise();
+                  
+                  console.log(`👤 [REKOGNITION] DynamoDB query result:`, JSON.stringify(userResult, null, 2));
                   
                   if (userResult.Items && userResult.Items.length > 0) {
                     const userItem = userResult.Items[0];
-                    console.log(`🔍 [COMPANION] Found user for face ${faceId}:`, userItem);
+                    console.log(`✅ [REKOGNITION] Found user match for face ${faceId}:`, JSON.stringify(userItem, null, 2));
                     
                     // Add to matched users array
-                    matchedUsers.push({
+                    const matchedUser = {
                       userId: userItem.user_id,
                       faceId: faceId,
                       similarity: similarity,
                       name: userItem.username || userItem.name || 'Unknown User'
-                    });
+                    };
+                    
+                    matchedUsers.push(matchedUser);
+                    console.log(`✅ [REKOGNITION] Added matched user to results:`, JSON.stringify(matchedUser, null, 2));
                   } else {
-                    console.log(`🔍 [COMPANION] No user found for face ${faceId}`);
+                    console.log(`❗ [REKOGNITION] No user found in DynamoDB for face ${faceId}`);
                   }
                 }
                 
-                console.log(`🔍 [COMPANION] Found ${matchedUsers.length} matching users`);
+                console.log(`\n✅ [REKOGNITION] FACE MATCHING COMPLETE - Found ${matchedUsers.length} matching users`);
+                console.log(`✅ [REKOGNITION] Final matched_users array:`, JSON.stringify(matchedUsers, null, 2));
               } else {
-                console.log(`🔍 [COMPANION] No matching faces found in collection`);
+                console.log(`❗ [REKOGNITION] No matching faces found in collection`);
               }
             } catch (error) {
-              console.error(`❌ [COMPANION] Error searching for faces:`, error);
+              console.error(`❌ [REKOGNITION] Error searching for faces:`, error);
               // Continue with the upload without face matches
             }
           }
         } else {
-          console.log(`🧠 [COMPANION] No faces detected in photo`);
+          console.log(`❗ [REKOGNITION] No faces detected in photo`);
         }
       } catch (error) {
-        console.error(`❌ [COMPANION] Error processing faces:`, error);
+        console.error(`❌ [REKOGNITION] Error processing faces:`, error);
         // Continue with the upload without face processing
       }
     } else {
-      console.warn(`⚠️ [COMPANION] Skipping face processing because file not found in S3`);
+      console.warn(`⚠️ [REKOGNITION] Skipping face processing because file not found in S3`);
     }
     
     // 4. Save metadata to DynamoDB
-    console.log(`💾 [COMPANION] Saving photo metadata to DynamoDB`);
+    console.log(`\n💾 [DATABASE] SAVING PHOTO METADATA to DynamoDB`);
     
     const now = new Date().toISOString();
     const photoMetadata = {
@@ -1182,6 +1211,24 @@ if (companionSocket && companionSocket.on) {
           console.log('------------------------------------');
           console.log('🚨🚨🚨 DETECTED REMOTE UPLOAD - FORCING FACE PROCESSING 🚨🚨🚨');
           console.log('------------------------------------');
+          console.log('🔍 [COMPANION] Remote upload details:');
+          console.log(`- Upload ID: ${data.uploadId || 'N/A'}`);
+          console.log(`- Source: ${data.source || data.metadata?.source || 'unknown'}`);
+          console.log(`- User ID: ${enhancedData.metadata.userId || 'N/A'}`);
+          
+          // Validate Rekognition settings
+          console.log('🔧 [COMPANION] Validating Rekognition configuration:');
+          console.log(`- FACE_COLLECTION_ID: ${FACE_COLLECTION_ID || 'NOT SET'}`);
+          console.log(`- DETECTED_FACES_TABLE: ${DETECTED_FACES_TABLE || 'NOT SET'}`);
+          console.log(`- S3 Bucket: ${process.env.COMPANION_AWS_BUCKET || 'NOT SET'}`);
+          
+          if (!FACE_COLLECTION_ID) {
+            console.error('❌ [COMPANION] FACE_COLLECTION_ID is not defined, face processing will fail');
+          }
+          
+          if (!DETECTED_FACES_TABLE) {
+            console.error('❌ [COMPANION] DETECTED_FACES_TABLE is not defined, face matching will fail');
+          }
           
           // Determine the S3 path - multiple ways to get it
           let s3Path = null;
@@ -1202,31 +1249,79 @@ if (companionSocket && companionSocket.on) {
             console.log(`🔄 [COMPANION] Constructed S3 path for remote file: ${s3Path}`);
           }
           
-          // Ensure we have the file information for processing
-          const fileData = {
-            size: data.fileSize || data.size || 0,
-            type: data.fileType || data.type || data.file?.type || 'image/jpeg'
-          };
-          
-          // Process the file using the Rekognition handling
-          console.log(`🔄 [COMPANION] EXPLICITLY PROCESSING REMOTE UPLOAD: ${s3Path}`);
-          const processingResult = await processUploadedFile(s3Path, fileData, enhancedData.metadata);
-          
-          console.log('🔄 [COMPANION] EXPLICIT PROCESSING RESULT:', JSON.stringify(processingResult, null, 2));
-          
-          // Use this result for the response
-          if (processingResult.success) {
-            // Send success back to client
-            console.log(`🔔 [COMPANION] Emitting explicit success for remote file to socket ${socket.id}`);
+          // Validate S3 path
+          if (!s3Path) {
+            console.error('❌ [COMPANION] Failed to determine S3 path for remote upload');
             socket.emit('upload-processed', {
-              success: true,
-              photoId: processingResult.photoId,
-              photoMetadata: processingResult.photoMetadata,
-              uploadId: data.uploadId,
-              explicitProcessing: true // Flag to indicate this was processed explicitly
+              success: false,
+              error: 'Failed to determine S3 path for remote upload',
+              uploadId: data.uploadId
             });
+            return;
+          }
+          
+          // Ensure S3 path is properly formatted (no leading slash, etc.)
+          if (s3Path.startsWith('/')) {
+            s3Path = s3Path.substring(1);
+            console.log(`🔄 [COMPANION] Removed leading slash from S3 path: ${s3Path}`);
+          }
+          
+          // Verify the S3 file exists before processing
+          try {
+            const headParams = {
+              Bucket: process.env.COMPANION_AWS_BUCKET,
+              Key: s3Path
+            };
             
-            return; // Skip normal processing flow
+            console.log(`🔍 [COMPANION] Checking if file exists in S3: ${s3Path}`);
+            const headResponse = await s3Client.headObject(headParams).promise();
+            console.log(`✅ [COMPANION] File exists in S3, size: ${headResponse.ContentLength} bytes, type: ${headResponse.ContentType}`);
+            
+            // Get correct content type if available
+            const fileType = headResponse.ContentType || data.fileType || data.type || data.file?.type || 'image/jpeg';
+            
+            // Ensure we have the file information for processing
+            const fileData = {
+              size: headResponse.ContentLength || data.fileSize || data.size || 0,
+              type: fileType
+            };
+            
+            // Process the file using the Rekognition handling
+            console.log(`�� [COMPANION] EXPLICITLY PROCESSING REMOTE UPLOAD: ${s3Path}`);
+            const processingResult = await processUploadedFile(s3Path, fileData, enhancedData.metadata);
+            
+            console.log('🔄 [COMPANION] EXPLICIT PROCESSING RESULT:', JSON.stringify(processingResult, null, 2));
+            
+            // Use this result for the response
+            if (processingResult.success) {
+              // Make sure the UI knows this was explicitly processed with face recognition
+              if (processingResult.photoMetadata) {
+                // Add a flag to highlight that face processing was done
+                processingResult.photoMetadata.faceProcessed = true;
+                processingResult.photoMetadata.processingTimestamp = Date.now();
+              }
+              
+              // Send success back to client
+              console.log(`🔔 [COMPANION] Emitting explicit success for remote file to socket ${socket.id}`);
+              socket.emit('upload-processed', {
+                success: true,
+                photoId: processingResult.photoId,
+                photoMetadata: processingResult.photoMetadata,
+                uploadId: data.uploadId,
+                explicitProcessing: true, // Flag to indicate this was processed explicitly
+                faceProcessingCompleted: true
+              });
+              
+              return; // Skip normal processing flow
+            } else {
+              console.error(`❌ [COMPANION] Explicit processing failed:`, processingResult.error);
+              // Continue with normal flow as a fallback
+            }
+          } catch (headError) {
+            console.error(`❌ [COMPANION] File not found in S3 or access denied: ${s3Path}`, headError);
+            
+            // Continue with normal upload flow as fallback
+            console.log(`⚠️ [COMPANION] Falling back to normal upload processing flow`);
           }
         }
         

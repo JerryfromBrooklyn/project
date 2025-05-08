@@ -626,11 +626,96 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 console.log('%c- Upload ID: ' + (data.uploadId || 'unknown'), 'color: #00c853; font-weight: bold;');
                 console.log('%c- Photo ID: ' + (data.photoId || 'unknown'), 'color: #00c853; font-weight: bold;');
                 console.log('%c- Success: ' + (data.success ? 'YES' : 'NO'), 'color: #00c853; font-weight: bold;');
-                console.log('%c- Explicit Processing: ' + (data.explicitProcessing ? 'YES' : 'NO'), 'color: #00c853; font-weight: bold;');
+                console.log('%c- Face Processing: ' + (data.faceProcessingCompleted ? 'COMPLETED' : 'UNKNOWN'), 'color: #00c853; font-weight: bold;');
+                
+                // Log face recognition data if present
+                if (data.photoMetadata) {
+                  console.log('%c🧠 [REKOGNITION] FACE DATA:', 'background: #9c27b0; color: white; font-weight: bold; padding: 3px 5px; border-radius: 4px;');
+                  
+                  // Check for faces detected
+                  const facesCount = data.photoMetadata.faces?.length || 0;
+                  console.log('%c- Faces Detected: ' + facesCount, 'color: #9c27b0; font-weight: bold;');
+                  if (facesCount > 0) {
+                    console.log('%c- Face Details:', 'color: #9c27b0; font-weight: bold;');
+                    data.photoMetadata.faces.forEach((face, index) => {
+                      console.log(`%c  Face #${index + 1}:`, 'color: #9c27b0; font-weight: bold;');
+                      console.log(`   - Confidence: ${face.confidence?.toFixed(2) || 'N/A'}`);
+                      console.log(`   - Gender: ${face.gender?.Value || 'N/A'} (${face.gender?.Confidence?.toFixed(2) || 'N/A'}%)`);
+                      console.log(`   - Age Range: ${face.age_range?.Low || 'N/A'}-${face.age_range?.High || 'N/A'}`);
+                      console.log(`   - Emotions: ${face.emotions?.map(e => e.Type).join(', ') || 'N/A'}`);
+                    });
+                  }
+                  
+                  // Check for matched users
+                  const matchedUsersCount = 
+                    data.photoMetadata.matched_users_list?.length || 
+                    (Array.isArray(data.photoMetadata.matched_users) ? data.photoMetadata.matched_users.length : 0);
+                  
+                  console.log('%c- Matched Users Count: ' + matchedUsersCount, 'color: #9c27b0; font-weight: bold;');
+                  
+                  if (matchedUsersCount > 0) {
+                    console.log('%c- Matched Users Details:', 'color: #9c27b0; font-weight: bold;');
+                    
+                    // Check which format the matched users are in
+                    let matchedUsers = [];
+                    if (data.photoMetadata.matched_users_list && Array.isArray(data.photoMetadata.matched_users_list)) {
+                      matchedUsers = data.photoMetadata.matched_users_list;
+                      console.log('%c  Using matched_users_list array', 'color: #9c27b0; font-weight: bold;');
+                    } else if (data.photoMetadata.matched_users) {
+                      // Handle both array and string (JSON) formats
+                      if (Array.isArray(data.photoMetadata.matched_users)) {
+                        matchedUsers = data.photoMetadata.matched_users;
+                        console.log('%c  Using matched_users array', 'color: #9c27b0; font-weight: bold;');
+                      } else if (typeof data.photoMetadata.matched_users === 'string') {
+                        try {
+                          // Try to parse if it's a JSON string
+                          matchedUsers = JSON.parse(data.photoMetadata.matched_users);
+                          console.log('%c  Parsed matched_users from JSON string', 'color: #9c27b0; font-weight: bold;');
+                        } catch (e) {
+                          console.error('%c  Failed to parse matched_users string:', 'color: #ff0000; font-weight: bold;', e);
+                        }
+                      }
+                    }
+                    
+                    // Log each matched user
+                    matchedUsers.forEach((user, index) => {
+                      console.log(`%c  User #${index + 1}:`, 'color: #9c27b0; font-weight: bold;');
+                      console.log(`   - UserID: ${user.userId || 'N/A'}`);
+                      console.log(`   - Name: ${user.name || 'N/A'}`);
+                      console.log(`   - FaceID: ${user.faceId || 'N/A'}`);
+                      console.log(`   - Similarity: ${user.similarity?.toFixed(2) || 'N/A'}%`);
+                    });
+                  }
+                }
+                
                 console.log('%c- Full Response:', 'color: #00c853; font-weight: bold;', data);
                 
                 if (data.success) {
                   console.log('%c✅ [Uppy] Remote upload successfully processed on server', 'background: #00c853; color: white; padding: 2px 5px; border-radius: 3px;');
+                  
+                  // Normalize matched users before updating the state
+                  let normalizedMatchedUsers = [];
+                  
+                  if (data.photoMetadata) {
+                    // Capture the face processing status
+                    const faceProcessed = data.faceProcessingCompleted || 
+                                        data.photoMetadata.faceProcessed || 
+                                        (data.photoMetadata.faces && data.photoMetadata.faces.length > 0);
+                                        
+                    console.log(`%c🧠 [FACES] Face processing completed: ${faceProcessed ? 'YES' : 'NO'}`, 'color: #9c27b0; font-weight: bold;');
+                    
+                    // Use our normalizeMatchedUsers helper for consistent data format
+                    if (data.photoMetadata.matched_users_list && Array.isArray(data.photoMetadata.matched_users_list)) {
+                      normalizedMatchedUsers = data.photoMetadata.matched_users_list;
+                    } else if (data.photoMetadata.matched_users) {
+                      normalizedMatchedUsers = normalizeMatchedUsers(data.photoMetadata.matched_users);
+                    }
+                    
+                    // Structured log showing the exact matched users data that will be displayed
+                    console.log('%c🧠 [FACES] Normalized matched users for display:', 'background: #9c27b0; color: white; font-weight: bold; padding: 3px 5px; border-radius: 4px;');
+                    console.log('%c- Count: ' + normalizedMatchedUsers.length, 'color: #9c27b0; font-weight: bold;');
+                    console.log('%c- Data:', 'color: #9c27b0; font-weight: bold;', normalizedMatchedUsers);
+                  }
                   
                   // Update the matching upload with the complete data
                   setUploads(prev => prev.map(upload => {
@@ -647,6 +732,34 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                     
                     if (isMatch) {
                       console.log(`%c✅ [Uppy] Updating UI for processed upload: ${upload.id}`, 'background: #00c853; color: white; padding: 2px 5px; border-radius: 3px;');
+                      
+                      // Ensure we save the data to database for consistent retrieval
+                      if (data.photoMetadata && normalizedMatchedUsers.length > 0) {
+                        console.log(`%c🌟 [DATABASE] Ensuring matched users data is saved for ${upload.id}`, 'background: #0091ea; color: white; padding: 2px 5px; border-radius: 3px;');
+                        
+                        // Create an updated metadata object with the normalized matched users
+                        const updatedMetadata = {
+                          ...data.photoMetadata,
+                          matched_users: normalizedMatchedUsers,
+                          matched_users_list: normalizedMatchedUsers,
+                          faceProcessed: true,
+                          processingTimestamp: Date.now()
+                        };
+                        
+                        // Save this to the database to ensure consistency
+                        awsPhotoService.savePhotoMetadata(updatedMetadata)
+                          .then(result => {
+                            if (result.success) {
+                              console.log(`%c🌟 [DATABASE] Successfully saved normalized matched users data for ${upload.id}`, 'background: #0091ea; color: white; padding: 2px 5px; border-radius: 3px;');
+                            } else {
+                              console.error(`%c🌟 [DATABASE] Failed to save normalized matched users data: ${result.error}`, 'background: #d50000; color: white; padding: 2px 5px; border-radius: 3px;');
+                            }
+                          })
+                          .catch(error => {
+                            console.error(`%c🌟 [DATABASE] Error saving normalized matched users data:`, 'background: #d50000; color: white; padding: 2px 5px; border-radius: 3px;', error);
+                          });
+                      }
+                      
                       return {
                         ...upload,
                         status: 'complete',
@@ -654,535 +767,6 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                         photoDetails: {
                           ...upload.photoDetails,
                           ...data.photoMetadata,
-                          id: data.photoId || upload.photoDetails?.id || upload.id,
-                          user_id: data.photoMetadata?.user_id || upload.photoDetails?.user_id,
-                          userId: data.photoMetadata?.userId || upload.photoDetails?.userId,
-                          matched_users: data.photoMetadata?.matched_users || upload.photoDetails?.matched_users || [],
-                          matched_users_list: data.photoMetadata?.matched_users_list || upload.photoDetails?.matched_users_list || [],
-                          faces: data.photoMetadata?.faces || upload.photoDetails?.faces || []
-                        }
-                      };
-                    }
-                    return upload;
-                  }));
-                  
-                  // Trigger final completion after all updates are done
-                  setTimeout(finalizeUpload, 500);
-                } else {
-                  console.error('%c❌ [Uppy] Upload processing failed:', 'background: #d50000; color: white; padding: 2px 5px; border-radius: 3px;', data.error);
-                  
-                  // Update error status for relevant uploads
-                  setUploads(prev => prev.map(upload => {
-                    // Improved matching logic
-                    const isMatch = (
-                      // Direct ID match (new improved method)
-                      (data.uploadId && upload.id === data.uploadId) ||
-                      // Fallback to finding the most recent incomplete upload
-                      (!data.uploadId && upload.status !== 'complete' && upload.status !== 'error')
-                    );
-                    
-                    if (isMatch) {
-                      console.log('%c⚠️ [Uppy] Marking upload as failed:', 'background: #ff6d00; color: white; padding: 2px 5px; border-radius: 3px;', upload.id);
-                      return {
-                        ...upload,
-                        status: 'error',
-                        error: data.error || 'Upload processing failed'
-                      };
-                    }
-                    return upload;
-                  }));
-                }
-              });
-              
-              // ENHANCED LOGGING: Listen for global upload events (in case the original socket disconnects)
-              socket.on('global-upload-processed', (data) => {
-                console.log('%c🌐 [Uppy] GLOBAL UPLOAD PROCESSED EVENT RECEIVED:', 'background: #0091ea; color: white; font-weight: bold; padding: 3px 5px; border-radius: 4px;', data);
-                
-                // Only process if it matches our user ID
-                if (data.userId === userId) {
-                  setUploads(prev => prev.map(upload => {
-                    const isMatch = (
-                      (data.uploadId && upload.id === data.uploadId) ||
-                      (upload.source === 'dropbox' || upload.source === 'googledrive')
-                    );
-                    
-                    if (isMatch && upload.status !== 'complete') {
-                      console.log(`%c✅ [Uppy] Updating UI from global event for upload: ${upload.id}`, 'background: #00c853; color: white; padding: 2px 5px; border-radius: 3px;');
-                      
-                      // Force refresh photos to make sure we get this upload
-                      setTimeout(() => {
-                        if (onUploadComplete) {
-                          console.log('%c[PhotoUploader] Forcing refresh from global event', 'background: #0091ea; color: white; padding: 2px 5px; border-radius: 3px;');
-                          onUploadComplete(true);
-                        }
-                      }, 1000);
-                      
-                      return {
-                        ...upload,
-                        status: 'complete',
-                        progress: 100,
-                        photoDetails: {
-                          ...upload.photoDetails,
-                          id: data.photoId || upload.photoDetails?.id,
-                          s3Path: data.s3Path
-                        }
-                      };
-                    }
-                    return upload;
-                  }));
-                }
-              });
-            }
-          } catch (error) {
-            console.error('❌ [Uppy] Error sending auth via socket:', error);
-          }
-        }
-      });
-
-      // For all remote source files, make sure they have user info
-      uppyInstance.on('file-added', (file) => {
-        console.log(`📄 [Uppy] File added from source ${file.source || 'local'}:`, file.name);
-        
-        // Set metadata for all files, regardless of source
-        const fileMeta = {
-          userId: userId,
-          user_id: userId,
-          uploadedBy: userId,
-          uploaded_by: userId,
-          username: username,
-          eventId: eventId || '',
-          timestamp: Date.now(),
-          ...metadata,
-          source: file.source || 'local'
-        };
-        
-        console.log('🔖 [Uppy] Setting metadata for file:', JSON.stringify(fileMeta));
-        uppyInstance.setFileMeta(file.id, fileMeta);
-        
-        // For remote files (Dropbox/Google Drive), ensure we have the preview
-        const isRemoteFile = file.source === 'dropbox' || file.source === 'googledrive' || 
-                             (typeof file.id === 'string' && file.id.startsWith('id:'));
-                             
-        if (isRemoteFile) {
-          console.log(`🌟 [DATABASE] Remote file detected from ${file.source}. Will ensure database entry is created.`);
-          
-          // Set preview if available
-          if (file.thumbnail) {
-            file.preview = file.thumbnail;
-          } else if (file.remote && file.remote.url) {
-            file.preview = file.remote.url;
-          }
-          
-          // NEW: Track the remote upload for special handling
-          const remoteUploadsKey = `remote_uploads_${userId}`;
-          try {
-            let remoteUploads = JSON.parse(localStorage.getItem(remoteUploadsKey) || '[]');
-            remoteUploads.push({
-              id: file.id,
-              source: file.source,
-              name: file.name,
-              timestamp: Date.now(),
-              userId: userId
-            });
-            localStorage.setItem(remoteUploadsKey, JSON.stringify(remoteUploads));
-            console.log(`🌐 [Uppy] Tracking remote upload from ${file.source}: ${file.name} with ID ${file.id}`);
-          } catch (error) {
-            console.error('❌ [Uppy] Error saving remote upload tracking data:', error);
-          }
-          
-          // NEW: Set up a fallback save to database even before upload completes
-          // This ensures metadata is saved to database regardless of socket status
-          try {
-            // Only do this for Dropbox and Google Drive files
-            setTimeout(() => {
-              // Basic metadata for the file
-              const basicMetadata = {
-                id: file.id,
-                user_id: userId,
-                userId: userId,
-                uploadedBy: userId,
-                uploaded_by: userId,
-                username: username,
-                source: file.source,
-                url: file.thumbnail || file.preview || '',
-                public_url: file.thumbnail || file.preview || '',
-                file_size: file.size || 0,
-                file_type: file.type || 'image/jpeg',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                storage_path: `photos/${userId}/${file.source}/${file.id}`,
-                // Include event metadata if available
-                ...metadata,
-                // Empty arrays for faces and matches
-                faces: [],
-                matched_users: []
-              };
-              
-              console.log(`🌟 [DATABASE] Setting up fallback save to database for ${file.id} from ${file.source}`);
-              
-              // Wait a bit to ensure upload process has started
-              setTimeout(() => {
-                // Check if this file is still in Uppy
-                if (uppyInstance.getFile(file.id)) {
-                  console.log(`🌟 [DATABASE] Fallback saving metadata to database for ${file.id}`);
-                  
-                  awsPhotoService.savePhotoMetadata(basicMetadata)
-                    .then(result => {
-                      if (result.success) {
-                        console.log(`🌟 [DATABASE] SUCCESS: Fallback metadata save successful for ${file.id}`);
-                      } else {
-                        console.warn(`🌟 [DATABASE] WARNING: Fallback metadata save failed: ${result.error}`);
-                      }
-                    })
-                    .catch(error => {
-                      console.error(`🌟 [DATABASE] ERROR: Fallback metadata save exception:`, error);
-                    });
-                } else {
-                  console.log(`🌟 [DATABASE] File ${file.id} no longer in Uppy, skipping fallback save`);
-                }
-              }, 10000); // Wait 10 seconds to ensure upload has had time to start
-            }, 2000); // Small delay to ensure proper setup
-          } catch (fallbackError) {
-            console.error('❌ [DATABASE] Error setting up fallback database save:', fallbackError);
-          }
-        }
-      });
-
-      // Add listeners using the refs
-      uppyInstance.on('file-added', handlersRef.current.handleFileAdded);
-      uppyInstance.on('file-removed', handlersRef.current.handleFileRemoved);
-      uppyInstance.on('upload-progress', handlersRef.current.handleUploadProgress);
-      uppyInstance.on('complete', handlersRef.current.handleBatchComplete);
-      uppyInstance.on('error', handlersRef.current.handleUploadError);
-
-      // Save to both ref and state
-      uppyRef.current = uppyInstance;
-      
-      // Set the state in a way that doesn't trigger re-renders during initialization
-      setUppy(uppyInstance);
-      
-      // Mark initialization as complete
-      initializationCompleteRef.current = true;
-      
-      console.log('✅ [Uppy] Initialization complete');
-    } catch (error) {
-      console.error('❌ [Uppy] Error initializing Uppy:', error);
-    }
-    
-    // Proper cleanup function
-    return () => {
-      console.log('🧹 [Uppy] Cleaning up Uppy instance');
-      
-      if (uppyRef.current) {
-        try {
-          const instance = uppyRef.current;
-          
-          // Save any complete uploads to prevent loss of upload state
-          const completedUploads = instance.getFiles()
-            .filter(f => f.progress?.uploadComplete)
-            .map(f => ({
-              id: f.id,
-              status: 'complete',
-              photoDetails: f.response?.body || {},
-              progress: 100,
-              file: f.data
-            }));
-            
-          // If we have completed uploads, trigger a final callback
-          if (completedUploads.length > 0 && onUploadComplete) {
-            console.log(`[PhotoUploader] Final cleanup with ${completedUploads.length} completed uploads.`);
-            onUploadComplete();
-          }
-          
-          // Remove all event listeners
-          instance.off('file-added', handlersRef.current.handleFileAdded);
-          instance.off('file-removed', handlersRef.current.handleFileRemoved);
-          instance.off('upload-progress', handlersRef.current.handleUploadProgress);
-          instance.off('complete', handlersRef.current.handleBatchComplete);
-          instance.off('error', handlersRef.current.handleUploadError);
-          
-          // Only call reset if it exists
-          if (typeof instance.reset === 'function') {
-            instance.reset();
-          }
-          
-          // Only call destroy if it exists
-          if (typeof instance.destroy === 'function') {
-            instance.destroy();
-          }
-        } catch (cleanupError) {
-          console.error('❌ [Uppy] Error during cleanup:', cleanupError);
-        }
-        
-        // Reset refs
-        uppyRef.current = null;
-        initializationCompleteRef.current = false;
-      }
-    };
-  }, []);
-
-  // Update Uppy metadata when user or event changes
-  useEffect(() => {
-    if (uppyRef.current && (user?.id || eventId)) {
-      console.log('🔄 [Uppy] Updating global metadata with user/event info:', {
-        userId: user?.id,
-        eventId: eventId,
-        username: user?.username
-      });
-      
-      uppyRef.current.setMeta({
-        userId: user?.id || '',
-        user_id: user?.id || '',
-        uploadedBy: user?.id || '',
-        uploaded_by: user?.id || '',
-        username: user?.username || '',
-        eventId: eventId || '',
-        ...metadata
-      });
-    }
-  }, [user?.id, user?.username, eventId, metadata]);
-
-  // Ensure handleFileAdded, handleFileRemoved, etc. are defined with useCallback or outside the component
-  const handleFileAdded = useCallback((file) => {
-    if (!file) {
-      console.error('❌ [Uppy] handleFileAdded: No file object provided');
-      return;
-    }
-
-    console.log('📎 [Uppy] File added:', {
-      id: file.id,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      source: file.source
-    });
-
-    setTotalStorage(prev => prev + (file.size || 0));
-    
-    // Create a file object that works for both local and companion files
-    const fileObject = {
-      id: file.id,
-      file: {
-        name: file.name,
-        type: file.type || 'application/octet-stream',
-        size: file.size,
-        preview: file.preview || (file.data ? URL.createObjectURL(file.data) : null),
-        source: file.source || file.meta?.source || 'local' // Add source to file object itself
-      },
-      progress: 0,
-      status: 'pending',
-      metadata: { ...metadata },
-      folderPath: file.meta?.folderPath || null,
-      error: null,
-      photoDetails: null,
-      source: file.source || file.meta?.source || 'local'
-    };
-
-    // For remote files (Dropbox/Google Drive), ensure we have the preview
-    if (file.source && (file.source === 'dropbox' || file.source === 'googledrive')) {
-      // If we have a thumbnail URL, use it as preview
-      if (file.thumbnail) {
-        fileObject.file.preview = file.thumbnail;
-      }
-      // If we have a remote URL, use it as preview
-      else if (file.remote && file.remote.url) {
-        fileObject.file.preview = file.remote.url;
-      }
-    }
-
-    setUploads(prev => [...prev, fileObject]);
-  }, [metadata]);
-
-  const handleFileRemoved = useCallback((file) => {
-    if (!file) {
-      console.error('❌ [Uppy] handleFileRemoved: No file object provided');
-      return;
-    }
-    console.log('🗑️ [Uppy] File removed:', { id: file.id, name: file.name });
-    setTotalStorage(prev => Math.max(0, prev - (file.size || 0))); // Prevent negative storage
-    setUploads(prev => prev.filter(upload => upload.id !== file.id));
-  }, []); // No dependencies needed
-
-  const handleUploadProgress = useCallback((file, progress) => {
-    if (!file || !progress) {
-        console.error('❌ [Uppy] handleUploadProgress: Missing file or progress object');
-        return;
-    }
-    // console.log('📊 [Uppy] Upload progress:', { file: file.name, progress: progress.bytesUploaded / progress.bytesTotal * 100 });
-    const { bytesUploaded, bytesTotal } = progress;
-    const progressPercentage = bytesTotal > 0 ? (bytesUploaded / bytesTotal) * 100 : 0;
-    
-    setUploads(prev => prev.map(upload => 
-      upload.id === file.id 
-        ? { ...upload, progress: progressPercentage, status: 'uploading' }
-        : upload
-    ));
-  }, []); // No dependencies needed
-
-  const handleUploadError = useCallback((file, error, response) => {
-     if (!file) {
-      console.error('❌ [Uppy] handleUploadError: No file object provided');
-      return;
-    }
-    console.error('❌ [Uppy] Upload error:', {
-      file: file.name,
-      error: error,
-      response: response
-    });
-    setUploads(prev => prev.map(upload => 
-      upload.id === file.id 
-        ? { ...upload, status: 'error', error: error.message || 'Upload failed' }
-        : upload
-    ));
-
-    if (onError) {
-      onError(error.message || 'An upload error occurred');
-    }
-  }, [onError]); // Dependency: onError prop
-
-  // Create a function reference that will remain stable
-  const startUploadQueueRef = useRef(null);
-
-  // Wrap startUploadQueue in useCallback
-  const startUploadQueue = useCallback((uppyInstance) => {
-    if (!uppyInstance) {
-        console.error('❌ [Uppy] startUploadQueue called without a valid Uppy instance.');
-        return;
-    }
-    console.log('🔄 [Uppy] Starting/continuing upload queue process');
-    const allFiles = uppyInstance.getFiles();
-    // Filter for files that are genuinely pending (not started, not complete, not errored)
-    const pendingFiles = allFiles.filter(f => 
-        !f.progress?.uploadComplete && 
-        !f.progress?.uploadStarted && 
-        !f.error
-    );
-    const inProgressFiles = allFiles.filter(f => 
-        f.progress?.uploadStarted && 
-        !f.progress?.uploadComplete &&
-        !f.error
-    );
-    
-    console.log(`📊 [Uppy] Queue status: ${pendingFiles.length} pending, ${inProgressFiles.length} in progress, ${allFiles.length - pendingFiles.length - inProgressFiles.length} completed/errored`);
-    
-    if (pendingFiles.length > 0) {
-      // Only start upload if there are pending files and not too many already in progress
-      // This prevents accidentally calling upload() multiple times rapidly
-      if(inProgressFiles.length < (uppyInstance.opts.limit || 5)) { // Check against the concurrency limit
-         console.log(`🚀 [Uppy] Starting upload for next batch of files (${pendingFiles.length} pending).`);
-         uppyInstance.upload().catch(error => {
-           console.error('❌ [Uppy] Error calling uppy.upload():', error);
-         });
-      } else {
-         console.log(`🚦 [Uppy] ${inProgressFiles.length} files already in progress (limit: ${uppyInstance.opts.limit || 5}). Waiting for current batch to complete.`);
-      }
-    } else if (inProgressFiles.length === 0) {
-      console.log(`✅ [Uppy] No pending files and no uploads in progress. Queue appears complete.`);
-      // You might want to set a state here indicating completion if needed
-    }
-  }, []); // Empty dependency array as it doesn't depend on component state/props
-
-  // Store the function in ref to avoid circular dependencies
-  useEffect(() => {
-    startUploadQueueRef.current = startUploadQueue;
-  }, [startUploadQueue]);
-
-  // Add a function to force-process any Dropbox/Google Drive uploads 
-  // that might not have been properly identified
-  const processRemoteUploads = useCallback(() => {
-    const pendingFiles = uploads.filter(u => 
-      (u.source === 'dropbox' || u.source === 'googledrive' || u.file?.source === 'dropbox' || u.file?.source === 'googledrive') && 
-      u.status !== 'complete' && 
-      u.status !== 'error'
-    );
-    
-    if (pendingFiles.length > 0) {
-      console.log(`[PhotoUploader] Force-completing ${pendingFiles.length} pending remote uploads`);
-      setUploads(prev => prev.map(upload => {
-        if ((upload.source === 'dropbox' || upload.source === 'googledrive' || upload.file?.source === 'dropbox' || upload.file?.source === 'googledrive') && 
-            upload.status !== 'complete' && upload.status !== 'error') {
-          return {
-            ...upload,
-            status: 'complete',
-            photoDetails: upload.photoDetails || {
-              id: upload.id,
-              url: upload.file.preview || '',
-              source: upload.source || upload.file?.source || 'remote',
-              metadata: upload.metadata,
-              userId: user?.id || '',
-              user_id: user?.id || '',
-              uploadedBy: user?.id || '',
-              uploaded_by: user?.id || '',
-              username: user?.username || ''
-            }
-          };
-        }
-        return upload;
-      }));
-      return true;
-    }
-    return false;
-  }, [uploads, user]);
-
-  // Add a dedicated upload completion handling function
-  const finalizeUpload = useCallback(() => {
-    console.log('[PhotoUploader] Finalizing upload and refreshing display...');
-    
-    // First, ensure any remote uploads are properly processed
-    const processedRemotes = processRemoteUploads();
-    
-    // Helper function to determine if a URL is a temporary Companion URL
-    const isTemporaryUrl = (url) => {
-      if (!url) return false;
-      return url.includes('localhost:3020') || 
-             url.includes('/companion/') || 
-             url.includes('/dropbox/') || 
-             url.includes('/drive/');
-    };
-    
-    // Helper function to convert a temporary URL to a potential S3 URL
-    const getS3UrlFromStoragePath = (userId, source, fileId) => {
-      // Expected S3 path format: photos/userId/source/fileId
-      const storagePath = `photos/${userId}/${source}/${fileId}`;
-      // We don't know the bucket name here, but server.js will handle that
-      return storagePath;
-    };
-    
-    // Ensure we mark uploads as complete in the UI
-    const completedFiles = uppy?.getFiles().filter(f => f.progress?.uploadComplete) || [];
-    if (completedFiles.length > 0) {
-      console.log(`[PhotoUploader] Finalizing ${completedFiles.length} completed uploads`);
-      setUploads(prev => {
-        const updatedUploads = [...prev];
-        completedFiles.forEach(file => {
-          const index = updatedUploads.findIndex(u => u.id === file.id);
-          if (index !== -1) {
-            // Get the potential final S3 path if this is a remote upload with a temporary URL
-            const isRemote = file.source === 'dropbox' || file.source === 'googledrive';
-            const currentUrl = file.response?.body?.url || updatedUploads[index].photoDetails?.url;
-            const hasTemporaryUrl = isTemporaryUrl(currentUrl);
-            
-            // If it's a remote upload with a temporary URL, generate a proper S3 path
-            let properUrl = currentUrl;
-            let storagePath = '';
-            
-            if (isRemote && hasTemporaryUrl) {
-              storagePath = getS3UrlFromStoragePath(
-                user?.id || '', 
-                file.source, 
-                file.id
-              );
-              console.log(`[PhotoUploader] Detected temporary URL for remote upload. 
-                File: ${file.name}
-                URL: ${currentUrl}
-                Generated storage path: ${storagePath}`);
-            }
-            
-            updatedUploads[index] = {
-              ...updatedUploads[index],
-              status: 'complete',
-              progress: 100,
-              photoDetails: {
                 ...updatedUploads[index].photoDetails,
                 ...file.response?.body,
                 storage_path: storagePath || file.response?.body?.storage_path || updatedUploads[index].photoDetails?.storage_path
@@ -1392,7 +976,30 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         }
       }, 3000); // Small delay to ensure backend processing completes
     }, 1000); // Small delay to ensure backend processing completes
-  }, [uppy, onUploadComplete, uploads, user, processRemoteUploads, metadata]);
+  }, [uppy, onUploadComplete, uploads, user, processRemoteUploads, metadata, normalizeMatchedUsers]);
+
+  // Add a helper function to normalize matched users data (various formats)
+  const normalizeMatchedUsers = useCallback((data) => {
+    if (!data) return [];
+    
+    // If it's already an array, make sure it's not empty
+    if (Array.isArray(data)) {
+      return data;
+    }
+    
+    // If it's a string (probably JSON), try to parse it
+    if (typeof data === 'string') {
+      try {
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        console.error('%c❌ Error parsing matched_users string:', 'color: #ff0000; font-weight: bold;', e);
+        return [];
+      }
+    }
+    
+    return [];
+  }, []);
 
   // Process successful uploads
   const processSuccessfulUploads = useCallback((successfulUploads) => {
@@ -1816,7 +1423,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
       finalizeUpload();
     }, 1000);
     
-  }, [user, eventId, metadata, uploads, finalizeUpload, checkIsRemoteUpload, processSuccessfulUploads]);
+  }, [user, eventId, metadata, uploads, finalizeUpload, checkIsRemoteUpload, processSuccessfulUploads, normalizeMatchedUsers]);
 
   // Now that all handlers are defined, update the handlers ref
   useEffect(() => {
@@ -1947,6 +1554,39 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
   const renderUploadDetails = (upload) => {
     if (!upload.photoDetails) return null;
     
+    // Add detailed console logging for debugging
+    console.log('%c🔍 [FACES] Render upload details for photo:', 'background: #9c27b0; color: white; font-weight: bold; padding: 3px 5px; border-radius: 4px;');
+    console.log('%c- Photo ID: ' + (upload.photoDetails.id || 'unknown'), 'color: #9c27b0; font-weight: bold;');
+    
+    // Log the matched users in different possible formats
+    console.log('%c- matched_users property:', 'color: #9c27b0; font-weight: bold;', upload.photoDetails.matched_users);
+    console.log('%c- matched_users_list property:', 'color: #9c27b0; font-weight: bold;', upload.photoDetails.matched_users_list);
+    
+    // Try to get the real matched users array, handling different formats
+    let matchedUsers = [];
+    
+    if (upload.photoDetails.matched_users_list && Array.isArray(upload.photoDetails.matched_users_list)) {
+      matchedUsers = upload.photoDetails.matched_users_list;
+      console.log('%c- Using matched_users_list', 'color: #9c27b0; font-weight: bold;');
+    } else if (upload.photoDetails.matched_users) {
+      if (Array.isArray(upload.photoDetails.matched_users)) {
+        matchedUsers = upload.photoDetails.matched_users;
+        console.log('%c- Using matched_users array', 'color: #9c27b0; font-weight: bold;');
+      } else if (typeof upload.photoDetails.matched_users === 'string') {
+        try {
+          const parsed = JSON.parse(upload.photoDetails.matched_users);
+          if (Array.isArray(parsed)) {
+            matchedUsers = parsed;
+            console.log('%c- Parsed matched_users from string', 'color: #9c27b0; font-weight: bold;');
+          }
+        } catch (e) {
+          console.error('%c- Error parsing matched_users string:', 'color: #ff0000; font-weight: bold;', e);
+        }
+      }
+    }
+    
+    console.log('%c- Final matched users to display:', 'color: #9c27b0; font-weight: bold;', matchedUsers);
+    
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -1977,11 +1617,11 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         
         <div className="md:col-span-2">
           <h4 className="font-medium text-apple-gray-900 mb-1">Recognition Results</h4>
-          {upload.photoDetails.matched_users_list && upload.photoDetails.matched_users_list.length > 0 ? (
+          {matchedUsers && matchedUsers.length > 0 ? (
             <div>
-              <p className="text-sm text-apple-gray-500 mb-2">Matched Users: {upload.photoDetails.matched_users_list.length}</p>
+              <p className="text-sm text-apple-gray-500 mb-2">Matched Users: {matchedUsers.length}</p>
               <div className="grid grid-cols-2 gap-2">
-                {upload.photoDetails.matched_users_list.map((user, index) => (
+                {matchedUsers.map((user, index) => (
                   <div key={index} className="bg-apple-gray-100 p-2 rounded">
                     <p className="text-sm font-medium text-apple-gray-900">{user.name || user.userId || `User ${index + 1}`}</p>
                     <p className="text-xs text-apple-gray-500">Confidence: {user.similarity ? `${user.similarity.toFixed(2)}%` : (user.confidence ? `${user.confidence}%` : 'N/A')}</p>
@@ -1990,7 +1630,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-apple-gray-500">No matches found</p>
+            <p className="text-sm text-apple-gray-500">No matches found {upload.photoDetails.matched_users ? `(Data format: ${typeof upload.photoDetails.matched_users})` : '(No data)'}</p>
           )}
         </div>
       </div>
