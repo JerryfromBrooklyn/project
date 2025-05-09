@@ -71,7 +71,7 @@ const SimplePhotoUpload = ({ onSuccess }) => {
       const fileName = `${fileId}-${selectedFile.name}`;
       
       // Use the same path format that is used in the functioning uploads
-      const filePath = `${user.id}/${fileName}`;
+      const filePath = `photos/${user.id}/${fileName}`;
       
       console.log(`Uploading file to path: ${filePath}`);
       setProgress(20);

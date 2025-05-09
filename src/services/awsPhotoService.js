@@ -63,10 +63,10 @@ export const awsPhotoService = {
                           metadata.user_id || 
                           metadata.uploadedBy || 
                           metadata.uploaded_by || 
-                          'default-user';
+                          'default-user'; // Use actual UUID
             
             // Extract username from metadata
-            const username = metadata.username || 'default-user';
+            const username = metadata.username || '';
             
             console.log(`👤 [Upload ${uploadId}] User info from metadata:`, {
                 userId: userId,
@@ -115,8 +115,8 @@ export const awsPhotoService = {
             // File path with userId and username 
             const fileName = `${fileId}_${file.name}`;
             const path = cleanFolderPath 
-                ? `photos/${userId}/${username}/${cleanFolderPath}${fileName}` // Folder path included
-                : `photos/${userId}/${username}/${fileName}`; // No folder path
+                ? `photos/${userId}/${cleanFolderPath}${fileName}` // Folder path included
+                : `photos/${userId}/${fileName}`; // No folder path
                 
             console.log(`   Generated S3 path: ${path}`);
             console.log(`   Generated photo ID: ${fileId}`);

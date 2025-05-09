@@ -244,11 +244,16 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     // Add explicit check for Dropbox IDs which start with "id:"
     const isDropboxId = typeof file.id === 'string' && file.id.startsWith('id:');
     
+    // Add explicit check for Google Drive IDs which typically contain at least one underscore
+    const isGoogleDriveId = typeof file.id === 'string' && 
+                          (file.id.startsWith('drive-') || file.id.includes('_'));
+    
     return file.source === 'dropbox' || 
            file.source === 'googledrive' ||
            file.meta?.source === 'dropbox' || 
            file.meta?.source === 'googledrive' ||
-           isDropboxId;
+           isDropboxId ||
+           isGoogleDriveId;
   }, []);
   
   // Initialize Uppy only once
@@ -802,7 +807,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
             setTimeout(() => {
               // Basic metadata for the file
               const basicMetadata = {
-                id: file.id,
+                id: crypto.randomUUID(), // Always use a new UUID to create a new database entry
                 user_id: userId,
                 userId: userId,
                 uploadedBy: userId,
@@ -815,7 +820,9 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 file_type: file.type || 'image/jpeg',
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
-                storage_path: `photos/${userId}/${file.source}/${file.id}`,
+                storage_path: `photos/${userId}/${crypto.randomUUID()}`, // Generate a unique storage path
+                // Store the original file ID for reference only
+                originalId: file.id,
                 // Include event metadata if available
                 ...metadata,
                 // Empty arrays for faces and matches
@@ -1262,13 +1269,15 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           
           // Create metadata object with required fields for DynamoDB
           const uploadMetadata = {
-            id: upload.photoDetails?.id || upload.id,
+            id: crypto.randomUUID(), // Always generate a new UUID to create a new entry
             user_id: user?.id || upload.metadata?.userId || upload.photoDetails?.userId,
             userId: user?.id || upload.metadata?.userId || upload.photoDetails?.userId,
             uploaded_by: user?.id || upload.metadata?.uploadedBy || upload.photoDetails?.uploadedBy,
             uploadedBy: user?.id || upload.metadata?.uploadedBy || upload.photoDetails?.uploadedBy,
             username: user?.username || upload.metadata?.username || upload.photoDetails?.username,
-            storage_path: upload.photoDetails?.storage_path || `photos/${user?.id}/${source}/${upload.id}`,
+            storage_path: upload.photoDetails?.storage_path || `photos/${user?.id}/${crypto.randomUUID()}`,
+            // Store the original ID for reference but never as the primary key
+            originalId: upload.id,
             url: upload.photoDetails?.url || upload.file?.preview || '',
             public_url: upload.photoDetails?.url || upload.file?.preview || '',
             file_size: upload.file?.size || 0,
@@ -1372,7 +1381,24 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     
     // Update the uploads state
     setUploads(prev => prev.map(upload => {
-      const successfulUpload = successfulUploads.find(u => u.id === upload.id);
+      // For remote uploads, we might have generated a new ID to prevent key collisions
+      // Check if this upload has been remapped
+      const successfulUpload = successfulUploads.find(u => {
+        // Try to match by ID first
+        if (u.id === upload.id) return true;
+        
+        // For remote uploads, also try to match by originalId if we have it
+        if (upload.originalId && u.id === upload.originalId) return true;
+        
+        // Check if this ID was remapped in our global map
+        if (window.remoteIdMap && window.remoteIdMap.has(u.id)) {
+          const mappedId = window.remoteIdMap.get(u.id);
+          return mappedId === upload.id;
+        }
+        
+        return false;
+      });
+      
       if (successfulUpload) {
         // Extract response data consistently
         const responseData = successfulUpload.response?.body || {};
@@ -1411,7 +1437,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           file_type: upload.file.type || 'image/jpeg',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          storage_path: responseData.storage_path || `photos/${uploaderId}/${sourceType}/${successfulUpload.id}`,
+          storage_path: responseData.storage_path || `photos/${uploaderId}/${successfulUpload.id}`,
           public_url: uploadURL || successfulUpload.preview || successfulUpload.thumbnail,
           source: sourceType,
           // Include additional metadata
@@ -1528,11 +1554,16 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         // Dropbox upload IDs start with "id:"
         const isDropboxId = typeof successfulUpload.id === 'string' && successfulUpload.id.startsWith('id:');
         
+        // Add explicit check for Google Drive IDs
+        const isGoogleDriveId = typeof successfulUpload.id === 'string' && 
+                              (successfulUpload.id.startsWith('drive-') || 
+                               successfulUpload.id.includes('_'));
+        
         // Determine the source with explicit checking
         let uploadSource = 'local';
         if (successfulUpload.source === 'dropbox' || isDropboxId) {
           uploadSource = 'dropbox';
-        } else if (successfulUpload.source === 'googledrive') {
+        } else if (successfulUpload.source === 'googledrive' || isGoogleDriveId) {
           uploadSource = 'googledrive';
         } else if (successfulUpload.meta?.source === 'dropbox') {
           uploadSource = 'dropbox';
@@ -1541,6 +1572,27 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         }
         
         console.log(`🔍 [Uppy] Determined upload source for ${successfulUpload.id}: ${uploadSource}`);
+        
+        // Generate a unique identifier for remote uploads
+        // This prevents issues with duplicate React keys and ensures we ALWAYS
+        // create a new database entry for each upload
+        let uniqueId = crypto.randomUUID();
+        
+        // Always store the original ID for reference, but never use it as the primary key
+        const originalId = successfulUpload.id;
+        
+        // Log the mapping for debugging
+        console.log(`🔑 [Uppy] Generated unique ID for file:`, {
+          originalId: originalId,
+          newId: uniqueId,
+          source: uploadSource
+        });
+        
+        // Store the mapping for future reference
+        if (!window.remoteIdMap) {
+          window.remoteIdMap = new Map();
+        }
+        window.remoteIdMap.set(originalId, uniqueId);
         
         // Check if this upload is already in our state
         let upload = uploads.find(u => u.id === successfulUpload.id);
@@ -1554,9 +1606,14 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
           if (isRemote) {
             console.log(`🌟 [DATABASE] Creating temporary upload object for remote file: ${successfulUpload.id}`);
             
+            // Always generate a new UUID for this upload
+            const uniqueId = crypto.randomUUID();
+            console.log(`🌟 [DATABASE] Generated new UUID ${uniqueId} for remote file ${successfulUpload.id}`);
+            
             // Create a temporary upload object
             upload = {
-              id: successfulUpload.id,
+              id: uniqueId, // Always use a generated unique ID for the key
+              originalId: successfulUpload.id, // Preserve the original ID as reference only
               file: {
                 name: successfulUpload.name,
                 type: successfulUpload.type || 'application/octet-stream',
@@ -1565,7 +1622,8 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 source: uploadSource,
                 meta: {
                   ...successfulUpload.meta,
-                  source: uploadSource
+                  source: uploadSource,
+                  originalId: successfulUpload.id // Store original ID in meta
                 }
               },
               progress: {
@@ -1678,10 +1736,13 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
               // Explicitly determine the source
               let sourceType = 'remote';
               if (upload.source === 'dropbox' || successfulUpload.source === 'dropbox' || 
-                  successfulUpload.meta?.source === 'dropbox' || successfulUpload.id.startsWith('id:')) {
+                  successfulUpload.meta?.source === 'dropbox' || 
+                  (typeof successfulUpload.id === 'string' && successfulUpload.id.startsWith('id:'))) {
                 sourceType = 'dropbox';
               } else if (upload.source === 'googledrive' || successfulUpload.source === 'googledrive' || 
-                         successfulUpload.meta?.source === 'googledrive') {
+                         successfulUpload.meta?.source === 'googledrive' ||
+                         (typeof successfulUpload.id === 'string' && 
+                          (successfulUpload.id.startsWith('drive-') || successfulUpload.id.includes('_')))) {
                 sourceType = 'googledrive';
               }
               
@@ -1721,9 +1782,9 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
               // This ensures it's properly saved even if socket communication fails
               console.log(`🌟 [DATABASE] Explicitly saving metadata to database for ${upload.id}`);
               
-              // Create a complete metadata object
+              // Create a complete metadata object - always use a new UUID for the id
               const completeMetadata = {
-                id: photoDetails.id,
+                id: crypto.randomUUID(), // Always use a new UUID to create a new database entry
                 user_id: uploaderId,
                 userId: uploaderId,
                 uploadedBy: uploaderId,
@@ -1736,7 +1797,9 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 file_type: successfulUpload.type || 'image/jpeg',
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
-                storage_path: `photos/${uploaderId}/${sourceType}/${successfulUpload.id}`,
+                storage_path: `photos/${uploaderId}/${crypto.randomUUID()}`, // Generate a unique storage path
+                // Store the original ID for reference only
+                originalId: successfulUpload.id,
                 // Add event metadata
                 eventName: metadata.eventName || '',
                 venueName: metadata.venueName || '',
@@ -1771,7 +1834,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
               
               // If no socket is available, save metadata directly
               const directMetadata = {
-                id: successfulUpload.id,
+                id: crypto.randomUUID(), // Always use a new UUID to create a new database entry
                 user_id: uploaderId,
                 userId: uploaderId,
                 uploadedBy: uploaderId,
@@ -1784,7 +1847,9 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                 file_type: successfulUpload.type || 'image/jpeg',
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
-                storage_path: `photos/${uploaderId}/${upload.source || 'remote'}/${successfulUpload.id}`,
+                storage_path: `photos/${uploaderId}/${crypto.randomUUID()}`, // Generate a unique storage path
+                // Store the original ID for reference only
+                originalId: successfulUpload.id,
                 // Add event metadata
                 ...metadata
               };
