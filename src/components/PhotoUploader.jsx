@@ -774,88 +774,13 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
                              (typeof file.id === 'string' && file.id.startsWith('id:'));
                              
         if (isRemoteFile) {
-          console.log(`🌟 [DATABASE] Remote file detected from ${file.source}. Will ensure database entry is created.`);
+          console.log(`🌟 [Uppy] Remote file detected from ${file.source}. Will process after form submission.`);
           
           // Set preview if available
           if (file.thumbnail) {
             file.preview = file.thumbnail;
           } else if (file.remote && file.remote.url) {
             file.preview = file.remote.url;
-          }
-          
-          // NEW: Track the remote upload for special handling
-          const remoteUploadsKey = `remote_uploads_${userId}`;
-          try {
-            let remoteUploads = JSON.parse(localStorage.getItem(remoteUploadsKey) || '[]');
-            remoteUploads.push({
-              id: file.id,
-              source: file.source,
-              name: file.name,
-              timestamp: Date.now(),
-              userId: userId
-            });
-            localStorage.setItem(remoteUploadsKey, JSON.stringify(remoteUploads));
-            console.log(`🌐 [Uppy] Tracking remote upload from ${file.source}: ${file.name} with ID ${file.id}`);
-          } catch (error) {
-            console.error('❌ [Uppy] Error saving remote upload tracking data:', error);
-          }
-          
-          // NEW: Set up a fallback save to database even before upload completes
-          // This ensures metadata is saved to database regardless of socket status
-          try {
-            // Only do this for Dropbox and Google Drive files
-            setTimeout(() => {
-              // Basic metadata for the file
-              const basicMetadata = {
-                id: crypto.randomUUID(), // Always use a new UUID to create a new database entry
-                user_id: userId,
-                userId: userId,
-                uploadedBy: userId,
-                uploaded_by: userId,
-                username: username,
-                source: file.source,
-                url: file.thumbnail || file.preview || '',
-                public_url: file.thumbnail || file.preview || '',
-                file_size: file.size || 0,
-                file_type: file.type || 'image/jpeg',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                storage_path: `photos/${userId}/${crypto.randomUUID()}`, // Generate a unique storage path
-                // Store the original file ID for reference only
-                originalId: file.id,
-                // Include event metadata if available
-                ...metadata,
-                // Empty arrays for faces and matches
-                faces: [],
-                matched_users: []
-              };
-              
-              console.log(`🌟 [DATABASE] Setting up fallback save to database for ${file.id} from ${file.source}`);
-              
-              // Wait a bit to ensure upload process has started
-              setTimeout(() => {
-                // Check if this file is still in Uppy
-                if (uppyInstance.getFile(file.id)) {
-                  console.log(`🌟 [DATABASE] Fallback saving metadata to database for ${file.id}`);
-                  
-                  awsPhotoService.savePhotoMetadata(basicMetadata)
-                    .then(result => {
-                      if (result.success) {
-                        console.log(`🌟 [DATABASE] SUCCESS: Fallback metadata save successful for ${file.id}`);
-                      } else {
-                        console.warn(`🌟 [DATABASE] WARNING: Fallback metadata save failed: ${result.error}`);
-                      }
-                    })
-                    .catch(error => {
-                      console.error(`🌟 [DATABASE] ERROR: Fallback metadata save exception:`, error);
-                    });
-                } else {
-                  console.log(`🌟 [DATABASE] File ${file.id} no longer in Uppy, skipping fallback save`);
-                }
-              }, 10000); // Wait 10 seconds to ensure upload has had time to start
-            }, 2000); // Small delay to ensure proper setup
-          } catch (fallbackError) {
-            console.error('❌ [DATABASE] Error setting up fallback database save:', fallbackError);
           }
         }
       });
@@ -1546,150 +1471,13 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
     console.log(`🔍 [Uppy] Has remote uploads: ${hasRemoteUploads}`);
 
     if (successfulUploads.length > 0) {
-      // Create temporary upload objects for any remote uploads not in state
-      const missingRemoteUploads = [];
-      
-      // Process each upload to identify Dropbox/Google Drive
-      successfulUploads.forEach(successfulUpload => {
-        // Dropbox upload IDs start with "id:"
-        const isDropboxId = typeof successfulUpload.id === 'string' && successfulUpload.id.startsWith('id:');
-        
-        // Add explicit check for Google Drive IDs
-        const isGoogleDriveId = typeof successfulUpload.id === 'string' && 
-                              (successfulUpload.id.startsWith('drive-') || 
-                               successfulUpload.id.includes('_'));
-        
-        // Determine the source with explicit checking
-        let uploadSource = 'local';
-        if (successfulUpload.source === 'dropbox' || isDropboxId) {
-          uploadSource = 'dropbox';
-        } else if (successfulUpload.source === 'googledrive' || isGoogleDriveId) {
-          uploadSource = 'googledrive';
-        } else if (successfulUpload.meta?.source === 'dropbox') {
-          uploadSource = 'dropbox';
-        } else if (successfulUpload.meta?.source === 'googledrive') {
-          uploadSource = 'googledrive';
-        }
-        
-        console.log(`🔍 [Uppy] Determined upload source for ${successfulUpload.id}: ${uploadSource}`);
-        
-        // Generate a unique identifier for remote uploads
-        // This prevents issues with duplicate React keys and ensures we ALWAYS
-        // create a new database entry for each upload
-        let uniqueId = crypto.randomUUID();
-        
-        // Always store the original ID for reference, but never use it as the primary key
-        const originalId = successfulUpload.id;
-        
-        // Log the mapping for debugging
-        console.log(`🔑 [Uppy] Generated unique ID for file:`, {
-          originalId: originalId,
-          newId: uniqueId,
-          source: uploadSource
-        });
-        
-        // Store the mapping for future reference
-        if (!window.remoteIdMap) {
-          window.remoteIdMap = new Map();
-        }
-        window.remoteIdMap.set(originalId, uniqueId);
-        
-        // Check if this upload is already in our state
-        let upload = uploads.find(u => u.id === successfulUpload.id);
-        
-        if (!upload) {
-          console.log(`⚠️ [Uppy] Could not find upload in state for ID: ${successfulUpload.id}, creating one`);
-          
-          // Check if this is a remote upload
-          const isRemote = uploadSource === 'dropbox' || uploadSource === 'googledrive';
-          
-          if (isRemote) {
-            console.log(`🌟 [DATABASE] Creating temporary upload object for remote file: ${successfulUpload.id}`);
-            
-            // Always generate a new UUID for this upload
-            const uniqueId = crypto.randomUUID();
-            console.log(`🌟 [DATABASE] Generated new UUID ${uniqueId} for remote file ${successfulUpload.id}`);
-            
-            // Create a temporary upload object
-            upload = {
-              id: uniqueId, // Always use a generated unique ID for the key
-              originalId: successfulUpload.id, // Preserve the original ID as reference only
-              file: {
-                name: successfulUpload.name,
-                type: successfulUpload.type || 'application/octet-stream',
-                size: successfulUpload.size || 0,
-                preview: successfulUpload.preview || successfulUpload.thumbnail,
-                source: uploadSource,
-                meta: {
-                  ...successfulUpload.meta,
-                  source: uploadSource,
-                  originalId: successfulUpload.id // Store original ID in meta
-                }
-              },
-              progress: {
-                percentage: 100,
-                bytesUploaded: successfulUpload.size || 0,
-                bytesTotal: successfulUpload.size || 0,
-                uploadComplete: true
-              },
-              status: 'complete',
-              metadata: { 
-                ...metadata,
-                userId: uploaderId,
-                user_id: uploaderId,
-                uploadedBy: uploaderId,
-                uploaded_by: uploaderId,
-                username: uploaderName,
-                source: uploadSource
-              },
-              source: uploadSource
-            };
-            
-            // Only add this upload if it doesn't already exist
-            if (!uploads.some(u => u.id === successfulUpload.id)) {
-              missingRemoteUploads.push(upload);
-            }
-          }
-        } else {
-          // Ensure existing upload has the correct source
-          upload.source = uploadSource;
-          if (upload.file) {
-            upload.file.source = uploadSource;
-          }
-          if (upload.metadata) {
-            upload.metadata.source = uploadSource;
-          }
-        }
-      });
-      
-      // Add any missing remote uploads to state so they can be processed properly
-      if (missingRemoteUploads.length > 0) {
-        console.log(`🌟 [Uppy] Adding ${missingRemoteUploads.length} missing remote uploads to state`);
-        setUploads(prev => [...prev, ...missingRemoteUploads]);
-        
-        // Since state updates are batched and asynchronous, we need to include these in our current processing
-        successfulUploads.forEach(su => {
-          const matching = missingRemoteUploads.find(mru => mru.id === su.id);
-          if (matching) {
-            // Add the remote metadata to the successful upload to ensure it's properly tagged
-            su.source = matching.source;
-            if (su.meta) {
-              su.meta.source = matching.source;
-            } else {
-              su.meta = { source: matching.source };
-            }
-          }
-        });
-      }
-      
       // Process all uploads with our specialized handler
       processSuccessfulUploads(successfulUploads);
       
       // For each upload, check if it needs socket communication
       successfulUploads.forEach(successfulUpload => {
-        // Find the upload in our state (or the newly created one)
-        const upload = uploads.find(u => u.id === successfulUpload.id) || 
-                     missingRemoteUploads.find(mru => mru.id === successfulUpload.id);
+        // Find the upload in our state
+        const upload = uploads.find(u => u.id === successfulUpload.id);
         
         if (!upload) {
           console.log(`⚠️ [Uppy] Still cannot find upload in state for ID: ${successfulUpload.id}`);
@@ -1777,98 +1565,7 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
               console.log(`📤 [Uppy] Sending upload-complete event via socket for ${upload.id}:`, socketData);
               socket.emit('upload-complete', socketData);
               console.log(`📤 [Uppy] Sent upload-complete event for ${upload.id}`);
-              
-              // CRITICAL: Also save the metadata directly to the database
-              // This ensures it's properly saved even if socket communication fails
-              console.log(`🌟 [DATABASE] Explicitly saving metadata to database for ${upload.id}`);
-              
-              // Create a complete metadata object - always use a new UUID for the id
-              const completeMetadata = {
-                id: crypto.randomUUID(), // Always use a new UUID to create a new database entry
-                user_id: uploaderId,
-                userId: uploaderId,
-                uploadedBy: uploaderId,
-                uploaded_by: uploaderId,
-                username: uploaderName,
-                source: sourceType,
-                url: uploadURL || successfulUpload.preview || successfulUpload.thumbnail,
-                public_url: uploadURL || successfulUpload.preview || successfulUpload.thumbnail,
-                file_size: successfulUpload.size || 0,
-                file_type: successfulUpload.type || 'image/jpeg',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                storage_path: `photos/${uploaderId}/${crypto.randomUUID()}`, // Generate a unique storage path
-                // Store the original ID for reference only
-                originalId: successfulUpload.id,
-                // Add event metadata
-                eventName: metadata.eventName || '',
-                venueName: metadata.venueName || '',
-                promoterName: metadata.promoterName || '',
-                date: metadata.date || new Date().toISOString().split('T')[0],
-                albumLink: metadata.albumLink || '',
-                // Include all nested structures
-                event_details: metadata.event_details || {},
-                venue: metadata.venue || {},
-                promoter: metadata.promoter || {},
-                location: metadata.location || {},
-                externalAlbumLink: metadata.albumLink || metadata.externalAlbumLink || '',
-                // Empty arrays for faces and matches
-                faces: [],
-                matched_users: []
-              };
-              
-              // Call the direct database save function
-              awsPhotoService.savePhotoMetadata(completeMetadata)
-                .then(result => {
-                  if (result.success) {
-                    console.log(`🌟 [DATABASE] SUCCESS: Metadata saved directly to database for ${upload.id}`);
-                  } else {
-                    console.error(`🌟 [DATABASE] ERROR: Failed to save metadata directly: ${result.error}`);
-                  }
-                })
-                .catch(error => {
-                  console.error(`🌟 [DATABASE] ERROR: Exception saving metadata directly:`, error);
-                });
-            } else {
-              console.warn(`⚠️ [Uppy] No socket available for ${upload.source || successfulUpload.source} upload, saving metadata directly`);
-              
-              // If no socket is available, save metadata directly
-              const directMetadata = {
-                id: crypto.randomUUID(), // Always use a new UUID to create a new database entry
-                user_id: uploaderId,
-                userId: uploaderId,
-                uploadedBy: uploaderId,
-                uploaded_by: uploaderId,
-                username: uploaderName,
-                source: upload.source || successfulUpload.source || successfulUpload.meta?.source || 'remote',
-                url: successfulUpload.preview || successfulUpload.thumbnail || '',
-                public_url: successfulUpload.preview || successfulUpload.thumbnail || '',
-                file_size: successfulUpload.size || 0,
-                file_type: successfulUpload.type || 'image/jpeg',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                storage_path: `photos/${uploaderId}/${crypto.randomUUID()}`, // Generate a unique storage path
-                // Store the original ID for reference only
-                originalId: successfulUpload.id,
-                // Add event metadata
-                ...metadata
-              };
-              
-              // Save directly to database
-              awsPhotoService.savePhotoMetadata(directMetadata)
-                .then(result => {
-                  if (result.success) {
-                    console.log(`🌟 [DATABASE] SUCCESS: Metadata saved directly (fallback) for ${upload.id}`);
-                  } else {
-                    console.error(`🌟 [DATABASE] ERROR: Failed to save metadata directly (fallback): ${result.error}`);
-                  }
-                })
-                .catch(error => {
-                  console.error(`🌟 [DATABASE] ERROR: Exception saving metadata directly (fallback):`, error);
-                });
             }
-          } else {
-            console.warn('⚠️ [Uppy] Unable to get plugin info for socket communication');
           }
         }
       });
