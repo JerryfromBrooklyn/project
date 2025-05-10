@@ -1392,33 +1392,25 @@ export const PhotoUploader = ({ eventId, onUploadComplete, onError }) => {
         // Log the created photoDetails
         console.log(`🌟 [DATABASE] Created photoDetails for upload: ${upload.id}, Source: ${sourceType}`);
         
-        // Check if this is a remote upload (Dropbox/Google Drive)
-        const isRemoteSource = sourceType === 'dropbox' || sourceType === 'googledrive';
-                           
-        if (isRemoteSource) {
-          console.log(`🌟 [DATABASE] Remote upload completed. Will save metadata directly to database for ${upload.id}`);
-          
-          // Save metadata to database immediately
-          awsPhotoService.savePhotoMetadata(photoDetails)
-            .then(result => {
-              if (result.success) {
-                console.log(`🌟 [DATABASE] SUCCESS: Saved remote upload metadata to database for ${upload.id}`);
-                
-                // Refresh the list of uploads after successful save to database
-                setTimeout(() => {
-                  if (onUploadComplete) {
-                    console.log(`🔄 [Uppy] Refreshing display after successful database save for ${upload.id}`);
-                    onUploadComplete(true);
-                  }
-                }, 2000); // Give database operation time to complete
-              } else {
-                console.error(`🌟 [DATABASE] ERROR: Failed to save remote upload metadata for ${upload.id}: ${result.error}`);
-              }
-            })
-            .catch(error => {
-              console.error(`🌟 [DATABASE] ERROR: Exception while saving remote upload metadata:`, error);
-            });
-        }
+        // Always save metadata to database for every upload
+        awsPhotoService.savePhotoMetadata(photoDetails)
+          .then(result => {
+            if (result.success) {
+              console.log(`🌟 [DATABASE] SUCCESS: Saved upload metadata to database for ${upload.id}`);
+              // Refresh the list of uploads after successful save to database
+              setTimeout(() => {
+                if (onUploadComplete) {
+                  console.log(`🔄 [Uppy] Refreshing display after successful database save for ${upload.id}`);
+                  onUploadComplete(true);
+                }
+              }, 2000);
+            } else {
+              console.error(`🌟 [DATABASE] ERROR: Failed to save upload metadata for ${upload.id}: ${result.error}`);
+            }
+          })
+          .catch(error => {
+            console.error(`🌟 [DATABASE] ERROR: Exception while saving upload metadata:`, error);
+          });
         
         // Return updated upload object with additional details
         return {
