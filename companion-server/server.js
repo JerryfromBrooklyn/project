@@ -9,6 +9,7 @@ const AWS = require('aws-sdk');
 const axios = require('axios');
 // const sharp = require('sharp');
 const { promisify } = require('util');
+const crypto = require('crypto');
 
 // Debug: Check if .env file exists
 const envPath = path.join(__dirname, '.env');
@@ -203,8 +204,8 @@ const extractMetadataFromProvider = (req) => {
 // Store user metadata when discovered for later retrieval
 const userMetadataStore = new Map();
 
-// Track already processed uploads to prevent duplicates
-const processedUploads = new Map(); // Changed from Set to Map to store timestamp
+// Track processed uploads to prevent duplicates
+const processedUploads = new Map();
 
 // Add this middleware captures headers early and stores them for later use
 app.use((req, res, next) => {
@@ -812,264 +813,199 @@ const processUploadedFile = async (s3Path, fileData, metadata) => {
   }
 };
 
-// Add this after the companionOptions definition but before the companion app initialization
 const handleUploadComplete = async (payload) => {
+  console.log('🔄 [Server] Processing upload complete:', payload);
+  
   try {
-    console.log('🎉 [COMPANION] Upload complete event received:', JSON.stringify(payload, null, 2));
-    
-    // Check if this upload has already been processed in the last few seconds
-    // Use the original provider ID or URL as the key, plus the current timestamp
-    const trackingId = payload.id || payload.url;
-    const currentTime = Date.now();
-    console.log(`🔍 [COMPANION] Checking if ${trackingId} has already been processed recently`);
-    
-    // Debug log the current processed uploads
-    console.log(`📋 [COMPANION] Currently processed uploads (${processedUploads.size}):`, 
-                Array.from(processedUploads.keys()).slice(0, 10));
-    
-    // CHANGED: Now we check if processed within last 3 seconds to avoid double-processing
-    // BUT we ALWAYS allow a new upload even of the same file (with new UUID)
-    if (trackingId && processedUploads.has(trackingId)) {
-      const lastProcessed = processedUploads.get(trackingId);
-      // Only consider as duplicate if processed within the last 3 seconds
-      if (currentTime - lastProcessed < 3000) {
-        console.log(`⏭️ [COMPANION] Upload ${trackingId} processed within last 3 seconds, debouncing...`);
-        // Continue processing but log the short interval
-        console.log(`📊 [COMPANION] Will create another entry with a new UUID for this upload`);
+    // Check if this upload was recently processed (within last 5 seconds)
+    const uploadKey = payload.uploadId || payload.photoId || payload.originalId;
+    if (uploadKey) {
+      const lastProcessed = processedUploads.get(uploadKey);
+      const now = Date.now();
+      if (lastProcessed && (now - lastProcessed) < 5000) {
+        console.log(`⚠️ [Server] Upload ${uploadKey} was processed recently, skipping...`);
+        return {
+          success: true,
+          alreadyProcessed: true,
+          message: 'Upload was processed recently'
+        };
       }
-    }
-    
-    // Mark this upload as processed with current timestamp
-    if (trackingId) {
-      processedUploads.set(trackingId, currentTime);
-      console.log(`✅ [COMPANION] Marked ${trackingId} as processed at ${currentTime}, now ${processedUploads.size} tracked uploads`);
+      // Mark as processed with timestamp
+      processedUploads.set(uploadKey, now);
       
-      // Cleanup processedUploads Map - remove entries older than 1 hour
-      const oneHourAgo = currentTime - (60 * 60 * 1000);
-      for (const [id, timestamp] of processedUploads.entries()) {
-        if (timestamp < oneHourAgo) {
-          processedUploads.delete(id);
+      // Clean up old entries (older than 5 minutes)
+      const fiveMinutesAgo = now - (5 * 60 * 1000);
+      for (const [key, timestamp] of processedUploads.entries()) {
+        if (timestamp < fiveMinutesAgo) {
+          processedUploads.delete(key);
         }
       }
     }
     
-    // Extract key from S3 URL 
-    const s3Url = payload.url;
-    const bucketName = process.env.COMPANION_AWS_BUCKET;
-    const s3Path = s3Url ? s3Url.replace(`https://${bucketName}.s3.amazonaws.com/`, '') : null;
+    // Generate a new UUID for the database entry
+    const newUUID = crypto.randomUUID();
     
-    // Extract storage path in various formats (handle socket events and companion events differently)
-    let storagePath = s3Path;
-    if (!storagePath && payload.uploadURL) {
-      storagePath = payload.uploadURL.replace(`https://${bucketName}.s3.amazonaws.com/`, '');
+    // Extract user info
+    const userId = payload.metadata?.userId || payload.metadata?.user_id;
+    const username = payload.metadata?.username;
+    
+    if (!userId) {
+      throw new Error('Missing user ID in upload metadata');
     }
     
-    console.log(`🔍 [COMPANION] Processing upload: ${storagePath || 'Unknown path'}`);
+    // Determine the source
+    const source = payload.source || payload.metadata?.source || 'local';
+    const isRemoteUpload = source === 'dropbox' || source === 'googledrive';
     
-    // Get metadata from the payload
-    let fileMetadata = payload.metadata || {};
-    const fileData = payload.file || {};
-    
-    console.log(`📋 [COMPANION] Initial metadata:`, JSON.stringify(fileMetadata, null, 2));
-    
-    // Get user data from our store - try multiple possible keys
-    let userData = null;
-    
-    // First check if we have a direct mapping for this upload ID
-    if (payload.uploadId && userMetadataStore.has(`uploadId:${payload.uploadId}`)) {
-      userData = userMetadataStore.get(`uploadId:${payload.uploadId}`);
-      console.log(`👤 [COMPANION] Found user data for upload ID ${payload.uploadId}:`, userData);
+    // For remote uploads, we need to download the file first
+    let fileBuffer;
+    if (isRemoteUpload) {
+      console.log(`📥 [Server] Downloading remote file from ${source}...`);
+      fileBuffer = await getFileFromS3(payload.s3Key);
     }
     
-    // Then check for S3 key mapping
-    if (!userData && storagePath && userMetadataStore.has(`s3key:${storagePath}`)) {
-      userData = userMetadataStore.get(`s3key:${storagePath}`);
-      console.log(`👤 [COMPANION] Found user data for S3 key ${storagePath}:`, userData);
-    }
+    // Process the upload (face detection, etc.)
+    const processedResult = await processUpload({
+      fileBuffer,
+      userId,
+      username,
+      source,
+      metadata: payload.metadata,
+      s3Key: payload.s3Key,
+      newUUID
+    });
     
-    // Try socket ID
-    if (!userData && payload.socketId) {
-      userData = userMetadataStore.get(payload.socketId);
-      console.log(`👤 [COMPANION] Found user data for socket ${payload.socketId}:`, userData);
-    }
-    
-    // Try session ID
-    if (!userData && payload.sessionId) {
-      userData = userMetadataStore.get(payload.sessionId);
-      console.log(`👤 [COMPANION] Found user data for session ${payload.sessionId}:`, userData);
-    }
-    
-    // Extract user ID directly from S3 path as a last resort
-    // Format: photos/userId/fileId_filename
-    if (!userData && storagePath) {
-      const pathParts = storagePath.split('/');
-      if (pathParts.length >= 2 && pathParts[0] === 'photos') {
-        const pathUserId = pathParts[1];
-        console.log(`👤 [COMPANION] Extracted user ID from S3 path: ${pathUserId}`);
-        userData = {
-          userId: pathUserId,
-          username: fileMetadata.username || DEFAULT_USERNAME
-        };
-      }
-    }
-    
-    // If we still don't have user data, try to use metadata from the payload
-    if (!userData && (fileMetadata.userId || fileMetadata.user_id)) {
-      console.log('👤 [COMPANION] Using user data from payload metadata');
-      userData = {
-        userId: fileMetadata.userId || fileMetadata.user_id,
-        username: fileMetadata.username || DEFAULT_USERNAME,
-        eventId: fileMetadata.eventId || ''
-      };
-    }
-    
-    // If we still don't have user data, use defaults
-    if (!userData) {
-      console.log('⚠️ [COMPANION] No user data found, using defaults');
-      userData = {
-        userId: DEFAULT_USER_ID,
-        username: DEFAULT_USERNAME
-      };
-    }
-    
-    // Determine the source of the upload (Dropbox, Google Drive, or local)
-    let uploadSource = 'local';
-    
-    // Check if there's an explicit source in the metadata
-    if (fileMetadata.source) {
-      uploadSource = fileMetadata.source;
-      console.log(`📂 [COMPANION] Using source from metadata: ${uploadSource}`);
-    } 
-    // Check if the source is in the userData
-    else if (userData.source) {
-      uploadSource = userData.source;
-      console.log(`📂 [COMPANION] Using source from userData: ${uploadSource}`);
-    }
-    // Try to detect from path for Dropbox
-    else if (storagePath && storagePath.includes('/dropbox/')) {
-      uploadSource = 'dropbox';
-      console.log(`📂 [COMPANION] Detected Dropbox source from path`);
-    }
-    // Try to detect from path for Google Drive
-    else if (storagePath && (storagePath.includes('/googledrive/') || 
-              storagePath.includes('/google/') || 
-              storagePath.includes('/drive/'))) {
-      uploadSource = 'googledrive';
-      console.log(`📂 [COMPANION] Detected Google Drive source from path`);
-    }
-    // Look for patterns in file ID or URL
-    else if (payload.id) {
-      // Dropbox upload IDs start with "id:"
-      if (typeof payload.id === 'string' && payload.id.startsWith('id:')) {
-        uploadSource = 'dropbox';
-        console.log(`📂 [COMPANION] Detected Dropbox source from ID format`);
-      }
-      // Google Drive IDs often contain underscores or start with "drive-"
-      else if (typeof payload.id === 'string' && 
-              (payload.id.startsWith('drive-') || payload.id.includes('_'))) {
-        uploadSource = 'googledrive';
-        console.log(`📂 [COMPANION] Detected Google Drive source from ID format`);
-      }
-    }
-    // Check URL for telltale signs
-    if (payload.url && (
-        payload.url.includes('dropbox') || 
-        payload.url.includes('/dropbox/') ||
-        payload.url.includes('localhost:3020/dropbox/')
-      )) {
-      uploadSource = 'dropbox';
-      console.log(`📂 [COMPANION] Detected Dropbox source from URL`);
-    }
-    
-    console.log(`📂 [COMPANION] Final determined source: ${uploadSource}`);
-    
-    // CRITICAL: Always generate a new UUID for every upload
-    // This ensures each upload creates a brand new database entry
-    const generatedUuid = uuid();
-    console.log(`🔑 [COMPANION] Generated new UUID for this upload: ${generatedUuid}`);
-    
-    // CRITICAL: Always use a new UUID for the primary ID, never the provider ID
-    // For Dropbox files, we want a new entry every time the file is selected
-    const primaryId = generatedUuid;
-    
-    // Store the original provider ID only in memory/logs, not in the database
-    if (payload.id) {
-      console.log(`📊 [COMPANION] Original provider ID: ${payload.id} (using new UUID: ${primaryId})`);
-    }
-    
-    // Store the original provider ID (especially important for Dropbox)
-    const originalProviderId = payload.id;
-    if (originalProviderId) {
-      if (typeof originalProviderId === 'string' && originalProviderId.startsWith('id:')) {
-        console.log(`📊 [COMPANION] Original Dropbox ID detected: ${originalProviderId}`);
-      } else if (uploadSource === 'googledrive') {
-        console.log(`📊 [COMPANION] Original Google Drive ID detected: ${originalProviderId}`);
-      }
-      console.log(`📊 [COMPANION] Original provider ID: ${originalProviderId} (using new UUID: ${primaryId})`);
-    }
-    
-    // Ensure the metadata has all the necessary user fields
-    const enhancedMetadata = {
-      // First, include basic properties from fileMetadata, but NOT the id
-      timestamp: Date.now(),
-      source: uploadSource,
-      
-      // User info - ensure consistency
-      userId: userData.userId,
-      user_id: userData.userId,
-      uploadedBy: userData.userId,
-      uploaded_by: userData.userId,
-      username: userData.username,
-      eventId: userData.eventId || fileMetadata.eventId || '',
-      
-      // CRITICAL: Always use our UUID as the primary ID
-      id: primaryId,
-      
-      // Store original provider ID only as reference
-      originalId: originalProviderId,
-      original_id: originalProviderId,
-      
-      // Processing flag
-      forceProcess: true // Signal to process this fully even for remote uploads
-    };
-    
-    // Now copy all other properties from fileMetadata except the id
-    for (const key in fileMetadata) {
-      if (key !== 'id') { // NEVER copy the 'id' field from fileMetadata
-        enhancedMetadata[key] = fileMetadata[key];
-      }
-    }
-    
-    // Final safety check - make absolutely sure we're using the UUID
-    console.log(`🔐 [COMPANION] Final ID verification - using UUID: ${enhancedMetadata.id}`);
-    
-    // Ensure storage path doesn't contain provider ID if this is from Dropbox
-    if (uploadSource === 'dropbox' && originalProviderId && typeof originalProviderId === 'string' && originalProviderId.startsWith('id:')) {
-      const safeStoragePath = `photos/${userData.userId}/${primaryId}`;
-      enhancedMetadata.storage_path = safeStoragePath;
-      console.log(`🔐 [COMPANION] Set safe storage path: ${safeStoragePath}`);
-    }
-    
-    console.log('📤 [COMPANION] Processing with enhanced metadata:', JSON.stringify(enhancedMetadata, null, 2));
-    
-    // If we don't have a storage path, we can't process the upload
-    if (!storagePath) {
-      console.error('❌ [COMPANION] No storage path found, cannot process upload');
-      throw new Error('No storage path found in payload');
-    }
-    
-    // Process the upload
-    const result = await processUploadedFile(storagePath, fileData, enhancedMetadata);
-    
-    console.log('✅ [COMPANION] Upload processing result:', JSON.stringify(result, null, 2));
-    return result;
+    console.log(`✅ [Server] Upload processing complete for ${newUUID}`);
+    return processedResult;
     
   } catch (error) {
-    console.error(`❌ [COMPANION] Error processing upload:`, error);
-    return {
-      success: false,
-      error: error.message
+    console.error('❌ [Server] Error processing upload:', error);
+    throw error;
+  }
+};
+
+// Helper function to download remote files
+const downloadRemoteFile = async (url) => {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to download file: ${response.statusText}`);
+    }
+    return await response.buffer();
+  } catch (error) {
+    console.error('Error downloading remote file:', error);
+    throw error;
+  }
+};
+
+// Helper function to get file from S3
+const getFileFromS3 = async (s3Path) => {
+  try {
+    const params = {
+      Bucket: process.env.COMPANION_AWS_BUCKET,
+      Key: s3Path
     };
+    
+    const data = await s3Client.getObject(params).promise();
+    return data.Body;
+  } catch (error) {
+    console.error('Error getting file from S3:', error);
+    throw error;
+  }
+};
+
+// Helper function to upload to S3
+const uploadToS3 = async (fileBuffer, s3Path, options = {}) => {
+  try {
+    const params = {
+      Bucket: process.env.COMPANION_AWS_BUCKET,
+      Key: s3Path,
+      Body: fileBuffer,
+      ContentType: options.ContentType || 'image/jpeg',
+      Metadata: options.Metadata || {}
+    };
+    
+    await s3Client.putObject(params).promise();
+    
+    // Generate URLs
+    const url = `https://${process.env.COMPANION_AWS_BUCKET}.s3.amazonaws.com/${s3Path}`;
+    const publicUrl = url; // You might want to use CloudFront or other CDN URL here
+    
+    return {
+      success: true,
+      url,
+      publicUrl
+    };
+  } catch (error) {
+    console.error('Error uploading to S3:', error);
+    throw error;
+  }
+};
+
+// Helper function to detect faces
+const detectFaces = async (imageBuffer) => {
+  try {
+    // Use AWS Rekognition or your face detection service
+    const rekognition = new AWS.Rekognition();
+    
+    const params = {
+      Image: {
+        Bytes: imageBuffer
+      },
+      Attributes: ['ALL']
+    };
+    
+    const result = await rekognition.detectFaces(params).promise();
+    
+    return {
+      faces: result.FaceDetails.map(face => ({
+        boundingBox: face.BoundingBox,
+        confidence: face.Confidence,
+        landmarks: face.Landmarks,
+        pose: face.Pose,
+        quality: face.Quality
+      }))
+    };
+  } catch (error) {
+    console.error('Error detecting faces:', error);
+    return { faces: [] };
+  }
+};
+
+// Helper function to match faces
+const matchFaces = async (faces) => {
+  try {
+    // Implement your face matching logic here
+    // This could involve:
+    // 1. Searching your face collection
+    // 2. Comparing against known users
+    // 3. Returning matches with confidence scores
+    
+    // For now, return empty array
+    return [];
+  } catch (error) {
+    console.error('Error matching faces:', error);
+    return [];
+  }
+};
+
+// Helper function to save to database
+const saveToDatabase = async (metadata) => {
+  try {
+    // Use your database service (e.g., DynamoDB) to save the metadata
+    const params = {
+      TableName: process.env.DYNAMODB_TABLE,
+      Item: metadata
+    };
+    
+    await dynamoDbClient.put(params).promise();
+    
+    return {
+      success: true
+    };
+  } catch (error) {
+    console.error('Error saving to database:', error);
+    throw error;
   }
 };
 
@@ -1411,250 +1347,63 @@ const companionSocket = companion.socket(server);
 // Store user data when socket connections are established
 if (companionSocket && companionSocket.on) {
   companionSocket.on('connection', (socket) => {
-    console.log(`🔌 [COMPANION] Socket connected: ${socket.id}`);
+    console.log('🔌 [Socket] Client connected');
     
-    // Listen for custom auth events from the client
+    // Handle authentication
     socket.on('auth', (data) => {
+      console.log('🔑 [Socket] Auth data received:', data);
+      
+      // Store user info with socket ID
+      const userInfo = {
+        userId: data.userId || data.user_id,
+        username: data.username,
+        eventId: data.eventId
+      };
+      
+      socket.userInfo = userInfo;
+      console.log('✅ [Socket] User authenticated:', userInfo);
+    });
+    
+    // Handle upload-complete events
+    socket.on('upload-complete', async (data) => {
+      console.log('📤 [Socket] Upload complete event received:', data);
+      
       try {
-        console.log(`🔑 [COMPANION] Received auth data on socket ${socket.id}:`, data);
-        if (data && (data.userId || data.user_id)) {
-          // Use the best available user ID
-          const userId = data.userId || data.user_id;
-          const username = data.username || DEFAULT_USERNAME;
-          
-          // Store in our global map using socket ID as key
-          userMetadataStore.set(socket.id, {
-            userId: userId,
-            username: username,
-            eventId: data.eventId || '',
-            metadata: data,
-            timestamp: Date.now()
-          });
-          
-          // Also store with a longer session ID if available
-          if (socket.handshake && socket.handshake.session && socket.handshake.session.id) {
-            userMetadataStore.set(socket.handshake.session.id, {
-              userId: userId,
-              username: username,
-              socketId: socket.id,
-              eventId: data.eventId || '',
-              metadata: data,
-              timestamp: Date.now()
-            });
-            console.log(`📦 [COMPANION] Stored user metadata with session ID: ${socket.handshake.session.id}`);
-          }
-          
-          console.log(`📦 [COMPANION] Stored user metadata in global map with socket ID: ${socket.id}`);
-          
-          // Acknowledge the auth with a success message
-          socket.emit('auth-response', {
-            success: true,
-            userId: userId,
-            username: username
-          });
-        } else {
-          console.warn(`⚠️ [COMPANION] Received auth event without user ID data`);
-          socket.emit('auth-response', {
-            success: false,
-            error: 'No user ID provided'
-          });
-        }
+        // Add user info from socket to metadata
+        const metadata = {
+          ...data.metadata,
+          userId: socket.userInfo?.userId || data.metadata?.userId,
+          username: socket.userInfo?.username || data.metadata?.username
+        };
+        
+        // Process the upload using our unified flow
+        const result = await handleUploadComplete({
+          ...data,
+          metadata
+        });
+        
+        // Emit the result back to the client
+        socket.emit('upload-processed', result);
+        
+        // Also emit a global event for all clients
+        io.emit('global-upload-processed', {
+          success: result.success,
+          photoId: result.photoId,
+          userId: metadata.userId,
+          s3Path: result.photoMetadata?.storage_path
+        });
+        
       } catch (error) {
-        console.error(`❌ [COMPANION] Error processing socket auth:`, error);
-        socket.emit('auth-response', {
+        console.error('❌ [Socket] Error processing upload:', error);
+        socket.emit('upload-processed', {
           success: false,
           error: error.message
         });
       }
     });
     
-    // Listen for upload complete events from client
-    socket.on('upload-complete', async (data) => {
-      try {
-        console.log('📤 [COMPANION] Upload complete event received on socket:', JSON.stringify(data, null, 2));
-        
-        // Always generate a new UUID for every upload
-        const newUuid = uuid();
-        console.log(`🔑 [COMPANION] Generated new UUID for socket upload: ${newUuid}`);
-        
-        // CRITICAL FIX FOR DROPBOX IDs
-        // If data.id is a Dropbox ID (starts with "id:"), 
-        // we need to preserve it as originalId but use a UUID for the main ID
-        const originalId = data.id; // Store the original ID for reference
-        if (data.id && typeof data.id === 'string' && data.id.startsWith('id:')) {
-          console.log(`🚨 [COMPANION] Detected Dropbox ID in socket data: ${data.id}`);
-          console.log(`🔐 [COMPANION] Will store as originalId but use UUID as primary key`);
-        }
-        
-        // Store original ID for tracking but use UUID as the main ID
-        data.originalId = originalId;
-        data.id = newUuid;
-        
-        // If there's metadata, also update it
-        if (data.metadata) {
-          data.metadata.originalId = originalId;
-          data.metadata.id = newUuid;
-          data.metadata.upload_timestamp = Date.now();
-
-          // Ensure we capture the name of the file
-          if (data.name && !data.metadata.name) {
-            data.metadata.name = data.name;
-          }
-          
-          // For Dropbox, ensure we capture the direct download URL if available
-          if ((data.metadata.source === 'dropbox' || data.source === 'dropbox') && 
-              data.url && !data.metadata.direct_url) {
-            data.metadata.direct_url = data.url;
-          }
-          
-          console.log(`🔐 [COMPANION] Updated metadata with UUID as primary key`);
-        }
-        
-        // Check if this upload has already been processed in the last few seconds
-        // Use the originalId (for Dropbox) or uploadId as the tracking key to avoid immediate duplicates
-        const trackingId = originalId || data.uploadId || data.url;
-        const currentTime = Date.now();
-        console.log(`🔍 [COMPANION] Checking if ${trackingId} has already been processed recently`);
-        
-        // Log the current processed uploads
-        console.log(`📋 [COMPANION] Current processed uploads (${processedUploads.size}):`, 
-                    Array.from(processedUploads.keys()).slice(0, 5));
-        
-        let skipProcessing = false;
-        if (trackingId && processedUploads.has(trackingId)) {
-          const lastProcessed = processedUploads.get(trackingId);
-          // Only consider as duplicate if processed within the last 2 seconds
-          if (currentTime - lastProcessed < 2000) {
-            console.log(`⏭️ [COMPANION] Upload ${trackingId} processed within last 2 seconds, debouncing...`);
-            skipProcessing = true; // Skip duplicate socket processing if within 2 seconds
-          } else {
-            console.log(`📊 [COMPANION] Upload ${trackingId} processed before but not recently, will create a new entry`);
-          }
-        }
-        
-        if (skipProcessing) {
-          socket.emit('upload-processed', {
-            success: true,
-            alreadyProcessed: true,
-            message: 'Upload already processed (debounced)',
-            uploadId: data.uploadId // Include uploadId for client-side matching
-          });
-          return;
-        }
-        
-        // Mark this upload as processed with current timestamp
-        if (trackingId) {
-          processedUploads.set(trackingId, currentTime);
-          console.log(`✅ [COMPANION] Marked ${trackingId} as processed at ${currentTime}, now ${processedUploads.size} tracked uploads`);
-          
-          // Cleanup processedUploads Map - remove entries older than 1 hour
-          const oneHourAgo = currentTime - (60 * 60 * 1000);
-          for (const [id, timestamp] of processedUploads.entries()) {
-            if (timestamp < oneHourAgo) {
-              processedUploads.delete(id);
-            }
-          }
-        }
-        
-        // Store mapping from upload ID to S3 path/URL if available
-        if (data.uploadURL) {
-          const bucketName = process.env.COMPANION_AWS_BUCKET;
-          const s3Path = data.uploadURL.replace(`https://${bucketName}.s3.amazonaws.com/`, '');
-          console.log(`🔄 [COMPANION] Storing mapping for upload ${data.uploadId} to path ${s3Path}`);
-          
-          // Store by multiple identifiers to improve matching chances
-          if (data.uploadId) userMetadataStore.set(`uploadId:${data.uploadId}`, { s3Path, uploadId: data.uploadId });
-          if (s3Path) userMetadataStore.set(`s3key:${s3Path}`, { 
-            userId: data.metadata?.userId || userMetadataStore.get(socket.id)?.userId,
-            username: data.metadata?.username || userMetadataStore.get(socket.id)?.username,
-            uploadId: data.uploadId
-          });
-        }
-        
-        // Add socket ID to the payload
-        data.socketId = socket.id;
-        
-        // Get user data from our store for this socket
-        const userData = userMetadataStore.get(socket.id) || {};
-        
-        // For Dropbox files, ensure we capture the original URL and path
-        if (data.source === 'dropbox' || (data.metadata && data.metadata.source === 'dropbox')) {
-          // Make sure accessToken is passed through if available
-          if (data.accessToken && (!data.metadata || !data.metadata.accessToken)) {
-            if (!data.metadata) data.metadata = {};
-            data.metadata.accessToken = data.accessToken;
-          }
-          
-          // Ensure we have the URL
-          if (data.url && (!data.metadata || !data.metadata.url)) {
-            if (!data.metadata) data.metadata = {};
-            data.metadata.url = data.url;
-          }
-          
-          // Add source info
-          if (!data.metadata) data.metadata = {};
-          data.metadata.source = 'dropbox';
-        }
-        
-        // Combine with data from the event
-        const enhancedData = {
-          ...data,
-          metadata: {
-            ...data.metadata,
-            userId: userData.userId || data.metadata?.userId,
-            user_id: userData.userId || data.metadata?.user_id,
-            username: userData.username || data.metadata?.username,
-            eventId: userData.eventId || data.metadata?.eventId,
-            timestamp: Date.now(),
-            // Ensure source is set
-            source: data.metadata?.source || data.source || 'dropbox',
-            // Add the name if available
-            name: data.name || data.metadata?.name
-          }
-        };
-        
-        console.log('📦 [COMPANION] Enhanced data for processing:', enhancedData);
-        
-        // Process the upload with combined data
-        const result = await handleUploadComplete(enhancedData);
-        
-        if (result && result.success) {
-          // Emit success back to client
-          console.log(`🔔 [COMPANION] Emitting success to socket ${socket.id} for photo ${result.photoId}`);
-          socket.emit('upload-processed', {
-            success: true,
-            photoId: result.photoId,
-            photoMetadata: result.photoMetadata,
-            uploadId: data.uploadId // Include the original uploadId for client-side matching
-          });
-          
-          // Also broadcast a global event in case this socket gets disconnected
-          socket.broadcast.emit('global-upload-processed', {
-            success: true,
-            photoId: result.photoId,
-            uploadId: data.uploadId,
-            s3Path: result.photoMetadata.storage_path,
-            userId: result.photoMetadata.user_id || result.photoMetadata.userId
-          });
-        } else {
-          throw new Error(result?.error || 'Unknown error processing upload');
-        }
-      } catch (error) {
-        console.error('❌ [COMPANION] Error processing upload-complete event:', error);
-        socket.emit('upload-processed', {
-          success: false,
-          error: error.message,
-          uploadId: data.uploadId // Include uploadId even on errors for client-side matching
-        });
-      }
-    });
-    
     socket.on('disconnect', () => {
-      console.log(`🔌 [COMPANION] Socket disconnected: ${socket.id}`);
-      // Clean up metadata for this socket
-      userMetadataStore.delete(socket.id);
-      
-      // Don't delete session mappings as they might be needed for other connections
+      console.log('🔌 [Socket] Client disconnected');
     });
   });
   
